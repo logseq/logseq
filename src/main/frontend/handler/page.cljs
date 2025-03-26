@@ -132,9 +132,8 @@
                         (:block/uuid (db/get-page page-uuid-or-old-name)))
             result (ui-outliner-tx/transact!
                     {:outliner-op :rename-page}
-                    (outliner-op/rename-page! page-uuid new-name))
-            result' (ldb/read-transit-str result)]
-      (case (if (string? result') (keyword result') result')
+                    (outliner-op/rename-page! page-uuid new-name))]
+      (case (if (string? result) (keyword result) result)
         :invalid-empty-name
         (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
         :rename-page-exists

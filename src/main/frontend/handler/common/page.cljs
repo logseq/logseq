@@ -68,10 +68,9 @@
                                 current-user-id
                                 (assoc :created-by current-user-id))
                               options)
-                   result (ui-outliner-tx/transact!
-                           {:outliner-op :create-page}
-                           (outliner-op/create-page! title' options'))
-                   [_page-name page-uuid] (ldb/read-transit-str result)
+                   [_page-name page-uuid] (ui-outliner-tx/transact!
+                                           {:outliner-op :create-page}
+                                           (outliner-op/create-page! title' options'))
                    page (db/get-page (or page-uuid title'))]
              (when redirect?
                (route-handler/redirect-to-page! page-uuid)
@@ -168,9 +167,8 @@
               (notification/show! "Journals enabled" :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
                             {:outliner-op :delete-page}
-                            (outliner-op/delete-page! page-uuid))
-                       res' (ldb/read-transit-str res)]
-                 (if res'
+                            (outliner-op/delete-page! page-uuid))]
+                 (if res
                    (when ok-handler (ok-handler))
                    (when error-handler (error-handler))))
                (p/catch (fn [error]

@@ -117,7 +117,7 @@
     (let [[hover set-hover!] (rum/use-state false)
           click-handler-fn (fn []
                              (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
-                                     result (when (string? result) (:tx-data (ldb/read-transit-str result)))
+                                     result (:tx-data result)
                                      first-child-id (first (map :block/uuid result))
                                      first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
                                (when first-child

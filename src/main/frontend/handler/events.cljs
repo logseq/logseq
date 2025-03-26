@@ -83,7 +83,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -1017,9 +1016,8 @@
                                      {:outliner-op :insert-blocks}
                                      ;; insert a new block
                                      (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
-                                       (turn-type! block')))
-                             result' (ldb/read-transit-str result)]
-                       (when-let [id (:block/uuid (first (:blocks result')))]
+                                       (turn-type! block')))]
+                       (when-let [id (:block/uuid (first (:blocks result)))]
                          (db/entity [:block/uuid id])))
                      (p/do!
                       (turn-type! block)
