@@ -603,7 +603,7 @@
         used-properties
         (->> (sqlite-build/get-used-properties-from-options graph-export)
              keys
-             (remove db-property/logseq-property?)
+             (remove db-property/internal-property?)
              (filter #(re-find include-regex (namespace %)))
              (map #(vector % (select-keys (d/entity db %) [:logseq.property/type :db/cardinality])))
              (into {}))]
@@ -654,7 +654,7 @@
         (->> (concat (mapcat :build/class-properties (vals classes))
                      (mapcat (comp keys :build/properties :page) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (comp keys :build/properties)) pages-and-blocks))
-             (remove db-property/logseq-property?)
+             (remove db-property/internal-property?)
              set)
         undefined-properties (set/difference referenced-properties (set (keys properties)))
         undefined (cond-> {}

@@ -699,7 +699,7 @@
     (let [used-properties (get-used-properties-from-options options)
           undeclared-properties (-> (set (keys used-properties))
                                     (set/difference (set (keys properties)))
-                                    ((fn [x] (remove db-property/logseq-property? x))))]
+                                    ((fn [x] (remove db-property/internal-property? x))))]
       (when (seq undeclared-properties)
         (throw (ex-info (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)
                         {:used-properties (select-keys used-properties undeclared-properties)}))))))
