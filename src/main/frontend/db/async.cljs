@@ -161,6 +161,20 @@
             (or (db/entity (:db/id block)) block)
             result'))))))
 
+(defn <get-blocks
+  [graph ids* & {:as opts}]
+  (let [ids (remove (fn [id] (:block.temp/fully-loaded? (db/entity id))) ids*)]
+    (when-let [^Object sqlite @db-browser/*worker]
+      (p/let [result-str (.get-blocks sqlite graph
+                                      (ldb/write-transit-str
+                                       (map (fn [id]
+                                              {:id id :opts opts})
+                                            ids)))
+              result (ldb/read-transit-str result-str)]
+        (let [conn (db/get-db graph false)
+              data (mapcat (fn [{:keys [block children]}] (cons block children)) result)]
+          (d/transact! conn data))))))
+
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))

@@ -28,6 +28,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -52,7 +54,10 @@
       {:id "header-checkbox"
        :checked (or selected-all? (and selected-some? "indeterminate"))
        :on-checked-change (fn [value]
-                            (toggle-selected-all! table value))
+                            (p/do
+                              (when value
+                                (db-async/<get-blocks (state/get-current-repo) (:rows table) {}))
+                              (toggle-selected-all! table value)))
        :aria-label "Select all"
        :class (str "flex transition-opacity "
                    (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
@@ -77,7 +82,9 @@
       {:id id
        :checked checked?
        :on-checked-change (fn [v]
-                            (row-toggle-selected! row v))
+                            (p/do!
+                             (when v (db-async/<get-block (state/get-current-repo) v {:skip-refresh? true}))
+                             (row-toggle-selected! row v)))
        :aria-label "Select row"
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
@@ -165,19 +172,12 @@
   [entity]
   (db-view/get-property-value-content (db/get-db) entity))
 
-(rum/defcs block-container < (rum/local false ::deleted?)
-  [state config row table]
-  (let [*deleted? (::deleted? state)
-        container (state/get-component :block/container)
+(rum/defc block-container
+  [config row _table]
+  (let [container (state/get-component :block/container)
         page? (ldb/page? row)]
-    (if (nil? (:db/id row))                    ; this row has been deleted
-      (when-not @*deleted?
-        (when-let [f (get-in table [:data-fns :set-data!])]
-          (f (remove (fn [r] (= (:id r) (:id row))) (or (:all-data table) (:data table))))
-          (reset! *deleted? true)
-          nil))
-      [:div.relative.w-full
-       (container (assoc config :view? true) (if page? row row))])))
+    [:div.relative.w-full
+     (container (assoc config :view? true) (if page? row row))]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -477,8 +477,58 @@
                        (fn [size]
                          (set-sized-columns! (assoc sized-columns (:id column) size)))))]))
 
+(defn- on-delete-rows
+  [view-parent view-feature-type table selected-ids]
+  (let [selected-rows (->> (map db/entity selected-ids)
+                           (remove :logseq.property/built-in?))
+        pages (filter ldb/page? selected-rows)
+        blocks (remove ldb/page? selected-rows)
+        page-ids (map :db/id pages)
+        {:keys [set-data! set-row-selection!]} (:data-fns table)
+        update-table-state! (fn []
+                              (let [data (or (:all-data table) (:data table))
+                                    selected-ids (set (map :db/id selected-rows))
+                                    new-data (if (every? number? data)
+                                               (remove selected-ids data)
+                                               ;; group
+                                               (map (fn [[by-value col]]
+                                                      [by-value (remove selected-ids col)]) data))]
+                                (set-data! new-data)
+                                (set-row-selection! {})))]
+    (p/do!
+     (ui-outliner-tx/transact!
+      {:outliner-op :delete-blocks}
+      (when (seq blocks)
+        (outliner-op/delete-blocks! blocks nil))
+      (case view-feature-type
+        :class-objects
+        (when (seq page-ids)
+          (let [tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id view-parent)]) page-ids)]
+            (when (seq tx-data)
+              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+
+        :property-objects
+        ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
+        (when-not (:logseq.property/built-in? view-parent)
+          (let [tx-data (map (fn [pid] [:db/retract pid (:db/ident view-parent)]) page-ids)]
+            (when (seq tx-data)
+              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+
+        :query-result
+        (doseq [page pages]
+          (when-let [id (:block/uuid page)]
+            (outliner-op/delete-page! id)))
+
+        :all-pages
+        (state/pub-event! [:page/show-delete-dialog selected-rows update-table-state!])
+
+        nil))
+
+     (when-not (= view-feature-type :all-pages)
+       (update-table-state!)))))
+
 (defn- table-header
-  [table {:keys [show-add-property? add-property!] :as option} selected-rows]
+  [table {:keys [show-add-property? add-property! view-parent view-feature-type] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
         pinned (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
@@ -513,7 +563,10 @@
                                    (set-ordered-columns! ordered-columns))})])
      (when (pos? selection-rows-count)
        [:div.table-action-bar.absolute.top-0.left-8
-        (action-bar table selected-rows option)]))))
+        (action-bar table selected-rows
+                    (assoc option
+                           :on-delete-rows (fn [table selected-ids]
+                                             (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
 
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
@@ -1108,8 +1161,8 @@
                               (gdom/getElement "main-content-container"))
     :increase-viewport-by {:top 300 :bottom 300}
     :compute-item-key (fn [idx]
-                        (let [block (util/nth-safe rows idx)]
-                          (str "table-row-" (:group-idx option) "-" (or (:db/id block) idx))))
+                        (let [block-id (util/nth-safe rows idx)]
+                          (str "table-row-" (:group-idx option) "-" block-id)))
     :skipAnimationFrameInResizeObserver true
     :total-count (count rows)
     :item-content (fn [idx]
@@ -1478,7 +1531,6 @@
                                           :set-visible-columns! set-visible-columns!
                                           :set-sized-columns! set-sized-columns!
                                           :set-ordered-columns! set-ordered-columns!})
-        [input-filters set-input-filters!] (rum/use-state [input filters])
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
@@ -1645,6 +1697,7 @@
           [:div.flex.flex-col.gap-2
            (view-container view-entity (assoc option
                                               :data data
+                                              :set-data! set-data!
                                               :items-count items-count
                                               :ref-pages-count ref-pages-count
                                               :load-view-data load-view-data

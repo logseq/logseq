@@ -16,6 +16,7 @@
             [frontend.components.encryption :as encryption]
             [frontend.components.file-based.git :as git-component]
             [frontend.components.file-sync :as file-sync]
+            [frontend.components.page :as component-page]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
@@ -337,6 +338,12 @@
 
 (defmethod handle :page/renamed [[_ repo data]]
   (page-common-handler/after-page-renamed! repo data))
+
+(defmethod handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
+  (shui/dialog-open!
+   (component-page/batch-delete-dialog
+    selected-rows false
+    ok-handler)))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]

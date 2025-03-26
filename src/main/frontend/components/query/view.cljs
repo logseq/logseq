@@ -3,12 +3,8 @@
   (:require [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.mixins :as mixins]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state]
             [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- columns
@@ -57,18 +53,4 @@
        :view-feature-type :query-result
        :data (mapv :db/id result')
        :set-data! set-data!
-       :columns columns'
-       :on-delete-rows (fn [table selected-rows]
-                         (let [pages (filter entity-util/page? selected-rows)
-                               blocks (remove entity-util/page? selected-rows)
-                               selected (set (map :id (remove :logseq.property/built-in? selected-rows)))
-                               data' (remove (fn [row] (contains? selected (:id row))) (:data table))]
-                           (p/do!
-                            (set-data! data')
-                            (ui-outliner-tx/transact!
-                             {:outliner-op :delete-blocks}
-                             (when (seq blocks)
-                               (outliner-op/delete-blocks! blocks nil))
-                             (doseq [page pages]
-                               (when-let [id (:block/uuid page)]
-                                 (outliner-op/delete-page! id)))))))})]))
+       :columns columns'})]))
