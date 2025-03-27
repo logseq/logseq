@@ -728,3 +728,22 @@
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
+
+(deftest import-graph-overlapping-ontology-properties
+  (let [original-data
+        {:properties {:user.property/p1
+                      {:logseq.property/type :node
+                       :build/property-classes [:user.property/p1]}
+                      :user.property/p2 {:logseq.property/type :default}}
+         :classes {:user.class/C1 {}
+                   :user.property/p1
+                   {:build/class-parent :user.class/C1
+                    :build/class-properties [:user.property/p2]}}
+         :build-existing-tx? true}
+        conn (db-test/create-conn-with-blocks original-data)
+        conn2 (db-test/create-conn)
+        imported-graph (export-graph-and-import-to-another-graph conn conn2 {})]
+    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
+    (is (= (expand-classes (:classes original-data))
+           (-> (:classes imported-graph)
+               (medley/dissoc-in [:user.property/p1 :build/properties]))))))

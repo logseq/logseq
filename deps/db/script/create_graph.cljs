@@ -60,6 +60,7 @@
           (outliner-cli/build-blocks-tx sqlite-build-edn))]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/title init-tx)) "blocks ...")
+    ;; (fs/writeFileSync "txs.edn" (with-out-str (cljs.pprint/pprint _txs)))
     ;; (cljs.pprint/pprint _txs)
     (d/transact! conn init-tx)
     (when (seq block-props-tx) (d/transact! conn block-props-tx))
