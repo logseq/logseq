@@ -106,6 +106,10 @@
   [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? block-only? _properties]
                             :or {children? true}
                             :as opts}]
+
+  ;; (prn :debug :<get-block id-uuid-or-name)
+  ;; (js/console.trace)
+
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
         cache-key [id-uuid-or-name opts]
@@ -139,7 +143,10 @@
                 {:keys [block children] :as result'} (first result)]
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (if skip-transact?
-            (reset! *block-cache (cache/miss @*block-cache cache-key result'))
+            (reset! *block-cache (cache/miss @*block-cache cache-key
+                                             (if (or children? block-only?)
+                                               (:block result')
+                                               result')))
             (let [conn (db/get-db graph false)
                   block-and-children (cons block children)
                   affected-keys [[:frontend.worker.react/block (:db/id block)]]]
