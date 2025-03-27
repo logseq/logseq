@@ -116,6 +116,8 @@
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
+                                              ;; For overlapping class properties, these would be built in :classes
+                                              :logseq.property/parent :logseq.property.class/properties
                                               (into db-property/schema-properties db-property/public-db-attribute-properties))]
                     [(:db/ident ent)
                      (cond-> build-property
@@ -508,7 +510,7 @@
                                 (seq ent-properties)
                                 (assoc :build/properties
                                        (-> (buildable-properties db ent-properties properties options)
-                                           (dissoc :logseq.property.class/properties))))))))
+                                           (dissoc :logseq.property/classes :logseq.property.class/properties))))))))
              (into {}))]
     (cond-> {}
       (seq properties)

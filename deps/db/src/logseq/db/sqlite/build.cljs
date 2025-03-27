@@ -378,7 +378,7 @@
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
-  [properties classes graph-namespace]
+  [properties classes {:keys [graph-namespace build-existing-tx?]}]
   (let [property-idents (->> (keys properties)
                              (map #(vector %
                                            (if graph-namespace
@@ -396,8 +396,9 @@
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
-    (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
-            "Class and property db-idents have no overlap")
+    (when-not build-existing-tx?
+      (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
+              "Class and property db-idents are unique and do not overlap"))
     all-idents))
 
 (defn- build-page-tx [page all-idents page-uuids properties options]
@@ -635,7 +636,7 @@
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties (dissoc options :pages-and-blocks :properties))
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
-        all-idents (create-all-idents properties classes graph-namespace)
+        all-idents (create-all-idents properties classes options)
         properties-tx (build-properties-tx properties page-uuids all-idents options)
         classes-tx (build-classes-tx classes properties page-uuids all-idents options)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
