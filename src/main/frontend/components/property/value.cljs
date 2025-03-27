@@ -236,6 +236,11 @@
   [block property value selected? {:keys [refresh-result-f] :as opts}]
   (let [many? (db-property/many? property)
         blocks (get-operating-blocks block)]
+    (when (and selected?
+               (= :db.type/ref (:db/valueType property))
+               (number? value)
+               (not (db/entity value)))
+      (db-async/<get-block (state/get-current-repo) value {:children? false}))
     (p/do!
      (if selected?
        (<add-property! block (:db/ident property) value
@@ -827,14 +832,7 @@
                                       (p/let [property-ident (if (= :logseq.property/default-value (:db/ident property))
                                                                (:db/ident block)
                                                                (:db/ident property))
-                                              result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                                          property-ident)
-                                              non-loaded-ids (filter (fn [id] (not (db/entity id))) result)
-                                              repo (state/get-current-repo)
-                                              _ (p/all (map (fn [id] (db-async/<get-block repo id
-                                                                                          {:children? false
-                                                                                           :including-property-vals? false
-                                                                                           :skip-refresh? true})) non-loaded-ids))]
+                                              result (db-async/<get-property-values property-ident)]
                                         (reset! *values result))))]
              (refresh-result-f)
              (assoc state
@@ -849,7 +847,6 @@
     (when-not (= :loading values)
       (let [type (:logseq.property/type property)
             closed-values? (seq (:property/closed-values property))
-            ref-type? (db-property-type/all-ref-property-types type)
             items (if closed-values?
                     (let [date? (and
                                  (= (:db/ident property) :logseq.task/recur-unit)
@@ -869,17 +866,9 @@
                                  :label-value value}))
                             values))
                     (->> values
-                         (mapcat (fn [value]
-                                   (if (coll? value)
-                                     (map (fn [v] {:value v}) value)
-                                     [{:value value}])))
-                         (map (fn [{:keys [value]}]
-                                (if (and ref-type? (number? value))
-                                  (when-let [e (db/entity value)]
-                                    {:label (db-property/property-value-content e)
-                                     :value value})
-                                  {:label value
-                                   :value value})))
+                         (map (fn [{:keys [value label]}]
+                                {:label label
+                                 :value (:db/id value)}))
                          (distinct)))
             items (->> (if (= :date type)
                          (map (fn [m] (let [label (:block/title (db/entity (:value m)))]

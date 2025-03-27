@@ -39,7 +39,6 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
-            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -709,7 +708,7 @@
     (hooks/use-effect!
      (fn []
        (when (and view-entity property-ident (not (or timestamp? checkbox?)))
-         (p/let [data (get-property-values (:db/id view-entity) property-ident)]
+         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)})]
            (set-values! data))))
      [property-ident])
     (let [option (cond
@@ -911,7 +910,7 @@
          (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids)))
        (when (and property-ident dropdown-open?
                   (not (contains? #{:data :datetime :checkbox} type)))
-         (p/let [data (get-property-values (:db/id view-entity) property-ident)]
+         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)})]
            (set-values! (map (fn [v] (if (map? (:value v))
                                        (assoc v :value (:block/uuid (:value v)))
                                        v)) data)))))

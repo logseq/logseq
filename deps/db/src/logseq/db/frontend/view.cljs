@@ -113,17 +113,17 @@
       (sort-by-multiple-properties db sorting rows))))
 
 (defn get-property-value-content
-  [db entity]
-  (when entity
+  [db value]
+  (when value
     (cond
-      (uuid? entity)
-      (db-property/property-value-content (d/entity db [:block/uuid entity]))
-      (de/entity? entity)
-      (db-property/property-value-content entity)
-      (keyword? entity)
-      (str entity)
+      (uuid? value)
+      (db-property/property-value-content (d/entity db [:block/uuid value]))
+      (de/entity? value)
+      (db-property/property-value-content value)
+      (keyword? value)
+      (str value)
       :else
-      entity)))
+      value)))
 
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
@@ -379,27 +379,49 @@
     (get-entities db view feat-type index-attr view-for-id)))
 
 (defn get-property-values
-  [db view-id property-ident]
-  (let [entities-result (get-view-entities db view-id)
-        entities (if (map? entities-result)
-                   (:ref-blocks entities-result)
-                   entities-result)
-        values (->> (mapcat (fn [entity]
-                              (let [v (get entity property-ident)]
-                                (if (set? v) v #{v})))
-                            entities)
-                    (remove nil?))]
-    (->>
-     (keep (fn [e]
-             (let [label (get-property-value-content db e)]
-               (when-not (string/blank? (str label))
-                 {:label (str label)
-                  :value (if (de/entity? e)
-                           (select-keys e [:db/id :block/uuid])
-                           e)})))
-           values)
-     (common-util/distinct-by :label)
-     (sort-by :label))))
+  [db property-ident {:keys [view-id]}]
+  (let [property (d/entity db property-ident)
+        default-value (:logseq.property/default-value property)
+        empty-id (:db/id (d/entity db :logseq.property/empty-placeholder))
+        ref-type? (= :db.type/ref (:db/valueType property))
+        values (if view-id
+                 (let [entities-result (get-view-entities db view-id)
+                       entities (if (map? entities-result)
+                                  (:ref-blocks entities-result)
+                                  entities-result)]
+                   (->> (mapcat (fn [entity]
+                                  (let [v (get entity property-ident)]
+                                    (if (set? v) v #{v})))
+                                entities)
+                        (remove nil?)
+                        (keep (fn [e]
+                                (when-let [label (get-property-value-content db e)]
+                                  (when-not (or (string/blank? (str label))
+                                                (= empty-id (:db/id e)))
+                                    {:label (str label)
+                                     :value (if (de/entity? e)
+                                              (select-keys e [:db/id :block/uuid])
+                                              e)}))))
+                        (common-util/distinct-by :label)))
+                 ;; get all values
+                 (->> (d/datoms db :avet property-ident)
+                      (map (fn [d]
+                             (:v d)))
+                      distinct
+                      (map (fn [v]
+                             (let [e (when ref-type? (d/entity db v))
+                                   [label value] (if ref-type?
+                                                   [(db-property/property-value-content e)
+                                                    (select-keys e [:db/id :block/uuid])]
+                                                   [(str v) v])]
+                               {:label label
+                                :value value})))
+                      (common-util/distinct-by :label)))]
+    (if default-value
+      (cons {:label (get-property-value-content db default-value)
+             :value (select-keys default-value [:db/id :block/uuid])}
+            values)
+      values)))
 
 (defn get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type input]
