@@ -637,21 +637,6 @@
         :on-click #(set-show-input! true)}
        (ui/icon "search" {:size 15})))))
 
-(defn- get-property-values
-  [rows property]
-  (let [property-ident (:db/ident property)
-        values (->> (mapcat (fn [e] (let [e' (db/entity (:db/id e))
-                                          v (get e' property-ident)]
-                                      (if (set? v) v #{v}))) rows)
-                    (remove nil?)
-                    (distinct))]
-    (->>
-     (map (fn [e]
-            (let [label (get-property-value-content e)]
-              {:label (str label) :value e}))
-          values)
-     (sort-by :label))))
-
 (defn datetime-property?
   [property]
   (or
@@ -674,9 +659,18 @@
    {:value "Custom date"
     :label "Custom date"}])
 
+(defn- get-property-values
+  [view-id property-ident]
+  (when (and view-id property-ident)
+    (p/let [data-str (.get-property-values ^js @state/*db-worker (state/get-current-repo)
+                                           (ldb/write-transit-str {:view-id view-id
+                                                                   :property-ident property-ident}))]
+      (ldb/read-transit-str data-str))))
+
 (rum/defc filter-property < rum/static
-  [columns {:keys [data-fns] :as table}]
+  [view-entity columns {:keys [data-fns] :as table}]
   (let [[property set-property!] (rum/use-state nil)
+        [values set-values!] (rum/use-state nil)
         schema (:schema (db/get-db))
         timestamp? (datetime-property? property)
         set-filters! (:set-filters! data-fns)
@@ -710,59 +704,68 @@
                                                     [new-filter])]
                                      (set-filters! {:or? (:or? filters)
                                                     :filters filters'}))))))}
-        option (cond
-                 timestamp?
-                 (merge option
-                        {:items timestamp-options
-                         :input-default-placeholder (if property (:block/title property) "Select")
-                         :on-chosen (fn [value _ _ e]
-                                      (shui/popup-hide!)
-                                      (let [set-filter-fn (fn [value]
-                                                            (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
-                                                              (set-filters! {:or? (:or? filters)
-                                                                             :filters filters'})))]
-                                        (if (= value "Custom date")
-                                          (shui/popup-show!
-                                           (.-target e)
-                                           (ui/nlp-calendar
-                                            {:initial-focus true
-                                             :datetime? false
-                                             :on-day-click (fn [value]
-                                                             (set-filter-fn value)
-                                                             (shui/popup-hide!))})
-                                           {})
-                                          (set-filter-fn value))))})
-                 property
-                 (if (= :checkbox (:logseq.property/type property))
-                   (let [items [{:value true :label "true"}
-                                {:value false :label "false"}]]
-                     (merge option
-                            {:items items
-                             :input-default-placeholder (if property (:block/title property) "Select")
-                             :on-chosen (fn [value]
-                                          (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
-                                            (set-filters! {:or? (:or? filters)
-                                                           :filters filters'})))}))
-                   (let [items (get-property-values (:data table) property)]
-                     (merge option
-                            {:items items
-                             :input-default-placeholder (if property (:block/title property) "Select")
-                             :multiple-choices? true
-                             :on-chosen (fn [_value _selected? selected]
-                                          (let [selected-value (if (de/entity? (first selected))
-                                                                 (set (map :block/uuid selected))
-                                                                 selected)
-                                                filters' (if (seq selected)
-                                                           (conj (:filters filters) [(:db/ident property) :is selected-value])
-                                                           (:filters filters))]
-                                            (set-filters! {:or? (:or? filters)
-                                                           :filters filters'})))})))
-                 :else
-                 option)]
-    (select/select option)))
+        checkbox? (= :checkbox (:logseq.property/type property))
+        property-ident (:db/ident property)]
+    (hooks/use-effect!
+     (fn []
+       (when (and view-entity property-ident (not (or timestamp? checkbox?)))
+         (p/let [data (get-property-values (:db/id view-entity) property-ident)]
+           (set-values! data))))
+     [property-ident])
+    (let [option (cond
+                   timestamp?
+                   (merge option
+                          {:items timestamp-options
+                           :input-default-placeholder (if property (:block/title property) "Select")
+                           :on-chosen (fn [value _ _ e]
+                                        (shui/popup-hide!)
+                                        (let [set-filter-fn (fn [value]
+                                                              (let [filters' (conj (:filters filters) [(:db/ident property) :after value])]
+                                                                (set-filters! {:or? (:or? filters)
+                                                                               :filters filters'})))]
+                                          (if (= value "Custom date")
+                                            (shui/popup-show!
+                                             (.-target e)
+                                             (ui/nlp-calendar
+                                              {:initial-focus true
+                                               :datetime? false
+                                               :on-day-click (fn [value]
+                                                               (set-filter-fn value)
+                                                               (shui/popup-hide!))})
+                                             {})
+                                            (set-filter-fn value))))})
+                   property
+                   (if checkbox?
+                     (let [items [{:value true :label "true"}
+                                  {:value false :label "false"}]]
+                       (merge option
+                              {:items items
+                               :input-default-placeholder (if property (:block/title property) "Select")
+                               :on-chosen (fn [value]
+                                            (let [filters' (conj (:filters filters) [(:db/ident property) :is value])]
+                                              (set-filters! {:or? (:or? filters)
+                                                             :filters filters'})))}))
+                     (let [items values]
+                       (merge option
+                              {:items items
+                               :input-default-placeholder (if property (:block/title property) "Select")
+                               :multiple-choices? true
+                               :on-chosen (fn [_value _selected? selected]
+                                            (let [selected-value (if (and (map? (first selected))
+                                                                          (:block/uuid (first selected)))
+                                                                   (set (map :block/uuid selected))
+                                                                   selected)
+                                                  filters' (if (seq selected)
+                                                             (conj (:filters filters) [(:db/ident property) :is selected-value])
+                                                             (:filters filters))]
+                                              (set-filters! {:or? (:or? filters)
+                                                             :filters filters'})))})))
+                   :else
+                   option)]
+      (select/select option))))
 
 (rum/defc filter-properties < rum/static
-  [columns table]
+  [view-entity columns table]
   (shui/button
    {:variant "ghost"
     :class "text-muted-foreground !px-1"
@@ -770,7 +773,7 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn []
-                                    (filter-property columns table))
+                                    (filter-property view-entity columns table))
                                   {:align :end
                                    :auto-focus? true}))}
    (ui/icon "filter")))
@@ -896,96 +899,106 @@
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
 (rum/defc filter-value-select < rum/static
-  [{:keys [data-fns] :as table} property value operator idx]
+  [view-entity {:keys [data-fns] :as table} property value operator idx]
   (let [type (:logseq.property/type property)
-        items (cond
-                (contains? #{:before :after} operator)
-                timestamp-options
-                (= type :checkbox)
-                [{:value true :label "true"} {:value false :label "false"}]
-                :else
-                (->> (get-property-values (:data table) property)
-                     (map (fn [{:keys [value label]}]
-                            {:label label
-                             :value (or (:block/uuid value) value)}))))
-        filters (get-in table [:state :filters])
-        set-filters! (:set-filters! data-fns)
-        many? (if (or (contains? #{:date-before :date-after :before :after} operator)
-                      (contains? #{:checkbox} type))
-                false
-                true)
-        option (cond->
-                {:input-default-placeholder (:block/title property)
-                 :input-opts {:class "!px-3 !py-1"}
-                 :items items
-                 :extract-fn :label
-                 :extract-chosen-fn :value
-                 :on-chosen (fn [value _selected? selected e]
-                              (when-not many?
-                                (shui/popup-hide!))
-                              (let [value' (if many? selected value)
-                                    set-filters-fn (fn [value']
-                                                     (let [new-filters (update filters :filters
-                                                                               (fn [col]
-                                                                                 (update col idx
-                                                                                         (fn [[property operator _value]]
-                                                                                           [property operator value']))))]
-                                                       (set-filters! new-filters)))]
-                                (if (= value "Custom date")
-                                  (shui/popup-show!
-                                   (.-target e)
-                                   (ui/nlp-calendar
-                                    {:initial-focus true
-                                     :datetime? false
-                                     :on-day-click (fn [value]
-                                                     (set-filters-fn value)
-                                                     (shui/popup-hide!))})
-                                   {})
-                                  (set-filters-fn value'))))}
-                 many?
-                 (assoc
-                  :multiple-choices? true
-                  :selected-choices value))]
-    (shui/dropdown-menu
-     (shui/dropdown-menu-trigger
-      {:asChild true}
-      (shui/button
-       {:class "!px-2 rounded-none border-r"
-        :variant "ghost"
-        :size :sm}
-       (let [value (cond
-                     (uuid? value)
-                     (db/entity [:block/uuid value])
-                     (instance? js/Date value)
-                     (some->> (tc/to-date value)
-                              (t/to-default-time-zone)
-                              (tf/unparse (tf/formatter "yyyy-MM-dd")))
-                     (and (coll? value) (every? uuid? value))
-                     (set (map #(db/entity [:block/uuid %]) value))
-                     :else
-                     value)]
-         [:div.flex.flex-row.items-center.gap-1.text-xs
-          (cond
-            (de/entity? value)
-            [:div (get-property-value-content value)]
+        property-ident (:db/ident property)
+        [values set-values!] (hooks/use-state nil)
+        [dropdown-open? set-dropdown-open!] (hooks/use-state false)]
+    (hooks/use-effect!
+     (fn []
+       (when (and property-ident dropdown-open?
+                  (not (contains? #{:data :datetime :checkbox} type)))
+         (p/let [data (get-property-values (:db/id view-entity) property-ident)]
+           (set-values! (map (fn [v] (if (map? (:value v))
+                                       (assoc v :value (:block/uuid (:value v)))
+                                       v)) data)))))
+     [property-ident dropdown-open?])
+    (let [items (cond
+                  (contains? #{:before :after} operator)
+                  timestamp-options
+                  (= type :checkbox)
+                  [{:value true :label "true"} {:value false :label "false"}]
+                  :else
+                  values)
+          filters (get-in table [:state :filters])
+          set-filters! (:set-filters! data-fns)
+          many? (if (or (contains? #{:date-before :date-after :before :after} operator)
+                        (contains? #{:checkbox} type))
+                  false
+                  true)
+          option (cond->
+                  {:input-default-placeholder (:block/title property)
+                   :input-opts {:class "!px-3 !py-1"}
+                   :items items
+                   :extract-fn :label
+                   :extract-chosen-fn :value
+                   :on-chosen (fn [value _selected? selected e]
+                                (when-not many?
+                                  (shui/popup-hide!))
+                                (let [value' (if many? selected value)
+                                      set-filters-fn (fn [value']
+                                                       (let [new-filters (update filters :filters
+                                                                                 (fn [col]
+                                                                                   (update col idx
+                                                                                           (fn [[property operator _value]]
+                                                                                             [property operator value']))))]
+                                                         (set-filters! new-filters)))]
+                                  (if (= value "Custom date")
+                                    (shui/popup-show!
+                                     (.-target e)
+                                     (ui/nlp-calendar
+                                      {:initial-focus true
+                                       :datetime? false
+                                       :on-day-click (fn [value]
+                                                       (set-filters-fn value)
+                                                       (shui/popup-hide!))})
+                                     {})
+                                    (set-filters-fn value'))))}
+                   many?
+                   (assoc
+                    :multiple-choices? true
+                    :selected-choices value))]
+      (shui/dropdown-menu
+       (shui/dropdown-menu-trigger
+        {:asChild true}
+        (shui/button
+         {:class "!px-2 rounded-none border-r"
+          :variant "ghost"
+          :size :sm
+          :on-click #(set-dropdown-open! (not dropdown-open?))}
+         (let [value (cond
+                       (uuid? value)
+                       (db/entity [:block/uuid value])
+                       (instance? js/Date value)
+                       (some->> (tc/to-date value)
+                                (t/to-default-time-zone)
+                                (tf/unparse (tf/formatter "yyyy-MM-dd")))
+                       (and (coll? value) (every? uuid? value))
+                       (set (map #(db/entity [:block/uuid %]) value))
+                       :else
+                       value)]
+           [:div.flex.flex-row.items-center.gap-1.text-xs
+            (cond
+              (de/entity? value)
+              [:div (get-property-value-content value)]
 
-            (string? value)
-            [:div value]
+              (string? value)
+              [:div value]
 
-            (boolean? value)
-            [:div (str value)]
+              (boolean? value)
+              [:div (str value)]
 
-            (seq value)
-            (->> (map (fn [v] [:div (get-property-value-content v)]) value)
-                 (interpose [:div "or"]))
-            :else
-            "All")])))
-     (shui/dropdown-menu-content
-      {:align "start"}
-      (select/select option)))))
+              (seq value)
+              (->> (map (fn [v] [:div (get-property-value-content v)]) value)
+                   (interpose [:div "or"]))
+              :else
+              "All")])))
+       (shui/dropdown-menu-content
+        {:align "start"}
+        (select/select option))))))
 
 (rum/defc filter-value < rum/static
-  [table property operator value filters set-filters! idx]
+  [view-entity table property operator value filters set-filters! idx]
   (let [number-operator? (string/starts-with? (name operator) "number-")]
     (case operator
       :between
@@ -1009,10 +1022,10 @@
                         (set-filters! new-filters))))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
 
-      (filter-value-select table property value operator idx))))
+      (filter-value-select view-entity table property value operator idx))))
 
-(rum/defc filters-row < rum/static
-  [{:keys [data-fns columns] :as table}]
+(rum/defc filters-row < rum/static      ;
+  [view-entity {:keys [data-fns columns] :as table}]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
     (when (seq (:filters filters))
@@ -1036,7 +1049,7 @@
                 :disabled true}
                [:span.text-xs (:block/title property)])
               (filter-operator property operator filters set-filters! idx)
-              (filter-value table property operator value filters set-filters! idx)
+              (filter-value view-entity table property operator value filters set-filters! idx)
               (shui/button
                {:class "!px-1 rounded-none text-muted-foreground"
                 :variant "ghost"
@@ -1485,7 +1498,7 @@
       (when (seq sorting)
         (view-sorting table columns sorting))
 
-      (filter-properties columns table)
+      (filter-properties view-entity columns table)
 
       (search input {:on-change set-input!
                      :set-input! set-input!})
@@ -1584,7 +1597,7 @@
      (ui/foldable
       (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
       [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
-       (filters-row table)
+       (filters-row view-entity table)
 
        (let [view-opts {:*scroller-ref *scroller-ref
                         :display-type display-type

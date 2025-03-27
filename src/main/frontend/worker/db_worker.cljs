@@ -915,6 +915,13 @@
          data (db-view/get-view-data @conn view-id (ldb/read-transit-str opts-str))]
      (ldb/write-transit-str data)))
 
+  (get-property-values
+   [_this repo opts-str]
+   (let [conn (worker-state/get-datascript-conn repo)
+         {:keys [view-id property-ident]} (ldb/read-transit-str opts-str)
+         data (db-view/get-property-values @conn view-id property-ident)]
+     (ldb/write-transit-str data)))
+
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [r (.listDB this)
