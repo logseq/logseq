@@ -159,7 +159,7 @@
     (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
-               properties (db-async/<db-based-get-all-properties repo)
+               properties (db-async/db-based-get-all-properties repo)
                classes (->> (db-model/get-all-classes repo)
                             (remove ldb/built-in?))]
          (set-classes! classes)

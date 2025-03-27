@@ -661,11 +661,7 @@
                                       (conj (:block/uuid block))) ; break cycle
                       options (if (ldb/class? block)
                                 (model/get-all-classes repo)
-                                (when (ldb/internal-page? block)
-                                  (cond->>
-                                   (->> (model/get-all-pages repo)
-                                        (filter ldb/internal-page?)
-                                        (remove ldb/built-in?)))))
+                                result)
                       excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
                   excluded-options)
 
@@ -817,14 +813,27 @@
                            class?
                            (conj (frontend.db/entity :logseq.class/Tag)))
         parent-property? (= (:db/ident property) :logseq.property/parent)]
-    (when (and (not parent-property?) (seq non-root-classes))
-      ;; effect runs once
-      (hooks/use-effect!
-       (fn []
+
+    ;; effect runs once
+    (hooks/use-effect!
+     (fn []
+       (cond
+         (and parent-property? (not (ldb/class? block))
+              (ldb/internal-page? block))
+         (p/let [result (db-async/<get-tag-pages repo (:db/id (db/entity :logseq.class/Page)))
+                 result' (->> result
+                              (remove ldb/built-in?))]
+           (set-result! result'))
+
+         parent-property?
+         nil
+
+         (seq non-root-classes)
          (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
                  result' (distinct (apply concat result))]
-           (set-result! result')))
-       []))
+           (set-result! result'))))
+     [])
+
     (select-node property opts' result)))
 
 (rum/defcs select < rum/reactive db-mixins/query
