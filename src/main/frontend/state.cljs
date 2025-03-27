@@ -33,14 +33,24 @@
 
 (defonce *db-worker (atom nil))
 
-(defn <invoke-db-worker
-  "invoke db-worker thread api"
-  [qkw & args]
+(defn- <invoke-db-worker*
+  [qkw direct-pass-args? args-list]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw args)))
+    (apply worker qkw direct-pass-args? args-list)))
+
+(defn <invoke-db-worker
+  "invoke db-worker thread api"
+  [qkw & args]
+  (<invoke-db-worker* qkw false args))
+
+(defn <invoke-db-worker-direct-passthrough-args
+  "invoke db-worker thread api.
+  But directly pass args to db-worker(won't do transit-write on them)."
+  [qkw & args]
+  (<invoke-db-worker* qkw true args))
 
 ;; Stores main application state
 (defonce ^:large-vars/data-var state

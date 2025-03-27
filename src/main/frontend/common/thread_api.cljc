@@ -23,10 +23,11 @@ e.g. (def-thread-api :thread-api/a-api [arg1 arg2] body)"
 #?(:cljs
    (defn remote-function
      "Return a promise whose value is transit-str."
-     [qualified-kw-str args-transit-str]
+     [qualified-kw-str args-direct-passthrough? args-transit-str-or-args-array]
      (let [qkw (keyword qualified-kw-str)]
        (if-let [f (@*thread-apis qkw)]
-         (let [result (apply f (ldb/read-transit-str args-transit-str))
+         (let [result (apply f (cond-> args-transit-str-or-args-array
+                                 (not args-direct-passthrough?) ldb/read-transit-str))
                result-promise
                (if (fn? result) ;; missionary task is a fn
                  (js/Promise. result)
