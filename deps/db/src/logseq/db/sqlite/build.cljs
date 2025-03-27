@@ -631,7 +631,7 @@
     @uuids))
 
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
+  [{:keys [pages-and-blocks properties auto-create-ontology?]
     :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties (dissoc options :pages-and-blocks :properties))
         page-uuids (create-page-uuids pages-and-blocks')

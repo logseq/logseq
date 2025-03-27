@@ -543,6 +543,7 @@
         closed-value-uuid (random-uuid)
         property-uuid (random-uuid)
         class-uuid (random-uuid)
+        class-alias-uuid (random-uuid)
         class2-uuid (random-uuid)
         journal-uuid (common-uuid/gen-uuid :journal-page-uuid 19650201)
         original-data
@@ -566,9 +567,13 @@
                                :db/cardinality :db.cardinality/many
                                :build/property-classes [:user.class/MyClass]}}
          :classes
-         {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}
-                               :block/uuid class-uuid
-                               :build/keep-uuid? true}
+         {:user.class/MyClass (cond-> {:build/properties {:user.property/url "https://example.com/MyClass"}
+                                       :block/uuid class-uuid
+                                       :build/keep-uuid? true}
+                                (not exclude-namespaces?)
+                                (assoc :block/alias #{[:block/uuid class-alias-uuid]}))
+          :user.class/MyClassAlias {:block/uuid class-alias-uuid
+                                    :build/keep-uuid? true}
           :user.class/MyClass2 {:build/class-parent :user.class/MyClass
                                 :block/uuid class2-uuid
                                 :build/keep-uuid? true

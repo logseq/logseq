@@ -561,11 +561,14 @@
                                 (and (:exclude-built-in-pages? options)
                                      (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
                               (concat page-exports ontology-page-exports))
-        alias-uuids  (mapcat (fn [{:keys [pages-and-blocks]}]
-                               (mapcat #(when-let [aliases (get-in % [:page :block/alias])]
-                                          (map second aliases))
-                                       pages-and-blocks))
-                             page-exports')
+        alias-uuids  (concat (mapcat (fn [{:keys [pages-and-blocks]}]
+                                (mapcat #(map second (get-in % [:page :block/alias]))
+                                        pages-and-blocks))
+                              page-exports')
+                             (mapcat #(map second (:block/alias %))
+                                     (vals (:classes graph-ontology)))
+                             (mapcat #(map second (:block/alias %))
+                                     (vals (:properties graph-ontology))))
         uuids-to-keep (set/union (set (mapcat :pvalue-uuids page-exports'))
                                  (set alias-uuids)
                                  (set (map #(get-in % [:pages-and-blocks 0 :page :block/uuid]) ontology-page-exports)))
