@@ -51,7 +51,7 @@
     (p/let [templates (<get-all-templates repo)]
       (get templates name))))
 
-(defn <db-based-get-all-properties
+(defn db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
   [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
             :or {remove-built-in-property? true
@@ -80,7 +80,7 @@
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph opts)
+      (db-based-get-all-properties graph opts)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))
@@ -274,8 +274,8 @@
 
 (defn <get-tag-pages
   [graph tag-id]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at])]
+  (<q graph {:transact-db? false}
+      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
         :in $ ?tag-id
         :where
         [?page :block/tags ?tag-id]
