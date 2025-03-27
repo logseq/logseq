@@ -3342,7 +3342,8 @@
     (nil? (:level config))
     (assoc :level 0)))
 
-(defn- build-block [config block* {:keys [navigating-block navigated?]}]
+(defn- build-block
+  [config block* {:keys [navigating-block navigated?]}]
   (let [linked-block (:block/link (db/entity (:db/id block*)))
         block (cond
                 (or (and (:custom-query? config)
@@ -3360,7 +3361,7 @@
 
                 :else
                 block*)
-        result (db/sub-block (:db/id block))]
+        result (or (db/sub-block (:db/id block)) block*)]
     (if linked-block
       [block* result]
       [nil result])))
@@ -3690,8 +3691,11 @@
 (rum/defc block-container
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state
-                            (some-> (:db/id block*) db/entity))]
-    (when-not (:page-title? config)
+                            (or (some-> (:db/id block*) db/entity)
+                                block*))]
+    (when-not (or (:page-title? config)
+                  (:property-block? config)
+                  (:table-view? config))
       (hooks/use-effect!
        (fn []
          (p/do!

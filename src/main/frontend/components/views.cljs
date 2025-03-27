@@ -1158,16 +1158,15 @@
     (when db-id
       (let [block (db/entity db-id)
             [item set-item!] (hooks/use-state block)
-            opts {:children? false
+            opts {:block-only? true
                   :properties properties
                   :skip-transact? true
                   :skip-refresh? true}]
         (hooks/use-effect!
          (fn []
-           (when (and db-id (not block))
-             (p/let [result (db-async/<get-block (state/get-current-repo) db-id opts)]
-               (let [block (:block result)]
-                 (set-item! (or block (some-> (:db/id block) db/entity)))))))
+           (when (and db-id (not (:block.temp/fully-loaded? block)))
+             (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
+               (set-item! block))))
          [db-id])
         (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))))
 
