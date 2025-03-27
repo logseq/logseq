@@ -385,16 +385,21 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks] :as options}]
+(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page?] :as options}]
   (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
                    (:exclude-ontology? options)
                    (assoc :properties (get-in options [:graph-ontology :properties])))
-        page-ent-export (build-node-export db page-entity options')
+        page-ent-export (if ontology-page?
+                          ;; Ontology pages are already built in build-graph-ontology-export
+                          {:node (select-keys page-entity [:block/uuid])}
+                          (build-node-export db page-entity options'))
         page-pvalue-uuids (get-pvalue-uuids (:node page-ent-export))
-        page (merge (dissoc (:node page-ent-export) :block/title)
-                    (shallow-copy-page page-entity)
-                    (when (:block/alias page-entity)
-                      {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))}))
+        page (if ontology-page?
+               (:node page-ent-export)
+               (merge (dissoc (:node page-ent-export) :block/title)
+                      (shallow-copy-page page-entity)
+                      (when (:block/alias page-entity)
+                        {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))})))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
                             :classes classes}]
@@ -412,7 +417,7 @@
         page-blocks (->> page-blocks*
                          (sort-by :block/order)
                          ;; Remove property value blocks as they are exported in a block's :build/properties
-                         (remove #(:logseq.property/created-from-property %)))
+                         (remove :logseq.property/created-from-property))
         {:keys [pvalue-uuids] :as blocks-export}
         (build-blocks-export db page-blocks options)
         page-blocks-export (build-page-blocks-export db page-entity (merge blocks-export options))
@@ -537,22 +542,34 @@
                          {:exclude-ontology? true}))
         page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
+        ontology-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Tag))
+                             (map :e (d/datoms db :avet :block/tags :logseq.class/Property)))
         page-exports (mapv (fn [eid]
-                             (let [page-blocks* (get-page-blocks db eid)]
-                               (build-page-export* db eid page-blocks* (merge options {:include-uuid-fn (constantly true)}))))
+                             (let [page-blocks (get-page-blocks db eid)]
+                               (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)}))))
                            page-ids)
+        ontology-page-exports
+        (vec
+         (keep (fn [eid]
+                 (when-let [page-blocks (seq (remove :logseq.property/created-from-property (get-page-blocks db eid)))]
+                   (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)
+                                                                          :ontology-page? true}))))
+               ontology-ids))
         page-exports' (remove (fn [page-export]
                                 (and (:exclude-built-in-pages? options)
                                      (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
-                              page-exports)
+                              (concat page-exports ontology-page-exports))
         alias-uuids  (mapcat (fn [{:keys [pages-and-blocks]}]
                                (mapcat #(when-let [aliases (get-in % [:page :block/alias])]
                                           (map second aliases))
                                        pages-and-blocks))
                              page-exports')
+        uuids-to-keep (set/union (set (mapcat :pvalue-uuids page-exports'))
+                                 (set alias-uuids)
+                                 (set (map #(get-in % [:pages-and-blocks 0 :page :block/uuid]) ontology-page-exports)))
         pages-export {:pages-and-blocks (vec (mapcat :pages-and-blocks page-exports'))
-                      :pvalue-uuids (into (set (mapcat :pvalue-uuids page-exports'))
-                                          alias-uuids)}]
+                      ;; :pvalue-uuids is a misleading name here but using it to keep uuid key consistent across exports
+                      :pvalue-uuids uuids-to-keep}]
     pages-export))
 
 (defn- build-graph-files
@@ -590,7 +607,9 @@
    and readability"
   [pages-and-blocks]
   (vec
-   (sort-by #(or (get-in % [:page :block/title]) (str (get-in % [:page :build/journal])))
+   (sort-by #(or (get-in % [:page :block/title])
+                 (some-> (get-in % [:page :build/journal]) str)
+                 (str (get-in % [:page :block/uuid])))
             pages-and-blocks)))
 
 (defn- add-ontology-for-include-namespaces
