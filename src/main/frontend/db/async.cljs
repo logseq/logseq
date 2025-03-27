@@ -155,7 +155,7 @@
                 (react/refresh-affected-queries! graph affected-keys))))
 
           (if (or children? block-only?)
-            (or (db/entity (:db/id block)) block)
+            block
             result'))))))
 
 (defn <get-blocks
