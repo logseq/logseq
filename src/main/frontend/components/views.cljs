@@ -600,8 +600,10 @@
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
-  (let [row' (or (db/sub-block (:db/id row)) row)]
-    (table-row-inner table row' props option)))
+  (let [block (db/sub-block (:db/id row))
+        row' (or block row)]
+    (table-row-inner table row' props
+                     (assoc option :init-row row))))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1156,15 +1158,15 @@
                     (number? item) item
                     :else nil)]
     (when db-id
-      (let [block (db/entity db-id)
-            [item set-item!] (hooks/use-state block)
+      (let [block-entity (db/entity db-id)
+            [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
             opts {:block-only? true
                   :properties properties
-                  :skip-transact? true
-                  :skip-refresh? true}]
+                  :skip-transact? (not block-entity)
+                  :skip-refresh? (not block-entity)}]
         (hooks/use-effect!
          (fn []
-           (when (and db-id (not (:block.temp/fully-loaded? block)))
+           (when (and db-id (not item))
              (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
                (set-item! block))))
          [db-id])

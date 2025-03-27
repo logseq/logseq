@@ -919,7 +919,9 @@
                (:skip-async-load? (first args))
                (reset! *result page)
                :else
-               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false :block-only? true})]
+               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false :block-only? true
+                                                                                             :skip-refresh? true
+                                                                                             :including-property-vals? false})]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -3690,9 +3692,7 @@
 
 (rum/defc block-container
   [config block* & {:as opts}]
-  (let [[block set-block!] (hooks/use-state
-                            (or (some-> (:db/id block*) db/entity)
-                                block*))]
+  (let [[block set-block!] (hooks/use-state block*)]
     (when-not (or (:page-title? config)
                   (:property-block? config)
                   (:table-view? config))
