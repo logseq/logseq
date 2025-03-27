@@ -360,32 +360,64 @@
 
       nil)))
 
+(defn- get-view-entities
+  [db view-id & {:keys [view-for-id view-feature-type]}]
+  (let [view (d/entity db view-id)
+        feat-type (or view-feature-type (:logseq.property.view/feature-type view))
+        index-attr (case feat-type
+                     :all-pages
+                     :block/name
+                     :class-objects
+                     :block/tags
+                     :property-objects
+                     (let [view-for (:logseq.property/view-for view)]
+                       (:db/ident view-for))
+                     nil)]
+    (get-entities db view feat-type index-attr view-for-id)))
+
+(defn get-property-values
+  [db view-id property-ident]
+  (let [entities-result (get-view-entities db view-id)
+        entities (if (map? entities-result)
+                   (:ref-blocks entities-result)
+                   entities-result)
+        values (->> (mapcat (fn [entity]
+                              (let [v (get entity property-ident)]
+                                (if (set? v) v #{v})))
+                            entities)
+                    (remove nil?))]
+    (->>
+     (keep (fn [e]
+             (let [label (get-property-value-content db e)]
+               (when-not (string/blank? (str label))
+                 {:label (str label)
+                  :value (if (de/entity? e)
+                           (select-keys e [:db/id :block/uuid])
+                           e)})))
+           values)
+     (common-util/distinct-by :label)
+     (sort-by :label))))
+
 (defn get-view-data
-  [db view-id {:keys [journals? view-for-id view-feature-type input]}]
+  [db view-id {:keys [journals? _view-for-id view-feature-type input]
+               :as opts}]
   ;; TODO: create a view for journals maybe?
-  (if journals?
+  (cond
+    journals?
     (let [ids (->> (ldb/get-latest-journals db)
                    (mapv :db/id))]
       {:count (count ids)
        :data ids})
+    :else
     (let [view (d/entity db view-id)
-          feat-type (or view-feature-type (:logseq.property.view/feature-type view))
-          index-attr (case feat-type
-                       :all-pages
-                       :block/name
-                       :class-objects
-                       :block/tags
-                       :property-objects
-                       (let [view-for (:logseq.property/view-for view)]
-                         (:db/ident view-for))
-                       nil)
           group-by-property (:logseq.property.view/group-by-property view)
           group-by-property-ident (:db/ident group-by-property)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (:logseq.property.table/filters view)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-          entities-result (get-entities db view feat-type index-attr view-for-id)
+          feat-type (or view-feature-type (:logseq.property.view/feature-type view))
+          entities-result (get-view-entities db view-id opts)
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)
                      entities-result)
