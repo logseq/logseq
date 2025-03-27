@@ -90,7 +90,9 @@
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
         ;; Block property blocks and queries
-        {:page {:block/title "Block Properties"}
+        {:page {:block/title "Block Properties"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all the combinations of property types and single/multiple values that are possible."}}
          :blocks
          [{:block/title "default property block" :build/properties {:default "haha"}}
           {:block/title "default property block" :build/properties {:default-many #{"yee" "haw" "sir"}}}
@@ -109,7 +111,9 @@
           {:block/title "date-many property block" :build/properties {:date-many #{[:build/page {:build/journal today-int}]
                                                                                    [:build/page {:build/journal yesterday-int}]}}}
           {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
-        {:page {:block/title "Property Queries"}
+        {:page {:block/title "Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for a specific value. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default \"haha\")")
           (query "(property default-many \"haw\")")
@@ -147,7 +151,9 @@
                                                                               [:build/page {:build/journal yesterday-int}]}}}}
         {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
-        {:page {:block/title "Has Property Queries"}
+        {:page {:block/title "Has Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for having a specific property. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default)")
           (query "(property default-many)")

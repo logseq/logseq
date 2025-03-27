@@ -632,12 +632,13 @@
 
 (defn- build-graph-export
   "Exports whole graph. Has the following options:
-   * :include-timestamps? - When set timestamps are included on all blocks
+   * :include-timestamps? - When set, timestamps are included on all blocks
    * :exclude-namespaces - A set of parent namespaces to exclude from properties and classes.
      This is useful for graphs seeded with an ontology e.g. schema.org as it eliminates noisy and needless
      export+import
-   * :exclude-built-in-pages? - When set built-in pages are excluded from export"
-  [db options*]
+   * :exclude-built-in-pages? - When set, built-in pages are excluded from export
+   * :exclude-files? - When set, files are excluded from export"
+  [db {:keys [exclude-files?] :as options*}]
   (let [options (merge options* {:property-value-uuids? true})
         content-ref-uuids (get-graph-content-ref-uuids db options)
         ontology-options (merge options {:include-uuid? true})
@@ -650,15 +651,17 @@
                        (assoc graph-export* ::auto-include-namespaces (:exclude-namespaces options))
                        graph-export*)
         all-ref-uuids (set/union content-ref-uuids ontology-pvalue-uuids (:pvalue-uuids pages-export))
-        files (build-graph-files db options)
+        files (when-not exclude-files? (build-graph-files db options))
         kv-values (build-kv-values db)
         ;; Remove all non-ref uuids after all nodes are built.
         ;; Only way to ensure all pvalue uuids present across block types
         graph-export' (-> (remove-uuids-if-not-ref graph-export all-ref-uuids)
                           (update :pages-and-blocks sort-pages-and-blocks))]
-    (merge graph-export'
-           {::graph-files files
-            ::kv-values kv-values})))
+    (cond-> graph-export'
+      (not exclude-files?)
+      (assoc ::graph-files files)
+      true
+      (assoc ::kv-values kv-values))))
 
 (defn- find-undefined-classes-and-properties [{:keys [classes properties pages-and-blocks]}]
   (let [referenced-classes

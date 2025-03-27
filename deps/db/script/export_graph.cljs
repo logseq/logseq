@@ -44,8 +44,8 @@
                         :desc "Namespaces to exclude from properties and classes"}
    :exclude-built-in-pages? {:alias :b
                              :desc "Exclude built-in pages"}
-   :export-options {:alias :E
-                    :desc "Raw options map to pass to export"}})
+   :exclude-files? {:alias :F
+                    :desc "Exclude :file/path files"}})
 
 (defn -main [args]
   (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
@@ -56,8 +56,7 @@
             (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-cli/open-db! dir db-name)
-        export-options (merge (dissoc options :file :export-options)
-                              (edn/read-string (:export-options options)))
+        export-options (dissoc options :file)
         export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})]
     (if (:file options)
       (do
