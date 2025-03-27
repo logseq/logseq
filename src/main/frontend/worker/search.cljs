@@ -346,8 +346,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   [repo db]
   (build-fuzzy-search-indice repo db)
   (->> (get-all-blocks db)
-       (keep block->index)
-       (bean/->js)))
+       (keep block->index)))
 
 (defn- get-blocks-from-datoms-impl
   [repo {:keys [db-after db-before]} datoms]

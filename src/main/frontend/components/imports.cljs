@@ -383,7 +383,7 @@
                                   (let [tx-reports
                                         (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
                                     (doseq [tx-report tx-reports]
-                                      (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))))}
+                                      (db-browser/transact! @state/*db-worker repo (:tx-data tx-report) (:tx-meta tx-report)))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)

@@ -71,7 +71,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.quick-capture :as quick-capture]
             [frontend.rum :as r]
             [frontend.search :as search]
@@ -83,7 +82,6 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -204,21 +202,19 @@
   (state/set-state! :db/async-queries {})
   (st/refresh!)
   (reset! r/*key->atom {})
-
-  (let [^js sqlite @db-browser/*worker]
-    (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-            request-finished? (db-transact/request-finished?)]
-      (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
-        (do
-          (log/info :graph/switch (cond->
-                                   {:request-finished? request-finished?
-                                    :file-writes-finished? writes-finished?}
-                                    (false? request-finished?)
-                                    (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
-          (notification/show!
-           "Please wait seconds until all changes are saved for the current graph."
-           :warning))
-        (graph-switch-on-persisted graph opts)))))
+  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
+          request-finished? (db-transact/request-finished?)]
+    (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
+      (do
+        (log/info :graph/switch (cond->
+                                 {:request-finished? request-finished?
+                                  :file-writes-finished? writes-finished?}
+                                  (false? request-finished?)
+                                  (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
+        (notification/show!
+         "Please wait seconds until all changes are saved for the current graph."
+         :warning))
+      (graph-switch-on-persisted graph opts))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)
@@ -364,9 +360,8 @@
                  :preferred-format (state/get-preferred-format)
                  :journals-directory (config/get-journals-directory)
                  :whiteboards-directory (config/get-whiteboards-directory)
-                 :pages-directory (config/get-pages-directory)}
-        worker ^Object @state/*db-worker]
-    (when worker (.set-context worker (ldb/write-transit-str context)))))
+                 :pages-directory (config/get-pages-directory)}]
+    (state/<invoke-db-worker :thread-api/set-context context)))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
@@ -1016,9 +1011,8 @@
                                      {:outliner-op :insert-blocks}
                                      ;; insert a new block
                                      (let [[_p _ block'] (editor-handler/insert-new-block-aux! {} block "")]
-                                       (turn-type! block')))
-                             result' (ldb/read-transit-str result)]
-                       (when-let [id (:block/uuid (first (:blocks result')))]
+                                       (turn-type! block')))]
+                       (when-let [id (:block/uuid (first (:blocks result)))]
                          (db/entity [:block/uuid id])))
                      (p/do!
                       (turn-type! block)
