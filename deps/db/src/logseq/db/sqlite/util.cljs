@@ -43,6 +43,7 @@
       (try (transit/write writer o)
            (catch :default e
              (prn ::write-transit-str o)
+             (js/console.trace)
              (throw e))))))
 
 (def read-transit-str

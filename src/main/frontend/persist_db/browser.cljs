@@ -24,7 +24,7 @@
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
 (defn- sync-app-state!
-  [worker]
+  []
   (add-watch state/state
              :sync-worker-state
              (fn [_ _ prev current]
@@ -35,7 +35,7 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (worker :thread-api/sync-app-state new-state))))))
+                   (state/<invoke-db-worker :thread-api/sync-app-state new-state))))))
 
 (defn get-route-data
   [route-match]
@@ -45,7 +45,7 @@
      :query-params (:query-params route-match)}))
 
 (defn- sync-ui-state!
-  [^js worker]
+  []
   (add-watch state/state
              :sync-ui-state
              (fn [_ _ prev current]
@@ -56,12 +56,12 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (worker :thread-api/sync-ui-state
-                             (state/get-current-repo)
-                             {:old-state old-state :new-state new-state})))))))
+                     (state/<invoke-db-worker :thread-api/sync-ui-state
+                                              (state/get-current-repo)
+                                              {:old-state old-state :new-state new-state})))))))
 
 (defn transact!
-  [worker repo tx-data tx-meta]
+  [repo tx-data tx-meta]
   (let [;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
@@ -75,9 +75,7 @@
                  :journals-directory (config/get-journals-directory)
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
-    (if worker
-      (worker :thread-api/transact repo tx-data tx-meta context)
-      (notification/show! "Latest change was not saved! Please restart the application." :error))))
+    (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
 (defn- with-write-transit-str
   [p]
@@ -116,29 +114,32 @@
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
-          wrapped-worker (fn [qkw & args]
+          wrapped-worker (fn [qkw direct-pass-args? & args]
                            (p/chain
                             (.remoteInvoke ^js wrapped-worker*
                                            (str (namespace qkw) "/" (name qkw))
-                                           (ldb/write-transit-str args))
+                                           direct-pass-args?
+                                           (if direct-pass-args?
+                                             (into-array args)
+                                             (ldb/write-transit-str args)))
                             ldb/read-transit-str))
           t1 (util/time-ms)]
       (Comlink/expose (Main.) worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (wrapped-worker :thread-api/init config/RTC-WS-URL)
+      (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (wrapped-worker :thread-api/sync-app-state
-                                    {:git/current-repo (state/get-current-repo)
-                                     :config (:config @state/state)})
-                  _ (sync-app-state! wrapped-worker)
-                  _ (sync-ui-state! wrapped-worker)
+                  _ (state/<invoke-db-worker :thread-api/sync-app-state
+                                             {:git/current-repo (state/get-current-repo)
+                                              :config (:config @state/state)})
+                  _ (sync-app-state!)
+                  _ (sync-ui-state!)
                   _ (ask-persist-permission!)
                   _ (state/pub-event! [:graph/sync-context])]
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (db-transact/transact (partial transact! wrapped-worker)
+               (db-transact/transact transact!
                                      (if (string? repo) repo (state/get-current-repo))
                                      tx-data
                                      tx-meta)))
@@ -187,7 +188,7 @@
     (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
                 disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                 _ (when disk-db-data
-                    (state/<invoke-db-worker :thread-api/import-db repo disk-db-data))
+                    (state/<invoke-db-worker-direct-passthrough-args :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo))
         (p/catch sqlite-error-handler)))
@@ -204,7 +205,7 @@
                    (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker :thread-api/import-db repo data)
+    (-> (state/<invoke-db-worker-direct-passthrough-args :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (prn :debug :import-db-error repo)
                    (js/console.error error)
