@@ -19,13 +19,15 @@
   [block property]
   (let [typ (:logseq.property/type property)
         many? (= :db.cardinality/many (get property :db/cardinality))
-        number-type? (= :number typ)
+        number-type? (or (= :number typ) (= :datetime typ))
         v (get block (:db/ident property))
         v' (if many? v [v])
         col (->> (if (db-property-type/all-ref-property-types typ) (map db-property/property-value-content v') v')
                  (remove nil?))]
-    (if number-type?
+    (cond
+      number-type?
       (reduce + (filter number? col))
+      :else
       (string/join ", " col))))
 
 (defn- get-value-for-sort
@@ -61,7 +63,7 @@
             ordering (if (and (number? v1) (number? v2))
                        (if asc? < >)
                        (if asc? compare #(compare %2 %1)))
-            order (ordering)]
+            order (ordering v1 v2)]
         (if (and (zero? order) orderings)
           (recur orderings)
           order)))))
@@ -91,7 +93,8 @@
   (let [sorting' (map (fn [{:keys [id asc?]}]
                         (let [property (or (d/entity db id) {:id id})]
                           {:asc? asc?
-                           :get-value (fn [row] ((get-value-for-sort property) row))})) sorting)]
+                           :get-value (fn [row]
+                                        ((get-value-for-sort property) row))})) sorting)]
     (sort (by sorting') rows)))
 
 (defn sort-rows

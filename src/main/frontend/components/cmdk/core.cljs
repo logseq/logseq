@@ -804,7 +804,7 @@
                                   (handle-input-change state e)
                                   (when-let [on-change (:on-input-change opts)]
                                     (on-change new-value))))
-                              100)
+                              200)
                              [])]
     ;; use-effect [results-ordered input] to check whether the highlighted item is still in the results,
     ;; if not then clear that puppy out!

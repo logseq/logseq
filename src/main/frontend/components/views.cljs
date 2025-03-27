@@ -906,6 +906,9 @@
         [dropdown-open? set-dropdown-open!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
+       (let [values (if (coll? value) value [value])
+             ids (filter #(and (uuid? %) (nil? (db/entity [:block/uuid %]))) values)]
+         (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids)))
        (when (and property-ident dropdown-open?
                   (not (contains? #{:data :datetime :checkbox} type)))
          (p/let [data (get-property-values (:db/id view-entity) property-ident)]
@@ -974,7 +977,7 @@
                                 (t/to-default-time-zone)
                                 (tf/unparse (tf/formatter "yyyy-MM-dd")))
                        (and (coll? value) (every? uuid? value))
-                       (set (map #(db/entity [:block/uuid %]) value))
+                       (keep #(db/entity [:block/uuid %]) value)
                        :else
                        value)]
            [:div.flex.flex-row.items-center.gap-1.text-xs
