@@ -91,25 +91,15 @@
   (when-not (config/db-based-graph? graph)
     (file-async/<get-file-based-property-values graph property)))
 
-(defn <get-block-property-values
+(defn <get-property-values
   "For db graphs, returns property value ids for given property db-ident.
    Separate from file version because values are lazy loaded"
-  [graph property-id]
-  (let [default-value-id (:db/id (:logseq.property/default-value (db/entity property-id)))
-        empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
-    (p/let [result (<q graph {:transact-db? false}
-                       '[:find [?v ...]
-                         :in $ ?property-id ?empty-id
-                         :where
-                         [?b ?property-id ?v]
-                         [(not= ?v ?empty-id)]]
-                       property-id
-                       empty-id)]
-      (distinct
-       (if default-value-id
-        ;; put default value the first
-         (cons default-value-id result)
-         result)))))
+  [property-id & {:keys [view-id]}]
+  (when property-id
+    (p/let [data-str (.get-property-values ^js @state/*db-worker (state/get-current-repo)
+                                           (ldb/write-transit-str {:view-id view-id
+                                                                   :property-ident property-id}))]
+      (ldb/read-transit-str data-str))))
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
