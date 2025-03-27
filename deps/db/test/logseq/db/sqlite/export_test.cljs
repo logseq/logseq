@@ -543,6 +543,7 @@
         closed-value-uuid (random-uuid)
         property-uuid (random-uuid)
         class-uuid (random-uuid)
+        class2-uuid (random-uuid)
         journal-uuid (common-uuid/gen-uuid :journal-page-uuid 19650201)
         original-data
         {:properties
@@ -569,6 +570,8 @@
                                :block/uuid class-uuid
                                :build/keep-uuid? true}
           :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+                                :block/uuid class2-uuid
+                                :build/keep-uuid? true
                                 :build/properties {:logseq.property/description "tests child class"}}}
          :pages-and-blocks
          [{:page {:block/title "page1"
@@ -617,6 +620,13 @@
                   :block/uuid journal-uuid
                   :build/keep-uuid? true}
            :blocks []}
+          {:page {:block/uuid class-uuid}
+           :blocks [{:block/title "class block1"
+                     :build/children [{:block/title "class block2"}]}]}
+          {:page {:block/uuid class2-uuid}
+           :blocks [{:block/title "class2 block1"}]}
+          {:page {:block/uuid property-uuid}
+           :blocks [{:block/title "property block1"}]}
           ;; built-in pages
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
@@ -642,7 +652,8 @@
           {:file/path "logseq/custom.css"
            :file/content ".foo {background-color: blue}"}
           {:file/path "logseq/custom.js"
-           :file/content "// comment"}]}]
+           :file/content "// comment"}]
+         :build-existing-tx? true}]
     original-data))
 
 (deftest import-graph
