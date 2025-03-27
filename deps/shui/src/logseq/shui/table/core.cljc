@@ -85,7 +85,7 @@
                        (remove (fn [item] (= (:id item) id)) sorting)
                        (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
                      (when-not (nil? asc?)
-                       (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
+                       (into [{:id id :asc? asc?}] sorting)))
                    (remove nil?)
                    vec)]
     (set-sorting! value)
