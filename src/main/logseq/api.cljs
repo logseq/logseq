@@ -793,8 +793,7 @@
             (some-> (editor-handler/insert-block-tree-after-target
                      (:db/id block) sibling bb (get block :block/format :markdown) keep-uuid?)
                     (p/then (fn [results]
-                              (some-> results (ldb/read-transit-str)
-                                      :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
+                              (some-> results :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
 
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]

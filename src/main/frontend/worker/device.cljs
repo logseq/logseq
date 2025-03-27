@@ -4,12 +4,13 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.crypt :as crypt]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [goog.crypt.base64 :as base64]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -172,9 +173,8 @@
         (m/? (new-task--remove-user-device* get-ws-create-task device-uuid*))))))
 
 (defn new-task--sync-current-graph-encrypted-aes-key
-  [token device-uuids-transit-str]
-  (let [repo (worker-state/get-current-repo)
-        device-uuids (ldb/read-transit-str device-uuids-transit-str)]
+  [token device-uuids]
+  (let [repo (worker-state/get-current-repo)]
     (assert (and (seq device-uuids) (every? uuid? device-uuids)) device-uuids)
     (m/sp
       (when-let [graph-uuid (client-op/get-graph-uuid repo)]
@@ -206,3 +206,19 @@
                                  devices*)))]
                 (m/? (new-task--sync-encrypted-aes-key*
                       get-ws-create-task device-uuid->encrypted-aes-key graph-uuid))))))))))
+
+(def-thread-api :thread-api/rtc-sync-current-graph-encrypted-aes-key
+  [token device-uuids]
+  (new-task--sync-current-graph-encrypted-aes-key token device-uuids))
+
+(def-thread-api :thread-api/list-devices
+  [token]
+  (new-task--list-devices token))
+
+(def-thread-api :thread-api/remove-device-public-key
+  [token device-uuid key-name]
+  (new-task--remove-device-public-key token device-uuid key-name))
+
+(def-thread-api :thread-api/remove-device
+  [token device-uuid]
+  (new-task--remove-device token device-uuid))

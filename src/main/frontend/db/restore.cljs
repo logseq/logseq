@@ -1,7 +1,6 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-time.core :as t]
-            [datascript.transit :as dt]
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -13,9 +12,8 @@
   [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          data (persist-db/<fetch-init-data repo opts)
+          {:keys [schema initial-data] :as data} (persist-db/<fetch-init-data repo opts)
           _ (assert (some? data) "No data found when reloading db")
-          {:keys [schema initial-data]} (dt/read-transit-str data)
           conn (try
                  (sqlite-common-db/restore-initial-data initial-data schema)
                  (catch :default e

@@ -16,8 +16,7 @@
          (do ~@body)                    ; nested transact!
          (binding [frontend.modules.outliner.op/*outliner-ops* (transient [])]
            ~@body
-           (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)
-                 worker# @frontend.state/*db-worker]
+           (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)]
             ;;  (js/console.groupCollapsed "ui/transact!")
             ;;  (prn :ops r#)
             ;;  (js/console.trace)
@@ -29,14 +28,14 @@
                                                 r#
                                                 (frontend.state/get-date-formatter)
                                                 ~opts))
-               (when (and worker# (seq r#))
+               (when (seq r#)
                  (let [request-id# (frontend.state/get-worker-next-request-id)
-                       request# #(.apply-outliner-ops ^Object worker# (frontend.state/get-current-repo)
-                                                      (logseq.db/write-transit-str r#)
-                                                      (logseq.db/write-transit-str
-                                                       (assoc ~opts
-                                                              :request-id request-id#
-                                                              :editor-info editor-info#)))
+                       request# #(frontend.state/<invoke-db-worker
+                                  :thread-api/apply-outliner-ops
+                                  (frontend.state/get-current-repo)
+                                  r#
+                                  (assoc ~opts
+                                         :request-id request-id#
+                                         :editor-info editor-info#))
                        response# (frontend.state/add-worker-request! request-id# request#)]
-
                    response#)))))))))

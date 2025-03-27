@@ -30,7 +30,7 @@
     (swap! *writes assoc request-id page-id)
     request-id))
 
-(defn- dissoc-request!
+(defn dissoc-request!
   [request-id]
   (when-let [page-id (get @*writes request-id)]
     (let [old-page-request-ids (keep (fn [[r p]]
