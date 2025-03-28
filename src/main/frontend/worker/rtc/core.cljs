@@ -597,6 +597,11 @@
   [token graph-uuid schema-version]
   (new-task--download-info-list token graph-uuid schema-version))
 
+(def-thread-api :thread-api/rtc-add-migration-client-ops
+  [repo server-schema-version]
+  (when-let [db @(worker-state/get-datascript-conn repo)]
+    (add-migration-client-ops! repo db server-schema-version)))
+
 ;;; ================ API (ends) ================
 
 ;;; subscribe state ;;;
