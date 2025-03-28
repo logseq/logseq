@@ -52,8 +52,9 @@
         (fn [m]
           (cond->
            (-> m
-               (update :classes update-vals (fn [m]
-                                              (update m :build/class-properties sort)))
+               ;; TODO: Fix order of these build keys
+               (update :classes update-vals (fn [m] (update m :build/class-properties sort)))
+               (update :properties update-vals (fn [m] (update m :build/property-classes sort)))
                (update ::sqlite-export/kv-values
                        (fn [kvs]
                          ;; Ignore extra metadata that a copied graph can add
