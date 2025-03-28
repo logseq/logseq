@@ -544,8 +544,8 @@
                          {:exclude-ontology? true}))
         page-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Page))
                          (map :e (d/datoms db :avet :block/tags :logseq.class/Journal)))
-        ontology-ids (concat (map :e (d/datoms db :avet :block/tags :logseq.class/Tag))
-                             (map :e (d/datoms db :avet :block/tags :logseq.class/Property)))
+        ontology-ids (set/union (set (map :e (d/datoms db :avet :block/tags :logseq.class/Tag)))
+                                (set (map :e (d/datoms db :avet :block/tags :logseq.class/Property))))
         page-exports (mapv (fn [eid]
                              (let [page-blocks (get-page-blocks db eid)]
                                (build-page-export* db eid page-blocks (merge options {:include-uuid-fn (constantly true)}))))
@@ -562,9 +562,9 @@
                                      (get-in page-export [:pages-and-blocks 0 :page :build/properties :logseq.property/built-in?])))
                               (concat page-exports ontology-page-exports))
         alias-uuids  (concat (mapcat (fn [{:keys [pages-and-blocks]}]
-                                (mapcat #(map second (get-in % [:page :block/alias]))
-                                        pages-and-blocks))
-                              page-exports')
+                                       (mapcat #(map second (get-in % [:page :block/alias]))
+                                               pages-and-blocks))
+                                     page-exports')
                              (mapcat #(map second (:block/alias %))
                                      (vals (:classes graph-ontology)))
                              (mapcat #(map second (:block/alias %))
