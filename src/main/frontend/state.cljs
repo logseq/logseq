@@ -46,7 +46,7 @@
   [qkw & args]
   (<invoke-db-worker* qkw false args))
 
-(defn <invoke-db-worker-direct-passthrough-args
+(defn <invoke-db-worker-direct-pass-args
   "invoke db-worker thread api.
   But directly pass args to db-worker(won't do transit-write on them)."
   [qkw & args]

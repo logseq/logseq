@@ -778,7 +778,16 @@
   (<ratelimit-file-writes!)
   (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
   (Comlink/expose #js{"remoteInvoke" thread-api/remote-function})
-  (reset! worker-state/*main-thread (Comlink/wrap js/self)))
+  (let [^js wrapped-main-thread* (Comlink/wrap js/self)
+        wrapped-main-thread (fn [qkw direct-pass-args? & args]
+                              (-> (.remoteInvoke wrapped-main-thread*
+                                                 (str (namespace qkw) "/" (name qkw))
+                                                 direct-pass-args?
+                                                 (if direct-pass-args?
+                                                   (into-array args)
+                                                   (ldb/write-transit-str args)))
+                                  (p/chain ldb/read-transit-str)))]
+    (reset! worker-state/*main-thread wrapped-main-thread)))
 
 (comment
   (defn <remove-all-files!

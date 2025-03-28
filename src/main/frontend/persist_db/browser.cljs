@@ -4,10 +4,10 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
+            [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.transact :as db-transact]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
@@ -77,35 +77,6 @@
                  :pages-directory (config/get-pages-directory)}]
     (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
-(defn- with-write-transit-str
-  [p]
-  (p/chain p ldb/write-transit-str))
-
-(deftype Main []
-  Object
-  (readAsset [_this repo asset-block-id asset-type]
-    (assets-handler/<read-asset repo asset-block-id asset-type))
-  (writeAsset [_this repo asset-block-id asset-type data]
-    (assets-handler/<write-asset repo asset-block-id asset-type data))
-  (unlinkAsset [_this repo asset-block-id asset-type]
-    (assets-handler/<unlink-asset repo asset-block-id asset-type))
-  (get-all-asset-file-paths [_this repo]
-    (with-write-transit-str
-      (assets-handler/<get-all-asset-file-paths repo)))
-  (get-asset-file-metadata [_this repo asset-block-id asset-type]
-    (with-write-transit-str
-      (assets-handler/<get-asset-file-metadata repo asset-block-id asset-type)))
-  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type checksum put-url]
-    (with-write-transit-str
-      (js/Promise.
-       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))))
-  (rtc-download-asset [_this repo asset-block-uuid-str asset-type get-url]
-    (with-write-transit-str
-      (js/Promise.
-       (assets-handler/new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))))
-  (testFn [_this]
-    (prn :debug :works)))
-
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -115,16 +86,15 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
           wrapped-worker (fn [qkw direct-pass-args? & args]
-                           (p/chain
-                            (.remoteInvoke ^js wrapped-worker*
-                                           (str (namespace qkw) "/" (name qkw))
-                                           direct-pass-args?
-                                           (if direct-pass-args?
-                                             (into-array args)
-                                             (ldb/write-transit-str args)))
-                            ldb/read-transit-str))
+                           (-> (.remoteInvoke ^js wrapped-worker*
+                                              (str (namespace qkw) "/" (name qkw))
+                                              direct-pass-args?
+                                              (if direct-pass-args?
+                                                (into-array args)
+                                                (ldb/write-transit-str args)))
+                               (p/chain ldb/read-transit-str)))
           t1 (util/time-ms)]
-      (Comlink/expose (Main.) worker)
+      (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*db-worker wrapped-worker)
       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
@@ -188,7 +158,7 @@
     (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
                 disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                 _ (when disk-db-data
-                    (state/<invoke-db-worker-direct-passthrough-args :thread-api/import-db repo disk-db-data))
+                    (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo))
         (p/catch sqlite-error-handler)))
@@ -205,7 +175,7 @@
                    (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-passthrough-args :thread-api/import-db repo data)
+    (-> (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (prn :debug :import-db-error repo)
                    (js/console.error error)
