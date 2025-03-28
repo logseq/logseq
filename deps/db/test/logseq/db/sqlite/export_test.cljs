@@ -551,6 +551,7 @@
          {:user.property/num {:logseq.property/type :number
                               :block/uuid property-uuid
                               :build/keep-uuid? true
+                              :block/collapsed? true
                               :build/properties (if exclude-namespaces?
                                                   {}
                                                   {:user.property/node #{[:block/uuid property-pvalue-uuid]}
@@ -575,6 +576,7 @@
           :user.class/MyClassAlias {:block/uuid class-alias-uuid
                                     :build/keep-uuid? true}
           :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+                                :block/collapsed? true
                                 :block/uuid class2-uuid
                                 :build/keep-uuid? true
                                 :build/properties {:logseq.property/description "tests child class"}}}
@@ -609,6 +611,7 @@
                      :block/uuid page-pvalue-uuid
                      :build/keep-uuid? true}
                     {:block/title "ref blocks"
+                     :block/collapsed? true
                      :build/children
                      [{:block/title (str "internal block ref to " (page-ref/->page-ref internal-block-uuid))}
                       {:block/title "node block"
