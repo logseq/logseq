@@ -10,6 +10,26 @@
 
 (defonce *main-thread (atom nil))
 
+(defn- <invoke-main-thread*
+  [qkw direct-pass-args? args-list]
+  (let [main-thread @*main-thread]
+    (when (nil? main-thread)
+      (prn :<invoke-main-thread-error qkw)
+      (throw (ex-info "main-thread has not been initialized" {})))
+    (apply main-thread qkw direct-pass-args? args-list)))
+
+(defn <invoke-main-thread
+  "invoke main thread api"
+  [qkw & args]
+  (<invoke-main-thread* qkw false args))
+
+(comment
+  (defn <invoke-main-thread-direct-pass-args
+    "invoke main thread api.
+  But directly pass args to main-thread(won't do transit-write on them)"
+    [qkw & args]
+    (<invoke-main-thread* qkw true args)))
+
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 

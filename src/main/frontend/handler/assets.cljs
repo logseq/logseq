@@ -1,6 +1,8 @@
 (ns ^:no-doc frontend.handler.assets
   (:require [cljs-http-missionary.client :as http]
             [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -8,12 +10,12 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [medley.core :as medley]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p])
+  (:import [missionary Cancelled]))
 
 (defn alias-enabled?
   []
@@ -301,20 +303,45 @@
     (let [*progress-flow (atom nil)
           http-task (http/get get-url {:with-credentials? false
                                        :response-type :array-buffer
-                                       :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
-                 @*progress-flow)
-       :download-asset-progress
-       :succ (constantly nil))
-      (let [{:keys [status body] :as r} (m/? http-task)]
-        (if-not (http/unexceptional-status? status)
-          {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
-          (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
-              nil))))))
+                                       :*progress-flow *progress-flow})
+          progress-canceler
+          (c.m/run-task
+           (m/reduce (fn [_ v]
+                       (state/update-state!
+                        :rtc/asset-upload-download-progress
+                        (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                     @*progress-flow)
+           :download-asset-progress
+           :succ (constantly nil))]
+      (try
+        (let [{:keys [status body] :as r} (m/? http-task)]
+          (if-not (http/unexceptional-status? status)
+            {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
+            (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+                nil)))
+        (catch Cancelled e
+          (progress-canceler)
+          (throw e))))))
+
+(def-thread-api :thread-api/unlink-asset
+  [repo asset-block-id asset-type]
+  (<unlink-asset repo asset-block-id asset-type))
+
+(def-thread-api :thread-api/get-all-asset-file-paths
+  [repo]
+  (<get-all-asset-file-paths repo))
+
+(def-thread-api :thread-api/get-asset-file-metadata
+  [repo asset-block-id asset-type]
+  (<get-asset-file-metadata repo asset-block-id asset-type))
+
+(def-thread-api :thread-api/rtc-upload-asset
+  [repo asset-block-uuid-str asset-type checksum put-url]
+  (new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))
+
+(def-thread-api :thread-api/rtc-download-asset
+  [repo asset-block-uuid-str asset-type get-url]
+  (new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))
 
 (comment
   ;; read asset
