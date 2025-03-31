@@ -1,7 +1,6 @@
 (ns frontend.handler.page
   "Provides util handler fns for pages"
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [electron.ipc :as ipc]
@@ -35,7 +34,6 @@
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]

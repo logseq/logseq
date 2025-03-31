@@ -1,30 +1,28 @@
 (ns ^:no-doc frontend.handler.block
-  (:require
-   [clojure.set :as set]
-   [clojure.string :as string]
-   [clojure.walk :as walk]
-   [datascript.impl.entity :as de]
-   [dommy.core :as dom]
-   [frontend.config :as config]
-   [frontend.db :as db]
-   [frontend.db.async :as db-async]
-   [frontend.db.model :as db-model]
-   [frontend.handler.file-based.property.util :as property-util]
-   [frontend.handler.property.util :as pu]
-   [frontend.mobile.haptics :as haptics]
-   [frontend.modules.outliner.op :as outliner-op]
-   [frontend.modules.outliner.ui :as ui-outliner-tx]
-   [frontend.state :as state]
-   [frontend.util :as util]
-   [frontend.util.file-based.drawer :as drawer]
-   [goog.dom :as gdom]
-   [goog.object :as gobj]
-   [logseq.db :as ldb]
-   [logseq.db.sqlite.util :as sqlite-util]
-   [logseq.graph-parser.block :as gp-block]
-   [logseq.outliner.core :as outliner-core]
-   [logseq.outliner.op]
-   [promesa.core :as p]))
+  (:require [clojure.string :as string]
+            [clojure.walk :as walk]
+            [datascript.impl.entity :as de]
+            [dommy.core :as dom]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as db-model]
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.handler.property.util :as pu]
+            [frontend.mobile.haptics :as haptics]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.file-based.drawer :as drawer]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op]
+            [promesa.core :as p]))
 
 ;;  Fns
 
@@ -71,49 +69,6 @@
   (let [blocks (js/document.getElementsByClassName (str "id" block-uuid))]
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
-
-(defn get-blocks-refed-pages
-  [aliases [block & children]]
-  (let [children-refs (mapcat :block/refs children)
-        refs (->>
-              (:block/path-refs block)
-              (concat children-refs)
-              (remove #(aliases (:db/id %))))]
-    (keep (fn [ref]
-            (when (:block/name ref)
-              {:db/id (:db/id ref)
-               :block/name (:block/name ref)
-               :block/title (:block/title ref)})) refs)))
-
-(defn filter-blocks
-  [ref-blocks filters]
-  (if (empty? filters)
-    ref-blocks
-    (let [exclude-ids (set (map :db/id (:excluded filters)))
-          include-ids (set (map :db/id (:included filters)))]
-      (cond->> ref-blocks
-        (seq exclude-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (seq (set/intersection exclude-ids ids)))))
-
-        (seq include-ids)
-        (filter (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (set/subset? include-ids ids))))))))
-
-(defn get-filtered-ref-blocks-with-parents
-  [all-ref-blocks filtered-ref-blocks]
-  (when (seq filtered-ref-blocks)
-    (let [id->block (zipmap (map :db/id all-ref-blocks) all-ref-blocks)
-          get-parents (fn [block]
-                        (loop [block block
-                               result [block]]
-                          (let [parent (id->block (:db/id (:block/parent block)))]
-                            (if (and parent (not= (:db/id parent) (:db/id block)))
-                              (recur parent (conj result parent))
-                              result))))]
-      (distinct (mapcat get-parents filtered-ref-blocks)))))
 
 (defn get-idx-of-order-list-block
   [block order-list-type]

@@ -891,7 +891,7 @@
                      (set-filters! new-filters))))
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
-(rum/defc filter-value-select < rum/static
+(rum/defc ^:large-vars/cleanup-todo filter-value-select < rum/static
   [view-entity {:keys [data-fns] :as table} property value operator idx opts]
   (let [type (:logseq.property/type property)
         property-ident (:db/ident property)

@@ -722,9 +722,7 @@
  :linked-references/filter-excludes "Excluir: "
  :linked-references/filter-heading "Filtrar"
  :linked-references/filter-includes "Incluir: "
- :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " de ")) total (if (= total 1) " Referência Vinculada" " Referências Vinculadas")))
  :settings-page/git-commit-on-close "Commitar mudanças no Git ao fechar a janela"
- :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Referência Não-Vinculada" " Referências Não-Vinculadas")))
 
  ;; Allowed duplicates - start
  :settings-of-plugins "Plugins"

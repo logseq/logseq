@@ -24,3 +24,9 @@ logseq.db.sqlite.build/create-blocks
 logseq.db.sqlite.export/build-export
 ;; API
 logseq.db.sqlite.export/build-import
+;; API
+logseq.db.frontend.graph/build-graph
+;; API
+logseq.db.frontend.view/get-property-values
+;; API
+logseq.db.frontend.view/get-view-data
