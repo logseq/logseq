@@ -660,16 +660,8 @@
    {:value "Custom date"
     :label "Custom date"}])
 
-(defn- get-property-values
-  [view-id property-ident]
-  (when (and view-id property-ident)
-    (p/let [data-str (.get-property-values ^js @state/*db-worker (state/get-current-repo)
-                                           (ldb/write-transit-str {:view-id view-id
-                                                                   :property-ident property-ident}))]
-      (ldb/read-transit-str data-str))))
-
 (rum/defc filter-property < rum/static
-  [view-entity columns {:keys [data-fns] :as table}]
+  [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (rum/use-state nil)
         [values set-values!] (rum/use-state nil)
         schema (:schema (db/get-db))
@@ -710,7 +702,8 @@
     (hooks/use-effect!
      (fn []
        (when (and view-entity property-ident (not (or timestamp? checkbox?)))
-         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)})]
+         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
+                                                                     :query-entity-ids (:query-entity-ids opts)})]
            (set-values! data))))
      [property-ident])
     (let [option (cond
@@ -766,7 +759,7 @@
       (select/select option))))
 
 (rum/defc filter-properties < rum/static
-  [view-entity columns table]
+  [view-entity columns table opts]
   (shui/button
    {:variant "ghost"
     :class "text-muted-foreground !px-1"
@@ -774,7 +767,7 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn []
-                                    (filter-property view-entity columns table))
+                                    (filter-property view-entity columns table opts))
                                   {:align :end
                                    :auto-focus? true}))}
    (ui/icon "filter")))
@@ -900,7 +893,7 @@
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
 (rum/defc filter-value-select < rum/static
-  [view-entity {:keys [data-fns] :as table} property value operator idx]
+  [view-entity {:keys [data-fns] :as table} property value operator idx opts]
   (let [type (:logseq.property/type property)
         property-ident (:db/ident property)
         [values set-values!] (hooks/use-state nil)
@@ -912,7 +905,8 @@
          (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids)))
        (when (and property-ident dropdown-open?
                   (not (contains? #{:data :datetime :checkbox} type)))
-         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)})]
+         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
+                                                                     :query-entity-ids (:query-entity-ids opts)})]
            (set-values! (map (fn [v] (if (map? (:value v))
                                        (assoc v :value (:block/uuid (:value v)))
                                        v)) data)))))
@@ -1002,7 +996,7 @@
         (select/select option))))))
 
 (rum/defc filter-value < rum/static
-  [view-entity table property operator value filters set-filters! idx]
+  [view-entity table property operator value filters set-filters! idx opts]
   (let [number-operator? (string/starts-with? (name operator) "number-")]
     (case operator
       :between
@@ -1026,10 +1020,10 @@
                         (set-filters! new-filters))))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
 
-      (filter-value-select view-entity table property value operator idx))))
+      (filter-value-select view-entity table property value operator idx opts))))
 
 (rum/defc filters-row < rum/static      ;
-  [view-entity {:keys [data-fns columns] :as table}]
+  [view-entity {:keys [data-fns columns] :as table} opts]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
     (when (seq (:filters filters))
@@ -1053,7 +1047,7 @@
                 :disabled true}
                [:span.text-xs (:block/title property)])
               (filter-operator property operator filters set-filters! idx)
-              (filter-value view-entity table property operator value filters set-filters! idx)
+              (filter-value view-entity table property operator value filters set-filters! idx opts)
               (shui/button
                {:class "!px-1 rounded-none text-muted-foreground"
                 :variant "ghost"
@@ -1501,7 +1495,7 @@
       (when (seq sorting)
         (view-sorting table columns sorting))
 
-      (filter-properties view-entity columns table)
+      (filter-properties view-entity columns table option)
 
       (search input {:on-change set-input!
                      :set-input! set-input!})
@@ -1600,7 +1594,7 @@
      (ui/foldable
       (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
       [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
-       (filters-row view-entity table)
+       (filters-row view-entity table option)
 
        (let [view-opts {:*scroller-ref *scroller-ref
                         :display-type display-type
@@ -1682,27 +1676,35 @@
     (ldb/read-transit-str data-str)))
 
 (rum/defc view-aux
-  [view-entity {:keys [view-parent view-feature-type data] :as option}]
+  [view-entity {:keys [view-parent view-feature-type data query-entity-ids] :as option}]
   (let [[view-entity set-view-entity!] (db/sub-entity view-entity (str "view-" (:db/id view-entity)))
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         load-view-data (fn load-view-data [input]
-                         (when-not query?                 ; TODO: move query logic to worker
-                           (->
-                            (p/let [{:keys [data ref-pages-count]} (<load-view-data view-entity
-                                                                                    {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                                                                      (:db/id view-parent))
-                                                                                     :view-feature-type view-feature-type
-                                                                                     :input input})]
-                              (set-data! data)
-                              (when ref-pages-count
-                                (set-ref-pages-count! ref-pages-count))
-                              (set-loading! false))
-                            (p/catch (fn [e]
-                                       (js/console.error e)
-                                       (set-loading! false))))))]
+                         (let [sorting (:logseq.property.table/sorting view-entity)
+                               filters (:logseq.property.table/filters view-entity)
+                               need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
+                           (if (and query? (not (or sorting filters)) (string/blank? input))
+                             (set-data! query-entity-ids)
+                             (when (or (not query?) need-query?)
+                               (->
+                                (p/let [{:keys [data ref-pages-count]} (<load-view-data view-entity
+                                                                                        (cond->
+                                                                                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                                                           (:db/id view-parent))
+                                                                                          :view-feature-type view-feature-type
+                                                                                          :input input}
+                                                                                          query?
+                                                                                          (assoc :query-entity-ids query-entity-ids)))]
+                                  (set-data! data)
+                                  (when ref-pages-count
+                                    (set-ref-pages-count! ref-pages-count))
+                                  (set-loading! false))
+                                (p/catch (fn [e]
+                                           (js/console.error e)
+                                           (set-loading! false))))))))]
     (hooks/use-effect!
      #(load-view-data nil)
      [;; page filters

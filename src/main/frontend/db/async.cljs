@@ -94,11 +94,10 @@
 (defn <get-property-values
   "For db graphs, returns property value ids for given property db-ident.
    Separate from file version because values are lazy loaded"
-  [property-id & {:keys [view-id]}]
+  [property-id & {:as opts}]
   (when property-id
     (p/let [data-str (.get-property-values ^js @state/*db-worker (state/get-current-repo)
-                                           (ldb/write-transit-str {:view-id view-id
-                                                                   :property-ident property-id}))]
+                                           (ldb/write-transit-str (assoc opts :property-ident property-id)))]
       (ldb/read-transit-str data-str))))
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
