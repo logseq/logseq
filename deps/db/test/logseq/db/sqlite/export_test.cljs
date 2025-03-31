@@ -590,7 +590,16 @@
                                         :user.property/default-closed [:block/uuid closed-value-uuid]
                                         :user.property/date [:block/uuid journal-uuid]}}
                     {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
-                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}]}
+                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
+                    {:block/title "Example advanced query",
+                     :build/tags [:logseq.class/Query],
+                     :build/properties
+                     {:logseq.property/query
+                      {:build/property-value :block
+                       :block/title "{:query (task Todo)}"
+                       :build/properties
+                       {:logseq.property.code/lang "clojure"
+                        :logseq.property.node/display-type :code}}}}]}
           {:page {:block/title "page object"
                   :block/uuid page-object-uuid
                   :build/keep-uuid? true}
