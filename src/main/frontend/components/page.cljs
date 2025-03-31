@@ -414,7 +414,8 @@
                                        :preview? preview?})
               [:span.title.block
                {:on-click (fn []
-                            (when (and (state/home?) (not preview?))
+                            (when (and (not preview?)
+                                       (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name])))
                               (route-handler/redirect-to-page! (:block/uuid page))))
                 :data-value @*input-value
                 :data-ref   (:block/title page)
