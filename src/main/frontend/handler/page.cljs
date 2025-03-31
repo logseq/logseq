@@ -28,7 +28,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -120,24 +119,22 @@
 
 (defn rename!
   [page-uuid-or-old-name new-name & {:as _opts}]
-  (when @db-browser/*worker
-    (p/let [page-uuid (cond
-                        (uuid? page-uuid-or-old-name)
-                        page-uuid-or-old-name
-                        (common-util/uuid-string? page-uuid-or-old-name)
-                        page-uuid-or-old-name
-                        :else
-                        (:block/uuid (db/get-page page-uuid-or-old-name)))
-            result (ui-outliner-tx/transact!
-                    {:outliner-op :rename-page}
-                    (outliner-op/rename-page! page-uuid new-name))
-            result' (ldb/read-transit-str result)]
-      (case (if (string? result') (keyword result') result')
-        :invalid-empty-name
-        (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
-        :rename-page-exists
-        (notification/show! "Another page with the new name exists already" :warning)
-        nil))))
+  (p/let [page-uuid (cond
+                      (uuid? page-uuid-or-old-name)
+                      page-uuid-or-old-name
+                      (common-util/uuid-string? page-uuid-or-old-name)
+                      page-uuid-or-old-name
+                      :else
+                      (:block/uuid (db/get-page page-uuid-or-old-name)))
+          result (ui-outliner-tx/transact!
+                  {:outliner-op :rename-page}
+                  (outliner-op/rename-page! page-uuid new-name))]
+    (case (if (string? result) (keyword result) result)
+      :invalid-empty-name
+      (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
+      :rename-page-exists
+      (notification/show! "Another page with the new name exists already" :warning)
+      nil)))
 
 (defn <reorder-favorites!
   [favorites]

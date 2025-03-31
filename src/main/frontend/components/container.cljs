@@ -700,7 +700,7 @@
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           (when (state/mobile?)
+           (when (mobile-util/native-platform?)
              (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
@@ -1071,6 +1071,7 @@
       [:a#download-as-json-v2.hidden]
       [:a#download-as-transit-debug.hidden]
       [:a#download-as-sqlite-db.hidden]
+      [:a#download-as-db-edn.hidden]
       [:a#download-as-roam-json.hidden]
       [:a#download-as-html.hidden]
       [:a#download-as-zip.hidden]

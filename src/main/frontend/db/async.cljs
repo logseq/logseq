@@ -14,7 +14,6 @@
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.file-based.property.util :as property-util]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -96,9 +95,8 @@
    Separate from file version because values are lazy loaded"
   [property-id & {:as opts}]
   (when property-id
-    (p/let [data-str (.get-property-values ^js @state/*db-worker (state/get-current-repo)
-                                           (ldb/write-transit-str (assoc opts :property-ident property-id)))]
-      (ldb/read-transit-str data-str))))
+    (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
+                             (assoc opts :property-ident property-id))))
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
@@ -133,12 +131,10 @@
       cached-response
 
       :else
-      (when-let [^Object sqlite @db-browser/*worker]
+      (do
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [result-str (.get-blocks sqlite graph
-                                        (ldb/write-transit-str
-                                         [{:id id :opts opts}]))
-                result (ldb/read-transit-str result-str)
+        (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                                [{:id id :opts opts}])
                 {:keys [block children] :as result'} (first result)]
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (if skip-transact?
@@ -160,47 +156,39 @@
 (defn <get-blocks
   [graph ids* & {:as opts}]
   (let [ids (remove (fn [id] (:block.temp/fully-loaded? (db/entity id))) ids*)]
-    (when-let [^Object sqlite @db-browser/*worker]
-      (p/let [result-str (.get-blocks sqlite graph
-                                      (ldb/write-transit-str
-                                       (map (fn [id]
-                                              {:id id :opts opts})
-                                            ids)))
-              result (ldb/read-transit-str result-str)]
-        (let [conn (db/get-db graph false)
-              data (mapcat (fn [{:keys [block children]}] (cons block children)) result)]
-          (d/transact! conn data))))))
+    (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                            (map (fn [id]
+                                                   {:id id :opts opts})
+                                                 ids))]
+      (let [conn (db/get-db graph false)
+            data (mapcat (fn [{:keys [block children]}] (cons block children)) result)]
+        (d/transact! conn data)))))
 
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when-let [^Object worker @db-browser/*worker]
-    (when-let [block-id (:block/uuid (db/entity graph id))]
-      (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
-      (p/let [result-str (.get-block-parents worker graph id depth)
-              result (ldb/read-transit-str result-str)
-              conn (db/get-db graph false)
-              _ (d/transact! conn result)]
-        (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
-        result))))
+  (when-let [block-id (:block/uuid (db/entity graph id))]
+    (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
+    (p/let [result (state/<invoke-db-worker :thread-api/get-block-parents graph id depth)
+            conn (db/get-db graph false)
+            _ (d/transact! conn result)]
+      (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
+      result)))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (when-let [^Object worker @db-browser/*worker]
-    (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
-    (p/let [result-str (.get-block-refs worker graph eid)
-            result (ldb/read-transit-str result-str)
-            conn (db/get-db graph false)
-            _ (d/transact! conn result)]
-      (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
-      result)))
+  (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
+  (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
+          conn (db/get-db graph false)
+          _ (d/transact! conn result)]
+    (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
+    result))
 
 (defn <get-block-refs-count
   [graph eid]
   (assert (integer? eid))
-  (when-let [^Object worker @db-browser/*worker]
-    (.get-block-refs-count worker graph eid)))
+  (state/<invoke-db-worker :thread-api/get-block-refs-count graph eid))
 
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."

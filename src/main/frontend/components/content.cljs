@@ -19,7 +19,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -354,11 +353,9 @@
                {:key "(Dev) Show block content history"
                 :on-click
                 (fn []
-                  (let [^object worker @db-browser/*worker
-                        token (state/get-auth-id-token)
+                  (let [token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [result (.rtc-get-block-content-versions worker token graph-uuid (str block-id))
-                            blocks-versions (ldb/read-transit-str result)]
+                    (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
                       (prn :Dev-show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)

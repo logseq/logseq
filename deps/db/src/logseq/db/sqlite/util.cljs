@@ -43,6 +43,7 @@
       (try (transit/write writer o)
            (catch :default e
              (prn ::write-transit-str o)
+             (js/console.trace)
              (throw e))))))
 
 (def read-transit-str
@@ -50,7 +51,13 @@
                                    "datascript/Entity" identity)
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
-    (fn read-transit-str* [s] (transit/read reader s))))
+    (fn read-transit-str* [s]
+      ;; TODO: delete the following pred later
+      ;; https://github.com/logseq/logseq/pull/11790#discussion_r2014120469
+      (if (and (string? s) (identical? "[" (first s)))
+        (transit/read reader s)
+        (do (prn :invalid-transit-string s)
+            s)))))
 
 (defn db-based-graph?
   [graph-name]

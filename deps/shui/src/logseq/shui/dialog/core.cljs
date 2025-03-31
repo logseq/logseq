@@ -1,11 +1,11 @@
 (ns logseq.shui.dialog.core
-  (:require [rum.core :as rum]
-            [daiquiri.interpreter :refer [interpret]]
-            [medley.core :as medley]
-            [logseq.shui.util :as util]
+  (:require [daiquiri.interpreter :refer [interpret]]
             [logseq.shui.base.core :as base]
             [logseq.shui.form.core :as form]
-            [promesa.core :as p]))
+            [logseq.shui.util :as util]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; provider
 (def dialog (util/lsui-wrap "Dialog"))
@@ -127,7 +127,7 @@
                 auto-width? close-btn? root-props content-props]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!

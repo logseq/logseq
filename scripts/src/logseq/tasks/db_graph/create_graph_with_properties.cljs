@@ -7,6 +7,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]
+            [cljs.pprint :as pprint]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -89,7 +90,9 @@
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
         ;; Block property blocks and queries
-        {:page {:block/title "Block Properties"}
+        {:page {:block/title "Block Properties"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all the combinations of property types and single/multiple values that are possible."}}
          :blocks
          [{:block/title "default property block" :build/properties {:default "haha"}}
           {:block/title "default property block" :build/properties {:default-many #{"yee" "haw" "sir"}}}
@@ -108,7 +111,9 @@
           {:block/title "date-many property block" :build/properties {:date-many #{[:build/page {:build/journal today-int}]
                                                                                    [:build/page {:build/journal yesterday-int}]}}}
           {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
-        {:page {:block/title "Property Queries"}
+        {:page {:block/title "Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for a specific value. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default \"haha\")")
           (query "(property default-many \"haw\")")
@@ -146,7 +151,9 @@
                                                                               [:build/page {:build/journal yesterday-int}]}}}}
         {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
-        {:page {:block/title "Has Property Queries"}
+        {:page {:block/title "Has Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for having a specific property. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default)")
           (query "(property default-many)")
@@ -190,6 +197,8 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :file {:alias :f
+          :desc "File to save generated sqlite.build EDN"}
    :config {:alias :c
             :coerce edn/read-string
             :desc "EDN map to add to config.edn"}})
@@ -209,7 +218,9 @@
             (fse/removeSync db-path))
         conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
                                                   :classpath (cp/get-classpath)})
-        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
+        init-data (create-init-data)
+        _ (when (:file options) (fs/writeFileSync (:file options) (with-out-str (pprint/pprint init-data))))
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)
         existing-names (set (map :v (d/datoms @conn :avet :block/title)))
         conflicting-names (set/intersection existing-names (set (keep :block/title init-tx)))]
     (when (seq conflicting-names)

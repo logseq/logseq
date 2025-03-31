@@ -180,3 +180,29 @@
 
     (is (= block-uuid (:block/uuid (db-test/find-block-by-content @conn "hi"))))
     (is (contains? (:block/refs block-with-block-ref) (db-test/find-block-by-content @conn "hi")))))
+
+(deftest build-class-and-property-pages
+  (let [class-uuid (random-uuid)
+        property-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:C1 {:block/uuid class-uuid :build/keep-uuid? true}}
+               :properties {:p1 {:block/uuid property-uuid :build/keep-uuid? true}}
+               :pages-and-blocks
+               [{:page {:block/uuid class-uuid}
+                 :blocks [{:block/title "b1"
+                           :build/children [{:block/title "b2"}]}]}
+                {:page {:block/uuid property-uuid}
+                 :blocks [{:block/title "b3"
+                           :build/children [{:block/title "b4"}]}]}]
+               :build-existing-tx? true})]
+    (is (= ["b1" "b2"]
+           (->> (d/q '[:find [?b ...] :in $ ?page-id :where [?b :block/page ?page-id]]
+                     @conn [:block/uuid class-uuid])
+                (map #(:block/title (d/entity @conn %)))))
+        "Class page has correct blocks")
+
+    (is (= ["b3" "b4"]
+           (->> (d/q '[:find [?b ...] :in $ ?page-id :where [?b :block/page ?page-id]]
+                     @conn [:block/uuid property-uuid])
+                (map #(:block/title (d/entity @conn %)))))
+        "Property page has correct blocks")))

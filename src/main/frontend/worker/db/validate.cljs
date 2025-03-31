@@ -12,7 +12,7 @@
                                         {:msg "Validation errors"
                                          :errors errors}])
         (worker-util/post-message :notification
-                                  [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
+                                  [(str "Validation detected " (count errors) " invalid block(s). These blocks may be buggy. Attempting to fix invalid blocks. Run validation again to see if they were fixed.")
                                    :warning false]))
 
       (worker-util/post-message :notification

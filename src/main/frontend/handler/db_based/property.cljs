@@ -1,21 +1,16 @@
 (ns frontend.handler.db-based.property
   "db based property handler"
-  (:require [frontend.modules.outliner.ui :as ui-outliner-tx]
+  (:require [frontend.db :as db]
             [frontend.modules.outliner.op :as outliner-op]
-            [logseq.outliner.op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [logseq.db.frontend.property :as db-property]
-            [frontend.db :as db]
-            #_:clj-kondo/ignore
-            [frontend.state :as state]
-            [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.outliner.op]))
 
 (defn upsert-property!
   [property-id schema property-opts]
-  (p/let [result (ui-outliner-tx/transact!
-                  {:outliner-op :upsert-property}
-                  (outliner-op/upsert-property! property-id schema property-opts))]
-    (ldb/read-transit-str result)))
+  (ui-outliner-tx/transact!
+   {:outliner-op :upsert-property}
+   (outliner-op/upsert-property! property-id schema property-opts)))
 
 (defn set-block-property!
   [block-id property-id value]
@@ -40,37 +35,37 @@
   [block-id property-id property-value]
   (ui-outliner-tx/transact!
    {:outliner-op :delete-property-value}
-    (outliner-op/delete-property-value! block-id property-id property-value)))
+   (outliner-op/delete-property-value! block-id property-id property-value)))
 
 (defn create-property-text-block!
   [block-id property-id value opts]
   (ui-outliner-tx/transact!
    {:outliner-op :create-property-text-block}
-    (outliner-op/create-property-text-block! block-id property-id value opts)))
+   (outliner-op/create-property-text-block! block-id property-id value opts)))
 
 (defn batch-set-property!
   [block-ids property-id value]
   (ui-outliner-tx/transact!
    {:outliner-op :batch-set-property}
-    (outliner-op/batch-set-property! block-ids property-id value)))
+   (outliner-op/batch-set-property! block-ids property-id value)))
 
 (defn batch-remove-property!
   [block-ids property-id]
   (ui-outliner-tx/transact!
    {:outliner-op :batch-remove-property}
-    (outliner-op/batch-remove-property! block-ids property-id)))
+   (outliner-op/batch-remove-property! block-ids property-id)))
 
 (defn class-add-property!
   [class-id property-id]
   (ui-outliner-tx/transact!
    {:outliner-op :class-add-property}
-    (outliner-op/class-add-property! class-id property-id)))
+   (outliner-op/class-add-property! class-id property-id)))
 
 (defn class-remove-property!
   [class-id property-id]
   (ui-outliner-tx/transact!
    {:outliner-op :class-remove-property}
-    (outliner-op/class-remove-property! class-id property-id)))
+   (outliner-op/class-remove-property! class-id property-id)))
 
 (defn batch-set-property-closed-value!
   [block-ids db-ident closed-value]
@@ -91,10 +86,10 @@
   [property-id value]
   (ui-outliner-tx/transact!
    {:outliner-op :delete-closed-value}
-    (outliner-op/delete-closed-value! property-id value)))
+   (outliner-op/delete-closed-value! property-id value)))
 
 (defn add-existing-values-to-closed-values!
   [property-id values]
   (ui-outliner-tx/transact!
    {:outliner-op :add-existing-values-to-closed-values}
-    (outliner-op/add-existing-values-to-closed-values! property-id values)))
+   (outliner-op/add-existing-values-to-closed-values! property-id values)))

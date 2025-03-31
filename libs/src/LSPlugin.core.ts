@@ -695,7 +695,9 @@ class PluginLocal extends EventEmitter<
         options.url = this._resolveResourceFullUrl(options.url, this._localRoot)
 
         // file:// for native
-        if (!this.isWebPlugin && !options.url.startsWith('file:')) {
+        if (!this.isWebPlugin &&
+          !options.url.startsWith('file:') &&
+          !options.url.startsWith('lsp:')) {
           options.url = 'assets://' + options.url
         }
       }

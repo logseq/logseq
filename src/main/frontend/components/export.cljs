@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.export :as export]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.opml :as export-opml]
@@ -100,6 +101,10 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
             (t :export-zip)]])
+        (when db-based?
+          [:div
+           [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
+            (t :export-db-edn)]])
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}

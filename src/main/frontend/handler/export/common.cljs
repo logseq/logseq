@@ -10,10 +10,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
@@ -190,20 +188,15 @@
 
 (defn <get-all-pages
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-pages worker repo)]
-      (ldb/read-transit-str result))))
+  (state/<invoke-db-worker :thread-api/export-get-all-pages repo))
 
 (defn <get-debug-datoms
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (.get-debug-datoms worker repo)))
+  (state/<invoke-db-worker :thread-api/export-get-debug-datoms repo))
 
 (defn <get-all-page->content
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-page->content worker repo)]
-      (ldb/read-transit-str result))))
+  (state/<invoke-db-worker :thread-api/export-get-all-page->content repo))
 
 (defn <get-file-contents
   [repo suffix]

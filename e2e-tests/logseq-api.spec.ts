@@ -215,7 +215,7 @@ test('(DB graph): block related apis',
     prop1 = await callAPI('get_property', 'map1')
     const b1p = await callAPI('get_block_property', b1.uuid, 'map1')
 
-    expect(prop1.schema.type).toBe('map')
+    expect(prop1.type).toBe('map')
     expect(b1p).toEqual({a: 1})
 
     // await page.pause()

@@ -407,10 +407,7 @@
              [:logseq.property.view/type.list "List View" "list"]
              [:logseq.property.view/type.gallery "Gallery View" "layout-grid"]])
       :properties {:logseq.property/default-value :logseq.property.view/type.table}
-      :queryable? true
-      :rtc {:rtc/ignore-attr-when-init-upload true
-            :rtc/ignore-attr-when-init-download true
-            :rtc/ignore-attr-when-syncing true}}
+      :queryable? true}
 
      :logseq.property.view/feature-type
      {:title "View Feature Type"
@@ -418,10 +415,7 @@
       {:type :keyword
        :public? false
        :hide? true}
-      :queryable? false
-      :rtc {:rtc/ignore-attr-when-init-upload true
-            :rtc/ignore-attr-when-init-download true
-            :rtc/ignore-attr-when-syncing true}}
+      :queryable? false}
 
      :logseq.property.view/group-by-property
      {:title "View group by property"
@@ -429,10 +423,7 @@
       {:type :property
        :public? false
        :hide? true}
-      :queryable? true
-      :rtc {:rtc/ignore-attr-when-init-upload true
-            :rtc/ignore-attr-when-init-download true
-            :rtc/ignore-attr-when-syncing true}}
+      :queryable? true}
 
      :logseq.property.table/sorting {:title "View sorting"
                                      :schema
@@ -663,6 +654,15 @@
   "Determines if namespace string is a user class"
   [s]
   (string/includes? s ".class"))
+
+(defn internal-property?
+  "Determines if ident kw is an internal property. This includes db-attribute properties
+   unlike logseq-property? and doesn't include non-property idents unlike internal-ident?"
+  [k]
+  (let [k-name (namespace k)]
+    (and k-name
+         (or (contains? logseq-property-namespaces k-name)
+             (contains? public-db-attribute-properties k)))))
 
 (defn property?
   "Determines if ident kw is a property visible to user"
