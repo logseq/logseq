@@ -378,7 +378,7 @@
                      nil)]
     (get-entities db view feat-type index-attr view-for-id)))
 
-(defn get-property-values
+(defn ^:api get-property-values
   [db property-ident {:keys [view-id query-entity-ids]}]
   (let [property (d/entity db property-ident)
         default-value (:logseq.property/default-value property)
@@ -427,7 +427,7 @@
             values)
       values)))
 
-(defn get-view-data
+(defn ^:api get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids]
                :as opts}]
   ;; TODO: create a view for journals maybe?

@@ -530,14 +530,6 @@
                                 :block    "center"}))))))
 
 #?(:cljs
-   (defn bottom-reached?
-     [node threshold]
-     (let [full-height (gobj/get node "scrollHeight")
-           scroll-top' (gobj/get node "scrollTop")
-           client-height (gobj/get node "clientHeight")]
-       (<= (- full-height scroll-top' client-height) threshold))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?

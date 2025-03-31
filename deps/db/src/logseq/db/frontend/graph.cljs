@@ -19,7 +19,7 @@
 
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
-  (let [parents (set (map last namespaces))
+  (let [page-parents (set (map last namespaces))
         current-page (or current-page "")
         pages (common-util/distinct-by :db/id nodes)]
     (->>
@@ -45,7 +45,7 @@
                  :size size
                  :color color
                  :block/created-at (:block/created-at p)}
-                 (contains? parents (:db/id p))
+                 (contains? page-parents (:db/id p))
                  (assoc :parent true))))))))
 
                   ;; slow
@@ -93,8 +93,9 @@
           (remove ldb/journal?)
           (not excluded-pages?)
           (remove (fn [p] (true?
-                           (or (:logseq.property/exclude-from-graph-view p)
-                               (get-in p [:block/properties :exclude-from-graph-view]))))))
+                           (if db-based?
+                             (:logseq.property/exclude-from-graph-view p)
+                             (get-in p [:block/properties :exclude-from-graph-view]))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names file-builtins/built-in-pages-names)
@@ -229,7 +230,7 @@
        {:nodes nodes
         :links links}))))
 
-(defn build-graph
+(defn ^:api build-graph
   [db opts]
   (case (:type opts)
     :global (build-global-graph db opts)

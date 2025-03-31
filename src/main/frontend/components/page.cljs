@@ -1091,10 +1091,10 @@
   (let [[graph set-graph!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (p/let [result (state/state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo)
-                                      (assoc settings
-                                                                    :type :global
-                                                                    :theme theme))]
+       (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo)
+                                               (assoc settings
+                                                      :type :global
+                                                      :theme theme))]
          (set-graph! result)))
      [theme settings])
     (when graph
@@ -1149,7 +1149,7 @@
         dark? (= (:theme opts) "dark")]
     (hooks/use-effect!
      (fn []
-       (p/let [result (state/state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]
+       (p/let [result (state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]
          (set-graph! result)))
      [opts])
     (when (seq (:nodes graph))

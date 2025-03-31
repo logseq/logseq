@@ -1,12 +1,12 @@
 (ns logseq.db.common.sqlite-test
-  (:require [cljs.test :refer [deftest async use-fixtures is testing]]
-            ["fs" :as fs]
+  (:require ["fs" :as fs]
             ["path" :as node-path]
+            [cljs.test :refer [deftest async use-fixtures is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.sqlite.cli :as sqlite-cli]
-            [clojure.string :as string]))
+            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]))
 
 (use-fixtures
   :each
@@ -66,9 +66,5 @@
           ;; Simulate getting data from sqlite and restoring it for frontend
           {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
           conn (sqlite-common-db/restore-initial-data initial-data schema)]
-      (is (= (take 1 blocks)
-             (->> (d/q '[:find (pull ?b [*])
-                         :where [?b :block/created-at]]
-                       @conn)
-                  (map first)))
-          "Journal page is included in initial restore while its block is not"))))
+      (is (nil? (d/entity @conn 100001))
+          "Journal page is not included in initial restore"))))

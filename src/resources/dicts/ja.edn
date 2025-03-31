@@ -164,20 +164,6 @@
  :linked-references/filter-directions "クリックすると含むもの、Shiftを押しながらクリックすると含まないものを検索します。もう一度クリックすると取り消します。"
  :linked-references/filter-includes "含む: "
  :linked-references/filter-excludes "含まない: "
- :linked-references/reference-count (fn [filtered-count total]
-                                      ;; 1 Linked Reference
-                                      ;; 1 of 1 Linked Reference
-                                      ;; 2 of 5 Linked References
-                                      (str
-                                       total
-                                       (when filtered-count
-                                         (str "個中" filtered-count))
-                                       "個のリンクによる参照"))
- :unlinked-references/reference-count (fn [total]
-                                        ;; 1 Unlinked Reference
-                                        ;; 5 Unlinked References
-                                        (str total
-                                             "個のリンクでない参照"))
  :editor/block-search "ブロックを検索"
  :text/image "画像"
  :asset/show-in-folder "画像のフォルダを開く"

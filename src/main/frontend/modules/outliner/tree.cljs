@@ -11,8 +11,6 @@
    (let [db (db/get-db repo)]
      (otree/blocks->vec-tree repo db blocks root-id))))
 
-(def block-entity->map otree/block-entity->map)
-
 (def filter-top-level-blocks otree/filter-top-level-blocks)
 
 (def non-consecutive-blocks->vec-tree otree/non-consecutive-blocks->vec-tree)

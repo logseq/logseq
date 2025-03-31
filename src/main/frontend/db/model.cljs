@@ -61,13 +61,6 @@
 
 (def hidden-page? ldb/hidden?)
 
-(defn get-all-tagged-pages
-  [repo]
-  (d/q '[:find ?page ?tag
-         :where
-         [?page :block/tags ?tag]]
-       (conn/get-db repo)))
-
 (defn get-all-pages
   [repo]
   (when-let [db (conn/get-db repo)]
@@ -808,26 +801,9 @@ independent of format as format specific heading characters are stripped"
        (:block/_tags class))
      (remove ldb/hidden?))))
 
-(defn get-property-related-objects
-  [repo property-id]
-  (when-let [property (db-utils/entity repo property-id)]
-    (->> (d/q '[:find [?b ...]
-                :in $ % ?prop
-                :where
-                (has-property-or-default-value? ?b ?prop)]
-              (conn/get-db repo)
-              (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
-                                   {:deps rules/rules-dependencies})
-              (:db/ident property))
-         (map #(db-utils/entity repo %))
-         (remove ldb/hidden?))))
-
 (defn get-all-namespace-relation
   [repo]
-  (d/q '[:find ?page ?parent
-         :where
-         [?page :block/namespace ?parent]]
-       (conn/get-db repo)))
+  (ldb/get-all-namespace-relation (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
