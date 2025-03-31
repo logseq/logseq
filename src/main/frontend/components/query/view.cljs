@@ -52,5 +52,6 @@
        :view-entity view-entity
        :view-feature-type :query-result
        :data (mapv :db/id result')
+       :query-entity-ids (mapv :db/id result')
        :set-data! set-data!
        :columns columns'})]))

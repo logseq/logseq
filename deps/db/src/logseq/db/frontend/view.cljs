@@ -379,15 +379,19 @@
     (get-entities db view feat-type index-attr view-for-id)))
 
 (defn get-property-values
-  [db property-ident {:keys [view-id]}]
+  [db property-ident {:keys [view-id query-entity-ids]}]
   (let [property (d/entity db property-ident)
         default-value (:logseq.property/default-value property)
         empty-id (:db/id (d/entity db :logseq.property/empty-placeholder))
         ref-type? (= :db.type/ref (:db/valueType property))
         values (if view-id
                  (let [entities-result (get-view-entities db view-id)
-                       entities (if (map? entities-result)
+                       entities (cond
+                                  query-entity-ids
+                                  (keep #(d/entity db %) query-entity-ids)
+                                  (map? entities-result)
                                   (:ref-blocks entities-result)
+                                  :else
                                   entities-result)]
                    (->> (mapcat (fn [entity]
                                   (let [v (get entity property-ident)]
@@ -424,7 +428,7 @@
       values)))
 
 (defn get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type input]
+  [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -442,7 +446,10 @@
           filters (:logseq.property.table/filters view)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
-          entities-result (get-view-entities db view-id opts)
+          query? (= feat-type :query-result)
+          entities-result (if query?
+                            (keep #(d/entity db %) query-entity-ids)
+                            (get-view-entities db view-id opts))
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)
                      entities-result)
