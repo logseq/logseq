@@ -206,3 +206,21 @@
                      @conn [:block/uuid property-uuid])
                 (map #(:block/title (d/entity @conn %)))))
         "Property page has correct blocks")))
+
+(deftest property-value-properties
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "Todo query",
+                          :build/tags [:logseq.class/Query],
+                          :build/properties
+                          {:logseq.property/query
+                           {:build/property-value :block
+                            :block/title "{:query (task Todo)}"
+                            :build/properties
+                            {:logseq.property.code/lang "clojure"
+                             :logseq.property.node/display-type :code}}}}]}])]
+    (is (= {:logseq.property.node/display-type :code
+            :logseq.property.code/lang "clojure"}
+           (-> (db-test/find-block-by-content @conn "{:query (task Todo)}")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))))
