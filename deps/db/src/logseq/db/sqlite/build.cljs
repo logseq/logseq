@@ -129,8 +129,10 @@
        (keep (fn [[k v]]
                (when-let [property-map (build-property-map-for-pvalue-tx k v new-block properties-config all-idents)]
                  [(cond-> property-map
-                    (and (:build/property-value v) (:build/properties v))
-                    (assoc :property-value-properties (:build/properties v)))
+                    (and (:build/property-value v)
+                         (or (:build/properties v) (seq (select-keys v [:block/created-at :block/updated-at]))))
+                    (assoc :property-value-properties
+                           (merge (:build/properties v) (select-keys v [:block/created-at :block/updated-at]))))
                   (if (:build/property-value v)
                     (or (:logseq.property/value v) (:block/title v))
                     v)])))

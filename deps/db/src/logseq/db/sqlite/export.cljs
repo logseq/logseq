@@ -12,7 +12,8 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -37,9 +38,11 @@
     {:build/journal (:block/journal-day page-entity)}
     {:block/title (block-title page-entity)}))
 
+(declare buildable-properties)
+
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
-  [property-ent pvalue {:keys [property-value-uuids?]}]
+  [db property-ent pvalue {:keys [property-value-uuids?] :as options}]
   (cond (and (not property-value-uuids?) (ldb/internal-page? pvalue))
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
@@ -55,9 +58,25 @@
             ;; Use metadata distinguish from block references that don't exist like closed values
             ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
           (or (:db/ident pvalue)
-              ;; nbb-compatible version of db-property/property-value-content
-              (or (block-title pvalue)
-                  (:logseq.property/value pvalue))))))
+              (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
+                                                :logseq.property/value :logseq.property/created-from-property
+                                                db-property/public-db-attribute-properties)
+                                         ;; TODO: Allow user properties when sqlite.build supports it
+                                         (medley/filter-keys db-property/internal-property?))
+                    ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
+                                     ;; TODO: Support closed values as needed
+                                     (buildable-properties db ent-properties* {} options))]
+                (if (seq ent-properties)
+                  (cond->
+                   {:build/property-value :block
+                    :block/title (or (block-title pvalue)
+                                     (:logseq.property/value pvalue))
+                    :build/properties ent-properties}
+                    (:include-timestamps? options)
+                    (merge (select-keys pvalue [:block/created-at :block/updated-at])))
+                  ;; nbb-compatible version of db-property/property-value-content
+                  (or (block-title pvalue)
+                      (:logseq.property/value pvalue))))))))
 
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
@@ -74,10 +93,10 @@
                    (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
                  (cond
                    (de/entity? v)
-                   (buildable-property-value-entity (d/entity db k) v options)
+                   (buildable-property-value-entity db (d/entity db k) v options)
                    (and (set? v) (every? de/entity? v))
                    (let [property-ent (d/entity db k)]
-                     (set (map #(buildable-property-value-entity property-ent % options) v)))
+                     (set (map #(buildable-property-value-entity db property-ent % options) v)))
                    :else
                    v))]))
        (into {})))
