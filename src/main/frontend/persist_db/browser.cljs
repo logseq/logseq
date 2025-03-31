@@ -4,10 +4,10 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
+            [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.transact :as db-transact]
-            [frontend.handler.assets :as assets-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
@@ -15,8 +15,6 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
-
-(defonce *worker state/*db-worker)
 
 (defn- ask-persist-permission!
   []
@@ -26,7 +24,7 @@
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
 (defn- sync-app-state!
-  [^js worker]
+  []
   (add-watch state/state
              :sync-worker-state
              (fn [_ _ prev current]
@@ -37,7 +35,7 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (.sync-app-state worker (ldb/write-transit-str new-state)))))))
+                   (state/<invoke-db-worker :thread-api/sync-app-state new-state))))))
 
 (defn get-route-data
   [route-match]
@@ -47,7 +45,7 @@
      :query-params (:query-params route-match)}))
 
 (defn- sync-ui-state!
-  [^js worker]
+  []
   (add-watch state/state
              :sync-ui-state
              (fn [_ _ prev current]
@@ -58,15 +56,13 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (.sync-ui-state worker (state/get-current-repo)
-                                     (ldb/write-transit-str {:old-state old-state
-                                                             :new-state new-state}))))))))
+                     (state/<invoke-db-worker :thread-api/sync-ui-state
+                                              (state/get-current-repo)
+                                              {:old-state old-state :new-state new-state})))))))
 
 (defn transact!
-  [^js worker repo tx-data tx-meta]
-  (let [tx-meta' (ldb/write-transit-str tx-meta)
-        tx-data' (ldb/write-transit-str tx-data)
-        ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
+  [repo tx-data tx-meta]
+  (let [;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
                  :validate-db-options (:dev/validate-db-options (state/get-config))
@@ -79,39 +75,7 @@
                  :journals-directory (config/get-journals-directory)
                  :whiteboards-directory (config/get-whiteboards-directory)
                  :pages-directory (config/get-pages-directory)}]
-    (if worker
-      (.transact worker repo tx-data' tx-meta'
-                 (ldb/write-transit-str context))
-      (notification/show! "Latest change was not saved! Please restart the application." :error))))
-
-(defn- with-write-transit-str
-  [p]
-  (p/chain p ldb/write-transit-str))
-
-(deftype Main []
-  Object
-  (readAsset [_this repo asset-block-id asset-type]
-    (assets-handler/<read-asset repo asset-block-id asset-type))
-  (writeAsset [_this repo asset-block-id asset-type data]
-    (assets-handler/<write-asset repo asset-block-id asset-type data))
-  (unlinkAsset [_this repo asset-block-id asset-type]
-    (assets-handler/<unlink-asset repo asset-block-id asset-type))
-  (get-all-asset-file-paths [_this repo]
-    (with-write-transit-str
-      (assets-handler/<get-all-asset-file-paths repo)))
-  (get-asset-file-metadata [_this repo asset-block-id asset-type]
-    (with-write-transit-str
-      (assets-handler/<get-asset-file-metadata repo asset-block-id asset-type)))
-  (rtc-upload-asset [_this repo asset-block-uuid-str asset-type checksum put-url]
-    (with-write-transit-str
-      (js/Promise.
-       (assets-handler/new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))))
-  (rtc-download-asset [_this repo asset-block-uuid-str asset-type get-url]
-    (with-write-transit-str
-      (js/Promise.
-       (assets-handler/new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))))
-  (testFn [_this]
-    (prn :debug :works)))
+    (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
 (defn start-db-worker!
   []
@@ -120,25 +84,32 @@
                        "js/db-worker.js"
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker (Comlink/wrap worker)
+          wrapped-worker* (Comlink/wrap worker)
+          wrapped-worker (fn [qkw direct-pass-args? & args]
+                           (-> (.remoteInvoke ^js wrapped-worker*
+                                              (str (namespace qkw) "/" (name qkw))
+                                              direct-pass-args?
+                                              (if direct-pass-args?
+                                                (into-array args)
+                                                (ldb/write-transit-str args)))
+                               (p/chain ldb/read-transit-str)))
           t1 (util/time-ms)]
-      (Comlink/expose (Main.) worker)
+      (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
-      (reset! *worker wrapped-worker)
-      (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
+      (reset! state/*db-worker wrapped-worker)
+      (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (.sync-app-state wrapped-worker
-                                     (ldb/write-transit-str
-                                      {:git/current-repo (state/get-current-repo)
-                                       :config (:config @state/state)}))
-                  _ (sync-app-state! wrapped-worker)
-                  _ (sync-ui-state! wrapped-worker)
+                  _ (state/<invoke-db-worker :thread-api/sync-app-state
+                                             {:git/current-repo (state/get-current-repo)
+                                              :config (:config @state/state)})
+                  _ (sync-app-state!)
+                  _ (sync-ui-state!)
                   _ (ask-persist-permission!)
                   _ (state/pub-event! [:graph/sync-context])]
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (db-transact/transact (partial transact! wrapped-worker)
+               (db-transact/transact transact!
                                      (if (string? repo) repo (state/get-current-repo))
                                      tx-data
                                      tx-meta)))
@@ -171,56 +142,41 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))))
+    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
 
   (<list-db [_this]
-    (when-let [^js sqlite @*worker]
-      (-> (.listDB sqlite)
-          (p/then ldb/read-transit-str)
-          (p/catch sqlite-error-handler))))
+    (-> (state/<invoke-db-worker :thread-api/list-db)
+        (p/catch sqlite-error-handler)))
 
   (<unsafe-delete [_this repo]
-    (when-let [^js sqlite @*worker]
-      (.unsafeUnlinkDB sqlite repo)))
+    (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo))
 
   (<release-access-handles [_this repo]
-    (when-let [^js sqlite @*worker]
-      (.releaseAccessHandles sqlite repo)))
+    (state/<invoke-db-worker :thread-api/release-access-handles repo))
 
   (<fetch-initial-data [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (-> (p/let [db-exists? (.dbExists sqlite repo)
-                  disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
-                  _ (when disk-db-data
-                      (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))]
-            (.getInitialData sqlite repo))
-          (p/catch sqlite-error-handler))))
+    (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
+                disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
+                _ (when disk-db-data
+                    (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo disk-db-data))
+                _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
+          (state/<invoke-db-worker :thread-api/get-initial-data repo))
+        (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (when-let [^js sqlite @*worker]
-      (-> (p/let [data (.exportDB sqlite repo)]
-            (when data
-              (if (:return-data? opts)
-                data
-                (<export-db! repo data))))
-          (p/catch (fn [error]
-                     (prn :debug :save-db-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
+    (-> (p/let [data (state/<invoke-db-worker :thread-api/export-db repo)]
+          (when data
+            (if (:return-data? opts)
+              data
+              (<export-db! repo data))))
+        (p/catch (fn [error]
+                   (prn :debug :save-db-error repo)
+                   (js/console.error error)
+                   (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
 
   (<import-db [_this repo data]
-    (when-let [^js sqlite @*worker]
-      (-> (.importDb sqlite repo data)
-          (p/catch (fn [error]
-                     (prn :debug :import-db-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {}))))))
-
-(comment
-  (defn clean-all-dbs!
-    []
-    (when-let [sqlite @*sqlite]
-      (.dangerousRemoveAllDbs sqlite)
-      (state/set-current-repo! nil))))
+    (-> (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo data)
+        (p/catch (fn [error]
+                   (prn :debug :import-db-error repo)
+                   (js/console.error error)
+                   (notification/show! [:div (str "SQLiteDB import error: " error)] :error) {})))))

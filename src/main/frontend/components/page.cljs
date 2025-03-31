@@ -117,7 +117,7 @@
     (let [[hover set-hover!] (rum/use-state false)
           click-handler-fn (fn []
                              (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
-                                     result (when (string? result) (:tx-data (ldb/read-transit-str result)))
+                                     result (:tx-data result)
                                      first-child-id (first (map :block/uuid result))
                                      first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
                                (when first-child
@@ -1091,11 +1091,10 @@
   (let [[graph set-graph!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
-       (p/let [data-str (.build-graph ^js @state/*db-worker (state/get-current-repo)
-                                      (ldb/write-transit-str (assoc settings
+       (p/let [result (state/state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo)
+                                      (assoc settings
                                                                     :type :global
-                                                                    :theme theme)))
-               result (ldb/read-transit-str data-str)]
+                                                                    :theme theme))]
          (set-graph! result)))
      [theme settings])
     (when graph
@@ -1150,8 +1149,7 @@
         dark? (= (:theme opts) "dark")]
     (hooks/use-effect!
      (fn []
-       (p/let [data-str (.build-graph ^js @state/*db-worker (state/get-current-repo) (ldb/write-transit-str opts))
-               result (ldb/read-transit-str data-str)]
+       (p/let [result (state/state/<invoke-db-worker :thread-api/build-graph (state/get-current-repo) opts)]
          (set-graph! result)))
      [opts])
     (when (seq (:nodes graph))

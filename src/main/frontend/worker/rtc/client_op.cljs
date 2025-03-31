@@ -168,7 +168,8 @@
                (-> r
                    (update block-uuid assoc :remove :retract)
                    (update-in [block-uuid :update] (fn [old-op]
-                                                     (if old-op
+                                                     (if (and old-op
+                                                              (not (keyword-identical? :retract old-op)))
                                                        (merge-update-ops old-op op)
                                                        op))))
                :remove

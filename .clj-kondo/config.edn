@@ -102,6 +102,7 @@
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.config config-handler
              frontend.handler.db-based.editor db-editor-handler
+             frontend.handler.db-based.export db-export-handler
              frontend.handler.db-based.page db-page-handler
              frontend.handler.db-based.property db-property-handler
              frontend.handler.db-based.property.util db-pu
@@ -216,7 +217,8 @@
                         rum.core/defcs hooks.rum/defcs
                         clojure.string/join hooks.path-invalid-construct/string-join
                         clojure.string/replace hooks.regex-checks/double-escaped-regex
-                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords}}
+                        logseq.common.defkeywords/defkeywords hooks.defkeywords/defkeywords
+                        frontend.common.thread-api/def-thread-api hooks.def-thread-api/def-thread-api}}
  :lint-as {promesa.core/let clojure.core/let
            promesa.core/loop clojure.core/loop
            promesa.core/recur clojure.core/recur
@@ -232,7 +234,8 @@
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
-           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def}
+           logseq.common.defkeywords/defkeyword cljs.spec.alpha/def
+           frontend.common.thread-api/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true
           :exclude-files ["src/test/docs-0.10.9/"]}}

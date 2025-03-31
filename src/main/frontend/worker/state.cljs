@@ -10,9 +10,27 @@
 
 (defonce *main-thread (atom nil))
 
-(defonce *state (atom {:worker/object nil
+(defn- <invoke-main-thread*
+  [qkw direct-pass-args? args-list]
+  (let [main-thread @*main-thread]
+    (when (nil? main-thread)
+      (prn :<invoke-main-thread-error qkw)
+      (throw (ex-info "main-thread has not been initialized" {})))
+    (apply main-thread qkw direct-pass-args? args-list)))
 
-                       :db/latest-transact-time {}
+(defn <invoke-main-thread
+  "invoke main thread api"
+  [qkw & args]
+  (<invoke-main-thread* qkw false args))
+
+(comment
+  (defn <invoke-main-thread-direct-pass-args
+    "invoke main thread api.
+  But directly pass args to main-thread(won't do transit-write on them)"
+    [qkw & args]
+    (<invoke-main-thread* qkw true args)))
+
+(defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
                        ;; FIXME: this name :config is too general
@@ -101,14 +119,6 @@
   [new-state]
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
-
-(defn set-worker-object!
-  [worker]
-  (swap! *state assoc :worker/object worker))
-
-(defn get-worker-object
-  []
-  (:worker/object @*state))
 
 (defn get-date-formatter
   [repo]

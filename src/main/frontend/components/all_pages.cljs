@@ -1,14 +1,12 @@
 (ns frontend.components.all-pages
   "All pages"
   (:require [frontend.components.block :as component-block]
-            [frontend.components.page :as component-page]
             [frontend.components.views :as views]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.state :as state]
             [logseq.common.config :as common-config]
-            [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
 (defn- columns

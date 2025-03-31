@@ -118,8 +118,8 @@
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
-                              ;; anything org mode except for org.babashka
-                              "org[^\\.]"
+                              ;; anything org mode except for org.babashka or urls like schema.org
+                              "[^\\.]org[^\\.]"
                               "#+BEGIN_"
                               "#+END_"
                               "pre-block"]))

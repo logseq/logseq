@@ -281,7 +281,7 @@
 }
 
 .cp__sidebar-left-layout {
-  @apply fixed top-0 left-0 w-[10px] z-[var(--ls-z-index-level-5)];
+  @apply fixed top-0 left-0 w-[10px] z-[var(--ls-z-index-level-4)];
 
   a {
     @apply opacity-80 hover:opacity-100 text-foreground;
@@ -319,7 +319,7 @@
   }
 
   &.is-open {
-    width: 100%;
+    @apply w-full h-full;
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
@@ -440,12 +440,16 @@
 }
 
 .cp__sidebar-main-content {
-  width: 100%;
-  max-width: var(--ls-main-content-max-width);
-  flex: 1;
+  @apply w-full max-w-[var(--ls-main-content-max-width)] flex-1;
 
   .page {
-    @apply px-4;
+    @apply px-5 pt-4;
+  }
+
+  @screen sm {
+    .page {
+      @apply px-2 pt-0;
+    }
   }
 }
 

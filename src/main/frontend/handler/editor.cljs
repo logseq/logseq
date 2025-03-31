@@ -1949,7 +1949,8 @@
                                             size)
       (let [new-meta (merge metadata size)
             image-part (first (string/split full_text #"\{"))
-            new-full-text (str image-part (pr-str new-meta))
+            md-link? (string/starts-with? image-part "![")
+            new-full-text (str (if md-link? image-part (str "![image](" image-part ")")) (pr-str new-meta))
             block (db/entity [:block/uuid block-id])
             value (:block/title block)
             new-value (string/replace value full_text new-full-text)]
@@ -2192,8 +2193,9 @@
                    (outliner-save-block! editing-block)))
               result (transact-blocks!)]
         (state/set-block-op-type! nil)
-        (when-let [result (some-> result (ldb/read-transit-str))]
-          (edit-last-block-after-inserted! result) result)))))
+        (when result
+          (edit-last-block-after-inserted! result)
+          result)))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2317,7 +2319,7 @@
                                                              (assoc opts
                                                                     :sibling? sibling?'
                                                                     :insert-template? true)))]
-                   (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
+                   (when result (edit-last-block-after-inserted! result)))
 
                  (catch :default ^js/Error e
                    (notification/show!
@@ -3045,8 +3047,8 @@
         (keydown-backspace-handler false e)
 
         (and (= key "#")
-             (and (> pos 0)
-                  (= "#" (util/nth-safe value (dec pos)))))
+             (> pos 0)
+             (= "#" (util/nth-safe value (dec pos))))
         (state/clear-editor-action!)
 
         (and (contains? (set/difference (set (keys reversed-autopair-map))

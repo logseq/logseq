@@ -13,7 +13,6 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -46,9 +45,9 @@
   "Return nil if this asset not exist"
   [repo block-uuid asset-type]
   (m/sp
-    (ldb/read-transit-str
-     (c.m/<?
-      (.get-asset-file-metadata ^js @worker-state/*main-thread repo (str block-uuid) asset-type)))))
+    (c.m/<?
+     (worker-state/<invoke-main-thread :thread-api/get-asset-file-metadata
+                                       repo (str block-uuid) asset-type))))
 
 (defn- remote-block-ops=>remote-asset-ops
   [db-before remove-ops]
@@ -133,11 +132,10 @@
   [repo asset-uuid->url asset-uuid->asset-type]
   (->> (fn [[asset-uuid url]]
          (m/sp
-           (let [r (ldb/read-transit-str
-                    (c.m/<?
-                     (.rtc-download-asset
-                      ^js @worker-state/*main-thread
-                      repo (str asset-uuid) (get asset-uuid->asset-type asset-uuid) url)))]
+           (let [r (c.m/<?
+                    (worker-state/<invoke-main-thread :thread-api/rtc-download-asset
+                                                      repo (str asset-uuid)
+                                                      (get asset-uuid->asset-type asset-uuid) url))]
              (when-let [edata (:ex-data r)]
                ;; if download-url return 404, ignore this asset
                (when (not= 404 (:status (:data edata)))
@@ -151,11 +149,9 @@
   (->> (fn [[asset-uuid url]]
          (m/sp
            (let [[asset-type checksum] (get asset-uuid->asset-type+checksum asset-uuid)
-                 r (ldb/read-transit-str
-                    (c.m/<?
-                     (.rtc-upload-asset
-                      ^js @worker-state/*main-thread
-                      repo (str asset-uuid) asset-type checksum url)))]
+                 r (c.m/<?
+                    (worker-state/<invoke-main-thread :thread-api/rtc-upload-asset
+                                                      repo (str asset-uuid) asset-type checksum url))]
              (when (:ex-data r)
                (throw (ex-info "upload asset failed" r)))
              (d/transact! conn
@@ -244,7 +240,8 @@
                                             :asset-uuids (keys asset-uuid->asset-type)}))
                    :asset-uuid->url))]
         (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
-          (c.m/<? (.unlinkAsset ^js @worker-state/*main-thread repo (str asset-uuid) asset-type)))
+          (c.m/<? (worker-state/<invoke-main-thread :thread-api/unlink-asset
+                                                    repo (str asset-uuid) asset-type)))
         (when (seq asset-uuid->url)
           (add-log-fn :rtc.asset.log/download-assets {:asset-uuids (keys asset-uuid->url)}))
         (m/? (new-task--concurrent-download-assets repo asset-uuid->url asset-uuid->asset-type))))))
@@ -263,8 +260,8 @@
 (defn- new-task--initial-download-missing-assets
   [repo get-ws-create-task graph-uuid conn add-log-fn]
   (m/sp
-    (let [local-all-asset-file-paths (ldb/read-transit-str
-                                      (c.m/<? (.get-all-asset-file-paths ^js @worker-state/*main-thread repo)))
+    (let [local-all-asset-file-paths
+          (c.m/<? (worker-state/<invoke-main-thread :thread-api/get-all-asset-file-paths repo))
           local-all-asset-file-uuids (set (map (comp parse-uuid path/file-stem) local-all-asset-file-paths))
           local-all-asset-uuids (set (map :block/uuid (get-all-asset-blocks @conn)))]
       (when-let [asset-update-ops
