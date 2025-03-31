@@ -99,6 +99,27 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
+(defn- build-property-map-for-pvalue-tx [k v new-block properties-config all-idents]
+  (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+    (if (and (db-property-type/value-ref-property-types built-in-type)
+             ;; closed values are referenced by their :db/ident so no need to create values
+             (not (get-in db-property/built-in-properties [k :closed-values])))
+      {:db/ident k
+       :logseq.property/type built-in-type}
+      (when-let [built-in-type' (get (or (:build/properties-ref-types new-block)
+                                         ;; Reasonable default for properties like logseq.property/default-value
+                                         {:entity :number})
+                                     built-in-type)]
+        {:db/ident k
+         :logseq.property/type built-in-type'}))
+    (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
+               ;; TODO: Support translate-property-value without this hack
+               (not (vector? v)))
+      (let [prop-type (get-in properties-config [k :logseq.property/type])]
+        {:db/ident (get-ident all-idents k)
+         :original-property-id k
+         :logseq.property/type prop-type}))))
+
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block.
@@ -106,28 +127,13 @@
   [new-block properties properties-config all-idents]
   (->> properties
        (keep (fn [[k v]]
-               (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (if (and (db-property-type/value-ref-property-types built-in-type)
-                          ;; closed values are referenced by their :db/ident so no need to create values
-                          (not (get-in db-property/built-in-properties [k :closed-values])))
-                   (let [property-map {:db/ident k
-                                       :logseq.property/type built-in-type}]
-                     [property-map v])
-                   (when-let [built-in-type' (get (or (:build/properties-ref-types new-block)
-                                                      ;; Reasonable default for properties like logseq.property/default-value
-                                                      {:entity :number})
-                                                  built-in-type)]
-                     (let [property-map {:db/ident k
-                                         :logseq.property/type built-in-type'}]
-                       [property-map v])))
-                 (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
-                            ;; TODO: Support translate-property-value without this hack
-                            (not (vector? v)))
-                   (let [prop-type (get-in properties-config [k :logseq.property/type])
-                         property-map {:db/ident (get-ident all-idents k)
-                                       :original-property-id k
-                                       :logseq.property/type prop-type}]
-                     [property-map v])))))
+               (when-let [property-map (build-property-map-for-pvalue-tx k v new-block properties-config all-idents)]
+                 [(cond-> property-map
+                    (and (:build/property-value v) (:build/properties v))
+                    (assoc :property-value-properties (:build/properties v)))
+                  (if (:build/property-value v)
+                    (or (:logseq.property/value v) (:block/title v))
+                    v)])))
        (db-property-build/build-property-values-tx-m new-block)))
 
 (defn- extract-basic-content-refs
