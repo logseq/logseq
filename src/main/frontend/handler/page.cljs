@@ -217,22 +217,6 @@
       (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
     opts)))
 
-(comment
-  (defn get-all-pages
-    [repo]
-    (let [db-based? (config/db-based-graph? repo)
-          graph-specific-hidden?
-          (if db-based?
-            (fn [p]
-              (and (ldb/property? p) (ldb/built-in? p)))
-            (fn [p]
-              (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-      (cond->>
-       (->> (db/get-all-pages repo)
-            (remove graph-specific-hidden?))
-        (not db-based?)
-        (common-handler/fix-pages-timestamps)))))
-
 (defn file-based-save-filter!
   [page filter-state]
   (property-handler/add-page-property! page :filters filter-state))

@@ -35,7 +35,7 @@
   get-files-blocks get-files-full get-journals-length
   get-latest-journals get-page get-case-page get-page-alias-names
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format
-  get-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages
+  get-referenced-blocks get-page-referenced-blocks-full
   get-all-pages get-pages-relation get-pages-that-mentioned-page
   journal-page? page? page-alias-set sub-block sub-entity
   page-empty? page-exists? get-alias-source-page

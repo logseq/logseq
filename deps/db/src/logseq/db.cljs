@@ -437,6 +437,13 @@
     (:alias rules/rules))
    distinct))
 
+(defn page-alias-set
+  [db page-id]
+  (->>
+   (get-block-alias db page-id)
+   (set)
+   (set/union #{page-id})))
+
 (defn get-block-refs
   [db id]
   (let [entity (d/entity db id)
@@ -603,3 +610,44 @@
 (def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
 
 (def get-latest-journals sqlite-common-db/get-latest-journals)
+
+(defn get-all-namespace-relation
+  [db]
+  (d/q '[:find ?page ?parent
+         :where
+         [?page :block/namespace ?parent]]
+       db))
+
+(defn get-pages-relation
+  [db with-journal?]
+  (if (entity-plus/db-based-graph? db)
+    (let [q (if with-journal?
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]]
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?p :block/tags]
+                (not [?p :block/tags :logseq.class/Journal])
+                [?block :block/refs ?ref-page]])]
+      (d/q q db))
+    (let [q (if with-journal?
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]]
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                (not [?p :block/type "journal"])
+                [?block :block/refs ?ref-page]])]
+      (d/q q db))))
+
+(defn get-all-tagged-pages
+  [db]
+  (d/q '[:find ?page ?tag
+         :where
+         [?page :block/tags ?tag]]
+       db))

@@ -34,6 +34,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.frontend.graph :as db-graph]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.view :as db-view]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -920,6 +921,12 @@
    (let [conn (worker-state/get-datascript-conn repo)
          {:keys [property-ident] :as opts} (ldb/read-transit-str opts-str)
          data (db-view/get-property-values @conn property-ident opts)]
+     (ldb/write-transit-str data)))
+
+  (build-graph
+   [_this repo opts-str]
+   (let [conn (worker-state/get-datascript-conn repo)
+         data (db-graph/build-graph @conn (ldb/read-transit-str opts-str))]
      (ldb/write-transit-str data)))
 
   (dangerousRemoveAllDbs
