@@ -1086,6 +1086,22 @@
       (filter (fn [node] (some #(re-find % (:label node)) filter-patterns)) nodes))
     nodes))
 
+(rum/defc graph-aux
+  [settings forcesettings theme search-graph-filters]
+  (let [[graph set-graph!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [data-str (.build-graph ^js @state/*db-worker (state/get-current-repo)
+                                      (ldb/write-transit-str (assoc settings
+                                                                    :type :global
+                                                                    :theme theme)))
+               result (ldb/read-transit-str data-str)]
+         (set-graph! result)))
+     [theme settings])
+    (when graph
+      (let [graph' (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
+        (global-graph-inner graph' settings forcesettings theme)))))
+
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -1103,10 +1119,8 @@
         theme (state/sub :ui/theme)
         ;; Needed for query to retrigger after reset
         _reset? (rum/react *graph-reset?)
-        graph (graph-handler/build-global-graph theme settings)
-        search-graph-filters (state/sub :search/graph-filters)
-        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
-    (global-graph-inner graph settings forcesettings theme)))
+        search-graph-filters (state/sub :search/graph-filters)]
+    (graph-aux settings forcesettings theme search-graph-filters)))
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
@@ -1130,6 +1144,19 @@
                       (fn [graph]
                         (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
+(rum/defc page-graph-aux
+  [page opts]
+  (let [[graph set-graph!] (hooks/use-state nil)
+        dark? (= (:theme opts) "dark")]
+    (hooks/use-effect!
+     (fn []
+       (p/let [data-str (.build-graph ^js @state/*db-worker (state/get-current-repo) (ldb/write-transit-str opts))
+               result (ldb/read-transit-str data-str)]
+         (set-graph! result)))
+     [opts])
+    (when (seq (:nodes graph))
+      (page-graph-inner page graph dark?))))
+
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
   (let [page (or
@@ -1137,14 +1164,13 @@
                    (state/sub [:route-match :path-params :name]))
               (date/today))
         theme (:ui/theme @state/state)
-        dark? (= theme "dark")
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
-        page-entity (db/get-page page)
-        graph (if (ldb/page? page-entity)
-                (graph-handler/build-page-graph page theme show-journals-in-page-graph)
-                (graph-handler/build-block-graph (uuid page) theme))]
-    (when (seq (:nodes graph))
-      (page-graph-inner page graph dark?))))
+        page-entity (db/get-page page)]
+    (page-graph-aux page
+                    {:type (if (ldb/page? page-entity) :page :block)
+                     :block/uuid (:block/uuid page-entity)
+                     :theme theme
+                     :show-journals? show-journals-in-page-graph})))
 
 (defn batch-delete-dialog
   [pages orphaned-pages? refresh-fn]

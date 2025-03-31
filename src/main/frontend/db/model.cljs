@@ -20,6 +20,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.graph :as db-graph]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -216,10 +217,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn page-alias-set
   [repo-url page-id]
-  (->>
-   (ldb/get-block-alias (conn/get-db repo-url) page-id)
-   (set)
-   (set/union #{page-id})))
+  (ldb/page-alias-set (conn/get-db repo-url) page-id))
 
 (defn get-page-alias-names
   [repo page-id]
@@ -576,42 +574,11 @@ independent of format as format specific heading characters are stripped"
    (when-let [db (conn/get-db repo-url)]
      (take n (ldb/get-latest-journals db)))))
 
-;; get pages that this page referenced
-(defn get-page-referenced-pages
-  [repo page-id]
-  (when-let [db (conn/get-db repo)]
-    (let [pages (page-alias-set repo page-id)
-          ref-pages (d/q
-                     '[:find [?ref-page ...]
-                       :in $ ?pages
-                       :where
-                       [(untuple ?pages) [?page ...]]
-                       [?block :block/page ?page]
-                       [?block :block/refs ?ref-page]]
-                     db
-                     pages)]
-      ref-pages)))
-
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page-id include-journals?]
-  (when (conn/get-db repo)
-    (let [pages (page-alias-set repo page-id)
-          mentioned-pages (->>
-                           (mapcat
-                            (fn [id]
-                              (let [page (db-utils/entity repo id)]
-                                (->> (:block/_refs page)
-                                     (keep (fn [ref]
-                                             (if (ldb/page? ref)
-                                               page
-                                               (:block/page ref)))))))
-                            pages)
-                           (util/distinct-by :db/id))]
-      (keep (fn [page]
-              (when-not (and (not include-journals?) (ldb/journal? page))
-                (:db/id page)))
-            mentioned-pages))))
+  (when-let [db (conn/get-db repo)]
+    (db-graph/get-pages-that-mentioned-page db page-id include-journals?)))
 
 (defn get-page-referenced-blocks-full
   ([page-id]
