@@ -3,3 +3,7 @@
         width: 107px;
     }
 }
+
+.group-list-view div[data-testid='virtuoso-item-list'] {
+    @apply flex flex-col gap-2;
+}

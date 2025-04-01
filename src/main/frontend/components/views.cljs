@@ -1399,7 +1399,7 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views items-count set-view-entity! set-views! view-feature-type show-items-count?]} hover?]
+  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count?]} hover?]
   [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
@@ -1433,7 +1433,9 @@
                         {:as-dropdown? true
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
-                       (set-view-entity! view)))}
+                       (do
+                         (set-view-entity! view)
+                         (set-data! nil))))}
         (let [display-type (or (:db/ident (get view :logseq.property.view/type))
                                :logseq.property.view/type.table)]
           (when-let [icon (:logseq.property/icon (db/entity display-type))]
@@ -1443,7 +1445,7 @@
           (if (= title "")
             "New view"
             title))
-        (when (and show-items-count? (> items-count 0))
+        (when (and current-view? show-items-count? (> items-count 0) (seq data))
           [:span.text-muted-foreground.text-xs
            items-count]))))
 
@@ -1602,7 +1604,8 @@
          (if (and group-by-property (not (number? (first (:rows table)))))
            [:div.flex.flex-col.border-t.py-4
             (ui/virtualized-list
-             {:custom-scroll-parent (gdom/getElement "main-content-container")
+             {:class (when list-view? "group-list-view")
+              :custom-scroll-parent (gdom/getElement "main-content-container")
               :increase-viewport-by {:top 300 :bottom 300}
               :compute-item-key (fn [idx]
                                   (str "table-group" idx))
