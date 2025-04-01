@@ -9,8 +9,10 @@
             [rum.core :as rum]))
 
 (rum/defc journal-cp < rum/static
-  [id]
+  [id last?]
   [:div.journal-item.content
+   (when last?
+     {:class "journal-last-item"})
    (page/page-cp {:db/id id})])
 
 (rum/defc all-journals
@@ -30,5 +32,6 @@
                              (str "journal-" id)))
        :total-count (count data)
        :item-content (fn [idx]
-                       (let [id (util/nth-safe data idx)]
-                         (journal-cp id)))})]))
+                       (let [id (util/nth-safe data idx)
+                             last? (= (inc idx) (count data))]
+                         (journal-cp id last?)))})]))
