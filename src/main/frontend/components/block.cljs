@@ -3176,7 +3176,7 @@
           (when (seq breadcrumbs)
             [:div.breadcrumb.block-parents
              {:class (when (seq breadcrumbs)
-                       (str (when-not (:search? config)
+                       (str (when-not (or (:search? config) (:list-view? config))
                               " my-2")
                             (when indent?
                               " ml-4")))}
