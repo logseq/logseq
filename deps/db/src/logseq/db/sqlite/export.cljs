@@ -38,77 +38,80 @@
     {:build/journal (:block/journal-day page-entity)}
     {:block/title (block-title page-entity)}))
 
-(declare buildable-properties)
-
-(defn- buildable-property-value-entity
-  "Converts property value to a buildable version"
-  [db property-ent pvalue properties-config {:keys [property-value-uuids?] :as options}]
-  (cond (and (not property-value-uuids?) (ldb/internal-page? pvalue))
+(defn- build-pvalue-entity-for-build-page
+  [pvalue]
+  (cond (ldb/internal-page? pvalue)
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
                        (assoc :build/tags (->build-tags (:block/tags pvalue))))]
-        (and (not property-value-uuids?) (entity-util/journal? pvalue))
-        [:build/page {:build/journal (:block/journal-day pvalue)}]
-        :else
-        (if (contains? #{:node :date} (:logseq.property/type property-ent))
-          ;; Idents take precedence over uuid because they are keep data graph-agnostic
-          (if (:db/ident pvalue)
-            (:db/ident pvalue)
-            ;; Use metadata distinguish from block references that don't exist like closed values
-            ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
-          (or (:db/ident pvalue)
-              (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
-                                                :logseq.property/value :logseq.property/created-from-property
-                                                db-property/public-db-attribute-properties)
-                                         ;; TODO: Allow user properties when sqlite.build supports it
-                                         (medley/filter-keys db-property/internal-property?))
-                    ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
-                                     (buildable-properties db ent-properties* properties-config options))]
-                (if (or (seq ent-properties) (seq (:block/tags pvalue)))
-                  (cond-> {:build/property-value :block
-                           :block/title (or (block-title pvalue)
-                                            (:logseq.property/value pvalue))}
-                    (seq (:block/tags pvalue))
-                    (assoc :build/tags (->build-tags (:block/tags pvalue)))
+        (entity-util/journal? pvalue)
+        [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
-                    (seq ent-properties)
-                    (assoc :build/properties ent-properties)
+(defn- build-pvalue-entity-default [ent-properties pvalue options]
+  (if (or (seq ent-properties) (seq (:block/tags pvalue)))
+    (cond-> {:build/property-value :block
+             :block/title (or (block-title pvalue)
+                              (:logseq.property/value pvalue))}
+      (seq (:block/tags pvalue))
+      (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
-                    (:include-timestamps? options)
-                    (merge (select-keys pvalue [:block/created-at :block/updated-at])))
-                  ;; nbb-compatible version of db-property/property-value-content
-                  (or (block-title pvalue)
-                      (:logseq.property/value pvalue))))))))
+      (seq ent-properties)
+      (assoc :build/properties ent-properties)
+
+      (:include-timestamps? options)
+      (merge (select-keys pvalue [:block/created-at :block/updated-at])))
+    ;; nbb-compatible version of db-property/property-value-content
+    (or (block-title pvalue)
+        (:logseq.property/value pvalue))))
 
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
    valid sqlite.build EDN"
   [db ent-properties properties-config options]
-  (->> ent-properties
-       (map (fn [[k v]]
-              [k
-               ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
-               (if (and (not (db-property/logseq-property? k))
-                        (or (:block/closed-value-property v)
-                            (and (set? v) (:block/closed-value-property (first v)))))
-                 (let [find-closed-uuid (fn [val]
-                                          (or (some #(when (= (:value %) (db-property/property-value-content val))
-                                                       (:uuid %))
-                                                    (get-in properties-config [k :build/closed-values]))
-                                              (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
-                   (if (set? v)
-                     (set (map #(vector :block/uuid (find-closed-uuid %)) v))
-                     [:block/uuid (find-closed-uuid v)]))
-                 (cond
-                   (de/entity? v)
-                   (buildable-property-value-entity db (d/entity db k) v properties-config options)
-                   (and (set? v) (every? de/entity? v))
-                   (let [property-ent (d/entity db k)]
-                     (set (map #(buildable-property-value-entity db property-ent % properties-config options) v)))
-                   :else
-                   v))]))
-       (into {})))
+  (letfn [(build-pvalue-entity
+            [db' property-ent pvalue properties-config' {:keys [property-value-uuids?] :as options'}]
+            (if-let [build-page (and (not property-value-uuids?) (build-pvalue-entity-for-build-page pvalue))]
+              build-page
+              (if (contains? #{:node :date} (:logseq.property/type property-ent))
+                ;; Idents take precedence over uuid because they are keep data graph-agnostic
+                (if (:db/ident pvalue)
+                  (:db/ident pvalue)
+                  ;; Use metadata distinguish from block references that don't exist like closed values
+                  ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
+                (or (:db/ident pvalue)
+                    (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
+                                                      :logseq.property/value :logseq.property/created-from-property
+                                                      db-property/public-db-attribute-properties)
+                                               ;; TODO: Allow user properties when sqlite.build supports it
+                                               (medley/filter-keys db-property/internal-property?))
+                          ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
+                                           (buildable-properties db' ent-properties* properties-config' options'))]
+                      (build-pvalue-entity-default ent-properties pvalue options'))))))]
+    (->> ent-properties
+         (map (fn [[k v]]
+                [k
+                 ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
+                 (if (and (not (db-property/logseq-property? k))
+                          (or (:block/closed-value-property v)
+                              (and (set? v) (:block/closed-value-property (first v)))))
+                   (let [find-closed-uuid (fn [val]
+                                            (or (some #(when (= (:value %) (db-property/property-value-content val))
+                                                         (:uuid %))
+                                                      (get-in properties-config [k :build/closed-values]))
+                                                (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
+                     (if (set? v)
+                       (set (map #(vector :block/uuid (find-closed-uuid %)) v))
+                       [:block/uuid (find-closed-uuid v)]))
+                   (cond
+                     (de/entity? v)
+                     (build-pvalue-entity db (d/entity db k) v properties-config options)
+                     (and (set? v) (every? de/entity? v))
+                     (let [property-ent (d/entity db k)]
+                       (set (map #(build-pvalue-entity db property-ent % properties-config options) v)))
+                     :else
+                     v))]))
+         (into {}))))
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"
