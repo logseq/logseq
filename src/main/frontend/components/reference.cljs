@@ -9,10 +9,12 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
+            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 ;; TODO: merge both page and block linked refs
@@ -71,20 +73,36 @@
       :additional-actions [reference-filter]
       :columns (views/build-columns {} [] {})})))
 
-(rum/defc references < rum/reactive db-mixins/query
+(rum/defc references
   [entity]
-  (ui/catch-error
-   (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
-                         "Linked References: Unexpected error."
-                         "Linked References: Unexpected error. Please re-index your graph first."))
-   (when-let [block-entity (db/sub-block (:db/id entity))]
-     (references-cp block-entity))))
+  (when-let [id (:db/id entity)]
+    (let [[has-references? set-has-references!] (hooks/use-state nil)]
+      (hooks/use-effect!
+       (fn []
+         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check (state/get-current-repo)
+                                                 id {})]
+           (set-has-references! result)))
+       [])
+      (when has-references?
+        (ui/catch-error
+         (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
+                               "Linked References: Unexpected error."
+                               "Linked References: Unexpected error. Please re-index your graph first."))
+         (references-cp entity))))))
 
 (rum/defc unlinked-references
-  [page]
-  (when page
-    (views/view
-     {:view-parent page
-      :view-feature-type :unlinked-references
-      :columns (views/build-columns {} [] {})
-      :foldable-options {:default-collapsed? true}})))
+  [entity]
+  (when-let [id (:db/id entity)]
+    (let [[has-references? set-has-references!] (hooks/use-state nil)]
+      (hooks/use-effect!
+       (fn []
+         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check (state/get-current-repo)
+                                                 id {:unlinked? true})]
+           (set-has-references! result)))
+       [])
+      (when has-references?
+        (views/view
+         {:view-parent entity
+          :view-feature-type :unlinked-references
+          :columns (views/build-columns {} [] {})
+          :foldable-options {:default-collapsed? true}})))))

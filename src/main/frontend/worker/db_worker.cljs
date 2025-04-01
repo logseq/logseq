@@ -495,6 +495,19 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs-count @conn id)))
 
+(def-thread-api :thread-api/block-refs-check
+  [repo id {:keys [unlinked?]}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          block (d/entity db id)]
+      (if unlinked?
+        (let [title (string/lower-case (:block/title block))]
+          (when-not (string/blank? title)
+            (->> (d/datoms db :avet :block/title)
+                 (some (fn [d]
+                         (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title)))))))
+        (some? (first (:block/_refs block)))))))
+
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
   (when-let [conn (worker-state/get-datascript-conn repo)]
