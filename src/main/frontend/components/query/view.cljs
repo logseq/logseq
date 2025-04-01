@@ -45,6 +45,7 @@
                      (remove :logseq.property/view-for))
         columns' (columns (assoc config :container-id (::container-id state)) result')
         set-data! (fn [data] (reset! *result data))]
+    (prn :debug :view-result result')
     [:div.query-result.w-full
      (views/view
       {:config {:custom-query? true}

@@ -1712,7 +1712,8 @@
       (:logseq.property.linked-references/excludes view-parent)
       (:filters view-parent)
       (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters
-                                :logseq.property.view/type])])
+                                :logseq.property.view/type])
+      query-entity-ids])
 
     (let [linked-refs? (= :linked-references view-feature-type)]
       (when-not (and linked-refs? (empty? data)

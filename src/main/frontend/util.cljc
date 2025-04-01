@@ -822,6 +822,10 @@
   (keep-indexed #(when (not= %1 n) %2) coll))
 
 #?(:cljs
+   (defn atom? [v]
+     (instance? Atom v)))
+
+#?(:cljs
    (defn react
      [ref]
      (if rum/*reactions*
@@ -1341,10 +1345,6 @@
 (defn collapsed?
   [block]
   (:block/collapsed? block))
-
-#?(:cljs
-   (defn atom? [v]
-     (instance? Atom v)))
 
 ;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
 #?(:cljs

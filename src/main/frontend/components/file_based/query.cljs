@@ -1,6 +1,6 @@
 (ns frontend.components.file-based.query
-  (:require [frontend.components.query.result :as query-result]
-            [frontend.components.file-based.query-table :as query-table]
+  (:require [frontend.components.file-based.query-table :as query-table]
+            [frontend.components.query.result :as query-result]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
@@ -82,4 +82,4 @@
            (query-refresh-button query-time {:full-text-search? full-text-search?
                                              :on-pointer-down (fn [e]
                                                                 (util/stop e)
-                                                                (query-result/trigger-custom-query! config q query-error-atom (fn [])))}))]])]))
+                                                                (query-result/run-custom-query config q query-error-atom))}))]])]))
