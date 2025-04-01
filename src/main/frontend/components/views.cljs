@@ -39,6 +39,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
+            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -172,11 +173,12 @@
   (db-view/get-property-value-content (db/get-db) entity))
 
 (rum/defc block-container
-  [config row _table]
-  (let [container (state/get-component :block/container)
-        page? (ldb/page? row)]
-    [:div.relative.w-full
-     (container (assoc config :view? true) (if page? row row))]))
+  [config row]
+  (let [container (state/get-component :block/container)]
+    [:div.relative.w-full {:style {:min-height 29}}
+     (if row
+       (container (assoc config :view? true) row)
+       [:div])]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -210,14 +212,14 @@
               :name "Name"
               :type :string
               :header header-cp
-              :cell (fn [table row _column]
+              :cell (fn [_table row _column]
                       (block-container (assoc config
                                               :raw-title? (ldb/asset? row)
                                               ;; TODO: remove this
                                               :table? true
-                                              :table-view? true)
-                                       row
-                                       table))
+                                              :table-view? true
+                                              :view? true)
+                                       row))
               :disable-hide? true})]
           (keep
            (fn [property]
@@ -1154,35 +1156,37 @@
         [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
         opts {:block-only? true
               :properties properties
-              :skip-transact? (not block-entity)
-              :skip-refresh? (not block-entity)}]
+              :skip-transact? true
+              :skip-refresh? true}]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
          (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
            (set-item! block))))
      [db-id])
-    (item-render (cond (map? item) item (number? item) {:db/id item}))))
+    (let [item' (cond (map? item) item (number? item) {:db/id item})]
+      (item-render item'))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (ui/virtualized-list
-   {:ref #(reset! *scroller-ref %)
-    :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                              (gdom/getElement "main-content-container"))
-    :increase-viewport-by {:top 300 :bottom 300}
-    :compute-item-key (fn [idx]
-                        (let [block-id (util/nth-safe rows idx)]
-                          (str "table-row-" (:group-idx option) "-" block-id)))
-    :skipAnimationFrameInResizeObserver true
-    :total-count (count rows)
-    :item-content (fn [idx]
-                    (lazy-item (:data table) idx option
-                               (fn [row]
-                                 (table-row table row {} option))))
-    :items-rendered (fn [props]
-                      (when (seq props)
-                        (set-items-rendered! true)))}))
+  (when (seq rows)
+    (ui/virtualized-list
+     {:ref #(reset! *scroller-ref %)
+      :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                (gdom/getElement "main-content-container"))
+      :increase-viewport-by {:top 300 :bottom 300}
+      :compute-item-key (fn [idx]
+                          (let [block-id (util/nth-safe rows idx)]
+                            (str "table-row-" (:group-idx option) "-" block-id)))
+      :skipAnimationFrameInResizeObserver true
+      :total-count (count rows)
+      :item-content (fn [idx]
+                      (lazy-item (:data table) idx option
+                                 (fn [row]
+                                   (table-row table row {} option))))
+      :items-rendered (fn [props]
+                        (when (seq props)
+                          (set-items-rendered! true)))})))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
@@ -1202,43 +1206,51 @@
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (rum/defc list-view < rum/static
-  [{:keys [config] :as option} _view-entity rows *scroller-ref]
-  (let [list-cp (fn [rows]
-                  (ui/virtualized-list
-                   {:ref #(reset! *scroller-ref %)
-                    :class "content"
-                    :custom-scroll-parent (gdom/getElement "main-content-container")
-                    :increase-viewport-by {:top 300 :bottom 300}
-                    :compute-item-key (fn [idx]
-                                        (str "list-row-" idx))
-                    :skipAnimationFrameInResizeObserver true
-                    :total-count (count rows)
-                    :item-content (fn [idx]
-                                    (lazy-item rows idx option
-                                               (fn [block]
-                                                 (block-container config block {}))))}))
-        pages? (every? number? rows)
-        breadcrumb (state/get-component :block/breadcrumb)]
-    (if pages?
+  [{:keys [config] :as option} _view-entity {:keys [rows]} *scroller-ref]
+  (let [lazy-item-render (fn [rows idx]
+                           (lazy-item rows idx option
+                                      (fn [block]
+                                        (block-container (assoc config :view? true) block))))
+        list-cp (fn [rows]
+                  (when (seq rows)
+                    (ui/virtualized-list
+                     {:ref #(reset! *scroller-ref %)
+                      :class "content"
+                      :custom-scroll-parent (gdom/getElement "main-content-container")
+                      :increase-viewport-by {:top 64 :bottom 64}
+                      :compute-item-key (fn [idx]
+                                          (str "list-row-" idx))
+                      ;; :skipAnimationFrameInResizeObserver true
+                      :total-count (count rows)
+                      :item-content (fn [idx] (lazy-item-render rows idx))})))
+        breadcrumb (state/get-component :block/breadcrumb)
+        all-numbers? (every? number? rows)]
+    (if all-numbers?
       (list-cp rows)
-      (for [[first-block-id blocks] rows]
-        [:div
-         [:div.ml-2
-          (breadcrumb (assoc config :list-view? true)
-                      (state/get-current-repo) first-block-id
-                      {:show-page? false})]
-         (list-cp blocks)]))))
+      (for [[idx row] (medley/indexed rows)]
+        (if (and (vector? row) (uuid? (first row)))
+          (let [[first-block-id blocks] row]
+            [:div
+             {:key (str "partition-" first-block-id)}
+             [:div.ml-2
+              (breadcrumb (assoc config :list-view? true)
+                          (state/get-current-repo) first-block-id
+                          {:show-page? false})]
+             (list-cp blocks)])
+          (rum/with-key
+            (lazy-item-render rows idx)
+            (str "partition-" idx)))))))
 
 (rum/defc gallery-card-item
-  [table view-entity block config]
+  [view-entity block config]
   [:div.ls-card-item.content
    {:key (str "view-card-" (:db/id view-entity) "-" (:db/id block))}
    [:div.-ml-4
     (block-container (assoc config
                             :id (str (:block/uuid block))
-                            :gallery-view? true)
-                     block
-                     table)]])
+                            :gallery-view? true
+                            :view? true)
+                     block)]])
 
 (rum/defcs gallery-view < rum/static mixins/container-id
   [state {:keys [config]} table view-entity blocks *scroller-ref]
@@ -1252,7 +1264,7 @@
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
-                                      (gallery-card-item table view-entity block config'))))}))]))
+                                      (gallery-card-item view-entity block config'))))}))]))
 
 (defn- run-effects!
   [{:keys [load-view-data] :as option} {:keys [data]} input *scroller-ref gallery?]
@@ -1352,7 +1364,7 @@
   (let [option (assoc option* :view-entity view-entity)]
     (case display-type
       :logseq.property.view/type.list
-      (list-view option view-entity (:rows table) *scroller-ref)
+      (list-view option view-entity table *scroller-ref)
 
       :logseq.property.view/type.gallery
       (gallery-view option table view-entity (:rows table) *scroller-ref)
@@ -1601,51 +1613,52 @@
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
          (if (and group-by-property (not (number? (first (:rows table)))))
-           [:div.flex.flex-col.border-t.py-4
-            (ui/virtualized-list
-             {:class (when list-view? "group-list-view")
-              :custom-scroll-parent (gdom/getElement "main-content-container")
-              :increase-viewport-by {:top 300 :bottom 300}
-              :compute-item-key (fn [idx]
-                                  (str "table-group" idx))
-              :skipAnimationFrameInResizeObserver true
-              :total-count (count (:rows table))
-              :item-content (fn [idx]
-                              (let [[value group] (nth (:rows table) idx)
-                                    add-new-object! (when (fn? add-new-object!)
-                                                      (fn [_]
-                                                        (add-new-object! view-entity table
-                                                                         {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                                    table' (shui/table-option (-> table-map
-                                                                  (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                  (assoc :data group ; data for this group
-                                                                         )))
-                                    readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                               (db-property/property-value-content %)
-                                                               (str %))
-                                    group-by-page? (= :block/page (:db/ident group-by-property))]
-                                (rum/with-key
-                                  (ui/foldable
-                                   [:div
-                                    (cond
-                                      group-by-page?
-                                      (if value
-                                        (let [c (state/get-component :block/page-cp)]
-                                          (c {:disable-preview? true} value))
-                                        [:div.text-muted-foreground.text-sm
-                                         "Pages"])
+           (when (seq (:rows table))
+             [:div.flex.flex-col.border-t.pt-2
+              (ui/virtualized-list
+               {:class (when list-view? "group-list-view")
+                :custom-scroll-parent (gdom/getElement "main-content-container")
+                :increase-viewport-by {:top 300 :bottom 300}
+                :compute-item-key (fn [idx]
+                                    (str "table-group" idx))
+                :skipAnimationFrameInResizeObserver true
+                :total-count (count (:rows table))
+                :item-content (fn [idx]
+                                (let [[value group] (nth (:rows table) idx)
+                                      add-new-object! (when (fn? add-new-object!)
+                                                        (fn [_]
+                                                          (add-new-object! view-entity table
+                                                                           {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                      table' (shui/table-option (-> table-map
+                                                                    (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                    (assoc :data group ; data for this group
+                                                                           )))
+                                      readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                                 (db-property/property-value-content %)
+                                                                 (str %))
+                                      group-by-page? (= :block/page (:db/ident group-by-property))]
+                                  (rum/with-key
+                                    (ui/foldable
+                                     [:div
+                                      (cond
+                                        group-by-page?
+                                        (if value
+                                          (let [c (state/get-component :block/page-cp)]
+                                            (c {:disable-preview? true} value))
+                                          [:div.text-muted-foreground.text-sm
+                                           "Pages"])
 
-                                      (some? value)
-                                      (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                                        [:div.flex.flex-row.gap-1.items-center
-                                         (when icon (icon-component/icon icon {:color? true}))
-                                         (readable-property-value value)])
-                                      :else
-                                      (str "No " (:block/title group-by-property)))]
-                                   (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
-                                     (if list-view? [:div.-ml-2 render] render))
-                                   {:title-trigger? false})
-                                  (str "group-" idx))))})]
+                                        (some? value)
+                                        (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                                          [:div.flex.flex-row.gap-1.items-center
+                                           (when icon (icon-component/icon icon {:color? true}))
+                                           (readable-property-value value)])
+                                        :else
+                                        (str "No " (:block/title group-by-property)))]
+                                     (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
+                                       (if list-view? [:div.-ml-2 render] render))
+                                     {:title-trigger? false})
+                                    (str "group-" idx))))})])
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 

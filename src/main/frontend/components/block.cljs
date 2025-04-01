@@ -3695,7 +3695,7 @@
   (let [[block set-block!] (hooks/use-state block*)]
     (when-not (or (:page-title? config)
                   (:property-block? config)
-                  (:table-view? config))
+                  (:view? config))
       (hooks/use-effect!
        (fn []
          (p/do!
