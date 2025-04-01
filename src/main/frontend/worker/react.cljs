@@ -89,7 +89,6 @@
 
                        (when journals?
                          [[::journals]]))]
-    (prn :debug :affected-keys affected-keys)
     (->>
      affected-keys
      (remove nil?)
