@@ -128,11 +128,14 @@
   (->> properties
        (keep (fn [[k v]]
                (when-let [property-map (build-property-map-for-pvalue-tx k v new-block properties-config all-idents)]
-                 [(cond-> property-map
-                    (and (:build/property-value v)
-                         (or (:build/properties v) (seq (select-keys v [:block/created-at :block/updated-at]))))
-                    (assoc :property-value-properties
-                           (merge (:build/properties v) (select-keys v [:block/created-at :block/updated-at]))))
+                 [(let [pvalue-attrs (when (:build/property-value v)
+                                       (merge (:build/properties v)
+                                              {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                                                 (:build/tags v))}
+                                              (select-keys v [:block/created-at :block/updated-at])))]
+                    (cond-> property-map
+                      (and (:build/property-value v) (seq pvalue-attrs))
+                      (assoc :property-value-properties pvalue-attrs)))
                   (if (:build/property-value v)
                     (or (:logseq.property/value v) (:block/title v))
                     v)])))
