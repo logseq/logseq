@@ -430,6 +430,9 @@
                                      {:type :coll
                                       :hide? true
                                       :public? false}
+                                     ;; ignore this property when rtc,
+                                     ;; since users frequently click the sort button to view table content temporarily,
+                                     ;; but this action does not need to be synchronized with other clients.
                                      :rtc {:rtc/ignore-attr-when-init-upload true
                                            :rtc/ignore-attr-when-init-download true
                                            :rtc/ignore-attr-when-syncing true}}
@@ -438,47 +441,32 @@
                                      :schema
                                      {:type :map
                                       :hide? true
-                                      :public? false}
-                                     :rtc {:rtc/ignore-attr-when-init-upload true
-                                           :rtc/ignore-attr-when-init-download true
-                                           :rtc/ignore-attr-when-syncing true}}
+                                      :public? false}}
 
      :logseq.property.table/hidden-columns {:title "View hidden columns"
                                             :schema
                                             {:type :keyword
                                              :cardinality :many
                                              :hide? true
-                                             :public? false}
-                                            :rtc {:rtc/ignore-attr-when-init-upload true
-                                                  :rtc/ignore-attr-when-init-download true
-                                                  :rtc/ignore-attr-when-syncing true}}
+                                             :public? false}}
 
      :logseq.property.table/ordered-columns {:title "View ordered columns"
                                              :schema
                                              {:type :coll
                                               :hide? true
-                                              :public? false}
-                                             :rtc {:rtc/ignore-attr-when-init-upload true
-                                                   :rtc/ignore-attr-when-init-download true
-                                                   :rtc/ignore-attr-when-syncing true}}
+                                              :public? false}}
 
      :logseq.property.table/sized-columns {:title "View columns settings"
                                            :schema
                                            {:type :map
                                             :hide? true
-                                            :public? false}
-                                           :rtc {:rtc/ignore-attr-when-init-upload true
-                                                 :rtc/ignore-attr-when-init-download true
-                                                 :rtc/ignore-attr-when-syncing true}}
+                                            :public? false}}
      :logseq.property.table/pinned-columns {:title "Table view pinned columns"
                                             :schema
                                             {:type :property
                                              :cardinality :many
                                              :hide? true
-                                             :public? false}
-                                            :rtc {:rtc/ignore-attr-when-init-upload true
-                                                  :rtc/ignore-attr-when-init-download true
-                                                  :rtc/ignore-attr-when-syncing true}}
+                                             :public? false}}
      :logseq.property/view-for {:title "This view belongs to"
                                 :schema
                                 {:type :node
