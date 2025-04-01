@@ -42,12 +42,13 @@
   (reset! query-state {}))
 
 (defn add-q!
-  [k query inputs result-atom transform-fn query-fn inputs-fn]
+  [k query inputs result-atom transform-fn query-fn async-query-fn inputs-fn]
   (swap! query-state assoc k {:query query
                               :inputs inputs
                               :result result-atom
                               :transform-fn transform-fn
                               :query-fn query-fn
+                              :async-query-fn async-query-fn
                               :inputs-fn inputs-fn})
   result-atom)
 
@@ -85,14 +86,16 @@
     (:result result)))
 
 (defn- <q-aux
-  [repo db query-fn inputs-fn k query inputs]
+  [repo db query-fn async-query-fn inputs-fn k query inputs]
   (let [kv? (and (vector? k) (= :kv (second k)))
-        journals? (and (vector? k) (= :frontend.worker.react/journals (last k)))
-        q (if (or journals? util/node-test?)
+        q (if util/node-test?
             (fn [query inputs] (apply d/q query db inputs))
             (fn [query inputs] (apply db-async-util/<q repo {} (cons query inputs))))]
-    (when (or query-fn query kv?)
+    (when (or query-fn async-query-fn query kv?)
       (cond
+        async-query-fn
+        (async-query-fn)
+
         query-fn
         (query-fn db nil)
 
@@ -110,7 +113,7 @@
         (q query nil)))))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive? return-promise?]
+  [repo k {:keys [use-cache? transform-fn query-fn async-query-fn inputs-fn disable-reactive? return-promise?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
   ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
@@ -125,9 +128,9 @@
         (if (and use-cache? result-atom)
           result-atom
           (let [result-atom (or result-atom (atom nil))
-                p-or-value (<q-aux repo db query-fn inputs-fn k query inputs)]
+                p-or-value (<q-aux repo db query-fn async-query-fn inputs-fn k query inputs)]
             (when-not disable-reactive?
-              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
+              (add-q! k query inputs result-atom transform-fn query-fn async-query-fn inputs-fn))
             (cond
               return-promise?
               p-or-value
@@ -159,9 +162,9 @@
         (ldb/get-page (conn/get-db) page)))))
 
 (defn- execute-query!
-  [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result]
+  [graph db k {:keys [query inputs transform-fn query-fn async-query-fn inputs-fn result]
                :or {transform-fn identity}}]
-  (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs)
+  (p/let [p-or-value (<q-aux graph db query-fn async-query-fn inputs-fn k query inputs)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
       (set-new-result! k result'))))

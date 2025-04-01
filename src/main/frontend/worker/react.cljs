@@ -1,8 +1,8 @@
 (ns frontend.worker.react
   "Compute reactive query affected keys"
-  (:require [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [cljs.spec.alpha :as s]))
+  (:require [cljs.spec.alpha :as s]
+            [datascript.core :as d]
+            [logseq.common.util :as common-util]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -41,9 +41,15 @@
                                     (:db/id (:block/page (d/entity db-after (:e datom))))))) tx-data)
                   (map :v)
                   (distinct))
-        tags (->> (filter (fn [datom] (contains? #{:block/tags} (:a datom))) tx-data)
+        tags (->> (filter (fn [datom] (= :block/tags (:a datom))) tx-data)
                   (map :v)
                   (distinct))
+        journals? (some (fn [datom]
+                          (and
+                           (= :block/tags (:a datom))
+                           (= (:db/id (d/entity db-after :logseq.class/Journal))
+                              (:v datom))))
+                        tx-data)
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
                           (map :e))
         blocks (-> (concat blocks other-blocks) distinct)
@@ -79,7 +85,11 @@
                        (keep
                         (fn [tag]
                           (when tag [::objects tag]))
-                        tags))]
+                        tags)
+
+                       (when journals?
+                         [[::journals]]))]
+    (prn :debug :affected-keys affected-keys)
     (->>
      affected-keys
      (remove nil?)
