@@ -99,7 +99,10 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- build-property-map-for-pvalue-tx [k v new-block properties-config all-idents]
+(defn- build-property-map-for-pvalue-tx
+  "Returns a property map if the given property pair should have a property value entity constructured
+   or nil if it should not. Property maps must at least contain the :db/ident and :logseq.property/type keys"
+  [k v new-block properties-config all-idents]
   (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
     (if (and (db-property-type/value-ref-property-types built-in-type)
              ;; closed values are referenced by their :db/ident so no need to create values
@@ -113,8 +116,8 @@
         {:db/ident k
          :logseq.property/type built-in-type'}))
     (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :logseq.property/type]))
-               ;; TODO: Support translate-property-value without this hack
-               (not (vector? v)))
+               ;; Don't build property value entity if values are :block/uuid refs
+               (if (set? v) (not (vector? (first v))) (not (vector? v))))
       (let [prop-type (get-in properties-config [k :logseq.property/type])]
         {:db/ident (get-ident all-idents k)
          :original-property-id k
