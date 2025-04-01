@@ -558,6 +558,7 @@
                                                    :logseq.property/default-value 42})}
           :user.property/default-closed
           {:logseq.property/type :default
+           :db/cardinality :db.cardinality/many
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
                                  {:value "sad" :uuid (random-uuid)}]}
           :user.property/checkbox {:logseq.property/type :checkbox}
@@ -587,7 +588,7 @@
                                      :user.property/node #{[:block/uuid page-pvalue-uuid]}}}
            :blocks [{:block/title "b1"
                      :build/properties {:user.property/num 1
-                                        :user.property/default-closed [:block/uuid closed-value-uuid]
+                                        :user.property/default-closed #{[:block/uuid closed-value-uuid]}
                                         :user.property/date [:block/uuid journal-uuid]}}
                     {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
                     {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}

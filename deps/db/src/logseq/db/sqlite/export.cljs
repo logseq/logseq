@@ -42,7 +42,7 @@
 
 (defn- buildable-property-value-entity
   "Converts property value to a buildable version"
-  [db property-ent pvalue {:keys [property-value-uuids?] :as options}]
+  [db property-ent pvalue properties-config {:keys [property-value-uuids?] :as options}]
   (cond (and (not property-value-uuids?) (ldb/internal-page? pvalue))
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
@@ -64,8 +64,7 @@
                                          ;; TODO: Allow user properties when sqlite.build supports it
                                          (medley/filter-keys db-property/internal-property?))
                     ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
-                                     ;; TODO: Support closed values as needed
-                                     (buildable-properties db ent-properties* {} options))]
+                                     (buildable-properties db ent-properties* properties-config options))]
                 (if (or (seq ent-properties) (seq (:block/tags pvalue)))
                   (cond-> {:build/property-value :block
                            :block/title (or (block-title pvalue)
@@ -89,18 +88,24 @@
   (->> ent-properties
        (map (fn [[k v]]
               [k
-               (if (and (:block/closed-value-property v) (not (db-property/logseq-property? k)))
-                 (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
-                                               (:uuid %))
-                                            (get-in properties-config [k :build/closed-values]))]
-                   [:block/uuid closed-uuid]
-                   (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
+               ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
+               (if (and (not (db-property/logseq-property? k))
+                        (or (:block/closed-value-property v)
+                            (and (set? v) (:block/closed-value-property (first v)))))
+                 (let [find-closed-uuid (fn [val]
+                                          (or (some #(when (= (:value %) (db-property/property-value-content val))
+                                                       (:uuid %))
+                                                    (get-in properties-config [k :build/closed-values]))
+                                              (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
+                   (if (set? v)
+                     (set (map #(vector :block/uuid (find-closed-uuid %)) v))
+                     [:block/uuid (find-closed-uuid v)]))
                  (cond
                    (de/entity? v)
-                   (buildable-property-value-entity db (d/entity db k) v options)
+                   (buildable-property-value-entity db (d/entity db k) v properties-config options)
                    (and (set? v) (every? de/entity? v))
                    (let [property-ent (d/entity db k)]
-                     (set (map #(buildable-property-value-entity db property-ent % options) v)))
+                     (set (map #(buildable-property-value-entity db property-ent % properties-config options) v)))
                    :else
                    v))]))
        (into {})))
