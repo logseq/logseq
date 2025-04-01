@@ -10,12 +10,13 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
+            [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
-(defn trigger-custom-query!
-  [config query *query-error set-result!]
+(defn run-custom-query
+  [config query *query-error]
   (let [repo (state/get-current-repo)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -40,16 +41,13 @@
                                             (let [entity (db/entity [:block/uuid (:block/uuid b)])]
                                               (when-not (ldb/hidden? entity)
                                                 entity))))))]
-                  (set-result! (atom result)))))
+                  result)))
 
             :else
-            (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
-              (set-result! (or result (atom []))))))
+            (util/react (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
 
         :else
-        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                       ;; FIXME: Remove this temporary workaround for reactivity not working
-                                                       :use-cache? false})))
+        (util/react (query-custom/custom-query query {:current-block-uuid current-block-uuid})))
       (catch :default e
         (reset! *query-error e)))))
 

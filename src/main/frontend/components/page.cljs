@@ -257,7 +257,7 @@
   (when (and today? (not sidebar?))
     (let [queries (get-in (state/sub-config repo) [:default-queries :journals])]
       (when (seq queries)
-        [:div#today-queries.mt-10
+        [:div#today-queries
          (for [query queries]
            (let [query' (if (config/db-based-graph?)
                           (assoc query :collapsed? true)
@@ -281,7 +281,7 @@
          (set-pages! result)))
      [tag])
     (when (seq pages)
-      [:div.references.page-tags.mt-6.flex-1.flex-row
+      [:div.references.page-tags.flex-1.flex-row
        [:div.content
         (ui/foldable
          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-title)]
@@ -690,7 +690,7 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when (and (not preview?) (or (not show-tabs?) tabs-rendered?))
-           [:div.ml-1
+           [:div.ml-1.flex.flex-col.gap-4
             (when today?
               (today-queries repo today? sidebar?))
 
