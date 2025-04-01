@@ -1149,21 +1149,26 @@
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
-                    :else nil)]
-    (when db-id
-      (let [block-entity (db/entity db-id)
-            [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
-            opts {:block-only? true
-                  :properties properties
-                  :skip-transact? (not block-entity)
-                  :skip-refresh? (not block-entity)}]
-        (hooks/use-effect!
-         (fn []
-           (when (and db-id (not item))
-             (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
-               (set-item! block))))
-         [db-id])
-        (item-render (assoc item :id (:db/id item) :db/id (:db/id item)))))))
+                    :else nil)
+        block-entity (when db-id (db/entity db-id))
+        [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
+        opts {:block-only? true
+              :properties properties
+              :skip-transact? (not block-entity)
+              :skip-refresh? (not block-entity)}]
+    (hooks/use-effect!
+     (fn []
+       (when (and db-id (not item))
+         (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
+           (set-item! block))))
+     [db-id])
+    (item-render (cond
+                   (map? item)
+                   item
+                   (number? item)
+                   {:db/id item}
+                   :else
+                   nil))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
@@ -1225,7 +1230,7 @@
       (for [[first-block-id blocks] rows]
         [:div
          [:div.ml-2
-          (breadcrumb config
+          (breadcrumb (assoc config :list-view? true)
                       (state/get-current-repo) first-block-id
                       {:show-page? false})]
          (list-cp blocks)]))))
