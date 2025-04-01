@@ -1162,13 +1162,8 @@
          (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
            (set-item! block))))
      [db-id])
-    (item-render (cond
-                   (map? item)
-                   item
-                   (number? item)
-                   {:db/id item}
-                   :else
-                   nil))))
+    (when item
+      (item-render (cond (map? item) item (number? item) {:db/id item})))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
@@ -1635,8 +1630,8 @@
                                       (if value
                                         (let [c (state/get-component :block/page-cp)]
                                           (c {:disable-preview? true} value))
-                                        [:div.text-muted-foreground
-                                         "Other pages"])
+                                        [:div.text-muted-foreground.text-sm
+                                         "Pages"])
 
                                       (some? value)
                                       (let [icon (pu/get-block-property-value value :logseq.property/icon)]
