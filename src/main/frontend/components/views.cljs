@@ -1162,8 +1162,7 @@
          (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
            (set-item! block))))
      [db-id])
-    (when item
-      (item-render (cond (map? item) item (number? item) {:db/id item})))))
+    (item-render (cond (map? item) item (number? item) {:db/id item}))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
