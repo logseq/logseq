@@ -599,7 +599,13 @@
                        :block/title "{:query (task Todo)}"
                        :build/properties
                        {:logseq.property.code/lang "clojure"
-                        :logseq.property.node/display-type :code}}}}]}
+                        :logseq.property.node/display-type :code}}}}
+                    {:block/title "block has property value with tags and properties"
+                     :build/properties
+                     {:user.property/url
+                      {:build/property-value :block
+                       :block/title "https://example.com"
+                       :build/tags [:user.class/MyClass]}}}]}
           {:page {:block/title "page object"
                   :block/uuid page-object-uuid
                   :build/keep-uuid? true}

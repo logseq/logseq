@@ -66,12 +66,16 @@
                     ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                      ;; TODO: Support closed values as needed
                                      (buildable-properties db ent-properties* {} options))]
-                (if (seq ent-properties)
-                  (cond->
-                   {:build/property-value :block
-                    :block/title (or (block-title pvalue)
-                                     (:logseq.property/value pvalue))
-                    :build/properties ent-properties}
+                (if (or (seq ent-properties) (seq (:block/tags pvalue)))
+                  (cond-> {:build/property-value :block
+                           :block/title (or (block-title pvalue)
+                                            (:logseq.property/value pvalue))}
+                    (seq (:block/tags pvalue))
+                    (assoc :build/tags (->build-tags (:block/tags pvalue)))
+
+                    (seq ent-properties)
+                    (assoc :build/properties ent-properties)
+
                     (:include-timestamps? options)
                     (merge (select-keys pvalue [:block/created-at :block/updated-at])))
                   ;; nbb-compatible version of db-property/property-value-content

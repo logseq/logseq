@@ -67,8 +67,10 @@
 
 (defn build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
-  ident and its property value"
-  [block property value & {:keys [block-uuid property-value-properties]}]
+  ident and its property value. Takes the following options:
+   * :block-uuid - :block/uuid for property value entity
+   * :properties - Additional properties and attributes to add to entity"
+  [block property value & {:keys [block-uuid properties]}]
   (let [block-id (or (:db/id block) (:db/ident block))]
     (cond->
      (merge
@@ -87,8 +89,8 @@
         {:block/title value}))
       true
       common-util/block-with-timestamps
-      property-value-properties
-      (merge property-value-properties))))
+      properties
+      (merge properties))))
 
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be
@@ -114,7 +116,7 @@
                                  block' property-map %
                                  (cond-> {}
                                    property-value-properties
-                                   (assoc :property-value-properties property-value-properties)
+                                   (assoc :properties property-value-properties)
                                    pure?
                                    (assoc :block-uuid
                                           (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %)))))
@@ -122,7 +124,7 @@
                      (build-property-value-block block' property-map v
                                                  (cond-> {}
                                                    property-value-properties
-                                                   (assoc :property-value-properties property-value-properties)
+                                                   (assoc :properties property-value-properties)
                                                    pure?
                                                    (assoc :block-uuid
                                                           (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" v))))))])))
