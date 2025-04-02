@@ -1221,7 +1221,8 @@
                       :custom-scroll-parent (gdom/getElement "main-content-container")
                       :increase-viewport-by {:top 64 :bottom 64}
                       :compute-item-key (fn [idx]
-                                          (str "list-row-" idx))
+                                          (let [block-id (util/nth-safe rows idx)]
+                                            (str "list-row-" block-id)))
                       ;; :skipAnimationFrameInResizeObserver true
                       :total-count (count rows)
                       :item-content (fn [idx] (lazy-item-render rows idx))})))
