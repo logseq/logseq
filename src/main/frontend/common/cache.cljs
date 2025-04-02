@@ -3,7 +3,7 @@
   (:require [cljs.cache :as cache]))
 
 (defn cache-fn
-  "Return a cached verison of `f`.
+  "Return a cached version of `f`.
   cache-key&f-args-fn: return [<cache-key> <args-list-to-f>]"
   [*cache cache-key&f-args-fn f]
   (fn [& args]

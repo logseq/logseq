@@ -54,12 +54,6 @@
   [db block]
   (update block :block/refs (fn [refs] (map (fn [ref] (d/pull db '[*] (:db/id ref))) refs))))
 
-(defn- with-block-link
-  [db block]
-  (if (:block/link block)
-    (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
-    block))
-
 (defn with-parent
   [db block]
   (cond
@@ -74,6 +68,13 @@
     :else
     block))
 
+(comment
+  (defn- with-block-link
+    [db block]
+    (if (:block/link block)
+      (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
+      block)))
+
 (defn- mark-block-fully-loaded
   [b]
   (assoc b :block.temp/fully-loaded? true))
@@ -81,42 +82,42 @@
 (comment
   (defn- property-without-db-attrs
     [property]
-    (dissoc property :db/index :db/valueType :db/cardinality)))
+    (dissoc property :db/index :db/valueType :db/cardinality))
 
-(defn- property-with-values
-  [db block properties]
-  (when (entity-plus/db-based-graph? db)
-    (let [block (d/entity db (:db/id block))
-          property-vals (if properties
-                          (map block properties)
-                          (vals (:block/properties block)))]
-      (->> property-vals
-           (mapcat
-            (fn [property-values]
-              (let [values (->>
-                            (if (and (coll? property-values)
-                                     (map? (first property-values)))
-                              property-values
-                              #{property-values}))
-                    value-ids (when (every? map? values)
-                                (->> (map :db/id values)
-                                     (filter (fn [id] (or (int? id) (keyword? id))))))
-                    value-blocks (->>
-                                  (when (seq value-ids)
-                                    (map
-                                     (fn [id] (d/pull db '[:db/id :block/uuid
-                                                           :block/name :block/title
-                                                           :logseq.property/value
-                                                           :block/tags :block/page
-                                                           :logseq.property/created-from-property] id))
-                                     value-ids))
+  (defn- property-with-values
+    [db block properties]
+    (when (entity-plus/db-based-graph? db)
+      (let [block (d/entity db (:db/id block))
+            property-vals (if properties
+                            (map block properties)
+                            (vals (:block/properties block)))]
+        (->> property-vals
+             (mapcat
+              (fn [property-values]
+                (let [values (->>
+                              (if (and (coll? property-values)
+                                       (map? (first property-values)))
+                                property-values
+                                #{property-values}))
+                      value-ids (when (every? map? values)
+                                  (->> (map :db/id values)
+                                       (filter (fn [id] (or (int? id) (keyword? id))))))
+                      value-blocks (->>
+                                    (when (seq value-ids)
+                                      (map
+                                       (fn [id] (d/pull db '[:db/id :block/uuid
+                                                             :block/name :block/title
+                                                             :logseq.property/value
+                                                             :block/tags :block/page
+                                                             :logseq.property/created-from-property] id))
+                                       value-ids))
                                   ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
-                                  (keep (fn [block]
-                                          (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
-                                            (if (keyword? from-property-id)
-                                              (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
-                                              block)))))]
-                value-blocks)))))))
+                                    (keep (fn [block]
+                                            (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
+                                              (if (keyword? from-property-id)
+                                                (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
+                                                block)))))]
+                  value-blocks))))))))
 
 (defn get-block-children-ids
   "Returns children UUIDs"
