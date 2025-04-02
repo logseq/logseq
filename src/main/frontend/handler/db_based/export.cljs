@@ -17,10 +17,10 @@
                                             (state/get-current-repo)
                                             {:export-type :block :block-id [:block/uuid block-uuid]})
             pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied block's data!" :success))
-
+      (when-not (= :export-edn-error result)
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied block's data!" :success)))
     (notification/show! "No block found" :warning)))
 
 (defn export-view-nodes-data [nodes]
@@ -29,9 +29,10 @@
                                             (state/get-current-repo)
                                             {:export-type :view-nodes :node-ids block-uuids})
             pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied block's data!" :success))))
+      (when-not (= :export-edn-error result)
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied view nodes' data!" :success)))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
@@ -39,9 +40,10 @@
                                             (state/get-current-repo)
                                             {:export-type :page :page-id page-id})
             pull-data (with-out-str (pprint/pprint result))]
-      (.writeText js/navigator.clipboard pull-data)
-      (println pull-data)
-      (notification/show! "Copied page's data!" :success))
+      (when-not (= :export-edn-error result)
+        (.writeText js/navigator.clipboard pull-data)
+        (println pull-data)
+        (notification/show! "Copied page's data!" :success)))
     (notification/show! "No page found" :warning)))
 
 (defn ^:export export-graph-ontology-data []
@@ -49,19 +51,12 @@
                                           (state/get-current-repo)
                                           {:export-type :graph-ontology})
           pull-data (with-out-str (pprint/pprint result))]
-    (.writeText js/navigator.clipboard pull-data)
-    (println pull-data)
-    (js/console.log (str "Exported " (count (:classes result)) " classes and "
-                         (count (:properties result)) " properties"))
-    (notification/show! "Copied graphs's ontology data!" :success)))
-
-(defn- export-graph-edn-data []
-  (p/let [result (state/<invoke-db-worker :thread-api/export-edn
-                                          (state/get-current-repo)
-                                          {:export-type :graph
-                                           :graph-options {:include-timestamps? true}})
-          pull-data (with-out-str (pprint/pprint result))]
-    pull-data))
+    (when-not (= :export-edn-error result)
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (js/console.log (str "Exported " (count (:classes result)) " classes and "
+                           (count (:properties result)) " properties"))
+      (notification/show! "Copied graphs's ontology data!" :success))))
 
 ;; Copied from handler.export
 (defn- file-name [repo extension]
@@ -72,9 +67,13 @@
 
 (defn export-repo-as-db-edn!
   [repo]
-  (p/let [edn-str (export-graph-edn-data)]
-    (when edn-str
-      (let [data-str (some->> edn-str
+  (p/let [result (state/<invoke-db-worker :thread-api/export-edn
+                                          (state/get-current-repo)
+                                          {:export-type :graph
+                                           :graph-options {:include-timestamps? true}})
+          pull-data (with-out-str (pprint/pprint result))]
+    (when-not (= :export-edn-error result)
+      (let [data-str (some->> pull-data
                               js/encodeURIComponent
                               (str "data:text/edn;charset=utf-8,"))
             filename (file-name repo :edn)]
