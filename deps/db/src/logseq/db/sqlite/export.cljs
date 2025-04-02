@@ -115,7 +115,7 @@
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"
-  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy?] :as options}]
+  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy? include-alias?] :as options}]
   (let [properties-config-by-ent
         (->> user-property-idents
              (map (fn [ident]
@@ -129,6 +129,8 @@
                          (assoc :block/uuid (:block/uuid property) :build/keep-uuid? true)
                          include-timestamps?
                          (merge (select-keys property [:block/created-at :block/updated-at]))
+                         (and (not shallow-copy?) include-alias? (:block/alias property))
+                         (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias property))))
                          (and (not shallow-copy?) (:logseq.property/classes property))
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
