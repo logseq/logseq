@@ -485,10 +485,11 @@
   [e *control-show? *all-collapsed?]
   (util/stop e)
   (reset! *control-show? true)
-  (let [all-collapsed?
-        (->> (editor-handler/all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
-             (empty?))]
+  (p/let [blocks (editor-handler/<all-blocks-with-level {:collapse? true})
+          all-collapsed?
+          (->> blocks
+               (filter (fn [b] (editor-handler/collapsable? (:block/uuid b))))
+               (empty?))]
     (reset! *all-collapsed? all-collapsed?)))
 
 (defn- page-mouse-leave
@@ -670,7 +671,7 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
-            (when (and db-based? sidebar?)
+            (when (and db-based? sidebar? (ldb/page? page))
               [:div.-mb-8
                (sidebar-page-properties config page)])
 

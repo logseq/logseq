@@ -3564,7 +3564,7 @@
                                    semantic?))))
          false)))))
 
-(defn all-blocks-with-level
+(defn <all-blocks-with-level
   "Return all blocks associated with correct level
    if :root-block is not nil, only return root block with its children
    if :expanded? true, return expanded children
@@ -3586,13 +3586,17 @@
   (when-let [page (or page
                       (state/get-current-page)
                       (date/today))]
-    (let [block-id (or root-block (parse-uuid page))
-          page-id (when-not block-id
-                    (:db/id (db/get-page page)))
-          blocks (if block-id
-                   (db/get-block-and-children (state/get-current-repo) block-id)
-                   (db/get-page-blocks-no-cache page-id))
-          root-block (or block-id root-block)]
+    (p/let [block-id (or root-block (parse-uuid page))
+            page-id (when-not block-id
+                      (:db/id (db/get-page page)))
+            repo (state/get-current-repo)
+            result (db-async/<get-block repo (or block-id page-id)
+                                        {:children-only? true
+                                         :nested-children? true})
+            blocks (if page-id
+                     result
+                     (cons (db/entity [:block/uuid block-id]) result))
+            root-block (or block-id root-block)]
       (if incremental?
         (let [blocks (tree/blocks->vec-tree blocks (or block-id page-id))]
           (->>
@@ -3661,10 +3665,13 @@
       (set-blocks-collapsed! [block-id] true))
     (state/set-collapsed-block! block-id true)))
 
-(defn expand-block! [block-id]
-  (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false))
-  (state/set-collapsed-block! block-id false))
+(defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
+  (let [repo (state/get-current-repo)]
+    (p/do!
+     (db-async/<get-block repo block-id {:children-only? true})
+     (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
+       (set-blocks-collapsed! [block-id] false))
+     (state/set-collapsed-block! block-id false))))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3690,8 +3697,8 @@
 
      :else
      ;; expand one level
-     (let [blocks-with-level (all-blocks-with-level {})
-           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+     (p/let [blocks-with-level (<all-blocks-with-level {})
+             max-level (or (apply max (map :block/level blocks-with-level)) 99)]
        (loop [level 1]
          (if (> level max-level)
            nil
@@ -3727,9 +3734,9 @@
 
      :else
      ;; collapse by one level from outside
-     (let [blocks-with-level
-           (all-blocks-with-level {:collapse? true})
-           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+     (p/let [blocks-with-level
+             (<all-blocks-with-level {:collapse? true})
+             max-level (or (apply max (map :block/level blocks-with-level)) 99)]
        (loop [level max-level]
          (if (zero? level)
            nil
@@ -3784,74 +3791,79 @@
    (collapse-all! nil {}))
   ([block-id {:keys [collapse-self?]
               :or {collapse-self? true}}]
-   (let [blocks (all-blocks-with-level {:incremental? false
-                                        :expanded? true
-                                        :root-block block-id})
-         block-ids (cond->> (mapv :block/uuid blocks)
-                     (not collapse-self?)
-                     (remove #{block-id}))]
+   (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                           :expanded? true
+                                           :root-block block-id})
+           block-ids (cond->> (mapv :block/uuid blocks)
+                       (not collapse-self?)
+                       (remove #{block-id}))]
      (set-blocks-collapsed! block-ids true))))
 
 (defn expand-all!
   ([]
    (expand-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:incremental? false
-                                        :collapse? true
-                                        :root-block block-id})
-         block-ids (map :block/uuid blocks)]
+   (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                           :collapse? true
+                                           :root-block block-id})
+           block-ids (map :block/uuid blocks)]
      (set-blocks-collapsed! block-ids false))))
 
 (defn collapse-all-selection!
   []
-  (let [block-ids (->> (get-selected-toplevel-block-uuids)
-                       (map #(all-blocks-with-level {:incremental? false
-                                                     :expanded? true
-                                                     :root-block %}))
-                       flatten
-                       (map :block/uuid)
-                       distinct)]
+  (p/let [blocks (p/all
+                  (map #(<all-blocks-with-level {:incremental? false
+                                                 :expanded? true
+                                                 :root-block %})
+                       (get-selected-toplevel-block-uuids)))
+          block-ids (->> blocks
+                         (map :block/uuid)
+                         distinct)]
     (set-blocks-collapsed! block-ids true)))
 
 (defn expand-all-selection!
   []
-  (let [block-ids (->> (get-selected-toplevel-block-uuids)
-                       (map #(all-blocks-with-level {:incremental? false
-                                                     :collapse? true
-                                                     :root-block %}))
-                       flatten
+  (let [blocks (p/all
+                (map #(<all-blocks-with-level {:incremental? false
+                                               :expanded? true
+                                               :root-block %})
+                     (get-selected-toplevel-block-uuids)))
+        block-ids (->> blocks
                        (map :block/uuid)
                        distinct)]
     (set-blocks-collapsed! block-ids false)))
 
 (defn toggle-open! []
-  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
-                                                      :collapse? true}))]
+  (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                          :collapse? true})
+          all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all!)
       (expand-all!))))
 
 (defn toggle-open-block-children! [block-id]
-  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
-                                                      :collapse? true
-                                                      :root-block block-id}))]
+  (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                          :collapse? true})
+          all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all! block-id {:collapse-self? false})
       (expand-all! block-id))))
 
 (defn select-all-blocks!
   [{:keys [page]}]
-  (if-let [current-input-id (state/get-edit-input-id)]
-    (let [input (gdom/getElement current-input-id)
-          blocks-container (util/rec-get-blocks-container input)
-          blocks (dom/by-class blocks-container "ls-block")]
-      (state/exit-editing-and-set-selected-blocks! blocks))
-    (->> (all-blocks-with-level {:page page
-                                 :collapse? true})
-         (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
-         (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
-         state/exit-editing-and-set-selected-blocks!))
-  (state/set-state! :selection/selected-all? true))
+  (p/do!
+   (if-let [current-input-id (state/get-edit-input-id)]
+     (let [input (gdom/getElement current-input-id)
+           blocks-container (util/rec-get-blocks-container input)
+           blocks (dom/by-class blocks-container "ls-block")]
+       (state/exit-editing-and-set-selected-blocks! blocks))
+     (p/let [blocks (<all-blocks-with-level {:page page
+                                             :collapse? true})]
+       (->> blocks
+            (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
+            (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
+            state/exit-editing-and-set-selected-blocks!)))
+   (state/set-state! :selection/selected-all? true)))
 
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)

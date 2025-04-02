@@ -1,6 +1,7 @@
 (ns frontend.extensions.fsrs
   "Flashcards functions based on FSRS, only works in db-based graphs"
   (:require [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
             [frontend.components.block :as component-block]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -16,7 +17,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.common.missionary :as c.m]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.shui.ui :as shui]
@@ -189,7 +189,7 @@
 (rum/defcs ^:private card-view < rum/reactive db-mixins/query
   {:will-mount (fn [state]
                  (when-let [[repo block-id _] (:rum/args state)]
-                   (db-async/<get-block repo block-id))
+                   (db-async/<get-block repo block-id {:children? false}))
                  state)}
   [state repo block-id *card-index *phase]
   (when-let [block-entity (db/sub-block block-id)]
