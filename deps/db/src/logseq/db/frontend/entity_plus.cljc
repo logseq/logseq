@@ -77,7 +77,7 @@
   "Whether the current graph is db-only"
   [db]
   (when db
-    (= "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
+    (identical? "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
 
 (defn- get-journal-title
   [db e]
@@ -92,7 +92,7 @@
       (get-journal-title db e)
       (let [search? (get (.-kv e) :block.temp/search?)]
         (or
-         (when-not (and search? (= k :block/title))
+         (when-not (and search? (keyword-identical? k :block/title))
            (get (.-kv e) k))
          (let [result (lookup-entity e k default-value)
                refs (:block/refs e)
@@ -115,7 +115,7 @@
        (when (qualified-keyword? k)
          (when-let [property (entity-memoized db k)]
            (let [property-type (lookup-entity property :logseq.property/type nil)]
-             (if (= :checkbox property-type)
+             (if (keyword-identical? :checkbox property-type)
                (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))
 

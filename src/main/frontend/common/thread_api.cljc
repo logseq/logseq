@@ -18,7 +18,7 @@
   (assert (vector? params) params)
   `(vswap! *thread-apis assoc
            ~qualified-keyword-name
-           (fn ~params ~@body)))
+           (fn ~(symbol (str "thread-api--" (name qualified-keyword-name))) ~params ~@body)))
 
 #?(:cljs
    (defn remote-function
