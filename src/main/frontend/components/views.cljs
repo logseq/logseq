@@ -217,8 +217,7 @@
                                               :raw-title? (ldb/asset? row)
                                               ;; TODO: remove this
                                               :table? true
-                                              :table-view? true
-                                              :view? true)
+                                              :table-view? true)
                                        row))
               :disable-hide? true})]
           (keep
@@ -602,9 +601,10 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (or block row)]
-    (table-row-inner table row' props
-                     (assoc option :init-row row))))
+        row' (if (:block.temp/fully-loaded? block)
+               (assoc block :block.temp/refs-count (:block.temp/refs-count row))
+               row)]
+    (table-row-inner table row' props option)))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]
@@ -1147,13 +1147,15 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [data idx {:keys [properties list-view?]} item-render]
+  [data idx {:keys [properties list-view? table-view?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
         block-entity (when db-id (db/entity db-id))
-        [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
+        [item set-item!] (hooks/use-state (when (and (:block.temp/fully-loaded? block-entity)
+                                                     (not table-view?))
+                                            block-entity))
         opts (if list-view?
                {:skip-refresh? true}
                {:block-only? true
@@ -1183,7 +1185,7 @@
       :skipAnimationFrameInResizeObserver true
       :total-count (count rows)
       :item-content (fn [idx]
-                      (lazy-item (:data table) idx option
+                      (lazy-item (:data table) idx (assoc option :table-view? true)
                                  (fn [row]
                                    (table-row table row {} option))))
       :items-rendered (fn [props]
@@ -1212,7 +1214,7 @@
   (let [lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
-                                        (block-container (assoc config :view? true) block))))
+                                        (block-container (assoc config :list-view? true) block))))
         list-cp (fn [rows]
                   (when (seq rows)
                     (ui/virtualized-list
