@@ -3975,14 +3975,17 @@
   1. References.
   2. Custom queries."
   [block config]
-  (or
-   (and
-    (or (:ref? config) (:custom-query? config))
-    (>= (:block/level block) (state/get-ref-open-blocks-level))
-    ;; has children
-    (first (:block/_parent (db/entity (:db/id block)))))
-   (ldb/page? block)
-   (util/collapsed? block)))
+  (let [block (or (db/entity (:db/id block)) block)]
+    (or
+     (util/collapsed? block)
+     (and (ldb/page? block)
+          (or (some? (:block.temp/property-keys block))
+              (first (:block/_parent (db/entity (:db/id block))))))
+     (and
+      (or (:ref? config) (:custom-query? config))
+      (>= (:block/level block) (state/get-ref-open-blocks-level))
+      ;; has children
+      (first (:block/_parent (db/entity (:db/id block))))))))
 
 (defn batch-set-heading!
   [block-ids heading]
