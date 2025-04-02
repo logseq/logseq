@@ -160,8 +160,7 @@
 (defn- build-export-class
   "The caller of this fn is responsible for building any classes or properties from this fn
    unless shallow-copy?"
-  [class-ent {:keys [include-parents? include-uuid? shallow-copy? include-timestamps?]
-              :or {include-parents? true}}]
+  [class-ent {:keys [include-uuid? shallow-copy? include-timestamps? include-alias?]}]
   (cond-> (select-keys class-ent [:block/title :block/collapsed?])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
@@ -170,11 +169,10 @@
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
-    (and (not shallow-copy?) (:block/alias class-ent))
+    (and (not shallow-copy?) include-alias? (:block/alias class-ent))
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
-    (and include-parents?
-         (not shallow-copy?)
+    (and (not shallow-copy?)
          (:logseq.property/parent class-ent)
          (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
     (assoc :build/class-parent
@@ -418,7 +416,7 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page?] :as options}]
+(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
   (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
                    (:exclude-ontology? options)
                    (assoc :properties (get-in options [:graph-ontology :properties])))
@@ -431,7 +429,7 @@
                (:node page-ent-export)
                (merge (dissoc (:node page-ent-export) :block/title)
                       (shallow-copy-page page-entity)
-                      (when (:block/alias page-entity)
+                      (when (and include-alias? (:block/alias page-entity))
                         {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))})))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
@@ -675,7 +673,8 @@
    * :exclude-built-in-pages? - When set, built-in pages are excluded from export
    * :exclude-files? - When set, files are excluded from export"
   [db {:keys [exclude-files?] :as options*}]
-  (let [options (merge options* {:property-value-uuids? true})
+  (let [options (merge options* {:property-value-uuids? true
+                                 :include-alias? true})
         content-ref-uuids (get-graph-content-ref-uuids db options)
         ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
