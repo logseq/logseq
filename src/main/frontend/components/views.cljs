@@ -1147,17 +1147,19 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [data idx {:keys [properties]} item-render]
+  [data idx {:keys [properties list-view?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
         block-entity (when db-id (db/entity db-id))
         [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block-entity) block-entity))
-        opts {:block-only? true
-              :properties properties
-              :skip-transact? true
-              :skip-refresh? true}]
+        opts (if list-view?
+               {:skip-refresh? true}
+               {:block-only? true
+                :properties properties
+                :skip-transact? true
+                :skip-refresh? true})]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
@@ -1208,7 +1210,7 @@
 (rum/defc list-view < rum/static
   [{:keys [config] :as option} _view-entity {:keys [rows]} *scroller-ref]
   (let [lazy-item-render (fn [rows idx]
-                           (lazy-item rows idx option
+                           (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
                                         (block-container (assoc config :view? true) block))))
         list-cp (fn [rows]
