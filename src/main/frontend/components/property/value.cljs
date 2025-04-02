@@ -924,7 +924,7 @@
 (rum/defcs property-normal-block-value <
   {:init (fn [state]
            (assoc state :container-id (state/get-next-container-id)))}
-  [state block property value-block]
+  [state block property value-block opts]
   (let [container-id (:container-id state)
         multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
@@ -949,20 +949,21 @@
                                                       (fn [_e]
                                                         (<create-new-block! block property (or (:block/title default-value) ""))))
                      :p-block (:db/id block)
-                     :p-property (:db/id property)}]
+                     :p-property (:db/id property)
+                     :view? (:view? opts)}]
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (rum/with-key
              (block-container (assoc config
                                      :property-default-value? default-value?) value-block)
-             (str (:db/id property) "-" (:block/uuid value-block)))))]
+             (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
       [:div
        {:tabIndex 0
         :on-click (fn [] (<create-new-block! block property ""))}
        (property-empty-btn-value property)])))
 
-(rum/defcs property-block-value < rum/reactive db-mixins/query
-  [state value block property page-cp]
+(rum/defcs property-block-value < rum/reactive
+  [state value block property page-cp opts]
   (when value
     (if (state/sub-async-query-loading (:block/uuid value))
       [:div.text-sm.opacity-70 "loading"]
@@ -973,7 +974,7 @@
           (when v-block
             (cond
               (:block/page v-block)
-              (property-normal-block-value block property v-block)
+              (property-normal-block-value block property v-block opts)
 
               ;; page/class/etc.
               (entity-util/page? v-block)
@@ -1094,7 +1095,8 @@
 
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
-                                dom-id row?]}]
+                                dom-id row?]
+                         :as opts}]
   (let [multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
@@ -1116,7 +1118,7 @@
        [:div.jtrigger (property-empty-btn-value property)]
 
        text-ref-type?
-       (property-block-value value block property page-cp)
+       (property-block-value value block property page-cp opts)
 
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
@@ -1307,7 +1309,7 @@
                                                   :class-schema? true})
 
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
-                         (property-normal-block-value block property v)
+                         (property-normal-block-value block property v opts)
 
                          multiple-values?
                          (multiple-values block property opts)

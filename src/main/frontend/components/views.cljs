@@ -243,7 +243,7 @@
                     :cell (or (:cell property)
                               (when (de/entity? property)
                                 (fn [_table row _column]
-                                  (pv/property-value row property {}))))
+                                  (pv/property-value row property {:view? true}))))
                     :get-value get-value
                     :type (:type property)}))))
            properties')
@@ -1147,26 +1147,27 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
 
 (rum/defc lazy-item
-  [data idx {:keys [properties list-view? table-view?]} item-render]
+  [data idx {:keys [properties list-view?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
-        block-entity (when db-id (db/entity db-id))
-        [item set-item!] (hooks/use-state (when (and (:block.temp/fully-loaded? block-entity)
-                                                     (not table-view?))
-                                            block-entity))
+        [item set-item!] (hooks/use-state nil)
         opts (if list-view?
-               {:skip-refresh? true}
                {:block-only? true
+                :skip-refresh? true
+                :children? false}
+               {:block-only? true
+                :children? false
                 :properties properties
                 :skip-transact? true
                 :skip-refresh? true})]
     (hooks/use-effect!
      (fn []
        (when (and db-id (not item))
-         (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)]
-           (set-item! block))))
+         (p/let [block (db-async/<get-block (state/get-current-repo) db-id opts)
+                 block' (if list-view? (db/entity db-id) block)]
+           (set-item! block'))))
      [db-id])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))

@@ -303,7 +303,8 @@
 
 (defn has-children?
   [db block-id]
-  (some? (:block/_parent (d/entity db [:block/uuid block-id]))))
+  (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
+    (some? (:block/_parent (d/entity db eid)))))
 
 (defn- collapsed-and-has-children?
   [db block]

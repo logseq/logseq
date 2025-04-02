@@ -3983,21 +3983,14 @@
 
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.
-  Currently, this handles several cases:
-  1. References.
-  2. Custom queries."
+  Currently, this handles all the kinds of views."
   [block config]
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
-     (and (ldb/page? block)
-          (or (some? (:block.temp/property-keys block))
-              (first (:block/_parent (db/entity (:db/id block))))))
-     (and
-      (or (:ref? config) (:custom-query? config))
-      (>= (:block/level block) (state/get-ref-open-blocks-level))
-      ;; has children
-      (first (:block/_parent (db/entity (:db/id block))))))))
+     (and (:view? config)
+          (or (ldb/page? block)
+              (some? (:block/_parent block)))))))
 
 (defn batch-set-heading!
   [block-ids heading]
