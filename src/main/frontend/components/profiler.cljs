@@ -14,7 +14,7 @@
         *reports (get state ::reports)
         *register-fn-name (get state ::register-fn-name)]
     [:div
-     [:b "Profiling fns:"]
+     [:b "Profiling fns(Only support UI thread now):"]
      [:div.pb-4
       (for [f-name profiling-fns]
         [:div.flex.flex-row.items-center.gap-2
