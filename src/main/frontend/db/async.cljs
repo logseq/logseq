@@ -100,7 +100,7 @@
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? block-only? children-only? _properties]
+  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? block-only? children-only? properties]
                             :or {children? true}
                             :as opts}]
 
@@ -126,7 +126,8 @@
     (cond
       (and (:block.temp/fully-loaded? e) ; children may not be fully loaded
            (not children-only?)
-           (not nested-children?))
+           (not nested-children?)
+           (not (some #{:block.temp/refs-count} properties)))
       e
 
       cached-response
