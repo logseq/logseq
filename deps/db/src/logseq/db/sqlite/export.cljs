@@ -733,7 +733,10 @@
         ;; Only looks one-level deep in properties e.g. not inside :build/page
         ;; Doesn't find :block/link refs
         ref-uuids
-        (->> (concat (mapcat get-pvalue-uuids (vals classes))
+        (->> (concat (mapcat #(map second (:block/alias %)) (vals classes))
+                     (mapcat #(map second (:block/alias %)) (vals properties))
+                     (mapcat #(map second (:block/alias (:page %))) pages-and-blocks)
+                     (mapcat get-pvalue-uuids (vals classes))
                      (mapcat get-pvalue-uuids (vals properties))
                      (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
