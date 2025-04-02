@@ -1270,11 +1270,7 @@
                                       (gallery-card-item view-entity block config'))))}))]))
 
 (defn- run-effects!
-  [{:keys [load-view-data] :as option} {:keys [data]} input *scroller-ref gallery?]
-  (hooks/use-effect!
-   (fn [] (load-view-data input))
-   [(hooks/use-debounced-value input 300)])
-
+  [option {:keys [data]} *scroller-ref gallery?]
   (hooks/use-effect!
    (fn []
      (when (and (:current-page? (:config option)) (seq data) (map? (first data)) (:block/uuid (first data)))
@@ -1524,10 +1520,9 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input!] :as option*}
    *scroller-ref]
-  (let [[input set-input!] (hooks/use-state "")
-        option (assoc option* :properties
+  (let [option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
@@ -1602,7 +1597,7 @@
                          :logseq.property.view/type.table)
         gallery? (= display-type :logseq.property.view/type.gallery)
         list-view? (= display-type :logseq.property.view/type.list)]
-    (run-effects! option table-map input *scroller-ref gallery?)
+    (run-effects! option table-map *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
      {:ref *view-ref}
@@ -1694,11 +1689,12 @@
 (rum/defc view-aux
   [view-entity {:keys [view-parent view-feature-type data query-entity-ids] :as option}]
   (let [[view-entity set-view-entity!] (db/sub-entity view-entity (str "view-" (:db/id view-entity)))
+        [input set-input!] (hooks/use-state "")
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
-        load-view-data (fn load-view-data [input]
+        load-view-data (fn load-view-data []
                          (let [sorting (:logseq.property.table/sorting view-entity)
                                filters (:logseq.property.table/filters view-entity)
                                need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -1722,13 +1718,13 @@
                                            (js/console.error e)
                                            (set-loading! false))))))))]
     (hooks/use-effect!
-     #(load-view-data nil)
-     [;; page filters
+     load-view-data
+     [(hooks/use-debounced-value input 300)
+      ;; page filters
       (:logseq.property.linked-references/includes view-parent)
       (:logseq.property.linked-references/excludes view-parent)
       (:filters view-parent)
-      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters
-                                :logseq.property.view/type])
+      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters])
       query-entity-ids])
 
     (let [linked-refs? (= :linked-references view-feature-type)]
@@ -1743,6 +1739,8 @@
                                               :data data
                                               :full-data data
                                               :set-data! set-data!
+                                              :set-input! set-input!
+                                              :input input
                                               :items-count (if (every? number? data)
                                                              (count data)
                                                              ;; grouped
@@ -1767,15 +1765,17 @@
                      views (get-views view-parent view-feature-type)]
                (if-let [v (first views)]
                  (do
-                   (when-not view-entity (set-view-entity! v))
-                   (set-views! views))
+                   (set-views! views)
+                   (when-not view-entity (set-view-entity! v)))
                  (when (and view-parent view-feature-type (not view-entity))
                    (p/let [new-view (create-view! view-parent view-feature-type)]
-                     (set-view-entity! new-view)
-                     (set-views! (concat views [new-view]))))))))))
+                     (set-views! (concat views [new-view]))
+                     (set-view-entity! new-view)))))))))
      [])
     (when view-entity
       (let [option' (assoc option
                            :views views
                            :set-views! set-views!)]
-        (view-aux view-entity option')))))
+        (rum/with-key
+          (view-aux view-entity option')
+          (str "view-" (:db/id view-entity)))))))
