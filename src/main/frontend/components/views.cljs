@@ -579,7 +579,7 @@
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
                      (when-let [render (get column :cell)]
-                       (let [id (str row "-" (:id column))
+                       (let [id (str (:id row) "-" (:id column))
                              width (get-column-size column sized-columns)
                              select? (= (:id column) :select)
                              add-property? (= (:id column) :add-property)
@@ -1234,7 +1234,7 @@
           (let [[first-block-id blocks] row]
             [:div
              {:key (str "partition-" first-block-id)}
-             [:div.ml-2
+             [:div.ml-6.text-sm.opacity-70.hover:opacity-100.mt-1
               (breadcrumb (assoc config :list-view? true)
                           (state/get-current-repo) first-block-id
                           {:show-page? false})]

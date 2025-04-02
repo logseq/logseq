@@ -757,8 +757,7 @@
                  repo (state/get-current-repo)
                  property (first (:rum/args state))
                  ident (:db/ident property)]
-             (p/let [_ (db-async/<get-block repo (:block/uuid property))
-                     result (db-async/<get-property-values ident)]
+             (p/let [result (db-async/<get-property-values ident)]
                (reset! *values result))
              (assoc state ::values *values)))}
   [state property* owner-block opts]

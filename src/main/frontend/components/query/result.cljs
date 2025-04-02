@@ -47,7 +47,8 @@
             (util/react (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
 
         :else
-        (util/react (query-custom/custom-query query {:current-block-uuid current-block-uuid})))
+        (util/react (query-custom/custom-query query {:current-block-uuid current-block-uuid
+                                                      :built-in-query? (:built-in-query? config)})))
       (catch :default e
         (reset! *query-error e)))))
 

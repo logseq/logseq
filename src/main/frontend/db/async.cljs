@@ -100,7 +100,7 @@
 
 (defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? block-only? _properties]
+  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? block-only? children-only? _properties]
                             :or {children? true}
                             :as opts}]
 
@@ -124,7 +124,9 @@
                (and (util/uuid-string? name') name')
                id-uuid-or-name)]
     (cond
-      (:block.temp/fully-loaded? e)
+      (and (:block.temp/fully-loaded? e) ; children may not be fully loaded
+           (not children-only?)
+           (not nested-children?))
       e
 
       cached-response
@@ -139,18 +141,23 @@
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (if skip-transact?
             (reset! *block-cache (cache/miss @*block-cache cache-key
-                                             (if (or children? block-only?)
+                                             (if (and (not children-only?) (or children? block-only?))
                                                (:block result')
                                                result')))
             (let [conn (db/get-db graph false)
-                  block-and-children (cons block children)
-                  affected-keys [[:frontend.worker.react/block (:db/id block)]]]
-              (d/transact! conn (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children))
+                  block-and-children (if block (cons block children) children)
+                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
+                  tx-data (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)]
+              (when (seq tx-data) (d/transact! conn tx-data))
               (when-not skip-refresh?
                 (react/refresh-affected-queries! graph affected-keys))))
 
-          (if (or children? block-only?)
+          (cond
+            children-only?
+            children
+            (or children? block-only?)
             block
+            :else
             result'))))))
 
 (defn <get-blocks

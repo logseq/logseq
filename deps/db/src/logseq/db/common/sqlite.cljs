@@ -146,7 +146,7 @@
         (d/pull-many db '[*] ids')))))
 
 (defn get-block-and-children
-  [db id {:keys [children? nested-children? including-property-vals? properties]
+  [db id {:keys [children? children-only? nested-children? including-property-vals? properties children-props]
           :or {including-property-vals? true}}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
@@ -157,52 +157,48 @@
                            :block/tags :block/page]
         block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
-      (let [block' (if (seq properties)
-                     (select-keys block properties)
-                     block)
-            block' (cond->
-                    (if (or children? nested-children?)
-                      (mark-block-fully-loaded block')
-                      block')
-                     including-property-vals?
-                     (update-vals (fn [v]
-                                    (cond
-                                      (de/entity? v)
-                                      (select-keys v property-value-ks)
+      (let [children (when (or children? children-only?)
+                       (let [page? (common-entity-util/page? block)
+                             children (cond
+                                        (and nested-children? (not page?))
+                                        (get-block-children db (:block/uuid block))
+                                        nested-children?
+                                        (:block/_page block)
+                                        :else
+                                        (let [short-page? (when page?
+                                                            (<= (count (:block/_page block)) 100))]
+                                          (if short-page?
+                                            (:block/_page block)
+                                            (:block/_parent block))))
+                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed?])]
+                         (map
+                          (fn [block]
+                            (select-keys block children-props))
+                          children)))]
+        (if children-only?
+          {:children children}
+          (let [block' (if (seq properties)
+                         (select-keys block properties)
+                         block)
+                block' (cond->
+                        (mark-block-fully-loaded block')
+                         including-property-vals?
+                         (update-vals (fn [v]
+                                        (cond
+                                          (de/entity? v)
+                                          (select-keys v property-value-ks)
 
-                                      (and (coll? v) (every? de/entity? v))
-                                      (map #(select-keys % property-value-ks) v)
+                                          (and (coll? v) (every? de/entity? v))
+                                          (map #(select-keys % property-value-ks) v)
 
-                                      :else
-                                      v)))
-                     block-refs-count?
-                     (assoc :block.temp/refs-count (count (:block/_refs block))))]
-        (cond->
-         {:block (assoc (into {} block') :db/id (:db/id block))}
-          children?
-          (assoc :children
-                 (let [page? (common-entity-util/page? block)
-                       children (if (and nested-children? (not page?))
-                                  (get-block-children db (:block/uuid block))
-                                  (if page?
-                                    (:block/_page block)
-                                    (:block/_parent block)))
-                       long-page? (and (> (count children) 500) (not (common-entity-util/whiteboard? block)))]
-                   (if long-page?
-                     (->> (map (fn [e]
-                                 (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))
-                               children)
-                          (map #(with-block-link db %)))
-                     (->> (d/pull-many db '[*] (map :db/id children))
-                          (map #(with-block-refs db %))
-                          (map #(with-block-link db %))
-                          (mapcat (fn [block]
-                                    (let [e (d/entity db (:db/id block))]
-                                      (conj
-                                       (if (seq (:block/properties e))
-                                         (vec (property-with-values db e nil))
-                                         [])
-                                       block)))))))))))))
+                                          :else
+                                          v)))
+                         block-refs-count?
+                         (assoc :block.temp/refs-count (count (:block/_refs block))))]
+            (cond->
+             {:block (assoc (into {} block') :db/id (:db/id block))}
+              children?
+              (assoc :children children))))))))
 
 (defn get-latest-journals
   [db]

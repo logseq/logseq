@@ -86,11 +86,17 @@
     (:result result)))
 
 (defn- <q-aux
-  [repo db query-fn async-query-fn inputs-fn k query inputs]
+  [repo db query-fn async-query-fn inputs-fn k query inputs built-in-query?]
   (let [kv? (and (vector? k) (= :kv (second k)))
         q (if util/node-test?
             (fn [query inputs] (apply d/q query db inputs))
-            (fn [query inputs] (apply db-async-util/<q repo {} (cons query inputs))))]
+            (fn [query inputs]
+              (let [q-f #(apply db-async-util/<q repo {} (cons query inputs))]
+                (if built-in-query?
+                  ;; delay built-in-queries to not block journal rendering
+                  (p/let [_ (p/delay 100)]
+                    (q-f))
+                  (q-f)))))]
     (when (or query-fn async-query-fn query kv?)
       (cond
         async-query-fn
@@ -113,7 +119,8 @@
         (q query nil)))))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn async-query-fn inputs-fn disable-reactive? return-promise?]
+  [repo k {:keys [use-cache? transform-fn query-fn async-query-fn inputs-fn
+                  disable-reactive? return-promise? built-in-query?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
   ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
@@ -128,7 +135,7 @@
         (if (and use-cache? result-atom)
           result-atom
           (let [result-atom (or result-atom (atom nil))
-                p-or-value (<q-aux repo db query-fn async-query-fn inputs-fn k query inputs)]
+                p-or-value (<q-aux repo db query-fn async-query-fn inputs-fn k query inputs built-in-query?)]
             (when-not disable-reactive?
               (add-q! k query inputs result-atom transform-fn query-fn async-query-fn inputs-fn))
             (cond
@@ -162,9 +169,9 @@
         (ldb/get-page (conn/get-db) page)))))
 
 (defn- execute-query!
-  [graph db k {:keys [query inputs transform-fn query-fn async-query-fn inputs-fn result]
+  [graph db k {:keys [query inputs transform-fn query-fn async-query-fn inputs-fn result built-in-query?]
                :or {transform-fn identity}}]
-  (p/let [p-or-value (<q-aux graph db query-fn async-query-fn inputs-fn k query inputs)
+  (p/let [p-or-value (<q-aux graph db query-fn async-query-fn inputs-fn k query inputs built-in-query?)
           result' (transform-fn p-or-value)]
     (when-not (= result' result)
       (set-new-result! k result'))))

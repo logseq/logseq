@@ -3630,6 +3630,12 @@
                                    (select-keys (first (:rum/args new-state)) config-compare-keys)))]
     (boolean result)))
 
+(defn- set-collapsed-block!
+  [block-id v]
+  (if (false? v)
+    (editor-handler/expand-block! block-id {:skip-db-collpsing? true})
+    (state/set-collapsed-block! block-id v)))
+
 (rum/defcs loaded-block-container < rum/reactive db-mixins/query
   (rum/local false ::show-block-left-menu?)
   (rum/local false ::show-block-right-menu?)
@@ -3642,14 +3648,14 @@
              (cond
                (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
                (let [collapsed? (state/get-block-collapsed block-id)]
-                 (state/set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
+                 (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
 
                (root-block? config block)
-               (state/set-collapsed-block! block-id false)
+               (set-collapsed-block! block-id false)
 
                (or (:ref? config) (:custom-query? config) (:view? config))
-               (state/set-collapsed-block! block-id
-                                           (boolean (editor-handler/block-default-collapsed? block config)))
+               (set-collapsed-block! block-id
+                                     (boolean (editor-handler/block-default-collapsed? block config)))
 
                :else
                nil)
@@ -3664,7 +3670,7 @@
                    (let [[config block] (:rum/args state)
                          block-id (:block/uuid block)]
                      (when (root-block? config block)
-                       (state/set-collapsed-block! block-id nil)))
+                       (set-collapsed-block! block-id nil)))
                    state)}
   [state config block & {:as opts}]
   (let [repo (state/get-current-repo)
@@ -3699,10 +3705,17 @@
       (hooks/use-effect!
        (fn []
          (p/do!
-          (db-async/<get-block (state/get-current-repo) (:db/id block*))
+          (db-async/<get-block (state/get-current-repo)
+                               (:db/id block*)
+                               {:children? (not
+                                            (if-some [result (state/get-block-collapsed (:block/uuid block))]
+                                              result
+                                              (:block/collapsed? block)))
+                                :skip-refresh? true})
           (set-block! (some-> (:db/id block*) db/entity))))
        []))
-    (loaded-block-container config block opts)))
+    (when (or (:view? config) (:block.temp/fully-loaded? block))
+      (loaded-block-container config block opts))))
 
 (defn divide-lists
   [[f & l]]
