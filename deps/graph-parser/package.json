@@ -10,6 +10,7 @@
     "mldoc": "^1.5.9"
   },
   "scripts": {
-    "test": "nbb-logseq -cp test:../outliner/src -m nextjournal.test-runner"
+    "test": "nbb-logseq -cp test:../outliner/src -m nextjournal.test-runner",
+    "test-v": "nbb-logseq -cp test:../outliner/src -m logseq.graph-parser.test-runner"
   }
 }
