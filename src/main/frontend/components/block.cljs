@@ -3645,20 +3645,21 @@
                  block-id (:block/uuid block)
                  linked-block? (or (:block/link block)
                                    (:original-block config))]
-             (cond
-               (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
-               (let [collapsed? (state/get-block-collapsed block-id)]
-                 (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
+             (when-not (:property-block? config)
+               (cond
+                 (and (:page-title? config) (or (ldb/class? block) (ldb/property? block)) (not config/publishing?))
+                 (let [collapsed? (state/get-block-collapsed block-id)]
+                   (set-collapsed-block! block-id (if (some? collapsed?) collapsed? true)))
 
-               (root-block? config block)
-               (set-collapsed-block! block-id false)
+                 (root-block? config block)
+                 (set-collapsed-block! block-id false)
 
-               (or (:ref? config) (:custom-query? config) (:view? config))
-               (set-collapsed-block! block-id
-                                     (boolean (editor-handler/block-default-collapsed? block config)))
+                 (or (:view? config) (:ref? config) (:custom-query? config))
+                 (set-collapsed-block! block-id
+                                       (boolean (editor-handler/block-default-collapsed? block config)))
 
-               :else
-               nil)
+                 :else
+                 nil))
              (cond->
               (assoc state
                      ::control-show? (atom false)
@@ -3700,7 +3701,6 @@
   [config block* & {:as opts}]
   (let [[block set-block!] (hooks/use-state block*)]
     (when-not (or (:page-title? config)
-                  (:property-block? config)
                   (:view? config))
       (hooks/use-effect!
        (fn []

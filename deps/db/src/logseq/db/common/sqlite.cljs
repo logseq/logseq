@@ -151,29 +151,31 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        property-value-ks [:db/id :block/uuid :db/ident
-                           :block/name :block/title
-                           :logseq.property/value
-                           :block/tags :block/page]
         block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
       (let [children (when (or children? children-only?)
                        (let [page? (common-entity-util/page? block)
-                             children (cond
-                                        (and nested-children? (not page?))
-                                        (get-block-children db (:block/uuid block))
-                                        nested-children?
-                                        (:block/_page block)
-                                        :else
-                                        (let [short-page? (when page?
-                                                            (<= (count (:block/_page block)) 100))]
-                                          (if short-page?
-                                            (:block/_page block)
-                                            (:block/_parent block))))
-                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed?])]
+                             children (->>
+                                       (cond
+                                         (and nested-children? (not page?))
+                                         (get-block-children db (:block/uuid block))
+                                         nested-children?
+                                         (:block/_page block)
+                                         :else
+                                         (let [short-page? (when page?
+                                                             (<= (count (:block/_page block)) 100))]
+                                           (if short-page?
+                                             (:block/_page block)
+                                             (:block/_parent block))))
+                                       (remove (fn [e] (or (:logseq.property/created-from-property e)
+                                                           (:block/closed-value-property e)))))
+                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed?])
+                             children-props '[*]]
                          (map
                           (fn [block]
-                            (select-keys block children-props))
+                            (if (= children-props '[*])
+                              (assoc (into {} block) :db/id (:db/id block))
+                              (select-keys block children-props)))
                           children)))]
         (if children-only?
           {:children children}
@@ -186,10 +188,9 @@
                          (update-vals (fn [v]
                                         (cond
                                           (de/entity? v)
-                                          (select-keys v property-value-ks)
-
+                                          (assoc (into {} v) :db/id (:db/id v))
                                           (and (coll? v) (every? de/entity? v))
-                                          (map #(select-keys % property-value-ks) v)
+                                          (map #(assoc (into {} %) :db/id (:db/id %)) v)
 
                                           :else
                                           v)))
