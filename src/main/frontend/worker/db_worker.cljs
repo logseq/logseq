@@ -479,13 +479,24 @@
                (d/pull @conn selector)
                (sqlite-common-db/with-parent @conn)))))
 
+(def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+(def ^:private get-blocks-with-cache
+  (common.cache/cache-fn
+   *get-blocks-cache
+   (fn [repo requests]
+     (let [db (some-> (worker-state/get-datascript-conn repo) deref)]
+       [[repo (:max-tx db) requests]
+        [db requests]]))
+   (fn [db requests]
+     (when db
+       (mapv (fn [{:keys [id opts]}]
+               (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                 (-> (sqlite-common-db/get-block-and-children db id' opts)
+                     (assoc :id id)))) requests)))))
+
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (mapv (fn [{:keys [id opts]}]
-            (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-              (-> (sqlite-common-db/get-block-and-children @conn id' opts)
-                  (assoc :id id)))) requests)))
+  (get-blocks-with-cache repo requests))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
