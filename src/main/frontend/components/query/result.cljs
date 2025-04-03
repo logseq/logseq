@@ -13,7 +13,8 @@
             [frontend.util :as util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn run-custom-query
   [config query *query-error]
@@ -44,7 +45,9 @@
                   result)))
 
             :else
-            (util/react (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)}))))
+            (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
+              (when (util/atom? result)
+                (rum/react result)))))
 
         :else
         (util/react (query-custom/custom-query query {:current-block-uuid current-block-uuid
