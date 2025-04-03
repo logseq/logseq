@@ -130,11 +130,18 @@
 
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
+          start-time (cljs.core/system-time)
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})
+          end-time (cljs.core/system-time)]
+
+    ;; Add multiplicative factor for CI as it runs about twice as slow
+    (let [max-time (-> 15 (* (if js/process.env.CI 2 1)))]
+      (is (< (-> end-time (- start-time) (/ 1000)) max-time)
+          (str "Importing large graph takes less than " max-time "s")))
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
