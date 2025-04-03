@@ -87,12 +87,18 @@
 
 (defn run-task
   "Return the canceler"
-  [task key & {:keys [succ fail]}]
-  (task (or succ #(log/info :key key :succ %)) (or fail #(log/info :key key :stopped %))))
+  [key' task & {:keys [succ fail]}]
+  (task (or succ #(log/info :key key' :succ %)) (or fail #(log/info :key key' :stopped %))))
 
 (defn run-task-throw
-  [task key & {:keys [succ]}]
-  (task (or succ #(log/info :key key :succ %)) #(throw (ex-info "task stopped" {:key key :e %}))))
+  "Return the canceler"
+  [key' task & {:keys [succ]}]
+  (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %}))))
+
+(defn run-task*
+  "Return the canceler"
+  [task]
+  (task (constantly nil) (constantly nil)))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler
   (volatile! {}))
@@ -105,7 +111,7 @@
     (canceler)
     (vswap! *background-task-cancelers assoc key' nil))
   (prn :run-background-task key')
-  (let [canceler (run-task task key')]
+  (let [canceler (run-task key' task)]
     (vswap! *background-task-cancelers assoc key' canceler)
     nil))
 

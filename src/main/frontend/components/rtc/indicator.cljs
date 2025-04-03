@@ -2,12 +2,12 @@
   "RTC state indicator"
   (:require [cljs-time.core :as t]
             [clojure.pprint :as pprint]
+            [frontend.common.missionary :as c.m]
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.common.missionary :as c.m]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [rum.core :as rum]))
@@ -38,21 +38,20 @@
                (when log
                  (swap! *detail-info update k (fn [logs] (take 5 (conj logs log))))))
              flow))]
-    (let [canceler (c.m/run-task
-                    (m/join
-                     (constantly nil)
-                     (update-log-task rtc-flows/rtc-download-log-flow :download-logs)
-                     (update-log-task rtc-flows/rtc-upload-log-flow :upload-logs)
-                     (update-log-task rtc-flows/rtc-misc-log-flow :misc-logs)
-                     (m/reduce (fn [_ state]
-                                 (swap! *detail-info assoc
-                                        :pending-local-ops (:unpushed-block-update-count state)
-                                        :graph-uuid (:graph-uuid state)
-                                        :local-tx (:local-tx state)
-                                        :remote-tx (:remote-tx state)
-                                        :rtc-state (if (:rtc-lock state) :open :close)))
-                               rtc-flows/rtc-state-stream-flow))
-                    ::update-detail-info)]
+    (let [canceler (c.m/run-task ::update-detail-info
+                     (m/join
+                      (constantly nil)
+                      (update-log-task rtc-flows/rtc-download-log-flow :download-logs)
+                      (update-log-task rtc-flows/rtc-upload-log-flow :upload-logs)
+                      (update-log-task rtc-flows/rtc-misc-log-flow :misc-logs)
+                      (m/reduce (fn [_ state]
+                                  (swap! *detail-info assoc
+                                         :pending-local-ops (:unpushed-block-update-count state)
+                                         :graph-uuid (:graph-uuid state)
+                                         :local-tx (:local-tx state)
+                                         :remote-tx (:remote-tx state)
+                                         :rtc-state (if (:rtc-lock state) :open :close)))
+                                rtc-flows/rtc-state-stream-flow)))]
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)
 

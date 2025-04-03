@@ -3,7 +3,6 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [cljs.cache :as cache]
             [datascript.core :as d]
             [frontend.config :as config]
             [frontend.date :as date]
