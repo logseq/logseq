@@ -1,10 +1,12 @@
 (ns frontend.rum
   "Utility fns for rum"
   (:require [cljs-bean.core :as bean]
+            [cljs.cache :as cache]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [daiquiri.interpreter :as interpreter]
+            [frontend.common.cache :as common.cache]
             [frontend.hooks :as hooks]
             [rum.core :refer [use-state] :as rum]))
 
@@ -144,11 +146,15 @@
          bp (->breakpoint (when (some? rect) (.-width rect)))]
      [ref bp])))
 
-(defonce *key->atom (atom {}))
-(defn cached-derived-atom
-  "Make sure to return the same atom if `key` is the same."
-  [ref key f]
-  (or (get @*key->atom key)
-      (let [a (rum/derived-atom [ref] key f)]
-        (swap! *key->atom assoc key a)
-        a)))
+(defonce *key->atom-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+
+(defn- gen-cached-derived-atom
+  [ref key' f]
+  (rum/derived-atom [ref] key' f))
+
+(def cached-derived-atom
+  (common.cache/cache-fn
+   *key->atom-cache
+   (fn [ref key' f]
+     [key' [ref key' f]])
+   gen-cached-derived-atom))
