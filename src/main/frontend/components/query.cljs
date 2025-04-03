@@ -61,8 +61,10 @@
            (util/hiccup-keywordize result))
 
          (and db-graph? (not (:built-in-query? config)))
-         (query-view/query-result (assoc config :id (str (:block/uuid current-block)))
-                                  current-block result)
+         (when-let [query (:logseq.property/query current-block)]
+           (when-not (string/blank? (:block/title query))
+             (query-view/query-result (assoc config :id (str (:block/uuid current-block)))
+                                      current-block result)))
 
          (and (not db-graph?)
               (or page-list? table?))

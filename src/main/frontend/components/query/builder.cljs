@@ -224,6 +224,19 @@
               (fn [{:keys [value]}]
                 (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
 
+(rum/defc page-search
+  [on-chosen]
+  (let [[result set-result!] (hooks/use-state nil)
+        [loading? set-loading!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-loading! true)
+       (p/let [result (state/<invoke-db-worker :thread-api/get-all-page-titles (state/get-current-repo))]
+         (set-result! result)
+         (set-loading! false)))
+     [])
+    (select result on-chosen {:loading? loading?})))
+
 (defn- db-based-query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
@@ -277,18 +290,16 @@
                               (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page value]))))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page value]))
+                    {})
 
        ;; TODO: replace with node reference
        "page reference"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-ref value]))
-                 {}))
+
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page-ref value]))
+                    {})
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
@@ -362,17 +373,14 @@
                               (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page value]))))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page value]))
+                    {})
 
        "page reference"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-ref value]))
-                 {}))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page-ref value]))
+                    {})
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
