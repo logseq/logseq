@@ -10,6 +10,7 @@
             [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
             [frontend.components.block.macros :as block-macros]
             [frontend.components.file-based.block :as file-block]
             [frontend.components.icon :as icon-component]
@@ -89,6 +90,7 @@
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
+            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -3703,16 +3705,17 @@
     (when-not (or (:page-title? config)
                   (:view? config))
       (hooks/use-effect!
-       (fn []
-         (p/do!
-          (db-async/<get-block (state/get-current-repo)
-                               (:db/id block*)
-                               {:children? (not
-                                            (if-some [result (state/get-block-collapsed (:block/uuid block))]
-                                              result
-                                              (:block/collapsed? block)))
-                                :skip-refresh? true})
-          (set-block! (some-> (:db/id block*) db/entity))))
+       #(c.m/run-task*
+         (m/sp
+           (c.m/<?
+            (db-async/<get-block (state/get-current-repo)
+                                 (:db/id block*)
+                                 {:children? (not
+                                              (if-some [result (state/get-block-collapsed (:block/uuid block))]
+                                                result
+                                                (:block/collapsed? block)))
+                                  :skip-refresh? true}))
+           (set-block! (some-> (:db/id block*) db/entity))))
        []))
     (when (or (:view? config) (:block.temp/fully-loaded? block))
       (loaded-block-container config block opts))))

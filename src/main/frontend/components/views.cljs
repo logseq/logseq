@@ -1163,13 +1163,12 @@
                 :skip-transact? true
                 :skip-refresh? true})]
     (hooks/use-effect!
-     (fn []
-       (c.m/run-task*
-         (m/sp
-           (when (and db-id (not item))
-             (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
-                   block' (if list-view? (db/entity db-id) block)]
-               (set-item! block'))))))
+     #(c.m/run-task*
+       (m/sp
+         (when (and db-id (not item))
+           (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
+                 block' (if list-view? (db/entity db-id) block)]
+             (set-item! block')))))
      [db-id])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))

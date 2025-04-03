@@ -104,7 +104,6 @@
 
   ;; (prn :debug :<get-block id-uuid-or-name)
   ;; (js/console.trace)
-
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
         e (cond
@@ -122,7 +121,7 @@
            (not children-only?)
            (not nested-children?)
            (not (some #{:block.temp/refs-count} properties)))
-      e
+      (p/promise e)
 
       :else
       (do
