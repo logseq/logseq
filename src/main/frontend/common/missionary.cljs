@@ -85,22 +85,27 @@
     (let [x (m/?> (m/relieve {} >in))]
       (m/amb x (do (m/? (m/sleep dur-ms)) (m/amb))))))
 
+(defn- fail-case-default-handler
+  [e]
+  (when-not (instance? Cancelled e)
+    (log/error :run-task*-failed e)))
+
 (defn run-task
   "Return the canceler"
   [key' task & {:keys [succ fail]}]
-  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail #(log/info :key key' :stopped %)))]
+  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail fail-case-default-handler))]
+    #(cancel)))
+
+(defn run-task*
+  "Return the canceler"
+  [task & {:keys [succ fail]}]
+  (let [cancel (task (or succ (constantly nil)) (or fail fail-case-default-handler))]
     #(cancel)))
 
 (defn run-task-throw
   "Return the canceler"
   [key' task & {:keys [succ]}]
   (let [cancel (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %})))]
-    #(cancel)))
-
-(defn run-task*
-  "Return the canceler"
-  [task & {:keys [succ fail]}]
-  (let [cancel (task (or succ (constantly nil)) (or fail (constantly nil)))]
     #(cancel)))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler

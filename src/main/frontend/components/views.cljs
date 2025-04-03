@@ -1699,28 +1699,30 @@
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
-                         (let [sorting (:logseq.property.table/sorting view-entity)
-                               filters (:logseq.property.table/filters view-entity)
-                               need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
-                           (if (and query? (not (or sorting filters)) (string/blank? input))
-                             (set-data! query-entity-ids)
-                             (when (or (not query?) need-query?)
-                               (->
-                                (p/let [{:keys [data ref-pages-count]} (<load-view-data view-entity
-                                                                                        (cond->
-                                                                                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                                                                           (:db/id view-parent))
-                                                                                          :view-feature-type view-feature-type
-                                                                                          :input input}
-                                                                                          query?
-                                                                                          (assoc :query-entity-ids query-entity-ids)))]
-                                  (set-data! data)
-                                  (when ref-pages-count
-                                    (set-ref-pages-count! ref-pages-count))
-                                  (set-loading! false))
-                                (p/catch (fn [e]
-                                           (js/console.error e)
-                                           (set-loading! false))))))))]
+                         (c.m/run-task*
+                          (m/sp
+                            (let [sorting (:logseq.property.table/sorting view-entity)
+                                  filters (:logseq.property.table/filters view-entity)
+                                  need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
+                              (if (and query? (not (or sorting filters)) (string/blank? input))
+                                (set-data! query-entity-ids)
+                                (when (or (not query?) need-query?)
+                                  (try
+                                    (let [{:keys [data ref-pages-count]}
+                                         (c.m/<?
+                                          (<load-view-data view-entity
+                                                           (cond->
+                                                            {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                              (:db/id view-parent))
+                                                             :view-feature-type view-feature-type
+                                                             :input input}
+                                                             query?
+                                                             (assoc :query-entity-ids query-entity-ids))))]
+                                     (set-data! data)
+                                     (when ref-pages-count
+                                       (set-ref-pages-count! ref-pages-count)))
+                                    (finally
+                                      (set-loading! false)))))))))]
     (hooks/use-effect!
      load-view-data
      [(hooks/use-debounced-value input 300)
@@ -1761,20 +1763,21 @@
         query? (= view-feature-type :query-result)
         db-based? (config/db-based-graph?)]
     (hooks/use-effect!
-     (fn []
-       (when-not query?                 ; TODO: move query logic to worker
-         (let [repo (state/get-current-repo)]
-           (when (and db-based? (not view-entity))
-             (p/let [_ (db-async/<get-views repo (:db/id view-parent) view-feature-type)
-                     views (get-views view-parent view-feature-type)]
-               (if-let [v (first views)]
-                 (do
-                   (set-views! views)
-                   (when-not view-entity (set-view-entity! v)))
-                 (when (and view-parent view-feature-type (not view-entity))
-                   (p/let [new-view (create-view! view-parent view-feature-type)]
-                     (set-views! (concat views [new-view]))
-                     (set-view-entity! new-view)))))))))
+     #(c.m/run-task*
+       (m/sp
+         (when-not query?             ; TODO: move query logic to worker
+           (let [repo (state/get-current-repo)]
+             (when (and db-based? (not view-entity))
+               (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
+               (let [views (get-views view-parent view-feature-type)]
+                 (if-let [v (first views)]
+                   (do
+                     (set-views! views)
+                     (when-not view-entity (set-view-entity! v)))
+                   (when (and view-parent view-feature-type (not view-entity))
+                     (let [new-view (c.m/<? (create-view! view-parent view-feature-type))]
+                       (set-views! (concat views [new-view]))
+                       (set-view-entity! new-view))))))))))
      [])
     (when view-entity
       (let [option' (assoc option
