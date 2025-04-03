@@ -98,7 +98,6 @@
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
                              (assoc opts :property-ident property-id))))
 
-(defonce *block-cache (atom (cache/lru-cache-factory {} :threshold 1000)))
 (defn <get-block
   [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? block-only? children-only? properties]
                             :or {children? true}
@@ -109,10 +108,6 @@
 
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
-        cache-key [id-uuid-or-name opts]
-        cached-response (when (cache/has? @*block-cache cache-key)
-                          (reset! *block-cache (cache/hit @*block-cache cache-key))
-                          (get @*block-cache cache-key))
         e (cond
             (number? id-uuid-or-name)
             (db/entity id-uuid-or-name)
@@ -130,9 +125,6 @@
            (not (some #{:block.temp/refs-count} properties)))
       e
 
-      cached-response
-      cached-response
-
       :else
       (do
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
@@ -140,11 +132,7 @@
                                                 [{:id id :opts opts}])
                 {:keys [block children] :as result'} (first result)]
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
-          (if skip-transact?
-            (reset! *block-cache (cache/miss @*block-cache cache-key
-                                             (if (and (not children-only?) (or children? block-only?))
-                                               (:block result')
-                                               result')))
+          (when-not skip-transact?
             (let [conn (db/get-db graph false)
                   block-and-children (if block (cons block children) children)
                   affected-keys [[:frontend.worker.react/block (:db/id block)]]
