@@ -11,6 +11,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
@@ -23,6 +24,7 @@
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
@@ -68,78 +70,84 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(defn build-sidebar-item
+(defn- <build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
-  (case (keyword block-type)
-    :contents
-    [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
-     (page-cp repo "contents")]
+  (p/do!
+   (db-async/<get-block repo db-id)
+   (let [lookup (cond
+                  (integer? db-id) db-id
+                  (uuid? db-id) [:block/uuid db-id]
+                  :else nil)
+         entity (when lookup (db/entity repo lookup))
+         page? (ldb/page? entity)
+         block-render (fn []
+                        (when entity
+                          (if page?
+                            [[:.flex.items-center.page-title.gap-1
+                              (icon/get-node-icon-cp entity {:class "text-md"})
+                              [:span.overflow-hidden.text-ellipsis (:block/title entity)]]
+                             (page-cp repo (str (:block/uuid entity)))]
+                            (block-with-breadcrumb repo entity idx [repo db-id block-type] false))))]
+     (case (keyword block-type)
+       :contents
+       (when-let [page (db/get-page "Contents")]
+         [[:.flex.items-center (ui/icon "list-details" {:class "text-md mr-2"}) (t :right-side-bar/contents)]
+          (page-cp repo (str (:block/uuid page)))])
 
-    :help
-    [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
+       :help
+       [[:.flex.items-center (ui/icon "help" {:class "text-md mr-2"}) (t :right-side-bar/help)] (onboarding/help)]
 
-    :page-graph
-    [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
-     (page/page-graph)]
+       :page-graph
+       [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
+        (page/page-graph)]
 
-    :block-ref
-    #_:clj-kondo/ignore
-    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-      (when-let [block (db/entity repo lookup)]
-        [(t :right-side-bar/block-ref)
-         (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
+       :block-ref
+       (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
+         (when-let [block (db/entity repo lookup)]
+           [(t :right-side-bar/block-ref)
+            (block-with-breadcrumb repo block idx [repo db-id block-type] true)]))
 
-    :block
-    #_:clj-kondo/ignore
-    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])]
-      (when-let [block (db/entity repo lookup)]
-        (block-with-breadcrumb repo block idx [repo db-id block-type] false)))
+       :block
+       (block-render)
 
-    :page
-    (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
-          page (db/entity repo lookup)]
-      (if (ldb/page? page)
-        [[:.flex.items-center.page-title.gap-1
-          (icon/get-node-icon-cp page {:class "text-md"})
-          [:span.overflow-hidden.text-ellipsis (:block/title page)]]
-         (page-cp repo (str (:block/uuid page)))]
-        (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
+       :page
+       (block-render)
 
-    :search
-    [[:.flex.items-center.page-title
-      (ui/icon "search" {:class "text-md mr-2"})
-      (let [input (rum/react *db-id)
-            input' (if (string/blank? input) "Blank input" input)]
-        [:span.overflow-hidden.text-ellipsis input'])]
-     (rum/with-key
-       (cmdk/cmdk-block {:initial-input db-id
-                         :sidebar? true
-                         :on-input-change (fn [new-value]
-                                            (reset! *db-id new-value))
-                         :on-input-blur (fn [new-value]
-                                          (state/sidebar-replace-block! [repo db-id block-type]
-                                                                        [repo new-value block-type]))})
-       (str init-key))]
+       :search
+       [[:.flex.items-center.page-title
+         (ui/icon "search" {:class "text-md mr-2"})
+         (let [input (rum/react *db-id)
+               input' (if (string/blank? input) "Blank input" input)]
+           [:span.overflow-hidden.text-ellipsis input'])]
+        (rum/with-key
+          (cmdk/cmdk-block {:initial-input db-id
+                            :sidebar? true
+                            :on-input-change (fn [new-value]
+                                               (reset! *db-id new-value))
+                            :on-input-blur (fn [new-value]
+                                             (state/sidebar-replace-block! [repo db-id block-type]
+                                                                           [repo new-value block-type]))})
+          (str init-key))]
 
-    :page-slide-view
-    (let [page (db/entity db-id)]
-      [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid page))})}
-        (:block/title page)]
-       [:div.ml-2.slide.mt-2
-        (slide/slide page)]])
+       :page-slide-view
+       (when entity
+         [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid entity))})}
+           (:block/title entity)]
+          [:div.ml-2.slide.mt-2
+           (slide/slide entity)]])
 
-    :shortcut-settings
-    [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
-     (shortcut-settings)]
-    :rtc
-    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
-     (rtc-debug-ui/rtc-debug-ui)]
+       :shortcut-settings
+       [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
+        (shortcut-settings)]
+       :rtc
+       [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+        (rtc-debug-ui/rtc-debug-ui)]
 
-    :profiler
-    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
-     (profiler/profiler)]
+       :profiler
+       [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) Profiler"]
+        (profiler/profiler)]
 
-    ["" [:span]]))
+       ["" [:span]]))))
 
 (defonce *drag-to
   (atom nil))
@@ -190,85 +198,100 @@
   [component _should-update?]
   component)
 
+(rum/defc sidebar-item-inner
+  [db-id {:keys [repo idx block-type collapsed? drag-from drag-to block-count *db-id init-key]}]
+  (let [[item set-item!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [item (<build-sidebar-item repo idx db-id block-type *db-id init-key)]
+         (set-item! item)))
+     [])
+    (when item
+      [:<>
+       (when (zero? idx) (drop-indicator (dec idx) drag-to))
+       [:div.flex.sidebar-item.content.color-level.rounded-md.shadow-lg
+        {:class [(str "item-type-" (name block-type))
+                 (when collapsed? "collapsed")]}
+        (let [[title component] item]
+          [:div.flex.flex-col.w-full.relative
+           [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
+            {:class         (when collapsed? "rounded-b-md")
+             :draggable     true
+             :on-context-menu (fn [e]
+                                (util/stop e)
+                                (shui/popup-show! e
+                                                  (actions-menu-content db-id idx block-type collapsed? block-count)
+                                                  {:as-dropdown? true
+                                                   :content-props {:on-click (fn [] (shui/popup-hide!))}}))
+             :on-drag-start (fn [event]
+                              (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
+                              (reset! *drag-from idx))
+             :on-drag-end   (fn [_event]
+                              (when drag-to (state/sidebar-move-block! idx drag-to))
+                              (reset! *drag-to nil)
+                              (reset! *drag-from nil))
+             :on-pointer-up   (fn [event]
+                                (when (= (.-which (.-nativeEvent event)) 2)
+                                  (state/sidebar-remove-block! idx)))}
+
+            [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
+             {:aria-expanded (str (not collapsed?))
+              :id            (str "sidebar-panel-header-" idx)
+              :aria-controls (str "sidebar-panel-content-" idx)
+              :on-click      (fn [event]
+                               (util/stop event)
+                               (state/sidebar-block-toggle-collapse! db-id))}
+             [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
+              (ui/rotating-arrow collapsed?)]
+             [:div.ml-1.font-medium.overflow-hidden.whitespace-nowrap
+              title]]
+            [:.item-actions.flex.items-center
+             (shui/button
+              {:title (t :right-side-bar/pane-more)
+               :class "px-3"
+               :variant :text
+               :on-click #(shui/popup-show!
+                           (.-target %)
+                           (actions-menu-content db-id idx block-type collapsed? block-count)
+                           {:as-dropdown? true
+                            :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+              (ui/icon "dots"))
+
+             (shui/button
+              {:title (t :right-side-bar/pane-close)
+               :variant :text
+               :class "px-3"
+               :on-click #(state/sidebar-remove-block! idx)}
+              (ui/icon "x"))]]
+
+           [:div {:role "region"
+                  :id (str "sidebar-panel-content-" idx)
+                  :aria-labelledby (str "sidebar-panel-header-" idx)
+                  :class           (util/classnames [{:hidden  collapsed?
+                                                      :initial (not collapsed?)
+                                                      :sidebar-panel-content true
+                                                      :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
+            (inner-component component (not drag-from))]
+           (when drag-from (drop-area idx))])]
+       (drop-indicator idx drag-to)])))
+
 (rum/defcs sidebar-item < rum/reactive
   {:init (fn [state] (assoc state
                             ::db-id (atom (nth (:rum/args state) 2))
                             ::init-key (random-uuid)))}
   [state repo idx db-id block-type block-count]
   (let [drag-from (rum/react *drag-from)
-        drag-to (rum/react *drag-to)
-        item (build-sidebar-item repo idx db-id block-type
-                                 (::db-id state)
-                                 (::init-key state))]
-    (when item
-      (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:<>
-         (when (zero? idx) (drop-indicator (dec idx) drag-to))
-         [:div.flex.sidebar-item.content.color-level.rounded-md.shadow-lg
-          {:class [(str "item-type-" (name block-type))
-                   (when collapsed? "collapsed")]}
-          (let [[title component] item]
-            [:div.flex.flex-col.w-full.relative
-             [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
-              {:class         (when collapsed? "rounded-b-md")
-               :draggable     true
-               :on-context-menu (fn [e]
-                                  (util/stop e)
-                                  (shui/popup-show! e
-                                                    (actions-menu-content db-id idx block-type collapsed? block-count)
-                                                    {:as-dropdown? true
-                                                     :content-props {:on-click (fn [] (shui/popup-hide!))}}))
-               :on-drag-start (fn [event]
-                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
-                                (reset! *drag-from idx))
-               :on-drag-end   (fn [_event]
-                                (when drag-to (state/sidebar-move-block! idx drag-to))
-                                (reset! *drag-to nil)
-                                (reset! *drag-from nil))
-               :on-pointer-up   (fn [event]
-                                  (when (= (.-which (.-nativeEvent event)) 2)
-                                    (state/sidebar-remove-block! idx)))}
-
-              [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
-               {:aria-expanded (str (not collapsed?))
-                :id            (str "sidebar-panel-header-" idx)
-                :aria-controls (str "sidebar-panel-content-" idx)
-                :on-click      (fn [event]
-                                 (util/stop event)
-                                 (state/sidebar-block-toggle-collapse! db-id))}
-               [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
-                (ui/rotating-arrow collapsed?)]
-               [:div.ml-1.font-medium.overflow-hidden.whitespace-nowrap
-                title]]
-              [:.item-actions.flex.items-center
-               (shui/button
-                {:title (t :right-side-bar/pane-more)
-                 :class "px-3"
-                 :variant :text
-                 :on-click #(shui/popup-show!
-                             (.-target %)
-                             (actions-menu-content db-id idx block-type collapsed? block-count)
-                             {:as-dropdown? true
-                              :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-                (ui/icon "dots"))
-
-               (shui/button
-                {:title (t :right-side-bar/pane-close)
-                 :variant :text
-                 :class "px-3"
-                 :on-click #(state/sidebar-remove-block! idx)}
-                (ui/icon "x"))]]
-
-             [:div {:role "region"
-                    :id (str "sidebar-panel-content-" idx)
-                    :aria-labelledby (str "sidebar-panel-header-" idx)
-                    :class           (util/classnames [{:hidden  collapsed?
-                                                        :initial (not collapsed?)
-                                                        :sidebar-panel-content true
-                                                        :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
-              (inner-component component (not drag-from))]
-             (when drag-from (drop-area idx))])]
-         (drop-indicator idx drag-to)]))))
+        drag-to (rum/react *drag-to)]
+    (let [collapsed? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
+      (sidebar-item-inner db-id {:repo repo
+                                 :idx idx
+                                 :block-type block-type
+                                 :collapsed? collapsed?
+                                 :drag-from drag-from
+                                 :drag-to drag-to
+                                 :block-count block-count
+                                 :*db-id (::db-id state)
+                                 :init-key (::init-key state)}))))
 
 (defn- get-page
   [match]

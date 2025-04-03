@@ -193,7 +193,7 @@
                                       (:block/uuid hls-page)
                                       {:children? true
                                        :nested-children? false})]
-    {:highlights (keep :logseq.property.pdf/hl-value (:children result))}))
+    {:highlights (keep :logseq.property.pdf/hl-value result)}))
 
 (defn file-based-load-hls-data$
   [{:keys [hls-file]}]

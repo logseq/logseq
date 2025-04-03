@@ -165,7 +165,7 @@
          [:span.bullet-container.cursor
           [:span.bullet]]]
 
-        [:div.flex.flex-1
+        [:div.flex.flex-1.cursor-text
          {:on-drag-enter #(set-hover! true)
           :on-drag-over #(util/stop %)
           :on-drop drop-handler-fn
@@ -205,12 +205,10 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state page-e {:keys [sidebar? whiteboard?] :as config}]
-  (when page-e
-    (let [page-name (or (:block/name page-e)
-                        (str (:block/uuid page-e)))
-          block-id (parse-uuid page-name)
-          block (get-block (or (:block/uuid page-e) (:block/name page-e)))
+  [state block* {:keys [sidebar? whiteboard?] :as config}]
+  (when-let [id (:db/id block*)]
+    (let [block (db/sub-block id)
+          block-id (:block/uuid block)
           block? (not (db/page? block))
           children (:block/_parent block)
           children (cond
@@ -225,13 +223,13 @@
       (cond
         (and
          (not block?)
-         (empty? children) page-e)
-        (dummy-block page-e)
+         (empty? children) block)
+        (dummy-block block)
 
         :else
         (let [document-mode? (state/sub :document/mode?)
               hiccup-config (merge
-                             {:id (if block? (str block-id) page-name)
+                             {:id (str (:block/uuid block))
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
@@ -246,10 +244,8 @@
                                        (string/blank? (:block/title (or link block'))))))]
             [:div.relative
              {:class (when add-button? "show-add-button")}
-             (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-             (let [args (if block-id
-                          {:block-uuid block-id}
-                          {:page page-name})]
+             (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
+             (let [args {:block-uuid block-id}]
                (add-button args (:container-id config)))]))))))
 
 (rum/defc today-queries < rum/reactive
