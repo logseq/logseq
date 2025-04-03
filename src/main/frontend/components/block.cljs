@@ -919,7 +919,7 @@
                (:skip-async-load? (first args))
                (reset! *result page)
                :else
-               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false :block-only? true
+               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
                                                                                              :skip-refresh? true
                                                                                              :including-property-vals? false})]
                  (reset! *result result)))

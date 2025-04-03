@@ -291,13 +291,16 @@
                             (get-structured-datoms db))
         recent-updated-pages (let [pages (get-recent-updated-pages db)]
                                (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
+        contents-datoms (when-let [id (get-first-page-by-title db "Contents")]
+                          (d/datoms db :eavt id))
         data (distinct
               (concat idents
                       structured-datoms
                       favorites
                       recent-updated-pages
                       views
-                      all-files))]
+                      all-files
+                      contents-datoms))]
     {:schema schema
      :initial-data data}))
 

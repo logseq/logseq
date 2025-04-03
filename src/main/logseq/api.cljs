@@ -718,10 +718,9 @@
 (defn- <ensure-page-loaded
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)
-          result (db-async/<get-block repo (str block-uuid-or-page-name)
-                                      {:children-props '[*]
-                                       :nested-children? true})
-          block (if (:block result) (:block result) result)
+          block (db-async/<get-block repo (str block-uuid-or-page-name)
+                                     {:children-props '[*]
+                                      :nested-children? true})
           _ (when-let [page-id (:db/id (:block/page block))]
               (when-let [page-uuid (:block/uuid (db/entity page-id))]
                 (db-async/<get-block repo page-uuid)))]
@@ -856,7 +855,7 @@
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
             block (<pull-block id)
             ;; Load all children blocks
-            _ (api-block/sync-children-blocks! block)]
+            _ (api-block/<sync-children-blocks! block)]
       (when block
         (when-let [sibling (ldb/get-left-sibling (db/entity (:db/id block)))]
           (get_block (:block/uuid sibling) opts))))))
@@ -866,7 +865,7 @@
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
             block (<pull-block id)
             ;; Load all children blocks
-            _ (api-block/sync-children-blocks! block)]
+            _ (api-block/<sync-children-blocks! block)]
       (when block
         (p/let [sibling (ldb/get-right-sibling (db/entity (:db/id block)))]
           (get_block (:block/uuid sibling) opts))))))
@@ -1071,7 +1070,7 @@
                                                                        :create-first-block? false
                                                                        :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
-      (-> (api-block/sync-children-blocks! block)
+      (-> (api-block/<sync-children-blocks! block)
           (p/then (fn []
                     (let [block' (first-child-of-block block)
                           opts (bean/->clj opts)

@@ -175,7 +175,7 @@
 (rum/defc block-container
   [config row]
   (let [container (state/get-component :block/container)]
-    [:div.relative.w-full {:style {:min-height 29}}
+    [:div.relative.w-full {:style {:min-height 24}}
      (if row
        (container (assoc config :view? true) row)
        [:div])]))

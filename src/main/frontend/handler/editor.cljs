@@ -1764,7 +1764,7 @@
                                (p/let [e (db/entity [:block/uuid id])
                                        e' (or e
                                               (p/let [result (db-async/<get-block (state/get-current-repo) id {:children? false})]
-                                                (:block result)))]
+                                                result))]
                                  (when e'
                                    (assoc e' :block/title (:block/title b)))))))
                          nodes))]

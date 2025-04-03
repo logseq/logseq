@@ -153,13 +153,7 @@
               (when-not skip-refresh?
                 (react/refresh-affected-queries! graph affected-keys))))
 
-          (cond
-            children-only?
-            children
-            (or children? block-only?)
-            block
-            :else
-            result'))))))
+          (if children-only? children block))))))
 
 (defn <get-blocks
   [graph ids* & {:as opts}]
