@@ -13,8 +13,9 @@
   (let [*async-queries (:db/async-queries @state/state)
         async-requested? (get @*async-queries [inputs opts])]
     (if (and async-requested? transact-db?)
-      (let [db (db-conn/get-db graph)]
-        (apply d/q (first inputs) db (rest inputs)))
+      (p/promise
+       (let [db (db-conn/get-db graph)]
+         (apply d/q (first inputs) db (rest inputs))))
       (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs)]
         (swap! *async-queries assoc [inputs opts] true)
         (when result
