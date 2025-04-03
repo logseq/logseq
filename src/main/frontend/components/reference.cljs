@@ -1,5 +1,6 @@
 (ns frontend.components.reference
-  (:require [frontend.components.block :as block]
+  (:require [frontend.common.missionary :as c.m]
+            [frontend.components.block :as block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
             [frontend.components.reference-filters :as filters]
@@ -14,7 +15,7 @@
             [frontend.ui :as ui]
             [logseq.db.frontend.view :as db-view]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
+            [missionary.core :as m]
             [rum.core :as rum]))
 
 ;; TODO: merge both page and block linked refs
@@ -78,10 +79,11 @@
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
-       (fn []
-         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check (state/get-current-repo)
-                                                 id {})]
-           (set-has-references! result)))
+       #(c.m/run-task*
+         (m/sp
+           (let [result (c.m/<? (state/<invoke-db-worker :thread-api/block-refs-check
+                                                         (state/get-current-repo) id {}))]
+             (set-has-references! result))))
        [])
       (when has-references?
         (ui/catch-error
@@ -95,10 +97,11 @@
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
-       (fn []
-         (p/let [result (state/<invoke-db-worker :thread-api/block-refs-check (state/get-current-repo)
-                                                 id {:unlinked? true})]
-           (set-has-references! result)))
+       #(c.m/run-task*
+         (m/sp
+           (let [result (c.m/<? (state/<invoke-db-worker :thread-api/block-refs-check
+                                                         (state/get-current-repo) id {:unlinked? true}))]
+             (set-has-references! result))))
        [])
       (when has-references?
         (views/view
