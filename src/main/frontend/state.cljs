@@ -347,25 +347,6 @@
       :db/async-queries                      (atom {})
       :db/latest-transacted-entity-uuids     (atom {})})))
 
-;; Block ast state
-;; ===============
-
-;; block uuid -> {content(String) -> ast}
-(def blocks-ast-cache (atom {}))
-(defn add-block-ast-cache!
-  [block-uuid content ast]
-  (when (and block-uuid content ast)
-    (let [new-value (assoc-in @blocks-ast-cache [block-uuid content] ast)
-          new-value (if (> (count new-value) 10000)
-                      (into {} (take 5000 new-value))
-                      new-value)]
-      (reset! blocks-ast-cache new-value))))
-
-(defn get-block-ast
-  [block-uuid content]
-  (when (and block-uuid content)
-    (get-in @blocks-ast-cache [block-uuid content])))
-
 ;; User configuration getters under :config (and sometimes :me)
 ;; ========================================
 ;; TODO: Refactor default config values to be data driven. Currently they are all

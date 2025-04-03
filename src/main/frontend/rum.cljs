@@ -146,7 +146,7 @@
          bp (->breakpoint (when (some? rect) (.-width rect)))]
      [ref bp])))
 
-(defonce *key->atom-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+(defonce *key->atom-cache (volatile! (cache/lru-cache-factory {} :threshold 3000)))
 
 (defn- gen-cached-derived-atom
   [ref key' f]
