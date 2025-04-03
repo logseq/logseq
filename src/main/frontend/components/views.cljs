@@ -1154,11 +1154,9 @@
                     :else nil)
         [item set-item!] (hooks/use-state nil)
         opts (if list-view?
-               {:block-only? true
-                :skip-refresh? true
+               {:skip-refresh? true
                 :children? false}
-               {:block-only? true
-                :children? false
+               {:children? false
                 :properties properties
                 :skip-transact? true
                 :skip-refresh? true})]

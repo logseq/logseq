@@ -99,7 +99,7 @@
                              (assoc opts :property-ident property-id))))
 
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? block-only? children-only? properties]
+  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? children-only? properties]
                             :or {children? true}
                             :as opts}]
 
@@ -130,7 +130,7 @@
         (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
                                                 [{:id id :opts opts}])
-                {:keys [block children] :as result'} (first result)]
+                {:keys [block children]} (first result)]
           (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (when-not skip-transact?
             (let [conn (db/get-db graph false)
