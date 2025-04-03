@@ -770,6 +770,26 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (db-graph/build-graph @conn option)))
 
+(def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
+(defn- get-all-page-titles
+  [db]
+  (let [pages (ldb/get-all-pages db)]
+    (sort (map :block/title pages))))
+
+(def ^:private get-all-page-titles-with-cache
+  (common.cache/cache-fn
+   *get-all-page-titles-cache
+   (fn [repo]
+     (let [db @(worker-state/get-datascript-conn repo)]
+       [[repo (:max-tx db)] ;cache-key
+        [db]             ;f-args
+        ]))
+   get-all-page-titles))
+
+(def-thread-api :thread-api/get-all-page-titles
+  [repo]
+  (get-all-page-titles-with-cache repo))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
