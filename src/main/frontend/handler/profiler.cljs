@@ -83,4 +83,10 @@
 
   (register-fn! 'frontend.handler.profiler/test-fn-to-profile
                 :custom-key-fn (fn [args result] {:a args :r result}))
+  (register-fn! 'cljs.core/reset!
+                :custom-key-fn (fn [args result]
+                                 (when (and (coll? result) (> (count result) 10000))
+                                   (prn :atom-size (count result) (take 10 result)))
+                                 nil))
+
   )

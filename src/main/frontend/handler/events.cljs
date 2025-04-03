@@ -202,7 +202,7 @@
   (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
   (st/refresh!)
-  (reset! r/*key->atom {})
+
   (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
           request-finished? (db-transact/request-finished?)]
     (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
