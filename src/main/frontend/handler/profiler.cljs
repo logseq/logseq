@@ -85,8 +85,17 @@
                 :custom-key-fn (fn [args result] {:a args :r result}))
   (register-fn! 'cljs.core/reset!
                 :custom-key-fn (fn [args result]
-                                 (when (and (coll? result) (> (count result) 10000))
-                                   (prn :atom-size (count result) (take 10 result)))
+                                 (when (and (coll? result) (> (count result) 5000))
+                                   (prn :atom-size (count result) (take 3 result))
+                                   (js/console.trace))
                                  nil))
+  (register-fn! 'cljs.core/vreset!
+                :custom-key-fn (fn [args result]
+                                 (when (and (coll? result) (> (count result) 5000))
+                                   (prn :volatile-size (count result) (take 3 result))
+                                   (js/console.trace))
+                                 nil))
+
+
 
   )
