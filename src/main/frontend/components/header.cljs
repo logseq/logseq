@@ -54,9 +54,9 @@
   {:will-mount (fn [state]
                  (reset!
                   (::online-users-canceler state)
-                  (c.m/run-task
-                   (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
-                   :fetch-online-users :succ (constantly nil)))
+                  (c.m/run-task :fetch-online-users
+                    (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
+                    :succ (constantly nil)))
                  state)
    :will-unmount (fn [state]
                    (when @(::online-users-canceler state) (@(::online-users-canceler state)))

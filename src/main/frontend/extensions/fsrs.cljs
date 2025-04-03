@@ -310,7 +310,8 @@
   (when-let [canceler @*last-update-due-cards-count-canceler]
     (canceler)
     (reset! *last-update-due-cards-count-canceler nil))
-  (let [canceler (c.m/run-task new-task--update-due-cards-count :update-due-cards-count)]
+  (let [canceler (c.m/run-task :update-due-cards-count
+                   new-task--update-due-cards-count)]
     (reset! *last-update-due-cards-count-canceler canceler)
     nil))
 
