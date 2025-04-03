@@ -30,7 +30,18 @@
   }
 
   .ls-table-row {
-    @apply min-h-[33px];
+    @apply h-[33px] min-h-[33px] max-h-[33px] overflow-hidden;
+    div, span, a {
+      @apply whitespace-nowrap;
+    }
+
+    .block-head-wrap span, .block-head-wrap a {
+      @apply text-ellipsis overflow-hidden;
+    }
+
+    .multi-values {
+      @apply !flex-nowrap;
+    }
   }
 
   .ls-table-header {
