@@ -62,6 +62,9 @@
                with-out-str))]])
      [:hr]
      [:b "Atom/Volatile Mem Leak Detect(Only support UI thread now):"]
+     [:pre "Only check atoms/volatiles with a value type of `coll`.
+The report shows refs with coll-size > 5k and atom's watches-count > 1k.
+`ref-hash` means `(hash ref)`"]
      [:div.flex.flex-row.items-center.gap-2
       (if (= 2 (count (set/difference #{'cljs.core/reset! 'cljs.core/vreset!} (set profiling-fns))))
         (shui/button
@@ -77,7 +80,7 @@
         (let [ref-hash->ref (:ref-hash->ref @*mem-leak-reports)]
           (-> @*mem-leak-reports
               (dissoc :ref-hash->ref)
-              (assoc :ref-hash->take-3-vals (update-vals ref-hash->ref (fn [ref] (take 3 @ref)))
+              (assoc :ref-hash->take-3-items (update-vals ref-hash->ref (fn [ref] (take 3 @ref)))
                      :ref-hash->take-3-watch-keys (update-vals ref-hash->ref (fn [ref] (take 3 (.-watches ^js ref)))))
               (fipp/pprint {:width 20})
               with-out-str)))]]))
