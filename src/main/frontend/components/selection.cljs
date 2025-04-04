@@ -14,8 +14,7 @@
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
   (let [selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
         on-copy (if (and selected-blocks (nil? on-copy))
-                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks
-                                                               :page-title-only? true})
+                  #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
                   (or on-copy #(editor-handler/copy-selection-blocks true)))
         button-opts {:variant :outline
                      :size :sm

@@ -30,6 +30,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
@@ -73,7 +74,6 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
-            [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -1092,6 +1092,15 @@
 
 (defmethod handle :editor/hide-action-bar []
   (shui/popup-hide! :selection-action-bar))
+
+(defmethod handle :editor/load-blocks [[_ ids]]
+  (when (seq ids)
+    ;; not using `<get-blocks` here becuase because we want to
+    ;; load all nested children here for copy/export
+    (p/all (map (fn [id]
+                  (db-async/<get-block (state/get-current-repo) id
+                                       {:nested-children? true
+                                        :skip-refresh? false})) ids))))
 
 (defn run!
   []
