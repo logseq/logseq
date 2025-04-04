@@ -470,7 +470,9 @@
         page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
     page-export))
 
-(defn build-view-nodes-export* [db nodes opts]
+(defn- build-nodes-export
+  "Export a mix of pages and blocks"
+  [db nodes opts]
   (let [node-pages (filter entity-util/page? nodes)
         pages-export
         (merge
@@ -483,9 +485,7 @@
         (->> node-blocks
              (group-by :block/page)
              (map (fn [[parent-page-ent blocks]]
-                    (merge (build-blocks-export db
-                                                (sort-by :block/order blocks)
-                                                (merge opts {:include-children? false}))
+                    (merge (build-blocks-export db (sort-by :block/order blocks) opts)
                            {:page (shallow-copy-page parent-page-ent)}))))
         pages-to-blocks-export
         {:properties (apply merge (map :properties pages-to-blocks))
@@ -505,7 +505,29 @@
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-view-nodes-export* db nodes {:include-uuid-fn content-ref-uuids})
+        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? false})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
+    view-nodes-export))
+
+(defn- build-selected-nodes-export
+  "Exports given nodes selected by a user. Nodes can be a mix of blocks and pages"
+  [db eids]
+  (let [top-level-nodes (map #(d/entity db %) eids)
+        children-nodes (->> top-level-nodes
+                            ;; Remove pages b/c when selected their children are not highlighted
+                            (remove entity-util/page?)
+                            (mapcat #(rest (ldb/get-block-and-children db (:block/uuid %))))
+                            (remove :logseq.property/created-from-property))
+        nodes (concat top-level-nodes children-nodes)
+        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
+                                          vals
+                                          (filter de/entity?))
+                                    nodes)
+        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
+        (build-content-ref-export db (into nodes property-value-ents))
+        {:keys [pvalue-uuids] :as nodes-export}
+        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? true})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
@@ -769,9 +791,10 @@
           (build-block-export db (:block-id options))
           :page
           (build-page-export db (:page-id options))
-          ;; Different export types for different features as their needs may diverge
-          (:view-nodes :selected-nodes)
+          :view-nodes
           (build-view-nodes-export db (:node-ids options))
+          :selected-nodes
+          (build-selected-nodes-export db (:node-ids options))
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph
