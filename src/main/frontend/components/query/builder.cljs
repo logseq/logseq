@@ -174,12 +174,13 @@
   [*property *private-property? *find *tree opts loc values {:keys [db-graph?]}]
   (let [values' (cons {:label "Select all"
                        :value "Select all"}
-                      values)]
+                      values)
+        find' (rum/react *find)]
     (select values'
             (fn [{:keys [value]}]
               (let [k (cond
                         db-graph? (if @*private-property? :private-property :property)
-                        (= (rum/react *find) :page) :page-property
+                        (= find' :page) :page-property
                         :else :property)
                     x (if (= value "Select all")
                         [k @*property]
