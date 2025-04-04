@@ -395,12 +395,26 @@
      :classes (apply merge (map :classes uuid-block-pages))
      :pages-and-blocks (mapv #(select-keys % [:page :blocks]) uuid-block-pages)}))
 
+(defn sort-pages-and-blocks
+  "Provide a reliable sort order since this tends to be large. Helps with diffing
+   and readability"
+  [pages-and-blocks]
+  (vec
+   (sort-by #(or (get-in % [:page :block/title])
+                 (some-> (get-in % [:page :build/journal]) str)
+                 (str (get-in % [:page :block/uuid])))
+            pages-and-blocks)))
+
 (defn- finalize-export-maps
-  "Given final export maps, merges them, adds any missing class parents and merges those in"
+  "Given final export maps, merges them, adds any missing class parents and merges those in.
+   If :pages-and-blocks exist, sorts them in order to have reliable sort order"
   [db & export-maps]
   (let [final-export* (apply merge-export-maps export-maps)
-        class-parents-export (some->> (:classes final-export*) (build-class-parents-export db))]
-    (merge-export-maps final-export* class-parents-export)))
+        class-parents-export (some->> (:classes final-export*) (build-class-parents-export db))
+        merged-map (merge-export-maps final-export* class-parents-export)]
+    (cond-> merged-map
+      (:pages-and-blocks merged-map)
+      (update :pages-and-blocks sort-pages-and-blocks))))
 
 (defn- build-block-export
   "Exports block for given block eid"
@@ -659,16 +673,6 @@
                           {:page (remove-uuid-if-not-ref page)
                            :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
                         pages-and-blocks))))))
-
-(defn sort-pages-and-blocks
-  "Provide a reliable sort order since this tends to be large. Helps with diffing
-   and readability"
-  [pages-and-blocks]
-  (vec
-   (sort-by #(or (get-in % [:page :block/title])
-                 (some-> (get-in % [:page :build/journal]) str)
-                 (str (get-in % [:page :block/uuid])))
-            pages-and-blocks)))
 
 (defn- add-ontology-for-include-namespaces
   "Adds :properties to export for given namespace parents. Current use case is for :exclude-namespaces

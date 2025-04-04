@@ -57,17 +57,21 @@
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks]
+                                      & {:keys [transform-expected-blocks build-journal]
                                          :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
   (let [page (db-test/find-page-by-title @conn2 page-title)
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
         updated-page (db-test/find-page-by-title @conn2 page-title)
         expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
+        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)
+        filter-imported-page (if build-journal
+                               #(= build-journal (get-in % [:page :build/journal]))
+                               #(= (get-in % [:page :block/title]) page-title))]
 
+    (assert (first expected-page-and-blocks))
     ;; Assume first page is one being imported for now
     (is (= (first expected-page-and-blocks)
-           (first (:pages-and-blocks imported-page)))
+           (first (filter filter-imported-page (:pages-and-blocks imported-page))))
         "Blocks are appended to existing page")
     (is (= (:block/created-at page) (:block/created-at updated-page))
         "Existing page didn't get re-created")
@@ -323,7 +327,8 @@
     (is (= (-> (:pages-and-blocks original-data)
                (medley/dissoc-in [1 :blocks 0 :build/properties])
                ;; shallow block means this page doesn't get included
-               butlast)
+               butlast
+               sort-pages-and-blocks)
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
@@ -412,7 +417,7 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 journal-title original-data)))
+    (import-second-time-assertions conn conn2 journal-title original-data {:build-journal 20250210})))
 
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
@@ -458,7 +463,8 @@
         "Page's classes are imported")
     (is (= (-> (:pages-and-blocks original-data)
                ;; adjust shallow block
-               (medley/dissoc-in [1 :blocks 0 :build/tags]))
+               (medley/dissoc-in [1 :blocks 0 :build/tags])
+               sort-pages-and-blocks)
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
@@ -527,7 +533,7 @@
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
                                                            :node-ids (get-node-ids @conn2)})]
 
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-nodes)))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
@@ -562,9 +568,9 @@
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
 
-    (is (= (set (->> (:pages-and-blocks original-data)
-                     (map #(if (= (get-in % [:page :block/title]) "page2") (dissoc % :blocks) %))))
-           (set (:pages-and-blocks imported-nodes))))
+    (is (= (->> (:pages-and-blocks original-data)
+                (map #(if (= (get-in % [:page :block/title]) "page2") (dissoc % :blocks) %)))
+           (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
