@@ -81,7 +81,8 @@
                           (let [block-uuids (state/get-selection-block-ids)]
                             (shui/popup-hide!)
                             (shui/dialog-open!
-                             #(export/export-blocks block-uuids {:whiteboard? false}))))}
+                             #(export/export-blocks block-uuids {:whiteboard? false
+                                                                 :export-type :selected-nodes}))))}
       (t :content/copy-export-as))
 
      (shui/dropdown-menu-item
@@ -260,7 +261,8 @@
           {:key      "Copy as"
            :on-click (fn [_]
                        (shui/dialog-open!
-                        #(export/export-blocks [block-id] {:whiteboard? false})))}
+                        #(export/export-blocks [block-id] {:whiteboard? false
+                                                           :export-type :block})))}
           (t :content/copy-export-as))
 
          (when-not property-default-value?
