@@ -147,7 +147,7 @@
                                       (editor-handler/get-matched-classes q)
                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
                        (set-matched-pages! result))))]
-    (hooks/use-effect! search-f [(hooks/use-debounced-value q 50)])
+    (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
                            (if db-tag?
@@ -183,11 +183,11 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        (let [block (if (and (:block/uuid block) (not (de/entity? block)))
-                                      (db/entity [:block/uuid (:block/uuid block)])
+                        (let [block (if-let [id (:block/uuid block)]
+                                      (or (db/entity [:block/uuid id]) block)
                                       block)]
                           [:div.flex.flex-col
-                           (when-not (db/page? block)
+                           (when (and (not (:page? block)) (:block/uuid block))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
@@ -207,7 +207,7 @@
                                  (db-model/whiteboard-page? block)
                                  (ui/icon "whiteboard" {:extension? true})
 
-                                 (db/page? block)
+                                 (:page? block)
                                  (ui/icon "page" {:extension? true})
 
                                  (or (string/starts-with? (str (:block/title block)) (t :new-tag))

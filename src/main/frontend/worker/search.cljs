@@ -277,6 +277,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (let [match-input (get-match-input q)
+          page-count (count (d/datoms @conn :avet :block/name))
+          large-graph? (> page-count 2500)
           non-match-input (when (<= (count q) 2)
                             (str "%" (string/replace q #"\s+" "%") "%"))
           limit  (or limit 100)
@@ -296,7 +298,8 @@ DROP TRIGGER IF EXISTS blocks_au;
           matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
           non-match-result (when non-match-input
                              (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
-          fuzzy-result (when-not page (fuzzy-search repo @conn q option))
+           ;; fuzzy is too slow for large graphs
+          fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
           result (->> (concat fuzzy-result matched-result non-match-result)
                       (common-util/distinct-by :id)
                       (keep (fn [result]
