@@ -146,6 +146,18 @@
       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
         (d/pull-many db '[*] ids')))))
 
+(defn- with-raw-title
+  [m entity]
+  (if-let [raw-title (:block/raw-title entity)]
+    (assoc m :block/title raw-title)
+    m))
+
+(defn- entity->map
+  [entity]
+  (-> (into {} entity)
+      (with-raw-title entity)
+      (assoc :db/id (:db/id entity))))
+
 (defn get-block-and-children
   [db id {:keys [children? children-only? nested-children? including-property-vals? properties children-props]
           :or {including-property-vals? true}}]
@@ -174,30 +186,33 @@
                          (map
                           (fn [block]
                             (if (= children-props '[*])
-                              (assoc (into {} block) :db/id (:db/id block))
-                              (select-keys block children-props)))
+                              (entity->map block)
+                              (-> (select-keys block children-props)
+                                  (with-raw-title block))))
                           children)))]
         (if children-only?
           {:children children}
           (let [block' (if (seq properties)
-                         (select-keys block properties)
-                         block)
+                         (-> (select-keys block properties)
+                             (with-raw-title block)
+                             (assoc :db/id (:db/id block)))
+                         (entity->map block))
                 block' (cond->
                         (mark-block-fully-loaded block')
                          including-property-vals?
                          (update-vals (fn [v]
                                         (cond
                                           (de/entity? v)
-                                          (assoc (into {} v) :db/id (:db/id v))
+                                          (entity->map v)
                                           (and (coll? v) (every? de/entity? v))
-                                          (map #(assoc (into {} %) :db/id (:db/id %)) v)
+                                          (map entity->map v)
 
                                           :else
                                           v)))
                          block-refs-count?
                          (assoc :block.temp/refs-count (count (:block/_refs block))))]
             (cond->
-             {:block (assoc (into {} block') :db/id (:db/id block))}
+             {:block block'}
               children?
               (assoc :children children))))))))
 
