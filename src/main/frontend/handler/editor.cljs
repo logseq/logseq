@@ -926,7 +926,7 @@
 
 (defn- compose-copied-blocks-contents
   [repo block-ids & {:as opts}]
-  (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
+  (let [blocks (map (fn [id] (db/entity [:block/uuid id])) block-ids)
         top-level-block-uuids (->> (block-handler/get-top-level-blocks blocks)
                                    (map :block/uuid))
         content (export-text/export-blocks-as-markdown
