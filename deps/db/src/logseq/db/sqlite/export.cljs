@@ -769,7 +769,8 @@
           (build-block-export db (:block-id options))
           :page
           (build-page-export db (:page-id options))
-          :view-nodes
+          ;; Different export types for different features as their needs may diverge
+          (:view-nodes :selected-nodes)
           (build-view-nodes-export db (:node-ids options))
           :graph-ontology
           (build-graph-ontology-export db {})
