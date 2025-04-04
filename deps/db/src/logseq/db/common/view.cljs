@@ -428,7 +428,7 @@
       values)))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids]
+  [db view-id {:keys [journals? view-for-id view-feature-type input query-entity-ids]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
