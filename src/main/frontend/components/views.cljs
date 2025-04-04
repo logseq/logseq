@@ -1694,7 +1694,8 @@
 
 (rum/defc view-aux
   [view-entity {:keys [view-parent view-feature-type data query-entity-ids] :as option}]
-  (let [[view-entity set-view-entity!] (db/sub-entity view-entity (str "view-" (:db/id view-entity)))
+  (let [[view-entity set-view-entity!] (when (:db/id view-entity)
+                                         (db/sub-entity view-entity (str "view-" (:db/id view-entity))))
         [input set-input!] (hooks/use-state "")
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
@@ -1781,7 +1782,8 @@
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
      [])
-    (when view-entity
+    (when (if db-based? view-entity (or view-entity view-parent
+                                        (= view-feature-type :all-pages)))
       (let [option' (assoc option
                            :views views
                            :set-views! set-views!)]
