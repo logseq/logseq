@@ -144,13 +144,15 @@
 (defn <get-blocks
   [graph ids* & {:as opts}]
   (let [ids (remove (fn [id] (:block.temp/fully-loaded? (db/entity id))) ids*)]
-    (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                            (map (fn [id]
-                                                   {:id id :opts opts})
-                                                 ids))]
-      (let [conn (db/get-db graph false)
-            data (mapcat (fn [{:keys [block children]}] (cons block children)) result)]
-        (d/transact! conn data)))))
+    (when (seq ids)
+      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                              (map (fn [id]
+                                                     {:id id :opts (assoc opts :children? false)})
+                                                   ids))]
+        (let [conn (db/get-db graph false)]
+          (when (seq result)
+            (let [result' (map (fn [b] (assoc b :block.temp/fully-loaded? true)) result)]
+              (d/transact! conn result'))))))))
 
 (defn <get-block-parents
   [graph id depth]

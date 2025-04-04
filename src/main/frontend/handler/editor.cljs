@@ -952,11 +952,8 @@
 (defn copy-selection-blocks
   [html? & {:keys [selected-blocks] :as opts}]
   (let [repo (state/get-current-repo)
-        blocks (seq (state/get-selection-blocks))
-        ids (if blocks
-              (distinct (keep #(when-let [id (dom/attr % "blockid")]
-                                 (uuid id)) blocks))
-              (map :block/uuid selected-blocks))
+        selected-ids (state/get-selection-block-ids)
+        ids (or (seq selected-ids) (map :block/uuid selected-blocks))
         [top-level-block-uuids content] (compose-copied-blocks-contents repo ids opts)
         block (db/entity [:block/uuid (first ids)])
         db-based? (config/db-based-graph? repo)]

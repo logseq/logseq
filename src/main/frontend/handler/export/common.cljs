@@ -57,19 +57,19 @@
 (defn- get-blocks-contents
   [repo root-block-uuid & {:keys [init-level]
                            :or {init-level 1}}]
-  (-> (db/pull-many (keep :db/id (db/get-block-and-children repo root-block-uuid)))
-      (outliner-tree/blocks->vec-tree (str root-block-uuid))
-      (outliner-file/tree->file-content {:init-level init-level})))
+  (let [block (db/entity [:block/uuid root-block-uuid])
+        link (:block/link block)
+        block' (or link block)
+        root-id (:block/uuid block')
+        blocks (db/get-block-and-children repo root-id)]
+    (-> (outliner-tree/blocks->vec-tree repo blocks root-id {:link link})
+        (outliner-file/tree->file-content {:init-level init-level
+                                           :link link}))))
 
 (defn root-block-uuids->content
-  [repo root-block-uuids & {:keys [page-title-only?]}]
+  [repo root-block-uuids]
   (let [contents (mapv (fn [id]
-                         (if-let [page (and page-title-only?
-                                            (let [e (db/entity [:block/uuid id])]
-                                              (when (:block/name e)
-                                                e)))]
-                           (:block/title page)
-                           (get-blocks-contents repo id))) root-block-uuids)]
+                         (get-blocks-contents repo id)) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
 (declare remove-block-ast-pos Properties-block-ast?)

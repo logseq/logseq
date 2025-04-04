@@ -1218,7 +1218,9 @@ Similar to re-frame subscriptions"
    (when (seq blocks)
      (let [blocks (vec (remove nil? blocks))]
        (set-selection-blocks-aux! blocks)
-       (when direction (set-state! :selection/direction direction))))))
+       (when direction (set-state! :selection/direction direction))
+       (let [ids (get-selection-block-ids)]
+         (when (seq ids) (pub-event! [:editor/load-blocks ids])))))))
 
 (defn state-clear-selection!
   []

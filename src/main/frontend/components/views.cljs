@@ -85,7 +85,8 @@
        :checked checked?
        :on-checked-change (fn [v]
                             (p/do!
-                             (when v (db-async/<get-block (state/get-current-repo) row {:skip-refresh? true}))
+                             (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
+                                                                                                 :children? false}))
                              (row-toggle-selected! row v)))
        :aria-label "Select row"
        :class (str "flex transition-opacity "
@@ -1709,18 +1710,18 @@
                                 (when (or (not query?) need-query?)
                                   (try
                                     (let [{:keys [data ref-pages-count]}
-                                         (c.m/<?
-                                          (<load-view-data view-entity
-                                                           (cond->
-                                                            {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                                              (:db/id view-parent))
-                                                             :view-feature-type view-feature-type
-                                                             :input input}
-                                                             query?
-                                                             (assoc :query-entity-ids query-entity-ids))))]
-                                     (set-data! data)
-                                     (when ref-pages-count
-                                       (set-ref-pages-count! ref-pages-count)))
+                                          (c.m/<?
+                                           (<load-view-data view-entity
+                                                            (cond->
+                                                             {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                                                               (:db/id view-parent))
+                                                              :view-feature-type view-feature-type
+                                                              :input input}
+                                                              query?
+                                                              (assoc :query-entity-ids query-entity-ids))))]
+                                      (set-data! data)
+                                      (when ref-pages-count
+                                        (set-ref-pages-count! ref-pages-count)))
                                     (finally
                                       (set-loading! false)))))))))]
     (hooks/use-effect!

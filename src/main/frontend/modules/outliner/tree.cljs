@@ -7,9 +7,9 @@
   "`blocks` need to be in the same page."
   ([blocks root-id]
    (blocks->vec-tree (state/get-current-repo) blocks root-id))
-  ([repo blocks root-id]
+  ([repo blocks root-id & {:as option}]
    (let [db (db/get-db repo)]
-     (otree/blocks->vec-tree repo db blocks root-id))))
+     (otree/blocks->vec-tree repo db blocks root-id option))))
 
 (def filter-top-level-blocks otree/filter-top-level-blocks)
 

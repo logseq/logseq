@@ -11,6 +11,7 @@
               simple-asts->string space]]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
+            [logseq.db :as ldb]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [malli.core :as m]
             [promesa.core :as p]))
@@ -506,8 +507,7 @@
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
   :remove-options [:emphasis :page-ref :tag :property]
-  :other-options {:keep-only-level<=N int :newline-after-block bool}
-  :page-title-only? boolean"
+  :other-options {:keep-only-level<=N int :newline-after-block bool}"
   [repo root-block-uuids-or-page-uuid options]
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
@@ -515,10 +515,15 @@
    :export-blocks-as-markdown
    (try
      (let [content
-           (if (uuid? root-block-uuids-or-page-uuid)
+           (cond
              ;; page
+             (uuid? root-block-uuids-or-page-uuid)
              (common/get-page-content root-block-uuids-or-page-uuid)
-             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid options))
+             (and (coll? root-block-uuids-or-page-uuid) (some #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
+             (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
+                  (string/join "\n"))
+             :else
+             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
            first-block (and (coll? root-block-uuids-or-page-uuid)
                             (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
            format (get first-block :block/format :markdown)]
