@@ -531,6 +531,43 @@
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
+(deftest import-selected-nodes
+  (let [original-data
+        ;; Test a mix of pages and blocks
+        {:properties {:user.property/p1 {:logseq.property/type :default}}
+         :classes {:user.class/class1 {}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "b1"
+                                       :build/properties {:user.property/p1 "ok"}
+                                       :build/children [{:block/title "b2"}]}
+                                      {:block/title "b3"
+                                       :build/tags [:user.class/class1]
+                                       :build/children [{:block/title "b4"}]}]}
+                            {:page {:block/title "page2"}
+                             :blocks [{:block/title "dont export"}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        get-node-ids (fn [db]
+                       (->> [(db-test/find-block-by-content db "b1")
+                             (db-test/find-page-by-title db "b3")
+                             (db-test/find-page-by-title db "page2")]
+                            (remove nil?)
+                            (mapv #(vector :block/uuid (:block/uuid %)))))
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)})
+            (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        _ (validate-db @conn2)
+        imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
+
+    (is (= (set (->> (:pages-and-blocks original-data)
+                     (map #(if (= (get-in % [:page :block/title]) "page2") (dissoc % :blocks) %))))
+           (set (:pages-and-blocks imported-nodes))))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
 (defn- build-original-graph-data
   [& {:keys [exclude-namespaces?]}]
   (let [internal-block-uuid (random-uuid)
