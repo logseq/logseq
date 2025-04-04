@@ -81,8 +81,6 @@
                                                        [:div {:on-click #(shui/popup-hide! id)
                                                               :data-keep-selection true}
                                                         ((state/get-component :selection/context-menu))])
-                                                     {:on-before-hide state/dom-clear-selection!
-                                                      :on-after-hide state/state-clear-selection!
-                                                      :content-props {:class "w-[280px] ls-context-menu-content"}
+                                                     {:content-props {:class "w-[280px] ls-context-menu-content"}
                                                       :as-dropdown? true})))
          (ui/icon "dots" {:size 13}))))]))

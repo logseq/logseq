@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.handler.block :as block-handler]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.export :as export]
             [frontend.handler.export.html :as export-html]
@@ -143,7 +144,7 @@
                                  :selected false}])
 
 (defn- export-helper
-  [block-uuids-or-page-name]
+  [top-level-ids]
   (let [current-repo (state/get-current-repo)
         text-indent-style (state/get-export-block-text-indent-style)
         text-remove-options (set (state/get-export-block-text-remove-options))
@@ -151,12 +152,12 @@
         tp @*export-block-type]
     (case tp
       :text (export-text/export-blocks-as-markdown
-             current-repo block-uuids-or-page-name
+             current-repo top-level-ids
              {:indent-style text-indent-style :remove-options text-remove-options :other-options text-other-options})
       :opml (export-opml/export-blocks-as-opml
-             current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
+             current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
       :html (export-html/export-blocks-as-html
-             current-repo block-uuids-or-page-name {:remove-options text-remove-options :other-options text-other-options})
+             current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
 (defn- get-zoom-level
@@ -199,6 +200,11 @@
                                                   (set! (.-src img) img-url)
                                                   (callback blob)))) "image/png"))))))
 
+(defn- get-top-level-uuids
+  [selection-ids]
+  (->> (block-handler/get-top-level-blocks (map #(db/entity [:block/uuid %]) selection-ids))
+       (map :block/uuid)))
+
 (rum/defcs ^:large-vars/cleanup-todo
   export-blocks < rum/static
   (rum/local false ::copied?)
@@ -207,19 +213,21 @@
   (rum/local nil ::text-other-options)
   (rum/local nil ::content)
   {:will-mount (fn [state]
-                 (reset! *export-block-type (if (:whiteboard? (last (:rum/args state))) :png :text))
-                 (if (= @*export-block-type :png)
-                   (do (reset! (::content state) nil)
-                       (get-image-blob (first (:rum/args state))
-                                       (merge (second (:rum/args state)) {:transparent-bg? false})
-                                       (fn [blob] (reset! (::content state) blob))))
-                   (reset! (::content state) (export-helper (first (:rum/args state)))))
-                 (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
-                 (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
-                 (reset! (::text-other-options state) (state/get-export-block-text-other-options))
-                 state)}
-  [state root-block-uuids-or-page-uuid {:keys [whiteboard?] :as options}]
-  (let [tp @*export-block-type
+                 (let [top-level-uuids (get-top-level-uuids (first (:rum/args state)))]
+                   (reset! *export-block-type (if (:whiteboard? (last (:rum/args state))) :png :text))
+                   (if (= @*export-block-type :png)
+                     (do (reset! (::content state) nil)
+                         (get-image-blob top-level-uuids
+                                         (merge (second (:rum/args state)) {:transparent-bg? false})
+                                         (fn [blob] (reset! (::content state) blob))))
+                     (reset! (::content state) (export-helper top-level-uuids)))
+                   (reset! (::text-remove-options state) (set (state/get-export-block-text-remove-options)))
+                   (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
+                   (reset! (::text-other-options state) (state/get-export-block-text-other-options))
+                   (assoc state ::top-level-uuids top-level-uuids)))}
+  [state _selection-ids {:keys [whiteboard?] :as options}]
+  (let [top-level-uuids (::top-level-uuids state)
+        tp @*export-block-type
         *text-other-options (::text-other-options state)
         *text-remove-options (::text-remove-options state)
         *text-indent-style (::text-indent-style state)
@@ -233,21 +241,21 @@
          (ui/button "Text"
                     :class "mr-4 w-20"
                     :on-click #(do (reset! *export-block-type :text)
-                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+                                   (reset! *content (export-helper top-level-uuids))))
          (ui/button "OPML"
                     :class "mr-4 w-20"
                     :on-click #(do (reset! *export-block-type :opml)
-                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+                                   (reset! *content (export-helper top-level-uuids))))
          (ui/button "HTML"
                     :class "mr-4 w-20"
                     :on-click #(do (reset! *export-block-type :html)
-                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
-         (when-not (seq? root-block-uuids-or-page-uuid)
+                                   (reset! *content (export-helper top-level-uuids))))
+         (when-not (seq? top-level-uuids)
            (ui/button "PNG"
                       :class "w-20"
                       :on-click #(do (reset! *export-block-type :png)
                                      (reset! *content nil)
-                                     (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
+                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
 
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
@@ -262,7 +270,7 @@
          (ui/checkbox {:class "mr-2 ml-4"
                        :on-change (fn [e]
                                     (reset! *content nil)
-                                    (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
+                                    (get-image-blob top-level-uuids (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
         (let [options (->> text-indent-style-options
                            (mapv (fn [opt]
                                    (if (= @*text-indent-style (:label opt))
@@ -278,7 +286,7 @@
                                 (let [value (util/evalue e)]
                                   (state/set-export-block-text-indent-style! value)
                                   (reset! *text-indent-style value)
-                                  (reset! *content (export-helper root-block-uuids-or-page-uuid))))}
+                                  (reset! *content (export-helper top-level-uuids))))}
                   (for [{:keys [label value selected]} options]
                     [:option (cond->
                               {:key label
@@ -293,7 +301,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :page-ref)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
+                                       (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "[[text]] -> text"]
 
@@ -303,7 +311,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :emphasis)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
+                                       (reset! *content (export-helper top-level-uuids)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "remove emphasis"]
@@ -314,7 +322,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :tag)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
+                                       (reset! *content (export-helper top-level-uuids)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "remove #tags"]]
@@ -327,7 +335,7 @@
                                        (state/update-export-block-text-other-options!
                                         :newline-after-block (boolean (util/echecked? e)))
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
+                                       (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              "newline after block"]
 
@@ -337,7 +345,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :property)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
+                                       (reset! *content (export-helper top-level-uuids)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              "remove properties"]]
 
@@ -352,7 +360,7 @@
                                  level (if (= "all" value) :all (util/safe-parse-int value))]
                              (state/update-export-block-text-other-options! :keep-only-level<=N level)
                              (reset! *text-other-options (state/get-export-block-text-other-options))
-                             (reset! *content (export-helper root-block-uuids-or-page-uuid))))}
+                             (reset! *content (export-helper top-level-uuids))))}
              (for [n (cons "all" (range 1 10))]
                [:option {:key n :value n} n])]]]))
 
@@ -366,8 +374,8 @@
                                   (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                                 (reset! *copied? true)))
          (ui/button (t :export-save-to-file)
-                    :on-click #(let [file-name (if (uuid? root-block-uuids-or-page-uuid)
-                                                 (-> (db/get-page root-block-uuids-or-page-uuid)
+                    :on-click #(let [file-name (if (uuid? top-level-uuids)
+                                                 (-> (db/get-page top-level-uuids)
                                                      (util/get-page-title))
                                                  (t/now))]
                                  (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

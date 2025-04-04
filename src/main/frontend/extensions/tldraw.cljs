@@ -129,7 +129,7 @@
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
                     (shui/dialog-open!
-                     #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
+                     #(export/export-blocks [(uuid page-uuid-str)] (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage (fn [page-name]
                        (when-let [entity (db/get-page page-name)]
                          (model/whiteboard-page? entity)))
