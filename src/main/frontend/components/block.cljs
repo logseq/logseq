@@ -3717,7 +3717,7 @@
                                   :skip-refresh? true}))
            (set-block! (some-> (:db/id block*) db/entity))))
        []))
-    (when (or (:view? config) (:block.temp/fully-loaded? block))
+    (when (or (:view? config) (:block/title block))
       (loaded-block-container config block opts))))
 
 (defn divide-lists
