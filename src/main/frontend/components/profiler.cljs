@@ -64,7 +64,8 @@
      [:b "Atom/Volatile Mem Leak Detect(Only support UI thread now):"]
      [:pre "Only check atoms/volatiles with a value type of `coll`.
 The report shows refs with coll-size > 5k and atom's watches-count > 1k.
-`ref-hash` means `(hash ref)`"]
+`ref` means atom or volatile.
+`ref-hash` means `(hash ref)`."]
      [:div.flex.flex-row.items-center.gap-2
       (if (= 2 (count (set/difference #{'cljs.core/reset! 'cljs.core/vreset!} (set profiling-fns))))
         (shui/button
