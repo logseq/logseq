@@ -182,7 +182,7 @@
                                              (:block/_parent block))))
                                        (remove (fn [e] (or (:logseq.property/created-from-property e)
                                                            (:block/closed-value-property e)))))
-                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title])]
+                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title :logseq.task/status])]
                          (map
                           (fn [block]
                             (if (= children-props '[*])
