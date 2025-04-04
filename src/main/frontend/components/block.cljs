@@ -3395,7 +3395,6 @@
              (assoc state ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?] :as opts}]
   (let [*ref (::ref state)
-        _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
                   (assoc config* :original-block original-block)
