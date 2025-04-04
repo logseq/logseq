@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
@@ -26,6 +27,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.ui :as shui]
+            [missionary.core :as m]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -2302,6 +2304,18 @@ Similar to re-frame subscriptions"
     (rum/react
      (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query k*]
                             (fn [s] (contains? s k*))))))
+
+(def ^:private async-query-loading-flow
+  (->> (m/watch (:db/async-query-loading @state))
+       (c.m/throttle 100)))
+
+(defn async-query-k-flow
+  [k]
+  (let [k* (str k)]
+    (->> async-query-loading-flow
+         (m/eduction
+          (map (fn [s] (contains? s k*)))
+          (dedupe)))))
 
 (defn clear-async-query-state!
   []

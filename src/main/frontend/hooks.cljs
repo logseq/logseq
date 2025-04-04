@@ -1,7 +1,9 @@
 (ns frontend.hooks
   "React custom hooks."
   (:refer-clojure :exclude [ref deref])
-  (:require [goog.functions :as gfun]
+  (:require [frontend.common.missionary :as c.m]
+            [goog.functions :as gfun]
+            [missionary.core :as m]
             [rum.core :as rum]))
 
 (defn- memo-deps
@@ -61,3 +63,16 @@
         cb (use-callback (gfun/debounce set-value! msec) [])]
     (use-effect! #(cb value) [value])
     debounced-value))
+
+(defn use-flow-state
+  "Return values from `flow`, default init-value is nil"
+  ([flow] (use-flow-state nil flow))
+  ([init-value flow]
+   (let [[value set-value!] (use-state init-value)]
+     (use-effect!
+      #(c.m/run-task*
+        (m/reduce
+         (constantly nil)
+         (m/ap (set-value! (m/?> flow)))))
+      [])
+     value)))
