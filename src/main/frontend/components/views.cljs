@@ -595,7 +595,8 @@
      (merge
       props
       {:key (str (:db/id row))
-       :data-state (when (row-selected? row) "selected")})
+       :data-state (when (row-selected? row) "selected")
+       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
      [:div.sticky-columns.flex.flex-row
       (map #(row-cell-f % {}) pinned-columns)]
      [:div.flex.flex-row
