@@ -962,29 +962,34 @@
         :on-click (fn [] (<create-new-block! block property ""))}
        (property-empty-btn-value property)])))
 
-(rum/defcs property-block-value < rum/reactive
-  [state value block property page-cp opts]
+(rum/defc property-block-value
+  [value block property page-cp opts]
   (when value
-    (if (state/sub-async-query-loading (:block/uuid value))
-      [:div.text-sm.opacity-70 "loading"]
-      (if-let [v-block value]
-        (let [class? (ldb/class? v-block)
-              invalid-warning [:div.warning.text-sm
-                               "Invalid block value, please delete the current property."]]
-          (when v-block
-            (cond
-              (:block/page v-block)
-              (property-normal-block-value block property v-block opts)
+    (let [loading? (hooks/use-flow-state
+                    true
+                    (hooks/use-memo
+                     #(state/async-query-k-flow (:block/uuid value))
+                     [(:block/uuid value)]))]
+      (if loading?
+        [:div.text-sm.opacity-70 "loading"]
+        (if-let [v-block value]
+          (let [class? (ldb/class? v-block)
+                invalid-warning [:div.warning.text-sm
+                                 "Invalid block value, please delete the current property."]]
+            (when v-block
+              (cond
+                (:block/page v-block)
+                (property-normal-block-value block property v-block opts)
 
-              ;; page/class/etc.
-              (entity-util/page? v-block)
-              (rum/with-key
-                (page-cp {:disable-preview? true
-                          :tag? class?} v-block)
-                (:db/id v-block))
-              :else
-              invalid-warning)))
-        (property-empty-btn-value property)))))
+                ;; page/class/etc.
+                (entity-util/page? v-block)
+                (rum/with-key
+                  (page-cp {:disable-preview? true
+                            :tag? class?} v-block)
+                  (:db/id v-block))
+                :else
+                invalid-warning)))
+          (property-empty-btn-value property))))))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
