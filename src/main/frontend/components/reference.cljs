@@ -13,7 +13,7 @@
             [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db.frontend.view :as db-view]
+            [logseq.db.common.view :as db-view]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [rum.core :as rum]))

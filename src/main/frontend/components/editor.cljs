@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.file-based.datetime :as datetime-comp]

@@ -1,10 +1,11 @@
-(ns logseq.db.frontend.graph
+(ns logseq.db.common.graph
   "Main namespace for graph view fns."
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.file-based.builtins :as file-builtins]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
@@ -93,9 +94,7 @@
           (remove ldb/journal?)
           (not excluded-pages?)
           (remove (fn [p] (true?
-                           (if db-based?
-                             (:logseq.property/exclude-from-graph-view p)
-                             (get-in p [:block/properties :exclude-from-graph-view]))))))
+                           (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names file-builtins/built-in-pages-names)

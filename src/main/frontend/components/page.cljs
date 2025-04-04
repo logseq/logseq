@@ -73,12 +73,6 @@
            str)))
   (def get-block-uuid-by-block-route-name (constantly nil)))
 
-(defn- get-block
-  [page-name-or-uuid]
-  (when page-name-or-uuid
-    (when-let [block (model/get-page page-name-or-uuid)]
-      (model/sub-block (:db/id block)))))
-
 (defn- open-root-block!
   [state]
   (let [[_ block _ sidebar? preview?] (:rum/args state)]

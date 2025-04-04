@@ -10,7 +10,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

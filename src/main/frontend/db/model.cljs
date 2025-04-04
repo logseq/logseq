@@ -18,9 +18,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.common.graph :as db-graph]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.graph :as db-graph]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -60,16 +60,6 @@
     {:block/_parent ...}])
 
 (def hidden-page? ldb/hidden?)
-
-(defn get-all-pages
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (ldb/get-all-pages db)))
-
-(defn get-all-page-titles
-  [repo]
-  (->> (get-all-pages repo)
-       (map :block/title)))
 
 (defn get-alias-source-page
   "return the source page of an alias"
@@ -811,35 +801,6 @@ independent of format as format specific heading characters are stripped"
     (->> (get-all-namespace-relation repo)
          (map (fn [[_ ?parent]]
                 (db-utils/entity db ?parent))))))
-
-;; Ignore files with empty blocks for now
-(defn get-pages-relation
-  [repo with-journal?]
-  (when-let [db (conn/get-db repo)]
-    (if (config/db-based-graph?)
-      (let [q (if with-journal?
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?block :block/refs ?ref-page]]
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?p :block/tags]
-                  (not [?p :block/tags :logseq.class/Journal])
-                  [?block :block/refs ?ref-page]])]
-        (d/q q db))
-      (let [q (if with-journal?
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?block :block/refs ?ref-page]]
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  (not [?p :block/type "journal"])
-                  [?block :block/refs ?ref-page]])]
-        (d/q q db)))))
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

@@ -291,15 +291,13 @@
 
        "page"
        (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page value]))
-                    {})
+                      (append-tree! *tree opts loc [:page value])))
 
        ;; TODO: replace with node reference
        "page reference"
 
        (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page-ref value]))
-                    {})
+                      (append-tree! *tree opts loc [:page-ref value])))
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
@@ -374,13 +372,11 @@
 
        "page"
        (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page value]))
-                    {})
+                      (append-tree! *tree opts loc [:page value])))
 
        "page reference"
        (page-search (fn [{:keys [value]}]
-                      (append-tree! *tree opts loc [:page-ref value]))
-                    {})
+                      (append-tree! *tree opts loc [:page-ref value])))
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
