@@ -1,4 +1,4 @@
-(ns logseq.db.frontend.view
+(ns logseq.db.common.view
   "Main namespace for view fns."
   (:require [cljs.reader :as reader]
             [clojure.set :as set]
@@ -427,7 +427,7 @@
             values)
       values)))
 
-(defn ^:api get-view-data
+(defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids]
                :as opts}]
   ;; TODO: create a view for journals maybe?

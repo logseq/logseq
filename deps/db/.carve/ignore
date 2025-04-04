@@ -25,8 +25,8 @@ logseq.db.sqlite.export/build-export
 ;; API
 logseq.db.sqlite.export/build-import
 ;; API
-logseq.db.frontend.graph/build-graph
+logseq.db.common.graph/build-graph
 ;; API
-logseq.db.frontend.view/get-property-values
+logseq.db.common.view/get-property-values
 ;; API
-logseq.db.frontend.view/get-view-data
+logseq.db.common.view/get-view-data

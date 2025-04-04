@@ -10,7 +10,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [logseq.db.frontend.view :as db-view]
+            [logseq.db.common.view :as db-view]
             [promesa.core :as p]
             [rum.core :as rum]))
 

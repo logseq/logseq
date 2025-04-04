@@ -3,7 +3,7 @@
   (:require [cljs.cache :as cache]))
 
 #_{:clj-kondo/ignore [:clojure-lsp/unused-public-var]}
-(def *profile (volatile! {}))
+;; (def *profile (volatile! {}))
 
 (defn cache-fn
   "Return a cached version of `f`.
@@ -14,6 +14,6 @@
           through-value-fn #(apply f f-args)
           ;; hit? (cache/has? @*cache cache-k)
           ;; _ (vswap! *profile update-in [[*cache (.-limit ^js @*cache)] (if hit? :hit :miss)] inc)
-          ;; _ (prn (if hit? :hit :mis) cache-k)
+          ;; _ (prn (if hit? :hit :miss) cache-k)
           cache (vreset! *cache (cache/through through-value-fn @*cache cache-k))]
       (cache/lookup cache cache-k))))

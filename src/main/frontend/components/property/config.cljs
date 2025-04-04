@@ -754,7 +754,6 @@
 (rum/defcs dropdown-editor < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*values (atom :loading)
-                 repo (state/get-current-repo)
                  property (first (:rum/args state))
                  ident (:db/ident property)]
              (p/let [result (db-async/<get-property-values ident)]

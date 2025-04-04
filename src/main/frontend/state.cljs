@@ -622,13 +622,15 @@ should be done through this fn in order to get global config and config defaults
       (get-in @state [:me :settings :start-of-week])
       6))
 
-(defn get-ref-open-blocks-level
-  []
-  (or
-   (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (integer? value)
-       value))
-   2))
+;; TODO: support this later
+(comment
+  (defn get-ref-open-blocks-level
+    []
+    (or
+     (when-let [value (:ref/default-open-blocks-level (get-config))]
+       (when (integer? value)
+         value))
+     2)))
 
 (comment
   (defn get-linked-references-collapsed-threshold
