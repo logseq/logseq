@@ -567,6 +567,23 @@
                                             {:id :user.property/metascore-ywPFZDu9
                                              :asc? false}
                                             {:id :block/updated-at
-                                             :asc? false}])))
-    )
-  )
+                                             :asc? false}])))))
+
+;; example to use the avet index to sort view entities
+(comment
+  (def db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
+
+  (defn sort-entities
+    [db property-id value sort-property-id asc?]
+    (let [entity-datoms (d/datoms db :avet property-id value)
+          id-set (set (map :e entity-datoms))
+          sort-property-datoms (cond-> (d/datoms db :avet sort-property-id)
+                                 (not asc?)
+                                 rseq)]
+      (keep (fn [d] (when (id-set (:e d))
+                      (d/entity db (:e d))))
+            sort-property-datoms)))
+
+  (dotimes [i 10]
+    (time
+     (count (map :db/id (sort-entities db :block/tags 165 :block/updated-at false))))))
