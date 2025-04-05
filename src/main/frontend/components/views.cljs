@@ -97,6 +97,7 @@
 (defn header-cp
   [{:keys [view-entity column-set-sorting! state]} column]
   (let [sorting (:sorting state)
+        db-based? (config/db-based-graph?)
         [asc?] (some (fn [item] (when (= (:id item) (:id column))
                                   (when-some [asc? (:asc? item)]
                                     [asc?]))) sorting)
@@ -127,7 +128,7 @@
                                                         {:align "start"})}
                           [:div.flex.flex-row.items-center.gap-1
                            (ui/icon "adjustments" {:size 15}) "Configure"]))
-                       (when property
+                       (when (and db-based? property)
                          (shui/dropdown-menu-item
                           {:on-click (fn [_e]
                                        (if pinned?
@@ -1122,33 +1123,34 @@
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns!
                   set-ordered-columns! set-sized-columns!]}]
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        db-based? (config/db-based-graph?)]
     {:set-sorting!
      (fn [sorting]
        (set-sorting! sorting)
-       (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
+       (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting)))
      :set-filters!
      (fn [filters]
        (let [filters (-> (update filters :filters table-filters->persist-state)
                          (update :or? boolean))]
          (set-filters! filters)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters)))
+         (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))))
      :set-visible-columns!
      (fn [columns]
        (let [hidden-columns (vec (keep (fn [[column visible?]]
                                          (when (false? visible?)
                                            column)) columns))]
          (set-visible-columns! columns)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns)))
+         (when db-based?  (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))))
      :set-ordered-columns!
      (fn [ordered-columns]
        (let [ids (vec (remove #{:select} ordered-columns))]
          (set-ordered-columns! ordered-columns)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids)))
+         (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))
      :set-sized-columns!
      (fn [sized-columns]
        (set-sized-columns! sized-columns)
-       (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))}))
+       (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns)))}))
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view?]} item-render]
@@ -1526,19 +1528,12 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input!] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters!] :as option*}
    *scroller-ref]
   (let [option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
-        sorting* (:logseq.property.table/sorting view-entity)
-        sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                  [{:id :block/updated-at, :asc? false}]
-                  sorting*)
-        [sorting set-sorting!] (rum/use-state sorting)
-        filters (:logseq.property.table/filters view-entity)
-        [filters set-filters!] (rum/use-state (or filters {}))
         default-visible-columns (if-let [hidden-columns (conj (:logseq.property.table/hidden-columns view-entity) :id)]
                                   (zipmap hidden-columns (repeat false))
                                   ;; This case can happen for imported tables
@@ -1697,6 +1692,13 @@
   (let [[view-entity set-view-entity!] (when (:db/id view-entity)
                                          (db/sub-entity view-entity (str "view-" (:db/id view-entity))))
         [input set-input!] (hooks/use-state "")
+        sorting* (:logseq.property.table/sorting view-entity)
+        sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
+                  [{:id :block/updated-at, :asc? false}]
+                  sorting*)
+        [sorting set-sorting!] (rum/use-state sorting)
+        filters (:logseq.property.table/filters view-entity)
+        [filters set-filters!] (rum/use-state (or filters {}))
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
@@ -1704,9 +1706,7 @@
         load-view-data (fn load-view-data []
                          (c.m/run-task*
                           (m/sp
-                            (let [sorting (:logseq.property.table/sorting view-entity)
-                                  filters (:logseq.property.table/filters view-entity)
-                                  need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
+                            (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
                               (if (and query? (not (or sorting filters)) (string/blank? input))
                                 (set-data! query-entity-ids)
                                 (when (or (not query?) need-query?)
@@ -1718,7 +1718,9 @@
                                                              {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
                                                                                (:db/id view-parent))
                                                               :view-feature-type view-feature-type
-                                                              :input input}
+                                                              :input input
+                                                              :filters filters
+                                                              :sorting sorting}
                                                               query?
                                                               (assoc :query-entity-ids query-entity-ids))))]
                                       (set-data! data)
@@ -1726,15 +1728,17 @@
                                         (set-ref-pages-count! ref-pages-count)))
                                     (finally
                                       (set-loading! false)))))))))]
-    (hooks/use-effect!
-     load-view-data
-     [(hooks/use-debounced-value input 300)
-      ;; page filters
-      (:logseq.property.linked-references/includes view-parent)
-      (:logseq.property.linked-references/excludes view-parent)
-      (:filters view-parent)
-      (select-keys view-entity [:logseq.property.table/sorting :logseq.property.table/filters])
-      query-entity-ids])
+    (let [sorting-filters {:sorting sorting
+                           :filters filters}]
+      (hooks/use-effect!
+       load-view-data
+       [(hooks/use-debounced-value input 300)
+        sorting-filters
+        ;; page filters
+        (:logseq.property.linked-references/includes view-parent)
+        (:logseq.property.linked-references/excludes view-parent)
+        (:filters view-parent)
+        query-entity-ids]))
 
     (let [linked-refs? (= :linked-references view-feature-type)]
       (when-not (and linked-refs? (empty? data)
@@ -1747,6 +1751,10 @@
            (view-container view-entity (assoc option
                                               :data data
                                               :full-data data
+                                              :filters filters
+                                              :sorting sorting
+                                              :set-filters! set-filters!
+                                              :set-sorting! set-sorting!
                                               :set-data! set-data!
                                               :set-input! set-input!
                                               :input input
