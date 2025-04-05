@@ -15,20 +15,27 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.rules :as rules]))
 
+(def valid-type-for-sort? (some-fn number? string? boolean?))
+
 (defn get-property-value-for-search
   [block property]
-  (let [typ (:logseq.property/type property)
-        many? (= :db.cardinality/many (get property :db/cardinality))
-        number-type? (or (= :number typ) (= :datetime typ))
-        v (get block (:db/ident property))
-        v' (if many? v [v])
-        col (->> (if (db-property-type/all-ref-property-types typ) (map db-property/property-value-content v') v')
-                 (remove nil?))]
-    (cond
-      number-type?
-      (reduce + (filter number? col))
-      :else
-      (string/join ", " col))))
+  (let [v (get block (:db/ident property))]
+    (if (valid-type-for-sort? v)        ;fast path
+      v
+      (let [typ (:logseq.property/type property)
+            many? (keyword-identical? :db.cardinality/many (get property :db/cardinality))
+            number-type? (or (keyword-identical? :number typ)
+                             (keyword-identical? :datetime typ))]
+        (if many?
+          (let [col (->> (if (db-property-type/all-ref-property-types typ) (map db-property/property-value-content v) v)
+                         (remove nil?))]
+            (if number-type?
+              (reduce + (filter number? col))
+              (string/join ", " col)))
+          (let [v' (if (db-property-type/all-ref-property-types typ) (db-property/property-value-content v) v)]
+            (cond
+              (and number-type? (number? v')) v'
+              :else v')))))))
 
 (defn- get-value-for-sort
   [property]
@@ -39,34 +46,41 @@
                                                  (if (every? :block/order closed-values)
                                                    (map :block/order closed-values)
                                                    (range 0 (count closed-values))))
-                                         (into {})))]
+                                         (into {})))
+        get-property-value-fn (fn [row] (if (de/entity? property)
+                                          (get-property-value-for-search row property)
+                                          (get row db-ident)))]
     (fn [row]
       (cond
         closed-values
         (closed-value->sort-number (:db/id (get row db-ident)))
         :else
-        (let [v (if (de/entity? property)
-                  (get-property-value-for-search row property)
-                  (get row db-ident))
-              ;; need to check value type, otherwise `compare` can be failed,
-              ;; then crash the UI.
-              valid-type? (some-fn number? string? boolean?)]
-          (when (valid-type? v)
+        (let [v (get-property-value-fn row)]
+          (when (valid-type-for-sort? v)
             v))))))
 
-(defn- by [sorting]
-  (fn [a b]
-    (loop [[{:keys [asc? get-value]} & orderings] sorting]
-      (let [;; non-entity property such as Backlinks
-            v1 (get-value a)
-            v2 (get-value b)
-            ordering (if (and (number? v1) (number? v2))
-                       (if asc? < >)
-                       (if asc? compare #(compare %2 %1)))
-            order (ordering v1 v2)]
-        (if (and (zero? order) orderings)
-          (recur orderings)
-          order)))))
+(defn- by-sortings
+  [sortings]
+  (let [get-value+cmp
+        (map
+         (fn [{:keys [get-value asc?]}]
+           [get-value
+            (if asc? compare #(compare %2 %1))])
+         sortings)]
+    (fn [a b]
+      (reduce
+       (fn [order [get-value cmp]]
+         (if (zero? order)
+           (cmp (get-value a) (get-value b))
+           (reduced order)))
+       0 get-value+cmp))))
+
+(comment
+  (defn- by-one-sorting
+    [{:keys [asc? get-value]}]
+    (let [cmp (if asc? compare #(compare %2 %1))]
+      (fn [a b]
+        (cmp (get-value a) (get-value b))))))
 
 (defn- sort-by-single-property
   [db {:keys [id asc?]} rows]
@@ -93,9 +107,9 @@
   (let [sorting' (map (fn [{:keys [id asc?]}]
                         (let [property (or (d/entity db id) {:id id})]
                           {:asc? asc?
-                           :get-value (fn [row]
-                                        ((get-value-for-sort property) row))})) sorting)]
-    (sort (by sorting') rows)))
+                           :get-value (memoize (get-value-for-sort property))}))
+                      sorting)]
+    (sort (by-sortings sorting') rows)))
 
 (defn sort-rows
   "Support multiple properties sort"
@@ -504,3 +518,55 @@
                  (= feat-type :linked-references)
                  (assoc :ref-pages-count (:ref-pages-count entities-result)))]
       data)))
+
+(comment
+  (defn- get-partitioned-entities-by-major-sorting
+    "get all entities sorted by `major-sorting`"
+    [db datom-a datom-v major-sorting partition?]
+    (let [{sort-datom-a :id asc? :asc?} major-sorting
+          property (d/entity db sort-datom-a)
+          get-value-fn (memoize (get-value-for-sort property))
+          sorting {:asc? asc?
+                   :get-value get-value-fn}
+          sort-cmp (by-one-sorting sorting)
+          x1 (time (mapv #(d/entity db (:e %)) (d/datoms db :avet datom-a datom-v)))
+          sorted-entities (time (sort sort-cmp x1))]
+      (if partition?
+        (partition-by get-value-fn sorted-entities)
+        sorted-entities)))
+
+  (defn- lazy-get-major-sorted-entities-by-minor-sortings
+    "minor-sortings - [{:keys [id asc?]} ...]"
+    [db partitioned-entities-by-major-sorting minor-sortings]
+    (let [sortings
+          (map (fn [{:keys [id asc?]}]
+                 (let [property (d/entity db id)]
+                   {:asc? asc?
+                    :get-value (memoize (get-value-for-sort property))}))
+               minor-sortings)
+          sort-cmp (by-sortings sortings)]
+      (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
+
+  (defn lazy-get-sorted-entities
+    [db datom-a datom-v sortings]
+    (let [major-sorting (or (first sortings)
+                            {:id :block/updated-at :asc? false})
+          minor-sortings (seq (rest sortings))
+          partitioned-entities-by-major-sorted
+          (get-partitioned-entities-by-major-sorting db datom-a datom-v major-sorting (not-empty minor-sortings))]
+      (if minor-sortings
+        (lazy-get-major-sorted-entities-by-minor-sortings db partitioned-entities-by-major-sorted minor-sortings)
+        partitioned-entities-by-major-sorted))))
+
+(comment
+  (let [db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo))]
+    (time  (take 10
+                 (lazy-get-sorted-entities db :block/tags 165
+                                           [{:id :user.property/imdbrating-KDvXHeDT
+                                             :asc? false}
+                                            {:id :user.property/metascore-ywPFZDu9
+                                             :asc? false}
+                                            {:id :block/updated-at
+                                             :asc? false}])))
+    )
+  )
