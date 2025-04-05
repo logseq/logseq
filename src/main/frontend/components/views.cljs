@@ -1528,7 +1528,7 @@
       (when add-new-object! (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters!] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! view-feature-type] :as option*}
    *scroller-ref]
   (let [option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
@@ -1592,10 +1592,14 @@
                               :add-new-object! add-new-object!}}
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
-        display-type (or (:db/ident (get view-entity :logseq.property.view/type))
-                         (when (= (:view-type option) :linked-references)
-                           :logseq.property.view/type.list)
-                         :logseq.property.view/type.table)
+        display-type (if (config/db-based-graph?)
+                       (or (:db/ident (get view-entity :logseq.property.view/type))
+                           (when (= (:view-type option) :linked-references)
+                             :logseq.property.view/type.list)
+                           :logseq.property.view/type.table)
+                       (if (= view-feature-type :all-pages)
+                         :logseq.property.view/type.table
+                         :logseq.property.view/type.list))
         gallery? (= display-type :logseq.property.view/type.gallery)
         list-view? (= display-type :logseq.property.view/type.list)]
     (run-effects! option table-map *scroller-ref gallery?)
