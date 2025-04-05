@@ -104,9 +104,9 @@
                                  0
                                  [:block/updated-at false]
                                  1
-                                 (let [{:keys [id asc?]} (first sorting)]
-                                   (when-let [property (d/entity db id)]
-                                     [(:db/ident property) asc?]))
+                                 (let [{:keys [id asc?]} (first sorting)
+                                       property (d/entity db id)]
+                                   [(get property :db/ident id) asc?])
                                  nil)]
     (if single-property
       (sort-by-single-property db {:id single-property :asc? asc?} rows)
@@ -312,7 +312,7 @@
          ids)))))
 
 (defn- get-entities
-  [db view feat-type property-ident view-for-id*]
+  [db view feat-type property-ident view-for-id* sorting]
   (let [view-for (:logseq.property/view-for view)
         view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
@@ -320,8 +320,7 @@
                                   e)))]
     (case feat-type
       :all-pages
-      (let [sorting (:logseq.property.table/sorting view)
-            refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))]
+      (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))]
         (keep (fn [d]
                 (let [e (d/entity db (:e d))]
                   (when-not (or (ldb/hidden-or-internal-tag? e)
@@ -364,9 +363,10 @@
       nil)))
 
 (defn- get-view-entities
-  [db view-id & {:keys [view-for-id view-feature-type]}]
+  [db view-id & {:keys [view-for-id view-feature-type sorting]}]
   (let [view (d/entity db view-id)
         feat-type (or view-feature-type (:logseq.property.view/feature-type view))
+        sorting (or sorting (:logseq.property.table/sorting view))
         index-attr (case feat-type
                      :all-pages
                      :block/name
@@ -376,7 +376,7 @@
                      (let [view-for (:logseq.property/view-for view)]
                        (:db/ident view-for))
                      nil)]
-    (get-entities db view feat-type index-attr view-for-id)))
+    (get-entities db view feat-type index-attr view-for-id sorting)))
 
 (defn ^:api get-property-values
   [db property-ident {:keys [view-id query-entity-ids]}]
@@ -428,7 +428,7 @@
       values)))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? view-for-id view-feature-type input query-entity-ids]
+  [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids filters sorting]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -443,7 +443,7 @@
           group-by-property-ident (:db/ident group-by-property)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
-          filters (:logseq.property.table/filters view)
+          filters (or (:logseq.property.table/filters view) filters)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           query? (= feat-type :query-result)
@@ -455,7 +455,7 @@
                      entities-result)
           sorting (let [sorting* (:logseq.property.table/sorting view)]
                     (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
-                      [{:id :block/updated-at, :asc? false}]
+                      (or sorting [{:id :block/updated-at, :asc? false}])
                       sorting*))
           filtered-entities (if (or (seq filters) (not (string/blank? input)))
                               (filter (fn [row] (row-matched? db row filters input)) entities)
