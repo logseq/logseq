@@ -745,20 +745,10 @@
                                   ["An unexpected error occurred during export. See the javascript console for details."
                                    :error])))))
 
-(def ^:private *get-view-data-cache (volatile! (cache/lru-cache-factory {})))
-(def ^:private get-view-data-with-cache
-  (common.cache/cache-fn
-   *get-view-data-cache
-   (fn [repo view-id option]
-     (let [db @(worker-state/get-datascript-conn repo)]
-       [[repo (:max-tx db) view-id option] ;cache-key
-        [db view-id option]             ;f-args
-        ]))
-   db-view/get-view-data))
-
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
-  (get-view-data-with-cache repo view-id option))
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (db-view/get-view-data db view-id option)))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]
