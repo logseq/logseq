@@ -3389,11 +3389,11 @@
           [:div.my-1 {:style {:margin-left 42}}
            (block-container (assoc config :property? true) query)])))))
 
-(rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
+(rum/defcs ^:large-vars/cleanup-todo block-container-inner-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)]
              (assoc state ::ref *ref)))}
-  [state container-state repo config* block {:keys [navigating-block navigated?] :as opts}]
+  [state container-state repo config* block {:keys [navigating-block navigated? editing?] :as opts}]
   (let [*ref (::ref state)
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
@@ -3406,8 +3406,6 @@
                                (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
-        editing? (or (state/sub-editing? [container-id (:block/uuid block)])
-                     (state/sub-editing? [:unknown-container (:block/uuid block)]))
         table? (:table? config*)
         sidebar? (:sidebar? config*)
         property? (:property? config*)
@@ -3614,6 +3612,15 @@
          (block-children config' block children collapsed?)))
 
      (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
+
+(rum/defc ^:large-vars/cleanup-todo block-container-inner
+  [container-state repo config* block opts]
+  (let [container-id (:container-id config*)
+        block-id (:block/uuid block)
+        v1 (state/sub-editing? [container-id block-id])
+        v2 (state/sub-editing? [:unknown-container block-id])
+        editing? (or v1 v2)]
+    (block-container-inner-aux container-state repo config* block (assoc opts :editing? editing?))))
 
 (defn- block-changed?
   [old-block new-block]
