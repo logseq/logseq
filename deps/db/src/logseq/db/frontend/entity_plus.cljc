@@ -177,8 +177,8 @@
            (lookup-entity e :block/_parent default-value)
 
            :property/closed-values
-           (->> (lookup-entity e :block/_closed-value-property default-value)
-                (sort-by :block/order))
+           (some->> (lookup-entity e :block/_closed-value-property default-value)
+                    (sort-by :block/order))
 
            (lookup-kv-with-default-value db e k default-value))))
      (catch :default e
