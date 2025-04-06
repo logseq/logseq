@@ -691,7 +691,7 @@ Similar to re-frame subscriptions"
 
 (defn- sub-flow
   [flow sub-f]
-  (m/eduction (map sub-f) dedupe flow))
+  (m/eduction (map sub-f) (dedupe) flow))
 
 (def ^:private editing-flow
   (m/watch (:editor/editing? @state)))
