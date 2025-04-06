@@ -340,6 +340,16 @@
                e)))
          ids)))))
 
+(defn- get-exclude-page-ids
+  [db]
+  (->>
+   (concat
+    (d/datoms db :avet :logseq.property/hide? true)
+    (d/datoms db :avet :logseq.property/built-in? true)
+    (d/datoms db :avet :block/tags (:db/id (d/entity db :logseq.class/Property))))
+   (map :e)
+   set))
+
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting]
   (let [view-for (:logseq.property/view-for view)
@@ -349,12 +359,11 @@
                                   e)))]
     (case feat-type
       :all-pages
-      (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))]
+      (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
+            exclude-ids (get-exclude-page-ids db)]
         (keep (fn [d]
                 (let [e (d/entity db (:e d))]
-                  (when-not (or (ldb/hidden-or-internal-tag? e)
-                                (entity-util/property? e)
-                                (entity-util/built-in? e))
+                  (when-not (exclude-ids (:db/id e))
                     (cond-> e
                       refs-count?
                       (assoc :block.temp/refs-count (count (:block/_refs e)))))))
