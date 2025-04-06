@@ -1128,30 +1128,35 @@
         db-based? (config/db-based-graph?)]
     {:set-sorting!
      (fn [sorting]
-       (set-sorting! sorting)
-       (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting)))
+       (p/do!
+        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting))
+        (set-sorting! sorting)))
      :set-filters!
      (fn [filters]
        (let [filters (-> (update filters :filters table-filters->persist-state)
                          (update :or? boolean))]
-         (set-filters! filters)
-         (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))))
+         (p/do!
+          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))
+          (set-filters! filters))))
      :set-visible-columns!
      (fn [columns]
        (let [hidden-columns (vec (keep (fn [[column visible?]]
                                          (when (false? visible?)
                                            column)) columns))]
-         (set-visible-columns! columns)
-         (when db-based?  (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))))
+         (p/do!
+          (when db-based?  (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))
+          (set-visible-columns! columns))))
      :set-ordered-columns!
      (fn [ordered-columns]
        (let [ids (vec (remove #{:select} ordered-columns))]
-         (set-ordered-columns! ordered-columns)
-         (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))
+         (p/do!
+          (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))
+          (set-ordered-columns! ordered-columns))))
      :set-sized-columns!
      (fn [sized-columns]
-       (set-sized-columns! sized-columns)
-       (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns)))}))
+       (p/do!
+        (when db-based? (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sized-columns sized-columns))
+        (set-sized-columns! sized-columns)))}))
 
 (rum/defc lazy-item
   [data idx {:keys [properties list-view?]} item-render]

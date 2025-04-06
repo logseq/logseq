@@ -47,15 +47,16 @@
                                                    (map :block/order closed-values)
                                                    (range 0 (count closed-values))))
                                          (into {})))
-        get-property-value-fn (fn [row] (if (de/entity? property)
-                                          (get-property-value-for-search row property)
-                                          (get row db-ident)))]
-    (fn [row]
+        get-property-value-fn (fn [entity]
+                                (if (de/entity? property)
+                                  (get-property-value-for-search entity property)
+                                  (get entity db-ident)))]
+    (fn [entity]
       (cond
         closed-values
-        (closed-value->sort-number (:db/id (get row db-ident)))
+        (closed-value->sort-number (:db/id (get entity db-ident)))
         :else
-        (let [v (get-property-value-fn row)]
+        (let [v (get-property-value-fn entity)]
           (when (valid-type-for-sort? v)
             v))))))
 
@@ -75,56 +76,70 @@
            (reduced order)))
        0 get-value+cmp))))
 
-(comment
-  (defn- by-one-sorting
-    [{:keys [asc? get-value]}]
-    (let [cmp (if asc? compare #(compare %2 %1))]
-      (fn [a b]
-        (cmp (get-value a) (get-value b))))))
+(defn- by-one-sorting
+  [{:keys [asc? get-value]}]
+  (let [cmp (if asc? compare #(compare %2 %1))]
+    (fn [a b]
+      (cmp (get-value a) (get-value b)))))
+
+(defn- sort-ref-entities-by-single-property
+  "get all entities sorted by `major-sorting`"
+  [entities {:keys [_id asc?]} get-value-fn]
+  (let [sorting {:asc? asc?
+                 :get-value get-value-fn}
+        sort-cmp (by-one-sorting sorting)]
+    (sort sort-cmp entities)))
 
 (defn- sort-by-single-property
-  [db {:keys [id asc?]} rows]
-  (if (= id :block.temp/refs-count)
-    (cond-> (sort-by :block.temp/refs-count rows)
-      (not asc?)
-      reverse)
-    (let [datoms (cond->
-                  (->> (d/datoms db :avet id)
-                       (common-util/distinct-by :e)
-                       vec)
-                   (not asc?)
-                   rseq)
-          row-ids (set (map :db/id rows))
-          id->row (zipmap (map :db/id rows) rows)]
-      (keep
-       (fn [d]
-         (when (row-ids (:e d))
-           (id->row (:e d))))
-       datoms))))
+  [db {:keys [id asc?] :as sorting} entities partition?]
+  (let [property (or (d/entity db id) {:db/ident id})
+        get-value-fn (memoize (get-value-for-sort property))
+        sorted-entities (if (= id :block.temp/refs-count)
+                          (cond-> (sort-by :block.temp/refs-count entities)
+                            (not asc?)
+                            rseq)
+                          (let [ref-type? (= :db.type/ref (:db/valueType property))]
+                            (if ref-type?
+                              (sort-ref-entities-by-single-property entities sorting get-value-fn)
+                              (let [datoms (cond->
+                                            (->> (d/datoms db :avet id)
+                                                 (common-util/distinct-by :e)
+                                                 vec)
+                                             (not asc?)
+                                             rseq)
+                                    row-ids (set (map :db/id entities))
+                                    id->row (zipmap (map :db/id entities) entities)]
+                                (keep
+                                 (fn [d]
+                                   (when (row-ids (:e d))
+                                     (id->row (:e d))))
+                                 datoms)))))]
+    (if partition?
+      (partition-by get-value-fn sorted-entities)
+      sorted-entities)))
 
-(defn- sort-by-multiple-properties
-  [db sorting rows]
-  (let [sorting' (map (fn [{:keys [id asc?]}]
-                        (let [property (or (d/entity db id) {:id id})]
-                          {:asc? asc?
-                           :get-value (memoize (get-value-for-sort property))}))
-                      sorting)]
-    (sort (by-sortings sorting') rows)))
+(defn- sort-entities-by-minor-sortings
+  "minor-sortings - [{:keys [id asc?]} ...]"
+  [db partitioned-entities-by-major-sorting minor-sortings]
+  (let [sortings
+        (map (fn [{:keys [id asc?]}]
+               (let [property (d/entity db id)]
+                 {:asc? asc?
+                  :get-value (memoize (get-value-for-sort property))}))
+             minor-sortings)
+        sort-cmp (by-sortings sortings)]
+    (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
-(defn sort-rows
-  "Support multiple properties sort"
-  [db sorting rows]
-  (let [[single-property asc?] (case (count sorting)
-                                 0
-                                 [:block/updated-at false]
-                                 1
-                                 (let [{:keys [id asc?]} (first sorting)
-                                       property (d/entity db id)]
-                                   [(get property :db/ident id) asc?])
-                                 nil)]
-    (if single-property
-      (sort-by-single-property db {:id single-property :asc? asc?} rows)
-      (sort-by-multiple-properties db sorting rows))))
+(defn sort-entities
+  [db sortings entities]
+  (let [major-sorting (or (first sortings)
+                          {:id :block/updated-at :asc? false})
+        minor-sortings (seq (rest sortings))
+        major-sorted-entities
+        (sort-by-single-property db major-sorting entities (not-empty minor-sortings))]
+    (if minor-sortings
+      (sort-entities-by-minor-sortings db major-sorted-entities minor-sortings)
+      major-sorted-entities)))
 
 (defn get-property-value-content
   [db value]
@@ -490,7 +505,7 @@
                                      :else
                                      by-value))
                                  (if group-by-page? #(compare %2 %1) compare)))
-                   (sort-rows db sorting filtered-entities))
+                   (sort-entities db sorting filtered-entities))
           data (cond->
                 {:count (count filtered-entities)
                  :data (if group-by-property
@@ -568,22 +583,3 @@
                                              :asc? false}
                                             {:id :block/updated-at
                                              :asc? false}])))))
-
-;; example to use the avet index to sort view entities
-(comment
-  (def db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
-
-  (defn sort-entities
-    [db property-id value sort-property-id asc?]
-    (let [entity-datoms (d/datoms db :avet property-id value)
-          id-set (set (map :e entity-datoms))
-          sort-property-datoms (cond-> (d/datoms db :avet sort-property-id)
-                                 (not asc?)
-                                 rseq)]
-      (keep (fn [d] (when (id-set (:e d))
-                      (d/entity db (:e d))))
-            sort-property-datoms)))
-
-  (dotimes [i 10]
-    (time
-     (count (map :db/id (sort-entities db :block/tags 165 :block/updated-at false))))))
