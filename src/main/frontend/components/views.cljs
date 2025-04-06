@@ -906,16 +906,17 @@
         [dropdown-open? set-dropdown-open!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
-       (let [values (if (coll? value) value [value])
-             ids (filter #(and (uuid? %) (nil? (db/entity [:block/uuid %]))) values)]
-         (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids)))
-       (when (and property-ident dropdown-open?
-                  (not (contains? #{:data :datetime :checkbox} type)))
-         (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
-                                                                     :query-entity-ids (:query-entity-ids opts)})]
-           (set-values! (map (fn [v] (if (map? (:value v))
-                                       (assoc v :value (:block/uuid (:value v)))
-                                       v)) data)))))
+       (p/do!
+        (let [values (if (coll? value) value [value])
+              ids (filter #(and (uuid? %) (nil? (db/entity [:block/uuid %]))) values)]
+          (when (seq ids) (db-async/<get-blocks (state/get-current-repo) ids)))
+        (when (and property-ident dropdown-open?
+                   (not (contains? #{:data :datetime :checkbox} type)))
+          (p/let [data (db-async/<get-property-values property-ident {:view-id (:db/id view-entity)
+                                                                      :query-entity-ids (:query-entity-ids opts)})]
+            (set-values! (map (fn [v] (if (map? (:value v))
+                                        (assoc v :value (:block/uuid (:value v)))
+                                        v)) data))))))
      [property-ident dropdown-open?])
     (let [items (cond
                   (contains? #{:before :after} operator)
@@ -1738,6 +1739,7 @@
        load-view-data
        [(hooks/use-debounced-value input 300)
         sorting-filters
+        (:logseq.property.view/group-by-property view-entity)
         ;; page filters
         (:logseq.property.linked-references/includes view-parent)
         (:logseq.property.linked-references/excludes view-parent)
