@@ -689,18 +689,18 @@ Similar to re-frame subscriptions"
   [container-block]
   (reset! (:editor/editing? @state) {container-block true}))
 
-(defn- sub-flow
-  [flow sub-f]
-  (m/eduction (map sub-f) (dedupe) flow))
-
 (def ^:private editing-flow
   (m/watch (:editor/editing? @state)))
 
 (defn sub-editing?
   [container-block]
-  (hooks/use-flow-state
-   (sub-flow editing-flow (fn [s] (get s container-block)))
-   {}))
+  (let [checkf (fn [s] (boolean (get s container-block)))
+        init-value (checkf @(:editor/editing? @state))]
+    (hooks/use-flow-state
+     init-value
+     (m/eduction
+      (map checkf) (drop-while #(= % init-value)) (dedupe)
+      editing-flow))))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -2316,7 +2316,9 @@ Similar to re-frame subscriptions"
 (defn async-query-k-flow
   [k]
   (let [k* (str k)]
-    (sub-flow async-query-loading-flow (fn [s] (contains? s k*)))))
+    (m/eduction
+     (map #(contains? % k*)) (dedupe)
+     async-query-loading-flow)))
 
 (defn clear-async-query-state!
   []
