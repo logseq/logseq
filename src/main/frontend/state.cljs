@@ -694,13 +694,18 @@ Similar to re-frame subscriptions"
 
 (defn sub-editing?
   [container-block]
-  (let [checkf (fn [s] (boolean (get s container-block)))
-        init-value (checkf @(:editor/editing? @state))]
-    (hooks/use-flow-state
-     init-value
-     (m/eduction
-      (map checkf) (drop-while #(= % init-value)) (dedupe)
-      editing-flow))))
+  (let [checkf (hooks/use-callback
+                (fn [s] (boolean (get s container-block)))
+                [container-block])
+        init-value (checkf @(:editor/editing? @state))
+        flow (hooks/use-memo
+              #(m/eduction
+                (map checkf)
+                (dedupe)
+                (drop-while (fn [x] (identical? x init-value)))
+                editing-flow)
+              [init-value])]
+    (hooks/use-flow-state init-value flow)))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
