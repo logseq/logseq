@@ -1121,14 +1121,11 @@
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
-(rum/defcs property-scalar-value < rum/static rum/reactive
-  [state block property value* {:keys [container-id editing? on-chosen]
+(rum/defcs property-scalar-value-aux < rum/static rum/reactive
+  [state block property value* {:keys [editing? on-chosen]
                                 :as opts}]
   (let [property (model/sub-block (:db/id property))
         type (:logseq.property/type property)
-        editing? (or editing?
-                     (and (state/sub-editing? [container-id (:block/uuid block)])
-                          (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
         select-type?' (or (select-type? block property)
@@ -1186,6 +1183,15 @@
           ;; :others
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))
+
+(rum/defc property-scalar-value
+  [block property value* {:keys [container-id editing?]
+                          :as opts}]
+  (let [block-editing? (state/sub-editing? [container-id (:block/uuid block)])
+        editing (or editing?
+                    (and block-editing?
+                         (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))]
+    (property-scalar-value-aux block property value* (assoc opts :editing? editing))))
 
 (rum/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts}]

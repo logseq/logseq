@@ -13,6 +13,7 @@
             [frontend.db.conn-state :as db-conn-state]
             [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
+            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
@@ -688,15 +689,18 @@ Similar to re-frame subscriptions"
   [container-block]
   (reset! (:editor/editing? @state) {container-block true}))
 
+(defn- sub-flow
+  [flow sub-f]
+  (m/eduction (map sub-f) dedupe flow))
+
+(def ^:private editing-flow
+  (m/watch (:editor/editing? @state)))
+
 (defn sub-editing?
   [container-block]
-  (when container-block
-    (rum/react
-     (r/cached-derived-atom
-      (:editor/editing? @state)
-      [(get-current-repo) ::editing-block container-block]
-      (fn [s]
-        (get s container-block))))))
+  (hooks/use-flow-state
+   (sub-flow editing-flow (fn [s] (get s container-block)))
+   {}))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -2312,10 +2316,7 @@ Similar to re-frame subscriptions"
 (defn async-query-k-flow
   [k]
   (let [k* (str k)]
-    (->> async-query-loading-flow
-         (m/eduction
-          (map (fn [s] (contains? s k*)))
-          (dedupe)))))
+    (sub-flow async-query-loading-flow (fn [s] (contains? s k*)))))
 
 (defn clear-async-query-state!
   []
