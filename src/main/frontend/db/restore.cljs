@@ -12,8 +12,9 @@
   [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          {:keys [schema initial-data] :as data} (persist-db/<fetch-init-data repo opts)
-          _ (assert (some? data) "No data found when reloading db")
+          {:keys [schema initial-data]} (persist-db/<fetch-init-data repo opts)
+          ;; Without valid schema app fails hard downstream
+          _ (assert (some? schema) "No valid schema found when reloading db")
           conn (try
                  (sqlite-common-db/restore-initial-data initial-data schema)
                  (catch :default e
