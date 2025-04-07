@@ -15,13 +15,11 @@
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
-            [goog.object :as gobj]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
-            [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn set-router!
   []

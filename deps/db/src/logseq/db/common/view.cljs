@@ -60,14 +60,14 @@
           (when (valid-type-for-sort? v)
             v))))))
 
-(defn- by-sortings
-  [sortings]
+(defn- by-sorting
+  [sorting]
   (let [get-value+cmp
         (map
          (fn [{:keys [get-value asc?]}]
            [get-value
             (if asc? compare #(compare %2 %1))])
-         sortings)]
+         sorting)]
     (fn [a b]
       (reduce
        (fn [order [get-value cmp]]
@@ -97,7 +97,7 @@
         sorted-entities (if (= id :block.temp/refs-count)
                           (cond-> (sort-by :block.temp/refs-count entities)
                             (not asc?)
-                            rseq)
+                            reverse)
                           (let [ref-type? (= :db.type/ref (:db/valueType property))]
                             (if ref-type?
                               (sort-ref-entities-by-single-property entities sorting get-value-fn)
@@ -118,27 +118,27 @@
       (partition-by get-value-fn sorted-entities)
       sorted-entities)))
 
-(defn- sort-entities-by-minor-sortings
-  "minor-sortings - [{:keys [id asc?]} ...]"
-  [db partitioned-entities-by-major-sorting minor-sortings]
-  (let [sortings
+(defn- sort-entities-by-minor-sorting
+  "minor-sorting - [{:keys [id asc?]} ...]"
+  [db partitioned-entities-by-major-sorting minor-sorting]
+  (let [sorting
         (map (fn [{:keys [id asc?]}]
                (let [property (d/entity db id)]
                  {:asc? asc?
                   :get-value (memoize (get-value-for-sort property))}))
-             minor-sortings)
-        sort-cmp (by-sortings sortings)]
+             minor-sorting)
+        sort-cmp (by-sorting sorting)]
     (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
 (defn sort-entities
-  [db sortings entities]
-  (let [major-sorting (or (first sortings)
+  [db sorting entities]
+  (let [major-sorting (or (first sorting)
                           {:id :block/updated-at :asc? false})
-        minor-sortings (seq (rest sortings))
+        minor-sorting (seq (rest sorting))
         major-sorted-entities
-        (sort-by-single-property db major-sorting entities (not-empty minor-sortings))]
-    (if minor-sortings
-      (sort-entities-by-minor-sortings db major-sorted-entities minor-sortings)
+        (sort-by-single-property db major-sorting entities (not-empty minor-sorting))]
+    (if minor-sorting
+      (sort-entities-by-minor-sorting db major-sorted-entities minor-sorting)
       major-sorted-entities)))
 
 (defn get-property-value-content
@@ -547,53 +547,3 @@
                  (= feat-type :linked-references)
                  (assoc :ref-pages-count (:ref-pages-count entities-result)))]
       data)))
-
-(comment
-  (defn- get-partitioned-entities-by-major-sorting
-    "get all entities sorted by `major-sorting`"
-    [db datom-a datom-v major-sorting partition?]
-    (let [{sort-datom-a :id asc? :asc?} major-sorting
-          property (d/entity db sort-datom-a)
-          get-value-fn (memoize (get-value-for-sort property))
-          sorting {:asc? asc?
-                   :get-value get-value-fn}
-          sort-cmp (by-one-sorting sorting)
-          x1 (time (mapv #(d/entity db (:e %)) (d/datoms db :avet datom-a datom-v)))
-          sorted-entities (time (sort sort-cmp x1))]
-      (if partition?
-        (partition-by get-value-fn sorted-entities)
-        sorted-entities)))
-
-  (defn- lazy-get-major-sorted-entities-by-minor-sortings
-    "minor-sortings - [{:keys [id asc?]} ...]"
-    [db partitioned-entities-by-major-sorting minor-sortings]
-    (let [sortings
-          (map (fn [{:keys [id asc?]}]
-                 (let [property (d/entity db id)]
-                   {:asc? asc?
-                    :get-value (memoize (get-value-for-sort property))}))
-               minor-sortings)
-          sort-cmp (by-sortings sortings)]
-      (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
-
-  (defn lazy-get-sorted-entities
-    [db datom-a datom-v sortings]
-    (let [major-sorting (or (first sortings)
-                            {:id :block/updated-at :asc? false})
-          minor-sortings (seq (rest sortings))
-          partitioned-entities-by-major-sorted
-          (get-partitioned-entities-by-major-sorting db datom-a datom-v major-sorting (not-empty minor-sortings))]
-      (if minor-sortings
-        (lazy-get-major-sorted-entities-by-minor-sortings db partitioned-entities-by-major-sorted minor-sortings)
-        partitioned-entities-by-major-sorted))))
-
-(comment
-  (let [db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo))]
-    (time  (take 10
-                 (lazy-get-sorted-entities db :block/tags 165
-                                           [{:id :user.property/imdbrating-KDvXHeDT
-                                             :asc? false}
-                                            {:id :user.property/metascore-ywPFZDu9
-                                             :asc? false}
-                                            {:id :block/updated-at
-                                             :asc? false}])))))

@@ -658,7 +658,7 @@
       `update-timestamps?`: whether to update `blocks` timestamps.
       `created-by`: user-uuid, update `:logseq.property/created-by` if exists
     ``"
-  [repo conn blocks target-block {:keys [sibling? keep-uuid? keep-block-order?
+  [repo conn blocks target-block {:keys [keep-uuid? keep-block-order?
                                          outliner-op replace-empty-target? update-timestamps?
                                          created-by insert-template?]
                                   :as opts
