@@ -599,7 +599,7 @@
                                              (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
 
 (rum/defc table-row-inner < rum/static
-  [{:keys [row-selected?] :as table} row props {:keys [show-add-property?]}]
+  [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
@@ -609,27 +609,31 @@
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
-                     (when-let [render (get column :cell)]
-                       (let [id (str (:id row) "-" (:id column))
-                             width (get-column-size column sized-columns)
-                             select? (= (:id column) :select)
-                             add-property? (= (:id column) :add-property)
-                             style {:width width :min-width width}
-                             cell-opts {:key id
-                                        :select? select?
-                                        :add-property? add-property?
-                                        :style style}]
-                         (shui/table-cell cell-opts (render table row column style)))))]
+                     (if scrolling?
+                       [:div]
+                       (when-let [render (get column :cell)]
+                         (let [id (str (:id row) "-" (:id column))
+                               width (get-column-size column sized-columns)
+                               select? (= (:id column) :select)
+                               add-property? (= (:id column) :add-property)
+                               style {:width width :min-width width}
+                               cell-opts {:key id
+                                          :select? select?
+                                          :add-property? add-property?
+                                          :style style}]
+                           (shui/table-cell cell-opts (render table row column style))))))]
     (shui/table-row
      (merge
       props
       {:key (str (:db/id row))
        :data-state (when (row-selected? row) "selected")
        :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
-     [:div.sticky-columns.flex.flex-row
-      (map #(row-cell-f % {}) pinned-columns)]
-     [:div.flex.flex-row
-      (map #(row-cell-f % {:lazy? true}) unpinned-columns)])))
+     (when (seq pinned-columns)
+       [:div.sticky-columns.flex.flex-row
+        (map #(row-cell-f % {}) pinned-columns)])
+     (when (seq unpinned-columns)
+       [:div.flex.flex-row
+        (map #(row-cell-f % {:lazy? true}) unpinned-columns)]))))
 
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
@@ -1187,7 +1191,7 @@
         (set-sized-columns! sized-columns)))}))
 
 (rum/defc lazy-item
-  [data idx {:keys [properties list-view?]} item-render]
+  [data idx {:keys [properties list-view? scrolling?]} item-render]
   (let [item (util/nth-safe data idx)
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
@@ -1203,33 +1207,39 @@
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
-         (when (and db-id (not item))
+         (when (and db-id (not item) (not scrolling?))
            (let [block (c.m/<? (db-async/<get-block (state/get-current-repo) db-id opts))
                  block' (if list-view? (db/entity db-id) block)]
              (set-item! block')))))
-     [db-id])
+     [db-id scrolling?])
     (let [item' (cond (map? item) item (number? item) {:db/id item})]
       (item-render item'))))
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (when (seq rows)
-    (ui/virtualized-list
-     {:ref #(reset! *scroller-ref %)
-      :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                (gdom/getElement "main-content-container"))
-      :compute-item-key (fn [idx]
-                          (let [block-id (util/nth-safe rows idx)]
-                            (str "table-row-" (:group-idx option) "-" block-id)))
-      :skipAnimationFrameInResizeObserver true
-      :total-count (count rows)
-      :item-content (fn [idx]
-                      (lazy-item (:data table) idx (assoc option :table-view? true)
-                                 (fn [row]
-                                   (table-row table row {} option))))
-      :items-rendered (fn [props]
-                        (when (seq props)
-                          (set-items-rendered! true)))})))
+  (let [[scrolling? set-scrolling!] (hooks/use-state false)]
+    (when (seq rows)
+      (ui/virtualized-list
+       {:ref #(reset! *scroller-ref %)
+        :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
+                                  (gdom/getElement "main-content-container"))
+        :compute-item-key (fn [idx]
+                            (let [block-id (util/nth-safe rows idx)]
+                              (str "table-row-" (:group-idx option) "-" block-id)))
+        :skipAnimationFrameInResizeObserver true
+        :total-count (count rows)
+        :context {:scrolling scrolling?}
+        :is-scrolling set-scrolling!
+        :item-content (fn [idx _user ^js context]
+                        (let [option (assoc option
+                                            :scrolling? (.-scrolling context)
+                                            :table-view? true)]
+                          (lazy-item (:data table) idx option
+                                     (fn [row]
+                                       (table-row table row {} option)))))
+        :items-rendered (fn [props]
+                          (when (seq props)
+                            (set-items-rendered! true)))}))))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]

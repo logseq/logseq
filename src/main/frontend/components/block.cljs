@@ -906,7 +906,7 @@
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [args (:rum/args state)
-                 page (last args)
+                 [config page] args
                  *result (atom nil)
                  page-id-or-name (or (:db/id page)
                                      (:block/uuid page)
@@ -916,7 +916,7 @@
              (cond
                page-entity
                (reset! *result page-entity)
-               (:skip-async-load? (first args))
+               (or (:skip-async-load? config) (:table-view? config))
                (reset! *result page)
                :else
                (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
@@ -928,7 +928,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
+  [state {:keys [label children preview? disable-preview? show-non-exists-page? table-view? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
     (let [entity (db/sub-block (:db/id entity'))]
       (cond
@@ -957,7 +957,7 @@
         (and (:block/name page) (util/uuid-string? (:block/name page)))
         (invalid-node-ref (:block/name page))
 
-        (and (:block/name page) show-non-exists-page?)
+        (and (:block/name page) (or show-non-exists-page? table-view?))
         (page-inner config (merge
                             {:block/title (:block/name page)
                              :block/name (:block/name page)}
