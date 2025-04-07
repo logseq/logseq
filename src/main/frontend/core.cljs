@@ -1,7 +1,8 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
-  (:require [frontend.background-tasks]
+  (:require ["react-dom/client" :as rdc]
+            [frontend.background-tasks]
             [frontend.common-keywords]
             [frontend.components.plugins :as plugins]
             [frontend.config :as config]
@@ -14,6 +15,7 @@
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
+            [goog.object :as gobj]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
@@ -49,16 +51,19 @@
             \\/    /_____/     \\/     \\/   |__|
      "))
 
+(defonce root (rdc/createRoot (.getElementById js/document "root")))
+
 (defn ^:export start []
   (when config/dev?
     (md/start!))
-  (when-let [node (.getElementById js/document "root")]
-    (set-router!)
-    (rum/mount (page/current-page) node)
-    (display-welcome-message)
+  (set-router!)
+
+  (.render ^js root (page/current-page))
+
+  (display-welcome-message)
     ;; NO repo state here, better not add init logic here
-    (when config/dev?
-      (js/setTimeout #(sync/<sync-start) 1000))))
+  (when config/dev?
+    (js/setTimeout #(sync/<sync-start) 1000)))
 
 (comment
   (def d-entity-count (volatile! 0))
