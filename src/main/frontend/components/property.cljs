@@ -383,7 +383,9 @@
                                    (and (not page?) (contains? #{:block/alias} (:db/ident m)))
                                    ;; Filters out properties from being in wrong :view-context and :never view-contexts
                                    (and (not= view-context :all) (not (contains? block-types view-context)))
-                                   (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m))))))
+                                   (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m)))
+                                   ;; Filters out adding buggy class properties e.g. Alias and Parent
+                                   (and class-schema? (ldb/public-built-in-property? m) (:logseq.property/view-context m)))))
         property (rum/react *property)
         property-key (rum/react *property-key)
         batch? (pv/batch-operation?)
