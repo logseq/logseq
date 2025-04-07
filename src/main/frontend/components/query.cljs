@@ -15,7 +15,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
 (defn- built-in-custom-query?
