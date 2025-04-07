@@ -356,14 +356,19 @@
         view-for-id (or (:db/id view-for) view-for-id*)
         non-hidden-e (fn [id] (let [e (d/entity db id)]
                                 (when-not (entity-util/hidden? e)
-                                  e)))]
+                                  e)))
+        db-based? (entity-plus/db-based-graph? db)]
     (case feat-type
       :all-pages
       (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
-            exclude-ids (get-exclude-page-ids db)]
+            exclude-ids (when db-based? (get-exclude-page-ids db))]
         (keep (fn [d]
                 (let [e (d/entity db (:e d))]
-                  (when-not (exclude-ids (:db/id e))
+                  (when-not (if db-based?
+                              (exclude-ids (:db/id e))
+                              (or (ldb/hidden-or-internal-tag? e)
+                                  (entity-util/property? e)
+                                  (entity-util/built-in? e)))
                     (cond-> e
                       refs-count?
                       (assoc :block.temp/refs-count (count (:block/_refs e)))))))

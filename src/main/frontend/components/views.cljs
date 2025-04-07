@@ -1388,7 +1388,7 @@
                                     (set-sorting! new-sorting)
                                     (f new-sorting)))}))
      (shui/dropdown-menu-item
-      {:class "text-muted-foreground"
+      {:class "text-muted-foreground pl-3"
        :on-click (fn []
                    (let [f (get-in table [:data-fns :set-sorting!])]
                      (set-sorting! nil)
