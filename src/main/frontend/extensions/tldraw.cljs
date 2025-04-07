@@ -233,27 +233,29 @@
             :onPersist #(on-persist page-uuid %1 %2)
             :model data})])
 
-(rum/defc tldraw-app-inner < rum/reactive
-  {:init (fn [state]
-           (let [page-uuid (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) page-uuid)
-             state))}
+(rum/defc tldraw-app-inner
   [page-uuid block-id loaded-app set-loaded-app]
-  (when-not (state/sub-async-query-loading (str page-uuid))
-    (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-uuid)
-          on-mount (fn [^js tln]
-                     (when tln
-                       (set! (.-appUndo tln) undo)
-                       (set! (.-appRedo tln) redo)
-                       (when-let [^js api (gobj/get tln "api")]
-                         (p/then (when populate-onboarding?
-                                   (whiteboard-handler/populate-onboarding-whiteboard api))
-                                 #(do (whiteboard-handler/cleanup! (.-currentPage tln))
-                                      (state/focus-whiteboard-shape tln block-id)
-                                      (set-loaded-app tln))))))
-          data (whiteboard-handler/get-page-tldr page-uuid)]
-      (when data
-        (tldraw-inner page-uuid data populate-onboarding? loaded-app on-mount)))))
+  (let [[loading? set-loading!] (hooks/use-state true)]
+    (hooks/use-effect!
+     (p/do!
+      (db-async/<get-block (state/get-current-repo) page-uuid)
+      (set-loading! false))
+     [])
+    (when-not loading?
+      (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-uuid)
+            on-mount (fn [^js tln]
+                       (when tln
+                         (set! (.-appUndo tln) undo)
+                         (set! (.-appRedo tln) redo)
+                         (when-let [^js api (gobj/get tln "api")]
+                           (p/then (when populate-onboarding?
+                                     (whiteboard-handler/populate-onboarding-whiteboard api))
+                                   #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                        (state/focus-whiteboard-shape tln block-id)
+                                        (set-loaded-app tln))))))
+            data (whiteboard-handler/get-page-tldr page-uuid)]
+        (when data
+          (tldraw-inner page-uuid data populate-onboarding? loaded-app on-mount))))))
 
 (rum/defc tldraw-app
   [page-uuid block-id]

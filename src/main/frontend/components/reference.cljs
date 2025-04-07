@@ -16,30 +16,39 @@
             [logseq.db.common.view :as db-view]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 ;; TODO: merge both page and block linked refs
-(rum/defc block-linked-references < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (when-let [e (db/entity [:block/uuid (first (:rum/args state))])]
-             (db-async/<get-block-refs (state/get-current-repo) (:db/id e)))
-           state)}
+(rum/defc block-linked-references-aux < rum/reactive db-mixins/query
+  [e]
+  (let [block-id (:block/uuid e)
+        ref-blocks (-> (db/get-referenced-blocks (:db/id e))
+                       db-utils/group-by-page)]
+    (when (> (count ref-blocks) 0)
+      (let [ref-hiccup (block/->hiccup ref-blocks
+                                       {:id (str block-id)
+                                        :ref? true
+                                        :breadcrumb-show? true
+                                        :group-by-page? true
+                                        :editor-box editor/box}
+                                       {})]
+        [:div.references-blocks
+         (content/content block-id
+                          {:hiccup ref-hiccup})]))))
+
+(rum/defc block-linked-references
   [block-id]
   (when-let [e (db/entity [:block/uuid block-id])]
-    (when-not (state/sub-async-query-loading (str (:db/id e) "-refs"))
-      (let [ref-blocks (-> (db/get-referenced-blocks (:db/id e))
-                           db-utils/group-by-page)]
-        (when (> (count ref-blocks) 0)
-          (let [ref-hiccup (block/->hiccup ref-blocks
-                                           {:id (str block-id)
-                                            :ref? true
-                                            :breadcrumb-show? true
-                                            :group-by-page? true
-                                            :editor-box editor/box}
-                                           {})]
-            [:div.references-blocks
-             (content/content block-id
-                              {:hiccup ref-hiccup})]))))))
+    (let [[loading? set-loading!] (hooks/use-state true)]
+      (hooks/use-effect!
+       (fn []
+         (p/do!
+          (db-async/<get-block-refs (state/get-current-repo) (:db/id e))
+          (set-loading! false)))
+       [])
+      (when-not loading?
+        (block-linked-references-aux e)))))
 
 (rum/defc references-cp
   [page-entity]

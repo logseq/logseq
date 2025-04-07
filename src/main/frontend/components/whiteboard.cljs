@@ -4,24 +4,25 @@
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-bounding-client-rect use-breakpoint]]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.common.util :as common-util]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.config :as config]
-            [frontend.db.async :as db-async]
-            [logseq.common.util :as common-util]
-            [frontend.db :as db]
-            [logseq.shui.ui :as shui]))
+            [shadow.loader :as loader]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -36,21 +37,21 @@
     (when draw-component
       (draw-component page-uuid shape-id))))
 
-(rum/defc tldraw-preview < rum/reactive
-  {:init (fn [state]
-           (p/let [_ (loader/load :tldraw)]
-             (reset! tldraw-loaded? true))
-           (let [page-uuid (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) page-uuid))
-           state)}
+(rum/defc tldraw-preview
   [page-uuid]
   (when page-uuid
-    (let [loaded? (rum/react tldraw-loaded?)
-          tldr (whiteboard-handler/get-page-tldr page-uuid)
-          generate-preview (when loaded?
-                             (resolve 'frontend.extensions.tldraw/generate-preview))]
-      (when (and generate-preview (not (state/sub-async-query-loading page-uuid)))
-        (generate-preview tldr)))))
+    (let [[loading? set-loading!] (hooks/use-state true)]
+      (hooks/use-effect!
+       (p/do!
+        (loader/load :tldraw)
+        (db-async/<get-block (state/get-current-repo) page-uuid)
+        (set-loading! false))
+       [])
+      (when-not loading?
+        (let [tldr (whiteboard-handler/get-page-tldr page-uuid)
+              generate-preview (resolve 'frontend.extensions.tldraw/generate-preview)]
+          (when generate-preview
+            (generate-preview tldr)))))))
 
 ;; TODO: move to frontend.components.reference
 (rum/defcs references-count < rum/reactive db-mixins/query
