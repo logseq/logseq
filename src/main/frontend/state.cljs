@@ -1181,14 +1181,20 @@ Similar to re-frame subscriptions"
   []
   (get-selected-block-ids (get-selection-blocks)))
 
+(def ^:private block-selected-flow
+  (m/watch (:selection/blocks @state)))
+
 (defn sub-block-selected?
   [block-id]
   (assert (uuid? block-id))
-  (rum/react
-   (r/cached-derived-atom
-    (:selection/blocks @state)
-    [(get-current-repo) ::ui-selected block-id]
-    (fn [blocks] (some #{block-id} (get-selected-block-ids blocks))))))
+  (let [checkf (fn [block-id]
+                 (some #{block-id} (get-selected-block-ids @(:selection/blocks @state))))
+        init-value (checkf block-id)]
+    (hooks/use-flow-state
+     init-value
+     (m/eduction
+      (map checkf) (dedupe) (drop-while #(= % init-value))
+      block-selected-flow))))
 
 (defn dom-clear-selection!
   []
