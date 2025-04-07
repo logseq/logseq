@@ -313,12 +313,13 @@
            [:div.flex-shrink-0.pt-2
             svg]
            [:div.ml-3.w-0.flex-1.pt-2
+
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-             {:button-props {:aria-label "Close"}
+             {:button-props {"aria-label" "Close"}
               :variant :ghost
               :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
