@@ -9,7 +9,6 @@
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
-            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
