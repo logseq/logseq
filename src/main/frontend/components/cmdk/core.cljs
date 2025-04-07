@@ -18,7 +18,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -36,6 +35,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

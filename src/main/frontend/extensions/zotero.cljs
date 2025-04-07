@@ -9,11 +9,11 @@
             [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

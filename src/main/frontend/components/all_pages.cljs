@@ -7,9 +7,9 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.handler.page :as page-handler]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [logseq.common.config :as common-config]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

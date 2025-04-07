@@ -23,7 +23,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [frontend.hooks :as hooks]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -38,6 +37,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -1340,12 +1340,12 @@
                              value-cp)))]]
          (if show-tooltip?
            (shui/tooltip-provider
-             (shui/tooltip
-               {:delayDuration 1200}
-               (shui/tooltip-trigger
-                 {:onFocusCapture #(util/stop-propagation %)
-                  :as-child true}
-                 value-cp)
-               (shui/tooltip-content
-                 (str "Change " (:block/title property)))))
+            (shui/tooltip
+             {:delayDuration 1200}
+             (shui/tooltip-trigger
+              {:onFocusCapture #(util/stop-propagation %)
+               :as-child true}
+              value-cp)
+             (shui/tooltip-content
+              (str "Change " (:block/title property)))))
            value-cp))))))

@@ -4,12 +4,12 @@
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repeated :as repeated]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))

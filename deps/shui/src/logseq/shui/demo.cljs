@@ -1,10 +1,11 @@
 (ns logseq.shui.demo
-  (:require [rum.core :as rum]
-            [logseq.shui.ui :as ui]
-            [dommy.core :refer-macros [sel1]]
+  (:require [dommy.core :refer-macros [sel1]]
+            [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.ui :as ui]
             [promesa.core :as p]
-            [logseq.shui.dialog.core :as dialog-core]))
+            [rum.core :as rum]))
 
 (rum/defc section-item
   [title children]
@@ -511,7 +512,7 @@
   []
 
   (let [el-ref (rum/use-ref nil)]
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js container (get-main-scroll-container)
              ^js el (rum/deref el-ref)
