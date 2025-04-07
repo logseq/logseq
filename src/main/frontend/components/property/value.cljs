@@ -1013,7 +1013,7 @@
         (inline-text {} :markdown (str value'))))))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? property-position _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
@@ -1037,12 +1037,13 @@
            (page-cp {:disable-preview? true
                      :tag? tag?
                      :property-position property-position
-                     :meta-click? other-position?} value)
+                     :meta-click? other-position?
+                     :table-view? table-view?} value)
            (:db/id value)))
 
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
-         (reference {} (:block/uuid value)))
+         (reference {:table-view? table-view?} (:block/uuid value)))
 
        (and (map? value) (some? (db-property/property-value-content value)))
        (let [content (str (db-property/property-value-content value))]
