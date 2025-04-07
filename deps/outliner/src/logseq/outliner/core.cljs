@@ -658,7 +658,7 @@
       `update-timestamps?`: whether to update `blocks` timestamps.
       `created-by`: user-uuid, update `:logseq.property/created-by` if exists
     ``"
-  [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
+  [repo conn blocks target-block {:keys [sibling? keep-uuid? keep-block-order?
                                          outliner-op replace-empty-target? update-timestamps?
                                          created-by insert-template?]
                                   :as opts
@@ -721,7 +721,8 @@
                               (map (fn [uuid'] {:block/uuid uuid'})))
                 tx (assign-temp-id blocks-tx replace-empty-target? target-block)
                 from-property (:logseq.property/created-from-property target-block)
-                property-values-tx (when (and sibling? from-property)
+                many? (= :db.cardinality/many (:db/cardinality from-property))
+                property-values-tx (when (and sibling? from-property many?)
                                      (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                        (mapcat (fn [block]
                                                  (when-let [new-id (or (id->new-uuid (:db/id block)) (:block/uuid block))]
