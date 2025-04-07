@@ -127,20 +127,23 @@
                           (:block/collapsed? current-block)))]
     collapsed?'))
 
-(rum/defc custom-query* < rum/reactive db-mixins/query
-  [{:keys [*query-error db-graph? dsl-query? built-in-query? table? current-block] :as config}
+(rum/defcs custom-query* < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (assoc state ::result (atom nil)))}
+  [state {:keys [*query-error db-graph? dsl-query? built-in-query? table? current-block] :as config}
    {:keys [builder query view collapsed?] :as q}]
-  (let [collapsed?' (:collapsed? config)
-        result' (query-result/run-custom-query config q *query-error)
+  (let [*result (::result state)
+        collapsed?' (:collapsed? config)
+        result' (query-result/run-custom-query config q *result *query-error)
         result (when result' (query-result/transform-query-result config q result'))
-          ;; Remove hidden pages from result
+        ;; Remove hidden pages from result
         result (if (and (coll? result) (not (map? result)))
                  (->> result
                       (remove (fn [b] (when (and (map? b) (:block/title b)) (ldb/hidden? (:block/title b)))))
                       (remove (fn [b]
                                 (when (and current-block (:db/id current-block)) (= (:db/id b) (:db/id current-block))))))
                  result)
-          ;; Args for displaying query header and results
+        ;; Args for displaying query header and results
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         page-list? (and (seq result) (some? (:block/name (first result))))
@@ -164,6 +167,7 @@
                                             :table? table?
                                             :view-f view-f
                                             :page-list? page-list?
+                                            :*result *result
                                             :result result
                                             :collapsed? collapsed?'}))
 
