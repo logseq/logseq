@@ -158,7 +158,9 @@
 (rum/defc actions-menu-content
   [db-id idx type collapsed? block-count]
   (let [multi-items? (> block-count 1)
-        menu-item shui/dropdown-menu-item]
+        menu-item shui/dropdown-menu-item
+        block (when (integer? db-id) (db/entity db-id))
+        page? (or (contains? #{:page :contents} type) (ldb/page? block))]
     [:<>
      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
@@ -172,11 +174,10 @@
      (when (and collapsed? multi-items?) [:hr.menu-separator])
      (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
-     (when (= type :page) [:hr.menu-separator])
-     (when (= type :page)
-       (let [page  (db/entity db-id)]
-         (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid page)))}
-                    (t :right-side-bar/pane-open-as-page))))]))
+     (when page? [:hr.menu-separator])
+     (when page?
+       (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid block)))}
+                  (t :right-side-bar/pane-open-as-page)))]))
 
 (rum/defc drop-indicator
   [idx drag-to]
