@@ -125,7 +125,6 @@
                   (when (seq misc-tx)
                     (db/transact! repo misc-tx tx-meta))
                   (when-not import-block?
-                    (state/clear-async-query-state!)
                     (ui-handler/re-render-root!)
                     (notification/show! "Import successful!" :success)))
                 (p/catch (fn [e]

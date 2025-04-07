@@ -9,13 +9,11 @@
             [datascript.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.common.missionary :as c.m]
             [frontend.db.conn-state :as db-conn-state]
             [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
             [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
-            [frontend.rum :as r]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -346,7 +344,6 @@
       :ui/highlight-recent-days              (atom (or (storage/get :ui/highlight-recent-days)
                                                        3))
       :favorites/updated?                    (atom 0)
-      :db/async-query-loading                (atom #{})
       :db/async-queries                      (atom {})
       :db/latest-transacted-entity-uuids     (atom {})})))
 
@@ -689,23 +686,28 @@ Similar to re-frame subscriptions"
   [container-block]
   (reset! (:editor/editing? @state) {container-block true}))
 
-(def ^:private editing-flow
-  (m/watch (:editor/editing? @state)))
-
-(defn sub-editing?
-  [container-block]
-  (let [checkf (hooks/use-callback
-                (fn [s] (boolean (get s container-block)))
-                [container-block])
-        init-value (checkf @(:editor/editing? @state))
+(defn- sub-flow-state
+  [flow watch-ref sub-value-f deps]
+  (let [checkf (hooks/use-callback sub-value-f deps)
+        init-value (checkf @watch-ref)
         flow (hooks/use-memo
               #(m/eduction
                 (map checkf)
                 (dedupe)
                 (drop-while (fn [x] (identical? x init-value)))
-                editing-flow)
+                flow)
               [init-value])]
     (hooks/use-flow-state init-value flow)))
+
+(def ^:private editing-flow
+  (m/watch (:editor/editing? @state)))
+
+(defn sub-editing?
+  [container-block]
+  (sub-flow-state editing-flow
+                  (:editor/editing? @state)
+                  (fn [s] (boolean (get s container-block)))
+                  [container-block]))
 
 (defn sub-config
   "Sub equivalent to get-config which should handle all sub user-config access"
@@ -1187,14 +1189,11 @@ Similar to re-frame subscriptions"
 (defn sub-block-selected?
   [block-id]
   (assert (uuid? block-id))
-  (let [checkf (fn [block-id]
-                 (some #{block-id} (get-selected-block-ids @(:selection/blocks @state))))
-        init-value (checkf block-id)]
-    (hooks/use-flow-state
-     init-value
-     (m/eduction
-      (map checkf) (dedupe) (drop-while #(= % init-value))
-      block-selected-flow))))
+  (sub-flow-state block-selected-flow
+                  (:selection/blocks @state)
+                  (fn [blocks]
+                    (some #{block-id} (get-selected-block-ids blocks)))
+                  [block-id]))
 
 (defn dom-clear-selection!
   []
@@ -2311,29 +2310,6 @@ Similar to re-frame subscriptions"
 (defn clear-user-info!
   []
   (storage/remove :user-groups))
-
-(defn sub-async-query-loading
-  [k]
-  (assert (or (string? k) (uuid? k)))
-  (let [k* (str k)]
-    (rum/react
-     (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query k*]
-                            (fn [s] (contains? s k*))))))
-
-(def ^:private async-query-loading-flow
-  (->> (m/watch (:db/async-query-loading @state))
-       (c.m/throttle 100)))
-
-(defn async-query-k-flow
-  [k]
-  (let [k* (str k)]
-    (m/eduction
-     (map #(contains? % k*)) (dedupe)
-     async-query-loading-flow)))
-
-(defn clear-async-query-state!
-  []
-  (reset! (:db/async-query-loading @state) #{}))
 
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)

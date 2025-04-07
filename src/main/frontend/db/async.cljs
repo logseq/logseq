@@ -124,22 +124,19 @@
       (p/promise e)
 
       :else
-      (do
-        (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                                [{:id id :opts opts}])
-                {:keys [block children]} (first result)]
-          (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
-          (when-not skip-transact?
-            (let [conn (db/get-db graph false)
-                  block-and-children (if block (cons block children) children)
-                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                  tx-data (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)]
-              (when (seq tx-data) (d/transact! conn tx-data))
-              (when-not skip-refresh?
-                (react/refresh-affected-queries! graph affected-keys))))
+      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                              [{:id id :opts opts}])
+              {:keys [block children]} (first result)]
+        (when-not skip-transact?
+          (let [conn (db/get-db graph false)
+                block-and-children (if block (cons block children) children)
+                affected-keys [[:frontend.worker.react/block (:db/id block)]]
+                tx-data (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)]
+            (when (seq tx-data) (d/transact! conn tx-data))
+            (when-not skip-refresh?
+              (react/refresh-affected-queries! graph affected-keys))))
 
-          (if children-only? children block))))))
+        (if children-only? children block)))))
 
 (defn <get-blocks
   [graph ids* & {:as opts}]
@@ -159,22 +156,18 @@
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when-let [block-id (:block/uuid (db/entity graph id))]
-    (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
+  (when (:block/uuid (db/entity graph id))
     (p/let [result (state/<invoke-db-worker :thread-api/get-block-parents graph id depth)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
-      (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
       result)))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
   (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
           conn (db/get-db graph false)
           _ (d/transact! conn result)]
-    (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
     result))
 
 (defn <get-block-refs-count

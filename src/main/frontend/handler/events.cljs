@@ -199,7 +199,6 @@
 (defmethod handle :graph/switch [[_ graph opts]]
   (export/cancel-db-backup!)
   (persist-db/export-current-graph!)
-  (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
   (st/refresh!)
 
