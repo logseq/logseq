@@ -3393,7 +3393,7 @@
   {:init (fn [state]
            (let [*ref (atom nil)]
              (assoc state ::ref *ref)))}
-  [state container-state repo config* block {:keys [navigating-block navigated? editing?] :as opts}]
+  [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [*ref (::ref state)
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
@@ -3444,7 +3444,6 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
-        selected? (when (uuid? (:block/uuid block)) (state/sub-block-selected? (:block/uuid block)))
         db-based? (config/db-based-graph? repo)
         page-icon (when (:page-title? config)
                     (let [icon' (get block (pu/get-pid :logseq.property/icon))]
@@ -3619,8 +3618,11 @@
         block-id (:block/uuid block)
         v1 (state/sub-editing? [container-id block-id])
         v2 (state/sub-editing? [:unknown-container block-id])
+        selected? (state/sub-block-selected? block-id)
         editing? (or v1 v2)]
-    (block-container-inner-aux container-state repo config* block (assoc opts :editing? editing?))))
+    (block-container-inner-aux container-state repo config* block (assoc opts
+                                                                         :editing? editing?
+                                                                         :selected? selected?))))
 
 (defn- block-changed?
   [old-block new-block]
