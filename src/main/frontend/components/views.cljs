@@ -1554,10 +1554,11 @@
                (if (fn? action)
                  (action option)
                  action))])
-      (when (seq sorting)
+
+      (when (and db-based? (seq sorting))
         (view-sorting table columns sorting))
 
-      (filter-properties view-entity columns table option)
+      (when db-based? (filter-properties view-entity columns table option))
 
       (search input {:on-change set-input!
                      :set-input! set-input!})
@@ -1568,7 +1569,7 @@
 
       (when db-based? (more-actions view-entity columns table))
 
-      (when add-new-object! (new-record-button table view-entity))]]))
+      (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! view-feature-type] :as option*}
