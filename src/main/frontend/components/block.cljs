@@ -3904,6 +3904,12 @@
   [config col]
   (map #(inline config %) col))
 
+(rum/defc inline-title
+  [title]
+  (map-inline {}
+              (gp-mldoc/inline->edn title
+                                    (mldoc/get-default-config :markdown))))
+
 (declare ->hiccup)
 
 (defn- get-code-mode-by-lang
