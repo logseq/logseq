@@ -11,7 +11,6 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -22,6 +21,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.db :as gp-db]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

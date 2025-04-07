@@ -65,26 +65,32 @@
     (into [property-tx]
           (closed-values->blocks property))))
 
-(defn- build-property-value-block
+(defn build-property-value-block
   "Builds a property value entity given a block map/entity, a property entity or
-  ident and its property value"
-  [block property value & {:keys [block-uuid]}]
+  ident and its property value. Takes the following options:
+   * :block-uuid - :block/uuid for property value entity
+   * :properties - Additional properties and attributes to add to entity"
+  [block property value & {:keys [block-uuid properties]}]
   (let [block-id (or (:db/id block) (:db/ident block))]
-    (-> (merge
-         {:block/uuid (or block-uuid (common-uuid/gen-uuid))
-          :block/page (if (:block/page block)
-                        (:db/id (:block/page block))
+    (cond->
+     (merge
+      {:block/uuid (or block-uuid (common-uuid/gen-uuid))
+       :block/page (if (:block/page block)
+                     (:db/id (:block/page block))
                         ;; page block
-                        block-id)
-          :block/parent block-id
-          :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
-                                                   block-id
-                                                   (or (:db/id property) {:db/ident (:db/ident property)}))
-          :block/order (db-order/gen-key)}
-         (if (db-property-type/property-value-content? (:logseq.property/type property) property)
-           {:logseq.property/value value}
-           {:block/title value}))
-        common-util/block-with-timestamps)))
+                     block-id)
+       :block/parent block-id
+       :logseq.property/created-from-property (if (= (:db/ident property) :logseq.property/default-value)
+                                                block-id
+                                                (or (:db/id property) {:db/ident (:db/ident property)}))
+       :block/order (db-order/gen-key)}
+      (if (db-property-type/property-value-content? (:logseq.property/type property) property)
+        {:logseq.property/value value}
+        {:block/title value}))
+      true
+      common-util/block-with-timestamps
+      properties
+      (merge properties))))
 
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be
@@ -99,7 +105,7 @@
   (let [block' (if (:db/id block) block (assoc block :db/id [:block/uuid (:block/uuid block)]))]
     (->> properties
          (map (fn [[k v]]
-                (let [property-map (if (map? k) k {:db/ident k})
+                (let [{:keys [property-value-properties] :as property-map} (if (map? k) k {:db/ident k})
                       gen-uuid-value-prefix (when pure?
                                               (or (:db/ident block) (:block/uuid block)))]
                   (assert (:db/ident property-map) "Key in map must have a :db/ident")
@@ -108,15 +114,20 @@
                    (if (set? v)
                      (set (map #(build-property-value-block
                                  block' property-map %
-                                 (when pure?
-                                   {:block-uuid
-                                    (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %))}))
+                                 (cond-> {}
+                                   property-value-properties
+                                   (assoc :properties property-value-properties)
+                                   pure?
+                                   (assoc :block-uuid
+                                          (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" %)))))
                                v))
                      (build-property-value-block block' property-map v
-                                                 (when pure?
-                                                   {:block-uuid
-                                                    (common-uuid/gen-uuid
-                                                     :builtin-block-uuid (str gen-uuid-value-prefix "-" v))})))])))
+                                                 (cond-> {}
+                                                   property-value-properties
+                                                   (assoc :properties property-value-properties)
+                                                   pure?
+                                                   (assoc :block-uuid
+                                                          (common-uuid/gen-uuid :builtin-block-uuid (str gen-uuid-value-prefix "-" v))))))])))
          (into {}))))
 
 (defn build-properties-with-ref-values

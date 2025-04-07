@@ -19,7 +19,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.hooks :as hooks]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -28,6 +27,7 @@
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

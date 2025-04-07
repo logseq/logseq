@@ -10,6 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
@@ -19,8 +20,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [promesa.core :as p]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [promesa.core :as p]))
 
 ;; Helpers
 ;; =======
@@ -130,11 +130,18 @@
 
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.9"
+          start-time (cljs.core/system-time)
           _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
           conn (db-test/create-conn)
           _ (db-pipeline/add-listener conn)
           {:keys [import-state]}
-          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})]
+          (import-file-graph-to-db file-graph-dir conn {:convert-all-tags? true})
+          end-time (cljs.core/system-time)]
+
+    ;; Add multiplicative factor for CI as it runs about twice as slow
+    (let [max-time (-> 15 (* (if js/process.env.CI 2 1)))]
+      (is (< (-> end-time (- start-time) (/ 1000)) max-time)
+          (str "Importing large graph takes less than " max-time "s")))
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")

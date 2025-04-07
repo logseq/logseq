@@ -1,4 +1,4 @@
-(ns frontend.hooks
+(ns logseq.shui.hooks
   "React custom hooks."
   (:refer-clojure :exclude [ref deref])
   (:require [frontend.common.missionary :as c.m]
@@ -26,17 +26,23 @@
   "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn] (rum/use-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
-   (rum/use-effect! setup-fn (if (empty? deps)
-                               deps
-                               #js[(memo-deps equal-fn deps)]))))
+   (rum/use-effect! (fn [& deps]
+                      (let [result (apply setup-fn deps)]
+                        (when (fn? result) result)))
+                    (if (empty? deps)
+                      deps
+                      #js[(memo-deps equal-fn deps)]))))
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-layout-effect!
   ([setup-fn] (rum/use-layout-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
-   (rum/use-layout-effect! setup-fn (if (empty? deps)
-                                      deps
-                                      #js[(memo-deps equal-fn deps)]))))
+   (rum/use-layout-effect! (fn [& deps]
+                             (let [result (apply setup-fn deps)]
+                               (when (fn? result) result)))
+                           (if (empty? deps)
+                             deps
+                             #js[(memo-deps equal-fn deps)]))))
 
 #_{:clj-kondo/ignore [:discouraged-var]}
 (defn use-callback

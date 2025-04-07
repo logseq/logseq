@@ -57,17 +57,21 @@
     (sqlite-export/build-export @import-conn {:export-type :page :page-id (:db/id page2)})))
 
 (defn- import-second-time-assertions [conn conn2 page-title original-data
-                                      & {:keys [transform-expected-blocks]
+                                      & {:keys [transform-expected-blocks build-journal]
                                          :or {transform-expected-blocks (fn [bs] (into bs bs))}}]
   (let [page (db-test/find-page-by-title @conn2 page-title)
         imported-page (export-page-and-import-to-another-graph conn conn2 page-title)
         updated-page (db-test/find-page-by-title @conn2 page-title)
         expected-page-and-blocks
-        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)]
+        (update-in (:pages-and-blocks original-data) [0 :blocks] transform-expected-blocks)
+        filter-imported-page (if build-journal
+                               #(= build-journal (get-in % [:page :build/journal]))
+                               #(= (get-in % [:page :block/title]) page-title))]
 
+    (assert (first expected-page-and-blocks))
     ;; Assume first page is one being imported for now
     (is (= (first expected-page-and-blocks)
-           (first (:pages-and-blocks imported-page)))
+           (first (filter filter-imported-page (:pages-and-blocks imported-page))))
         "Blocks are appended to existing page")
     (is (= (:block/created-at page) (:block/created-at updated-page))
         "Existing page didn't get re-created")
@@ -323,7 +327,8 @@
     (is (= (-> (:pages-and-blocks original-data)
                (medley/dissoc-in [1 :blocks 0 :build/properties])
                ;; shallow block means this page doesn't get included
-               butlast)
+               butlast
+               sort-pages-and-blocks)
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
@@ -412,7 +417,7 @@
     (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
-    (import-second-time-assertions conn conn2 journal-title original-data)))
+    (import-second-time-assertions conn conn2 journal-title original-data {:build-journal 20250210})))
 
 (deftest import-page-with-different-property-types
   (let [block-object-uuid (random-uuid)
@@ -458,7 +463,8 @@
         "Page's classes are imported")
     (is (= (-> (:pages-and-blocks original-data)
                ;; adjust shallow block
-               (medley/dissoc-in [1 :blocks 0 :build/tags]))
+               (medley/dissoc-in [1 :blocks 0 :build/tags])
+               sort-pages-and-blocks)
            (:pages-and-blocks imported-page))
         "Page's blocks are imported")
 
@@ -527,7 +533,44 @@
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
                                                            :node-ids (get-node-ids @conn2)})]
 
-    (is (= (:pages-and-blocks original-data) (:pages-and-blocks imported-nodes)))
+    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-nodes)))
+    (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
+    (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
+
+(deftest import-selected-nodes
+  (let [original-data
+        ;; Test a mix of pages and blocks
+        {:properties {:user.property/p1 {:logseq.property/type :default}}
+         :classes {:user.class/class1 {}}
+         :pages-and-blocks [{:page {:block/title "page1"}
+                             :blocks [{:block/title "b1"
+                                       :build/properties {:user.property/p1 "ok"}
+                                       :build/children [{:block/title "b2"}]}
+                                      {:block/title "b3"
+                                       :build/tags [:user.class/class1]
+                                       :build/children [{:block/title "b4"}]}]}
+                            {:page {:block/title "page2"}
+                             :blocks [{:block/title "dont export"}]}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        get-node-ids (fn [db]
+                       (->> [(db-test/find-block-by-content db "b1")
+                             (db-test/find-page-by-title db "b3")
+                             (db-test/find-page-by-title db "page2")]
+                            (remove nil?)
+                            (mapv #(vector :block/uuid (:block/uuid %)))))
+        conn2 (db-test/create-conn)
+        {:keys [init-tx block-props-tx] :as _txs}
+        (-> (sqlite-export/build-export @conn {:export-type :selected-nodes :node-ids (get-node-ids @conn)})
+            (sqlite-export/build-import @conn2 {}))
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn2 init-tx)
+        _ (d/transact! conn2 block-props-tx)
+        _ (validate-db @conn2)
+        imported-nodes (sqlite-export/build-export @conn2 {:export-type :selected-nodes :node-ids (get-node-ids @conn2)})]
+
+    (is (= (->> (:pages-and-blocks original-data)
+                (map #(if (= (get-in % [:page :block/title]) "page2") (dissoc % :blocks) %)))
+           (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
     (is (= (expand-classes (:classes original-data)) (:classes imported-nodes)))))
 
@@ -558,6 +601,7 @@
                                                    :logseq.property/default-value 42})}
           :user.property/default-closed
           {:logseq.property/type :default
+           :db/cardinality :db.cardinality/many
            :build/closed-values [{:value "joy" :uuid closed-value-uuid}
                                  {:value "sad" :uuid (random-uuid)}]}
           :user.property/checkbox {:logseq.property/type :checkbox}
@@ -587,10 +631,25 @@
                                      :user.property/node #{[:block/uuid page-pvalue-uuid]}}}
            :blocks [{:block/title "b1"
                      :build/properties {:user.property/num 1
-                                        :user.property/default-closed [:block/uuid closed-value-uuid]
+                                        :user.property/default-closed #{[:block/uuid closed-value-uuid]}
                                         :user.property/date [:block/uuid journal-uuid]}}
                     {:block/title "b2" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
-                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}]}
+                    {:block/title "b3" :build/properties {:user.property/node #{[:block/uuid page-object-uuid]}}}
+                    {:block/title "Example advanced query",
+                     :build/tags [:logseq.class/Query],
+                     :build/properties
+                     {:logseq.property/query
+                      {:build/property-value :block
+                       :block/title "{:query (task Todo)}"
+                       :build/properties
+                       {:logseq.property.code/lang "clojure"
+                        :logseq.property.node/display-type :code}}}}
+                    {:block/title "block has property value with tags and properties"
+                     :build/properties
+                     {:user.property/url
+                      {:build/property-value :block
+                       :block/title "https://example.com"
+                       :build/tags [:user.class/MyClass]}}}]}
           {:page {:block/title "page object"
                   :block/uuid page-object-uuid
                   :build/keep-uuid? true}

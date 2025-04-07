@@ -2,8 +2,8 @@
   (:require
    ["remove-accents" :as remove-accents]
    [clojure.string :as string]
-   [frontend.hooks :as hooks]
    [goog.string :as gstring]
+   [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [rum.core :as rum]))
 
