@@ -59,14 +59,15 @@
                    text))))
 
 (rum/defc property-empty-text-value
-  [property {:keys [property-position]}]
-  [:span.inline-flex.items-center.cursor-pointer
+  [property {:keys [property-position table-view?]}]
+  [:span.inline-flex.items-center.cursor-pointer.w-full
    (merge {:class "empty-text-btn" :variant :text})
-   (if property-position
-     (if-let [icon (:logseq.property/icon property)]
-       (icon-component/icon icon {:color? true})
-       (ui/icon "line-dashed"))
-     "Empty")])
+   (when-not table-view?
+     (if property-position
+       (if-let [icon (:logseq.property/icon property)]
+         (icon-component/icon icon {:color? true})
+         (ui/icon "line-dashed"))
+       "Empty"))])
 
 (defn- get-selected-blocks
   []
@@ -936,53 +937,56 @@
         default-value? (and
                         (:db/id default-value)
                         (= (:db/id value-block) (:db/id default-value))
-                        (not= (:db/ident property) :logseq.property/default-value))]
-    (if (seq value-block)
-      [:div.property-block-container.content.w-full
-       (let [config {:id (str (if multiple-values?
-                                (:block/uuid block)
-                                (:block/uuid value-block)))
-                     :container-id container-id
-                     :editor-box (state/get-component :editor/box)
-                     :property-block? true
-                     :on-block-content-pointer-down (when default-value?
-                                                      (fn [_e]
-                                                        (<create-new-block! block property (or (:block/title default-value) ""))))
-                     :p-block (:db/id block)
-                     :p-property (:db/id property)
-                     :view? (:view? opts)}]
-         (if (set? value-block)
-           (blocks-container config (ldb/sort-by-order value-block))
-           (rum/with-key
-             (block-container (assoc config
-                                     :property-default-value? default-value?) value-block)
-             (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
-      [:div
+                        (not= (:db/ident property) :logseq.property/default-value))
+        table-text-property-render (:table-text-property-render opts)]
+    (cond
+      (seq value-block)
+      (if table-text-property-render
+        (table-text-property-render
+         (if multiple-values? (first value-block) value-block))
+        [:div.property-block-container.content.w-full
+         (let [config {:id (str (if multiple-values?
+                                  (:block/uuid block)
+                                  (:block/uuid value-block)))
+                       :container-id container-id
+                       :editor-box (state/get-component :editor/box)
+                       :property-block? true
+                       :on-block-content-pointer-down (when default-value?
+                                                        (fn [_e]
+                                                          (<create-new-block! block property (or (:block/title default-value) ""))))
+                       :p-block (:db/id block)
+                       :p-property (:db/id property)
+                       :view? (:view? opts)}]
+           (if (set? value-block)
+             (blocks-container config (ldb/sort-by-order value-block))
+             (rum/with-key
+               (block-container (assoc config
+                                       :property-default-value? default-value?) value-block)
+               (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))])
+
+      :else
+      [:div.w-full.h-full
        {:tabIndex 0
-        :on-click (fn [] (<create-new-block! block property ""))}
-       (property-empty-btn-value property)])))
+        :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
+        :on-click (fn [e]
+                    (util/stop e)
+                    (p/let [block (<create-new-block! block property "")]
+                      (when table-text-property-render
+                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))}])))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
-  (when value
-    (if-let [v-block value]
-      (let [class? (ldb/class? v-block)
-            invalid-warning [:div.warning.text-sm
-                             "Invalid block value, please delete the current property."]]
-        (when v-block
-          (cond
-            (:block/page v-block)
-            (property-normal-block-value block property v-block opts)
+  (let [v-block value
+        class? (ldb/class? v-block)]
+    (cond
+      (entity-util/page? v-block)
+      (rum/with-key
+        (page-cp {:disable-preview? true
+                  :tag? class?} v-block)
+        (:db/id v-block))
 
-            ;; page/class/etc.
-            (entity-util/page? v-block)
-            (rum/with-key
-              (page-cp {:disable-preview? true
-                        :tag? class?} v-block)
-              (:db/id v-block))
-            :else
-            invalid-warning)))
-      (property-empty-btn-value property))))
+      :else
+      (property-normal-block-value block property v-block opts))))
 
 (rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
@@ -1104,16 +1108,10 @@
      {:id (or dom-id (random-uuid))
       :tabIndex 0
       :class (str class " " (when-not text-ref-type? "jtrigger"))
-      :style {:min-height 24}
-      :on-click (fn []
-                  (when (and text-ref-type? (nil? value))
-                    (<create-new-block! block property "")))}
+      :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
        [:div.jtrigger.cursor-pointer.text-sm.px-2 "Set default value"]
-
-       (and text-ref-type? (nil? (:block/title value)))
-       [:div.jtrigger (property-empty-btn-value property)]
 
        text-ref-type?
        (property-block-value value block property page-cp opts)

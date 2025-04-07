@@ -749,6 +749,7 @@
   (when-not (or (gobj/get e "shiftKey")
                 (util/meta-key? e)
                 (state/get-edit-input-id)
+                (some-> (.-target e) util/input?)
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))

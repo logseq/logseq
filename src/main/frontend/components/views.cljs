@@ -35,6 +35,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -184,11 +185,27 @@
        (container (assoc config :view? true) row)
        [:div])]))
 
+(rum/defc block-title
+  "Used on table view"
+  [block]
+  (let [inline-title (state/get-component :block/inline-title)]
+    [:div.relative.w-full.cursor-pointer.table-block-title
+     {:on-click (fn [_e]
+                  (when block
+                    (let [selection-type (some-> (js/window.getSelection)
+                                                 (gobj/get "type"))]
+                      (when-not (= selection-type "Range")
+                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))))}
+     (if block
+       [:div
+        (inline-title (:block/title block))]
+       [:div])]))
+
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column?]
-                        :or {with-object-name? true
-                             with-id? true
-                             add-tags-column? true}}]
+  [_config properties & {:keys [with-object-name? with-id? add-tags-column?]
+                         :or {with-object-name? true
+                              with-id? true
+                              add-tags-column? true}}]
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
         properties' (->>
@@ -217,12 +234,7 @@
               :type :string
               :header header-cp
               :cell (fn [_table row _column]
-                      (block-container (assoc config
-                                              :raw-title? (ldb/asset? row)
-                                              ;; TODO: remove this
-                                              :table? true
-                                              :table-view? true)
-                                       row))
+                      (block-title row))
               :disable-hide? true})]
           (keep
            (fn [property]
@@ -247,7 +259,9 @@
                     :cell (or (:cell property)
                               (when (de/entity? property)
                                 (fn [_table row _column]
-                                  (pv/property-value row property {:view? true}))))
+                                  (pv/property-value row property {:view? true
+                                                                   :table-view? true
+                                                                   :table-text-property-render block-title}))))
                     :get-value get-value
                     :type (:type property)}))))
            properties')
@@ -1190,7 +1204,6 @@
      {:ref #(reset! *scroller-ref %)
       :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
                                 (gdom/getElement "main-content-container"))
-      :increase-viewport-by {:top 300 :bottom 300}
       :compute-item-key (fn [idx]
                           (let [block-id (util/nth-safe rows idx)]
                             (str "table-row-" (:group-idx option) "-" block-id)))

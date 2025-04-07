@@ -35,7 +35,7 @@
       @apply whitespace-nowrap;
     }
 
-    .block-head-wrap span, .block-head-wrap a {
+    .table-block-title, .block-head-wrap a {
       @apply text-ellipsis overflow-hidden;
     }
 
