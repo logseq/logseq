@@ -18,7 +18,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -31,6 +30,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

@@ -3,9 +3,9 @@
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
             [cljs-bean.core :as bean]
-            [frontend.hooks :as hooks]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
 (def dnd-context (r/adapt-class DndContext))

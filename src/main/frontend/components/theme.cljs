@@ -8,12 +8,12 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.hooks :as hooks]
             [frontend.rum :refer [use-mounted]]
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 

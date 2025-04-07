@@ -3,9 +3,9 @@
             [frontend.components.header :as header]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [frontend.hooks :as hooks]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 

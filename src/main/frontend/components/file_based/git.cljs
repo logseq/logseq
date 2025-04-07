@@ -2,10 +2,10 @@
   (:require [clojure.string :as string]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.shell :as shell]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -73,7 +73,7 @@
        (ui/button "Revert"
                   :on-click (fn []
                               (file-handler/alter-file (state/get-current-repo)
-                                               path
-                                               content
-                                               {:re-render-root? true
-                                                :skip-compare? true})))]]]))
+                                                       path
+                                                       content
+                                                       {:re-render-root? true
+                                                        :skip-compare? true})))]]]))
