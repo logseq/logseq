@@ -2,6 +2,7 @@
   "Table"
   (:require [clojure.set :as set]
             [dommy.core :refer-macros [sel1]]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
@@ -147,7 +148,7 @@
 ;; FIXME: ux
 (defn- use-sticky-element!
   [^js/HTMLElement container target-ref]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [^js el (rum/deref target-ref)
            ^js cls (.-classList el)
@@ -189,7 +190,7 @@
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
   [^js/HTMLDivElement target-ref]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [^js target (rum/deref target-ref)
            ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
@@ -205,7 +206,7 @@
                update-target-top! (fn []
                                     (when (not (.contains target-cls "ls-fixed"))
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
-                                                         (.-scrollTop container)))))
+                                                          (.-scrollTop container)))))
                update-footer! (fn []
                                 (let [tw (.-scrollWidth table)]
                                   (when (and table-footer (number? tw) (> tw 0))
@@ -228,7 +229,7 @@
                                        table-in-top (+ scroll-top head-height)
                                        table-bottom (.-bottom (.getBoundingClientRect table))
                                        fixed? (and (> table-bottom (+ head-height 90))
-                                                (> table-in-top @*el-top))]
+                                                   (> table-in-top @*el-top))]
                                    (if fixed?
                                      (.add target-cls "ls-fixed")
                                      (.remove target-cls "ls-fixed"))
@@ -236,7 +237,7 @@
                target-observe-handle! (fn [^js _e]
                                         (when (not @*ticking?)
                                           (js/window.requestAnimationFrame
-                                            #(do (target-observe!) (vreset! *ticking? false)))
+                                           #(do (target-observe!) (vreset! *ticking? false)))
                                           (vreset! *ticking? true)))
                resize-observer (js/ResizeObserver. update-target!)
                page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
@@ -251,8 +252,8 @@
 
            ;; teardown
            #(do (.removeEventListener container "scroll" target-observe!)
-              (.disconnect resize-observer)
-              (.disconnect page-resize-observer))))))
+                (.disconnect resize-observer)
+                (.disconnect page-resize-observer))))))
    []))
 
 (rum/defc table-header < rum/static
