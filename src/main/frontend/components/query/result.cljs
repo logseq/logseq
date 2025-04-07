@@ -17,7 +17,7 @@
             [rum.core :as rum]))
 
 (defn run-custom-query
-  [config query *query-error]
+  [config query *result *query-error]
   (let [repo (state/get-current-repo)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -34,15 +34,17 @@
             nil
 
             (re-matches #"^\".*\"$" q) ; full-text search
-            (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
-              (when (seq blocks)
-                (let [result (->> blocks
-                                  (keep (fn [b]
-                                          (when-not (= (:block/uuid b) current-block-uuid)
-                                            (let [entity (db/entity [:block/uuid (:block/uuid b)])]
-                                              (when-not (ldb/hidden? entity)
-                                                entity))))))]
-                  result)))
+            (do
+              (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+                (when (seq blocks)
+                  (let [result (->> blocks
+                                    (keep (fn [b]
+                                            (when-not (= (:block/uuid b) current-block-uuid)
+                                              (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
+                                                (when-not (ldb/hidden? entity)
+                                                  entity))))))]
+                    (reset! *result result))))
+              (rum/react *result))
 
             :else
             (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
