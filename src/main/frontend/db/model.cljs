@@ -12,7 +12,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.common.util :as common-util]
@@ -22,7 +21,8 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.rules :as rules]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.shui.hooks :as hooks]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.

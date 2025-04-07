@@ -6,10 +6,10 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user]
-            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [adapt-class]]
             [frontend.state :as state]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 

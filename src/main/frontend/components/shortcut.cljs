@@ -3,7 +3,6 @@
             [clojure.string :as string]
             [frontend.context.i18n :refer [t]]
             [frontend.handler.notification :as notification]
-            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
@@ -14,6 +13,7 @@
             [frontend.util :as util]
             [goog.events :as events]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum])

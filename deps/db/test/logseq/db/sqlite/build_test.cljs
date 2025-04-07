@@ -206,3 +206,42 @@
                      @conn [:block/uuid property-uuid])
                 (map #(:block/title (d/entity @conn %)))))
         "Property page has correct blocks")))
+
+(deftest property-value-with-properties-and-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:p1 {:logseq.property/type :default}}
+               :classes {:C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "block has pvalue with built-in tag"
+                           :build/properties
+                           {:p1 {:build/property-value :block
+                                 :block/title "t1"
+                                 :build/tags [:logseq.class/Task]}}}
+                          {:block/title "block has pvalue with user tag"
+                           :build/properties
+                           {:p1 {:build/property-value :block
+                                 :block/title "u1"
+                                 :build/tags [:C1]}}}
+                          {:block/title "Todo query",
+                           :build/tags [:logseq.class/Query],
+                           :build/properties
+                           {:logseq.property/query
+                            {:build/property-value :block
+                             :block/title "{:query (task Todo)}"
+                             :build/properties
+                             {:logseq.property.code/lang "clojure"
+                              :logseq.property.node/display-type :code}}}}]}]})]
+    (is (= {:logseq.property.node/display-type :code
+            :logseq.property.code/lang "clojure"}
+           (-> (db-test/find-block-by-content @conn "{:query (task Todo)}")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))
+    (is (= {:block/tags [:logseq.class/Task]}
+           (-> (db-test/find-block-by-content @conn "t1")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))
+    (is (= {:block/tags [:user.class/C1]}
+           (-> (db-test/find-block-by-content @conn "u1")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))))

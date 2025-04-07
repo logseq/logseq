@@ -12,7 +12,8 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -37,54 +38,84 @@
     {:build/journal (:block/journal-day page-entity)}
     {:block/title (block-title page-entity)}))
 
-(defn- buildable-property-value-entity
-  "Converts property value to a buildable version"
-  [property-ent pvalue {:keys [property-value-uuids?]}]
-  (cond (and (not property-value-uuids?) (ldb/internal-page? pvalue))
+(defn- build-pvalue-entity-for-build-page
+  [pvalue]
+  (cond (ldb/internal-page? pvalue)
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
                        (assoc :build/tags (->build-tags (:block/tags pvalue))))]
-        (and (not property-value-uuids?) (entity-util/journal? pvalue))
-        [:build/page {:build/journal (:block/journal-day pvalue)}]
-        :else
-        (if (contains? #{:node :date} (:logseq.property/type property-ent))
-          ;; Idents take precedence over uuid because they are keep data graph-agnostic
-          (if (:db/ident pvalue)
-            (:db/ident pvalue)
-            ;; Use metadata distinguish from block references that don't exist like closed values
-            ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
-          (or (:db/ident pvalue)
-              ;; nbb-compatible version of db-property/property-value-content
-              (or (block-title pvalue)
-                  (:logseq.property/value pvalue))))))
+        (entity-util/journal? pvalue)
+        [:build/page {:build/journal (:block/journal-day pvalue)}]))
+
+(defn- build-pvalue-entity-default [ent-properties pvalue options]
+  (if (or (seq ent-properties) (seq (:block/tags pvalue)))
+    (cond-> {:build/property-value :block
+             :block/title (or (block-title pvalue)
+                              (:logseq.property/value pvalue))}
+      (seq (:block/tags pvalue))
+      (assoc :build/tags (->build-tags (:block/tags pvalue)))
+
+      (seq ent-properties)
+      (assoc :build/properties ent-properties)
+
+      (:include-timestamps? options)
+      (merge (select-keys pvalue [:block/created-at :block/updated-at])))
+    ;; nbb-compatible version of db-property/property-value-content
+    (or (block-title pvalue)
+        (:logseq.property/value pvalue))))
 
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
    valid sqlite.build EDN"
   [db ent-properties properties-config options]
-  (->> ent-properties
-       (map (fn [[k v]]
-              [k
-               (if (and (:block/closed-value-property v) (not (db-property/logseq-property? k)))
-                 (if-let [closed-uuid (some #(when (= (:value %) (db-property/property-value-content v))
-                                               (:uuid %))
-                                            (get-in properties-config [k :build/closed-values]))]
-                   [:block/uuid closed-uuid]
-                   (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content v))) {:properties properties-config})))
-                 (cond
-                   (de/entity? v)
-                   (buildable-property-value-entity (d/entity db k) v options)
-                   (and (set? v) (every? de/entity? v))
-                   (let [property-ent (d/entity db k)]
-                     (set (map #(buildable-property-value-entity property-ent % options) v)))
-                   :else
-                   v))]))
-       (into {})))
+  (letfn [(build-pvalue-entity
+            [db' property-ent pvalue properties-config' {:keys [property-value-uuids?] :as options'}]
+            (if-let [build-page (and (not property-value-uuids?) (build-pvalue-entity-for-build-page pvalue))]
+              build-page
+              (if (contains? #{:node :date} (:logseq.property/type property-ent))
+                ;; Idents take precedence over uuid because they are keep data graph-agnostic
+                (if (:db/ident pvalue)
+                  (:db/ident pvalue)
+                  ;; Use metadata distinguish from block references that don't exist like closed values
+                  ^::existing-property-value? [:block/uuid (:block/uuid pvalue)])
+                (or (:db/ident pvalue)
+                    (let [ent-properties* (->> (apply dissoc (db-property/properties pvalue)
+                                                      :logseq.property/value :logseq.property/created-from-property
+                                                      db-property/public-db-attribute-properties)
+                                               ;; TODO: Allow user properties when sqlite.build supports it
+                                               (medley/filter-keys db-property/internal-property?))
+                          ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
+                                           (buildable-properties db' ent-properties* properties-config' options'))]
+                      (build-pvalue-entity-default ent-properties pvalue options'))))))]
+    (->> ent-properties
+         (map (fn [[k v]]
+                [k
+                 ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
+                 (if (and (not (db-property/logseq-property? k))
+                          (or (:block/closed-value-property v)
+                              (and (set? v) (:block/closed-value-property (first v)))))
+                   (let [find-closed-uuid (fn [val]
+                                            (or (some #(when (= (:value %) (db-property/property-value-content val))
+                                                         (:uuid %))
+                                                      (get-in properties-config [k :build/closed-values]))
+                                                (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
+                     (if (set? v)
+                       (set (map #(vector :block/uuid (find-closed-uuid %)) v))
+                       [:block/uuid (find-closed-uuid v)]))
+                   (cond
+                     (de/entity? v)
+                     (build-pvalue-entity db (d/entity db k) v properties-config options)
+                     (and (set? v) (every? de/entity? v))
+                     (let [property-ent (d/entity db k)]
+                       (set (map #(build-pvalue-entity db property-ent % properties-config options) v)))
+                     :else
+                     v))]))
+         (into {}))))
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"
-  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy?] :as options}]
+  [db user-property-idents {:keys [include-properties? include-timestamps? include-uuid? shallow-copy? include-alias?] :as options}]
   (let [properties-config-by-ent
         (->> user-property-idents
              (map (fn [ident]
@@ -98,6 +129,8 @@
                          (assoc :block/uuid (:block/uuid property) :build/keep-uuid? true)
                          include-timestamps?
                          (merge (select-keys property [:block/created-at :block/updated-at]))
+                         (and (not shallow-copy?) include-alias? (:block/alias property))
+                         (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias property))))
                          (and (not shallow-copy?) (:logseq.property/classes property))
                          (assoc :build/property-classes (mapv :db/ident (:logseq.property/classes property)))
                          (seq closed-values)
@@ -129,8 +162,7 @@
 (defn- build-export-class
   "The caller of this fn is responsible for building any classes or properties from this fn
    unless shallow-copy?"
-  [class-ent {:keys [include-parents? include-uuid? shallow-copy? include-timestamps?]
-              :or {include-parents? true}}]
+  [class-ent {:keys [include-uuid? shallow-copy? include-timestamps? include-alias?]}]
   (cond-> (select-keys class-ent [:block/title :block/collapsed?])
     include-uuid?
     (assoc :block/uuid (:block/uuid class-ent) :build/keep-uuid? true)
@@ -139,11 +171,10 @@
     (and (:logseq.property.class/properties class-ent) (not shallow-copy?))
     (assoc :build/class-properties
            (mapv :db/ident (:logseq.property.class/properties class-ent)))
-    (and (not shallow-copy?) (:block/alias class-ent))
+    (and (not shallow-copy?) include-alias? (:block/alias class-ent))
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
-    (and include-parents?
-         (not shallow-copy?)
+    (and (not shallow-copy?)
          (:logseq.property/parent class-ent)
          (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
     (assoc :build/class-parent
@@ -364,12 +395,26 @@
      :classes (apply merge (map :classes uuid-block-pages))
      :pages-and-blocks (mapv #(select-keys % [:page :blocks]) uuid-block-pages)}))
 
+(defn sort-pages-and-blocks
+  "Provide a reliable sort order since this tends to be large. Helps with diffing
+   and readability"
+  [pages-and-blocks]
+  (vec
+   (sort-by #(or (get-in % [:page :block/title])
+                 (some-> (get-in % [:page :build/journal]) str)
+                 (str (get-in % [:page :block/uuid])))
+            pages-and-blocks)))
+
 (defn- finalize-export-maps
-  "Given final export maps, merges them, adds any missing class parents and merges those in"
+  "Given final export maps, merges them, adds any missing class parents and merges those in.
+   If :pages-and-blocks exist, sorts them in order to have reliable sort order"
   [db & export-maps]
   (let [final-export* (apply merge-export-maps export-maps)
-        class-parents-export (some->> (:classes final-export*) (build-class-parents-export db))]
-    (merge-export-maps final-export* class-parents-export)))
+        class-parents-export (some->> (:classes final-export*) (build-class-parents-export db))
+        merged-map (merge-export-maps final-export* class-parents-export)]
+    (cond-> merged-map
+      (:pages-and-blocks merged-map)
+      (update :pages-and-blocks sort-pages-and-blocks))))
 
 (defn- build-block-export
   "Exports block for given block eid"
@@ -387,7 +432,7 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page?] :as options}]
+(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
   (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
                    (:exclude-ontology? options)
                    (assoc :properties (get-in options [:graph-ontology :properties])))
@@ -400,7 +445,7 @@
                (:node page-ent-export)
                (merge (dissoc (:node page-ent-export) :block/title)
                       (shallow-copy-page page-entity)
-                      (when (:block/alias page-entity)
+                      (when (and include-alias? (:block/alias page-entity))
                         {:block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias page-entity)))})))
         page-blocks-export {:pages-and-blocks [{:page page :blocks blocks}]
                             :properties properties
@@ -439,7 +484,9 @@
         page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
     page-export))
 
-(defn build-view-nodes-export* [db nodes opts]
+(defn- build-nodes-export
+  "Export a mix of pages and blocks"
+  [db nodes opts]
   (let [node-pages (filter entity-util/page? nodes)
         pages-export
         (merge
@@ -452,9 +499,7 @@
         (->> node-blocks
              (group-by :block/page)
              (map (fn [[parent-page-ent blocks]]
-                    (merge (build-blocks-export db
-                                                (sort-by :block/order blocks)
-                                                (merge opts {:include-children? false}))
+                    (merge (build-blocks-export db (sort-by :block/order blocks) opts)
                            {:page (shallow-copy-page parent-page-ent)}))))
         pages-to-blocks-export
         {:properties (apply merge (map :properties pages-to-blocks))
@@ -474,7 +519,29 @@
         {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
         (build-content-ref-export db (into nodes property-value-ents))
         {:keys [pvalue-uuids] :as nodes-export}
-        (build-view-nodes-export* db nodes {:include-uuid-fn content-ref-uuids})
+        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? false})
+        uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
+        view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
+    view-nodes-export))
+
+(defn- build-selected-nodes-export
+  "Exports given nodes selected by a user. Nodes can be a mix of blocks and pages"
+  [db eids]
+  (let [top-level-nodes (map #(d/entity db %) eids)
+        children-nodes (->> top-level-nodes
+                            ;; Remove pages b/c when selected their children are not highlighted
+                            (remove entity-util/page?)
+                            (mapcat #(rest (ldb/get-block-and-children db (:block/uuid %))))
+                            (remove :logseq.property/created-from-property))
+        nodes (concat top-level-nodes children-nodes)
+        property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
+                                          vals
+                                          (filter de/entity?))
+                                    nodes)
+        {:keys [content-ref-uuids content-ref-ents] :as content-ref-export}
+        (build-content-ref-export db (into nodes property-value-ents))
+        {:keys [pvalue-uuids] :as nodes-export}
+        (build-nodes-export db nodes {:include-uuid-fn content-ref-uuids :include-children? true})
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {})
         view-nodes-export (finalize-export-maps db nodes-export uuid-block-export content-ref-export)]
     view-nodes-export))
@@ -607,16 +674,6 @@
                            :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
                         pages-and-blocks))))))
 
-(defn sort-pages-and-blocks
-  "Provide a reliable sort order since this tends to be large. Helps with diffing
-   and readability"
-  [pages-and-blocks]
-  (vec
-   (sort-by #(or (get-in % [:page :block/title])
-                 (some-> (get-in % [:page :build/journal]) str)
-                 (str (get-in % [:page :block/uuid])))
-            pages-and-blocks)))
-
 (defn- add-ontology-for-include-namespaces
   "Adds :properties to export for given namespace parents. Current use case is for :exclude-namespaces
    so no need to add :classes yet"
@@ -644,7 +701,8 @@
    * :exclude-built-in-pages? - When set, built-in pages are excluded from export
    * :exclude-files? - When set, files are excluded from export"
   [db {:keys [exclude-files?] :as options*}]
-  (let [options (merge options* {:property-value-uuids? true})
+  (let [options (merge options* {:property-value-uuids? true
+                                 :include-alias? true})
         content-ref-uuids (get-graph-content-ref-uuids db options)
         ontology-options (merge options {:include-uuid? true})
         ontology-export (build-graph-ontology-export db ontology-options)
@@ -702,7 +760,10 @@
         ;; Only looks one-level deep in properties e.g. not inside :build/page
         ;; Doesn't find :block/link refs
         ref-uuids
-        (->> (concat (mapcat get-pvalue-uuids (vals classes))
+        (->> (concat (mapcat #(map second (:block/alias %)) (vals classes))
+                     (mapcat #(map second (:block/alias %)) (vals properties))
+                     (mapcat #(map second (:block/alias (:page %))) pages-and-blocks)
+                     (mapcat get-pvalue-uuids (vals classes))
                      (mapcat get-pvalue-uuids (vals properties))
                      (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
@@ -736,6 +797,8 @@
           (build-page-export db (:page-id options))
           :view-nodes
           (build-view-nodes-export db (:node-ids options))
+          :selected-nodes
+          (build-selected-nodes-export db (:node-ids options))
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph

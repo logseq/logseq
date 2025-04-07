@@ -918,30 +918,41 @@
       (dissoc :block/whiteboard?)
       (update-page-tags db user-options per-file-state all-idents)))
 
+(defn- get-page-parents
+  "Like ldb/get-page-parents but using all-existing-page-uuids"
+  [node all-existing-page-uuids]
+  (let [get-parent (fn get-parent [n]
+                     (when (:block/uuid (:logseq.property/parent n))
+                       (or (get all-existing-page-uuids (:block/uuid (:logseq.property/parent n)))
+                           (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property/parent n))))
+                                           {:node n})))))]
+    (when-let [parent (get-parent node)]
+      (loop [current-parent parent
+             parents' []]
+        (if (and current-parent (not (contains? parents' current-parent)))
+          (recur (get-parent current-parent)
+                 (conj parents' current-parent))
+          (vec (reverse parents')))))))
+
 (defn- get-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names
    are in a format that is compatible with extract/extract e.g. namespace pages have
    their full hierarchy in the name"
-  [db classes-from-property-parents]
-  (->> db
-       ;; don't fetch built-in as that would give the wrong entity if a user used
-       ;; a db-only built-in property name e.g. description
-       (d/q '[:find [?b ...]
-              :where [?b :block/name] [(missing? $ ?b :logseq.property/built-in?)]])
-       (map #(d/entity db %))
-       (map #(vector
-              (if-let [parents (and (or (ldb/internal-page? %) (ldb/class? %))
+  [classes-from-property-parents all-existing-page-uuids]
+  (->> all-existing-page-uuids
+       (map (fn [[_ p]]
+              (vector
+               (if-let [parents (and (or (contains? (:block/tags p) :logseq.class/Tag)
+                                         (contains? (:block/tags p) :logseq.class/Page))
                                     ;; These classes have parents now but don't in file graphs (and in extract)
-                                    (not (contains? classes-from-property-parents (:block/title %)))
-                                    (->> (ldb/get-page-parents %)
-                                         (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                                         seq))]
+                                     (not (contains? classes-from-property-parents (:block/title p)))
+                                     (get-page-parents p all-existing-page-uuids))]
                 ;; Build a :block/name for namespace pages that matches data from extract/extract
-                (string/join ns-util/namespace-char (map :block/name (conj (vec parents) %)))
-                (:block/name %))
-              (or (:block/uuid %)
-                  (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name %)))
-                                  (select-keys % [:block/name :block/tags]))))))
+                 (string/join ns-util/namespace-char (map :block/name (conj (vec parents) p)))
+                 (:block/name p))
+               (or (:block/uuid p)
+                   (throw (ex-info (str "No uuid for existing page " (pr-str (:block/name p)))
+                                   (select-keys p [:block/name :block/tags])))))))
        (into {})))
 
 (defn- build-existing-page
@@ -1008,8 +1019,9 @@
                                       (not (:block/file %))))
                         ;; remove file path relative
                         (map #(dissoc % :block/file)))
-        ;; Fetch all named ents once per import file to speed up named lookups
-        all-existing-page-uuids (get-all-existing-page-uuids @conn @(:classes-from-property-parents import-state))
+        ;; Build all named ents once per import file to speed up named lookups
+        all-existing-page-uuids (get-all-existing-page-uuids @(:classes-from-property-parents import-state)
+                                                             @(:all-existing-page-uuids import-state))
         all-pages (map #(modify-page-tx % all-existing-page-uuids) all-pages*)
         all-new-page-uuids (->> all-pages
                                 (remove #(all-existing-page-uuids (or (::original-name %) (:block/name %))))
@@ -1119,6 +1131,8 @@
    ;; Map of property names (keyword) and their current schemas (map of qualified properties).
    ;; Used for adding schemas to properties and detecting changes across a property's usage
    :property-schemas (atom {})
+   ;; Indexes all created pages by uuid. Index is used to fetch all parents of a page
+   :all-existing-page-uuids (atom {})
    ;; Map of property or class names (keyword) to db-ident keywords
    :all-idents (atom {})
    ;; Set of children pages turned into classes by :property-parent-classes option
@@ -1312,6 +1326,12 @@
                  classes-tx)
            retract-page-tag-from-existing-pages)}))
 
+(defn- save-from-tx
+  "Save importer state from given txs"
+  [txs {:keys [import-state]}]
+  (when-let [nodes (seq (filter :block/name txs))]
+    (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -1351,6 +1371,7 @@
         ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
         main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true ::path file})
+        _ (save-from-tx property-pages-tx options)
 
         classes-tx @(:classes-tx tx-options)
         {:keys [retract-page-tags-tx] pages-tx'' :pages-tx} (clean-extra-invalid-tags @conn pages-tx' classes-tx existing-pages)
@@ -1376,11 +1397,13 @@
         ;;                        [whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'}))
         main-tx-report (d/transact! conn tx' {::new-graph? true ::path file})
+        _ (save-from-tx tx' options)
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
         ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
-        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {::new-graph? true ::path file}))]
+        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {::new-graph? true ::path file}))
+        _ (save-from-tx upstream-properties-tx options)]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
     [main-props-tx-report main-tx-report upstream-tx-report]))

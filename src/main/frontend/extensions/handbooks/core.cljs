@@ -9,7 +9,6 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.notification :as notification]
-            [frontend.hooks :as hooks]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.rum :as r]
             [frontend.search :as search]
@@ -17,6 +16,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]))

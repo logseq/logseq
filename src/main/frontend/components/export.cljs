@@ -1,6 +1,7 @@
 (ns frontend.components.export
   (:require ["/frontend/utils" :as utils]
             [cljs-time.core :as t]
+            [cljs.pprint :as pprint]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -160,6 +161,20 @@
              current-repo top-level-ids {:remove-options text-remove-options :other-options text-other-options})
       "")))
 
+(defn- <export-edn-helper
+  [root-block-uuids-or-page-uuid export-type]
+  (let [export-args (case export-type
+                      :page
+                      {:page-id [:block/uuid root-block-uuids-or-page-uuid]}
+                      :block
+                      {:block-id [:block/uuid (first root-block-uuids-or-page-uuid)]}
+                      :selected-nodes
+                      {:node-ids (mapv #(vector :block/uuid %) root-block-uuids-or-page-uuid)}
+                      {})]
+    (state/<invoke-db-worker :thread-api/export-edn
+                             (state/get-current-repo)
+                             (merge {:export-type export-type} export-args))))
+
 (defn- get-zoom-level
   [page-uuid]
   (let [uuid (:block/uuid (db/get-page page-uuid))
@@ -225,7 +240,7 @@
                    (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
                    (reset! (::text-other-options state) (state/get-export-block-text-other-options))
                    (assoc state ::top-level-uuids top-level-uuids)))}
-  [state _selection-ids {:keys [whiteboard?] :as options}]
+  [state _selection-ids {:keys [whiteboard? export-type] :as options}]
   (let [top-level-uuids (::top-level-uuids state)
         tp @*export-block-type
         *text-other-options (::text-other-options state)
@@ -252,11 +267,18 @@
                                    (reset! *content (export-helper top-level-uuids))))
          (when-not (seq? top-level-uuids)
            (ui/button "PNG"
-                      :class "w-20"
+                      :class "mr-4 w-20"
                       :on-click #(do (reset! *export-block-type :png)
                                      (reset! *content nil)
-                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
-
+                                     (get-image-blob top-level-uuids (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))
+         (when (config/db-based-graph?)
+           (ui/button "EDN"
+                      :class "w-20"
+                      :on-click #(do (reset! *export-block-type :edn)
+                                     (p/let [result (<export-edn-helper top-level-uuids export-type)
+                                             pull-data (with-out-str (pprint/pprint result))]
+                                       (when-not (= :export-edn-error result)
+                                         (reset! *content pull-data))))))])
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
          (when (not @*content) [:div.absolute (ui/loading "")])

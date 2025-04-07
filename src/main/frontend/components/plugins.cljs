@@ -12,7 +12,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
@@ -20,6 +19,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))

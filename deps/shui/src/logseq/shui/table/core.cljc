@@ -2,6 +2,7 @@
   "Table"
   (:require [clojure.set :as set]
             [dommy.core :refer-macros [sel1]]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
@@ -147,7 +148,7 @@
 ;; FIXME: ux
 (defn- use-sticky-element!
   [^js/HTMLElement container target-ref]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [^js el (rum/deref target-ref)
            ^js cls (.-classList el)
@@ -189,7 +190,7 @@
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
   [^js/HTMLDivElement target-ref]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [^js target (rum/deref target-ref)
            ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))

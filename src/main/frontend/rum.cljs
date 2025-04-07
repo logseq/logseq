@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [daiquiri.interpreter :as interpreter]
-            [frontend.hooks :as hooks]
+            [logseq.shui.hooks :as hooks]
             [rum.core :refer [use-state] :as rum]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs

@@ -33,7 +33,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frontend-rum]
@@ -46,6 +45,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -404,7 +404,8 @@
                                        :preview? preview?})
               [:span.title.block
                {:on-click (fn []
-                            (when (and (state/home?) (not preview?))
+                            (when (and (not preview?)
+                                       (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name])))
                               (route-handler/redirect-to-page! (:block/uuid page))))
                 :data-value @*input-value
                 :data-ref   (:block/title page)

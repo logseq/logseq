@@ -743,7 +743,8 @@
         (js/console.error "export-edn error: " e)
         (worker-util/post-message :notification
                                   ["An unexpected error occurred during export. See the javascript console for details."
-                                   :error])))))
+                                   :error])
+        :export-edn-error))))
 
 (def-thread-api :thread-api/get-view-data
   [repo view-id option]
