@@ -35,6 +35,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -512,13 +513,22 @@
   [repo id {:keys [unlinked?]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
-          block (d/entity db id)]
+          block (d/entity db id)
+          db-based? (entity-plus/db-based-graph? db)]
       (if unlinked?
         (let [title (string/lower-case (:block/title block))]
           (when-not (string/blank? title)
-            (->> (d/datoms db :avet :block/title)
-                 (some (fn [d]
-                         (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title)))))))
+            (let [datoms (d/datoms db :avet :block/title)]
+              (if db-based?
+                (some (fn [d]
+                        (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title)))
+                      datoms)
+                (some (fn [d]
+                        (and (not= id (:e d))
+                             (string/includes? (string/lower-case (:v d)) title)
+                             (let [refs (map :db/id (:block/refs (d/entity db (:e d))))]
+                               (contains? (set refs) (:e d)))))
+                      datoms)))))
         (some? (first (:block/_refs block)))))))
 
 (def-thread-api :thread-api/get-block-parents
