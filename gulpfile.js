@@ -161,7 +161,7 @@ const common = {
       stdio: 'inherit',
     })
 
-    cp.execSync(`npx cap run ${mode} --external`, {
+    cp.execSync(`npx cap run ${mode}`, {
       stdio: 'inherit',
       env: Object.assign(process.env, {
         LOGSEQ_APP_SERVER_URL,
