@@ -179,27 +179,39 @@
 
 (rum/defc block-container
   [config row]
-  (let [container (state/get-component :block/container)]
+  (let [container (state/get-component :block/container)
+        config' (cond-> config
+                  (not (:popup? config))
+                  (assoc :view? true))]
     [:div.relative.w-full {:style {:min-height 24}}
      (if row
-       (container (assoc config :view? true) row)
+       (container config' row)
        [:div])]))
 
 (rum/defc block-title
   "Used on table view"
-  [block]
+  [block {:keys [create-new-block property-ident width]}]
   (let [inline-title (state/get-component :block/inline-title)]
     [:div.relative.w-full.cursor-pointer.table-block-title
-     {:on-click (fn [_e]
-                  (when block
-                    (let [selection-type (some-> (js/window.getSelection)
-                                                 (gobj/get "type"))]
-                      (when-not (= selection-type "Range")
-                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))))}
-     (if block
-       [:div
-        (inline-title (:block/title block))]
-       [:div])]))
+     {:on-click (fn [e]
+                  (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
+                    (when block
+                      (if (= property-ident :block/title)
+                        (let [selection-type (some-> (js/window.getSelection)
+                                                     (gobj/get "type"))]
+                          (when-not (= selection-type "Range")
+                            (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))
+                        (p/do!
+                         (shui/popup-show!
+                          (.-target e)
+                          (fn []
+                            [:div {:style {:min-width (max 160 width)}}
+                             (block-container {:popup? true} block)])
+                          {:align :start})
+                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}     (if block
+                                                                                                                [:div
+                                                                                                                 (inline-title (:block/title block))]
+                                                                                                                [:div])]))
 
 (defn build-columns
   [_config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -234,7 +246,7 @@
               :type :string
               :header header-cp
               :cell (fn [_table row _column]
-                      (block-title row))
+                      (block-title row {:property-ident :block/title}))
               :disable-hide? true})]
           (keep
            (fn [property]
@@ -258,10 +270,12 @@
                                 header-cp)
                     :cell (or (:cell property)
                               (when (de/entity? property)
-                                (fn [_table row _column]
+                                (fn [_table row _column style]
                                   (pv/property-value row property {:view? true
                                                                    :table-view? true
-                                                                   :table-text-property-render block-title}))))
+                                                                   :table-text-property-render
+                                                                   (fn [block opts]
+                                                                     (block-title block (assoc opts :width (:width style))))}))))
                     :get-value get-value
                     :type (:type property)}))))
            properties')
@@ -605,7 +619,7 @@
                                         :select? select?
                                         :add-property? add-property?
                                         :style style}]
-                         (shui/table-cell cell-opts (render table row column)))))]
+                         (shui/table-cell cell-opts (render table row column style)))))]
     (shui/table-row
      (merge
       props

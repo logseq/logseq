@@ -939,11 +939,13 @@
                         (= (:db/id value-block) (:db/id default-value))
                         (not= (:db/ident property) :logseq.property/default-value))
         table-text-property-render (:table-text-property-render opts)]
-    (cond
-      (seq value-block)
-      (if table-text-property-render
-        (table-text-property-render
-         (if multiple-values? (first value-block) value-block))
+    (if table-text-property-render
+      (table-text-property-render
+       (if multiple-values? (first value-block) value-block)
+       {:create-new-block #(<create-new-block! block property "")
+        :property-ident (:db/ident property)})
+      (cond
+        (seq value-block)
         [:div.property-block-container.content.w-full
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
@@ -962,17 +964,13 @@
              (rum/with-key
                (block-container (assoc config
                                        :property-default-value? default-value?) value-block)
-               (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))])
+               (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
-      :else
-      [:div.w-full.h-full
-       {:tabIndex 0
-        :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
-        :on-click (fn [e]
-                    (util/stop e)
-                    (p/let [block (<create-new-block! block property "")]
-                      (when table-text-property-render
-                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block))))}])))
+        :else
+        [:div.w-full.h-full
+         {:tabIndex 0
+          :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
+          :on-click #(<create-new-block! block property "")}]))))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
