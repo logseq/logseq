@@ -1,10 +1,17 @@
-{:ns-groups [{:pattern "frontend.components.*" :name all-components}]
+{:ns-groups [{:pattern "frontend.components.*" :name all-components}
+             {:pattern "frontend.*" :name all-frontend}]
 
  :config-in-ns
  ;; :used-underscored-binding is turned off for components because of false positive
  ;; for rum/defcs and _state.
  {all-components
   {:linters {:used-underscored-binding {:level :off}}}
+
+  all-frontend
+  {:linters {:discouraged-namespace
+             {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+              logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}}}
+
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol
@@ -32,9 +39,6 @@
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
 
-  :discouraged-namespace
-  {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
-   logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
   :discouraged-var
   {rum.core/use-effect! {:message "Use frontend.hooks/use-effect! instead" :level :info}
    rum.core/use-memo {:message "Use frontend.hooks/use-memo instead" :level :info}
