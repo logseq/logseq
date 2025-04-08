@@ -283,7 +283,7 @@
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-cell.flex.relative (dissoc prop :select? :add-property?)
+    [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
                         (cond
                           (:select? prop)

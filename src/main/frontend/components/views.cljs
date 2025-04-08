@@ -598,6 +598,15 @@
                            :on-delete-rows (fn [table selected-ids]
                                              (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
 
+(rum/defc lazy-table-cell
+  [cell-render-f width]
+  (let [^js state (ui/useInView #js {:rootMargin "0px"})
+        in-view? (.-inView state)]
+    [:div.h-full {:ref (.-ref state)}
+     (if in-view?
+       (cell-render-f)
+       [:div {:style {:width width}}])]))
+
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
   (let [pinned-columns (get-in table [:state :pinned-columns])
@@ -621,7 +630,9 @@
                                           :select? select?
                                           :add-property? add-property?
                                           :style style}]
-                           (shui/table-cell cell-opts (render table row column style))))))]
+                           (lazy-table-cell
+                            (fn [] (shui/table-cell cell-opts (render table row column style)))
+                            width)))))]
     (shui/table-row
      (merge
       props
