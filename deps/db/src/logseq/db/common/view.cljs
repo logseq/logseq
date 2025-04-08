@@ -350,6 +350,21 @@
    (map :e)
    set))
 
+(defn- get-entities-for-all-pages [db sorting property-ident {:keys [db-based?]}]
+  (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
+        exclude-ids (when db-based? (get-exclude-page-ids db))]
+    (keep (fn [d]
+            (let [e (d/entity db (:e d))]
+              (when-not (if db-based?
+                          (exclude-ids (:db/id e))
+                          (or (ldb/hidden-or-internal-tag? e)
+                              (entity-util/property? e)
+                              (entity-util/built-in? e)))
+                (cond-> e
+                  refs-count?
+                  (assoc :block.temp/refs-count (count (:block/_refs e)))))))
+          (d/datoms db :avet property-ident))))
+
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting]
   (let [view-for (:logseq.property/view-for view)
@@ -360,19 +375,7 @@
         db-based? (entity-plus/db-based-graph? db)]
     (case feat-type
       :all-pages
-      (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
-            exclude-ids (when db-based? (get-exclude-page-ids db))]
-        (keep (fn [d]
-                (let [e (d/entity db (:e d))]
-                  (when-not (if db-based?
-                              (exclude-ids (:db/id e))
-                              (or (ldb/hidden-or-internal-tag? e)
-                                  (entity-util/property? e)
-                                  (entity-util/built-in? e)))
-                    (cond-> e
-                      refs-count?
-                      (assoc :block.temp/refs-count (count (:block/_refs e)))))))
-              (d/datoms db :avet property-ident)))
+      (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
 
       :class-objects
       (let [class-id view-for-id

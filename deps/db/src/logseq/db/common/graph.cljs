@@ -150,6 +150,23 @@
                    pages)]
     ref-pages))
 
+(defn- build-page-graph-other-page-links [db other-pages* show-journal]
+  (let [other-pages (->> other-pages*
+                         (remove nil?)
+                         (set))]
+    (mapcat
+     (fn [page-id]
+       (let [ref-pages (-> (get-page-referenced-pages db page-id)
+                           (set)
+                           (set/intersection other-pages))
+             mentioned-pages (-> (get-pages-that-mentioned-page db page-id show-journal)
+                                 (set)
+                                 (set/intersection other-pages))]
+         (concat
+          (map (fn [p] [page-id p]) ref-pages)
+          (map (fn [p] [p page-id]) mentioned-pages))))
+     other-pages)))
+
 (defn- build-page-graph
   [db page-uuid theme show-journal]
   (let [dark? (= "dark" theme)
@@ -171,21 +188,7 @@
                (map (fn [tag]
                       [page-id tag])
                     tags))
-        other-pages (->> (concat ref-pages mentioned-pages)
-                         (remove nil?)
-                         (set))
-        other-pages-links (mapcat
-                           (fn [page-id]
-                             (let [ref-pages (-> (get-page-referenced-pages db page-id)
-                                                 (set)
-                                                 (set/intersection other-pages))
-                                   mentioned-pages (-> (get-pages-that-mentioned-page db page-id show-journal)
-                                                       (set)
-                                                       (set/intersection other-pages))]
-                               (concat
-                                (map (fn [p] [page-id p]) ref-pages)
-                                (map (fn [p] [p page-id]) mentioned-pages))))
-                           other-pages)
+        other-pages-links (build-page-graph-other-page-links db (concat ref-pages mentioned-pages) show-journal)
         links (->> (concat links other-pages-links)
                    (remove nil?)
                    (distinct)
