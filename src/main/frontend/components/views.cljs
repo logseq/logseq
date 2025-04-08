@@ -609,7 +609,7 @@
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
-                     (if scrolling?
+                     (if (and scrolling? (not (:block/title row)))
                        [:div]
                        (when-let [render (get column :cell)]
                          (let [id (str (:id row) "-" (:id column))
