@@ -26,6 +26,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.outliner.op :as outliner-op]
@@ -190,17 +191,21 @@
 
 (rum/defc block-title
   "Used on table view"
-  [block {:keys [create-new-block property-ident width]}]
+  [block {:keys [create-new-block property-ident width sidebar?]}]
   (let [inline-title (state/get-component :block/inline-title)]
     [:div.relative.w-full.cursor-pointer.table-block-title
      {:on-click (fn [e]
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
-                      (if (= property-ident :block/title)
+                      (cond
+                        (and (= property-ident :block/title) sidebar?)
+                        (route-handler/redirect-to-page! (:block/uuid block))
+                        (= property-ident :block/title)
                         (let [selection-type (some-> (js/window.getSelection)
                                                      (gobj/get "type"))]
                           (when-not (= selection-type "Range")
                             (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))
+                        :else
                         (p/do!
                          (shui/popup-show!
                           (.-target e)
@@ -208,16 +213,17 @@
                             [:div {:style {:min-width (max 160 width)}}
                              (block-container {:popup? true} block)])
                           {:align :start})
-                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}     (if block
-                                                                                                                [:div
-                                                                                                                 (inline-title (:block/title block))]
-                                                                                                                [:div])]))
+                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
+     (if block
+       [:div
+        (inline-title (:block/title block))]
+       [:div])]))
 
 (defn build-columns
-  [_config properties & {:keys [with-object-name? with-id? add-tags-column?]
-                         :or {with-object-name? true
-                              with-id? true
-                              add-tags-column? true}}]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column?]
+                        :or {with-object-name? true
+                             with-id? true
+                             add-tags-column? true}}]
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
         properties' (->>
@@ -246,7 +252,7 @@
               :type :string
               :header header-cp
               :cell (fn [_table row _column]
-                      (block-title row {:property-ident :block/title}))
+                      (block-title row {:property-ident :block/title :sidebar? (:sidebar? config)}))
               :disable-hide? true})]
           (keep
            (fn [property]
@@ -275,7 +281,9 @@
                                                                    :table-view? true
                                                                    :table-text-property-render
                                                                    (fn [block opts]
-                                                                     (block-title block (assoc opts :width (:width style))))}))))
+                                                                     (block-title block (assoc opts
+                                                                                               :width (:width style)
+                                                                                               :sidebar? (:sidebar? config))))}))))
                     :get-value get-value
                     :type (:type property)}))))
            properties')
