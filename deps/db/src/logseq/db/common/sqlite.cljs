@@ -158,7 +158,7 @@
       (with-raw-title entity)
       (assoc :db/id (:db/id entity))))
 
-(defn get-block-and-children
+(defn ^:large-vars/cleanup-todo get-block-and-children
   [db id {:keys [children? children-only? nested-children? including-property-vals? properties children-props]
           :or {including-property-vals? true}}]
   (let [block (d/entity db (if (uuid? id)
