@@ -699,7 +699,7 @@
             (when-not (or whiteboard? linked-refs? (and block? (not db-based?)))
               [:div {:key "page-references"}
                (rum/with-key
-                 (reference/references page)
+                 (reference/references page {:sidebar? sidebar?})
                  (str title "-refs"))])
 
             (when-not block-or-whiteboard?
@@ -712,7 +712,7 @@
                           (or class-page? property-page?)
                           (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
-               (reference/unlinked-references page)])])])
+               (reference/unlinked-references page {:sidebar? sidebar?})])])])
       [:div.opacity-75 "Page not found"])))
 
 (rum/defcs page-aux < rum/reactive

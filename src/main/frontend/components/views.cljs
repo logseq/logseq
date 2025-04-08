@@ -1227,13 +1227,15 @@
       (item-render item'))))
 
 (rum/defc table-body < rum/static
-  [table option rows *scroller-ref *rows-wrap set-items-rendered!]
-  (let [[scrolling? set-scrolling!] (hooks/use-state false)]
+  [table option rows *scroller-ref set-items-rendered!]
+  (let [[scrolling? set-scrolling!] (hooks/use-state false)
+        sidebar? (get-in option [:config :sidebar?])]
     (when (seq rows)
       (ui/virtualized-list
        {:ref #(reset! *scroller-ref %)
-        :custom-scroll-parent (or (some-> (rum/deref *rows-wrap) (.closest ".sidebar-item-list"))
-                                  (gdom/getElement "main-content-container"))
+        :custom-scroll-parent (if sidebar?
+                                (first (dom/by-class "sidebar-item-list"))
+                                (gdom/getElement "main-content-container"))
         :compute-item-key (fn [idx]
                             (let [block-id (util/nth-safe rows idx)]
                               (str "table-row-" (:group-idx option) "-" block-id)))
@@ -1255,16 +1257,14 @@
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        *rows-wrap (rum/use-ref nil)
         [items-rendered? set-items-rendered!] (hooks/use-state false)]
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-        {:ref *rows-wrap}
         [:div.relative
          (table-header table option selected-rows)
 
-         (table-body table option rows *scroller-ref *rows-wrap set-items-rendered!)
+         (table-body table option rows *scroller-ref set-items-rendered!)
 
          (when (and (get-in table [:data-fns :add-new-object!]) (or (empty? rows) items-rendered?))
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
