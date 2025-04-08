@@ -51,7 +51,7 @@
         (block-linked-references-aux e)))))
 
 (rum/defc references-cp
-  [page-entity]
+  [page-entity config]
   (let [filters (db-view/get-filters (db/get-db) page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
@@ -81,10 +81,11 @@
      {:view-parent page-entity
       :view-feature-type :linked-references
       :additional-actions [reference-filter]
-      :columns (views/build-columns {} [] {})})))
+      :columns (views/build-columns {} [] {})
+      :config config})))
 
 (rum/defc references
-  [entity]
+  [entity config]
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
@@ -99,10 +100,10 @@
          (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                                "Linked References: Unexpected error."
                                "Linked References: Unexpected error. Please re-index your graph first."))
-         (references-cp entity))))))
+         (references-cp entity config))))))
 
 (rum/defc unlinked-references
-  [entity]
+  [entity config]
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
       (hooks/use-effect!
@@ -117,4 +118,5 @@
          {:view-parent entity
           :view-feature-type :unlinked-references
           :columns (views/build-columns {} [] {})
-          :foldable-options {:default-collapsed? true}})))))
+          :foldable-options {:default-collapsed? true}
+          :config config})))))
