@@ -56,18 +56,20 @@
                      (str id)))
          id)))))
 
-;; TODO: db ident should obey clojure's rules for keywords
 (defn create-db-ident-from-name
   "Creates a :db/ident for a class or property by sanitizing the given name.
+  The created ident should obey clojure's rules for keywords.
 
    NOTE: Only use this when creating a db-ident for a new class/property. Using
    this in read-only contexts like querying can result in db-ident conflicts"
   [user-namespace name-string]
   {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string)]}
+  (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
+          "New ident is not allowed to use an internal namespace")
   (if #?(:org.babashka/nbb (some? js/process)
          :cljs (exists? js/process)
          :default false)
-    ;; So that we don't have to change :user.{property|class} in our tests
+    ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
     (keyword user-namespace (-> name-string (string/replace #"[/()]|\s+" "-") (string/replace-first #"^(\d)" "NUM-$1")))
     (keyword user-namespace
              (str
