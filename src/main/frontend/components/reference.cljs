@@ -81,7 +81,7 @@
      {:view-parent page-entity
       :view-feature-type :linked-references
       :additional-actions [reference-filter]
-      :columns (views/build-columns {} [] {})
+      :columns (views/build-columns config [] {})
       :config config})))
 
 (rum/defc references
@@ -117,6 +117,6 @@
         (views/view
          {:view-parent entity
           :view-feature-type :unlinked-references
-          :columns (views/build-columns {} [] {})
+          :columns (views/build-columns config [] {})
           :foldable-options {:default-collapsed? true}
           :config config})))))
