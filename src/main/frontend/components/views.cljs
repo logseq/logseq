@@ -193,7 +193,7 @@
   "Used on table view"
   [block {:keys [create-new-block property-ident width sidebar?]}]
   (let [inline-title (state/get-component :block/inline-title)]
-    [:div.relative.w-full.cursor-pointer.table-block-title.w-full.h-full
+    [:div.table-block-title.flex.items-center.w-full.h-full.cursor-pointer.items-center
      {:on-click (fn [e]
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
@@ -215,8 +215,7 @@
                           {:align :start})
                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
-       [:div
-        (inline-title (:block/title block))]
+       (inline-title (:block/title block))
        [:div])]))
 
 (defn build-columns
