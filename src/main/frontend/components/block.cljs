@@ -930,7 +930,7 @@
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview? show-non-exists-page? table-view? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
-    (let [entity (db/sub-block (:db/id entity'))]
+    (let [entity (or (db/sub-block (:db/id entity')) entity')]
       (cond
         entity
         (if (or (ldb/page? entity) (:block/tags entity))
