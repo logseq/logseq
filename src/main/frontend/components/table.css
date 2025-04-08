@@ -30,7 +30,7 @@
   }
 
   .ls-table-row {
-    @apply h-[33px] min-h-[33px] max-h-[33px] overflow-hidden;
+    @apply h-[33px] min-h-[33px] max-h-[33px];
     div, span, a {
       @apply whitespace-nowrap;
     }
