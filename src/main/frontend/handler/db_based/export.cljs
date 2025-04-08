@@ -23,16 +23,15 @@
         (notification/show! "Copied block's data!" :success)))
     (notification/show! "No block found" :warning)))
 
-(defn export-view-nodes-data [nodes]
-  (let [block-uuids (mapv #(vector :block/uuid (:block/uuid %)) nodes)]
-    (p/let [result (state/<invoke-db-worker :thread-api/export-edn
-                                            (state/get-current-repo)
-                                            {:export-type :view-nodes :node-ids block-uuids})
-            pull-data (with-out-str (pprint/pprint result))]
-      (when-not (= :export-edn-error result)
-        (.writeText js/navigator.clipboard pull-data)
-        (println pull-data)
-        (notification/show! "Copied view nodes' data!" :success)))))
+(defn export-view-nodes-data [node-ids]
+  (p/let [result (state/<invoke-db-worker :thread-api/export-edn
+                                          (state/get-current-repo)
+                                          {:export-type :view-nodes :node-ids node-ids})
+          pull-data (with-out-str (pprint/pprint result))]
+    (when-not (= :export-edn-error result)
+      (.writeText js/navigator.clipboard pull-data)
+      (println pull-data)
+      (notification/show! "Copied view nodes' data!" :success))))
 
 (defn ^:export export-page-data []
   (if-let [page-id (page-util/get-current-page-id)]
