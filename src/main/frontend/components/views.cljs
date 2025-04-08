@@ -599,13 +599,13 @@
                                              (on-delete-rows view-parent view-feature-type table selected-ids))))]))))
 
 (rum/defc lazy-table-cell
-  [cell-render-f width]
+  [cell-render-f cell-placeholder]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)]
     [:div.h-full {:ref (.-ref state)}
      (if in-view?
        (cell-render-f)
-       [:div {:style {:width width}}])]))
+       cell-placeholder)]))
 
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
@@ -618,21 +618,22 @@
                            unpinned)
         sized-columns (get-in table [:state :sized-columns])
         row-cell-f (fn [column {:keys [_lazy?]}]
-                     (if (and scrolling? (not (:block/title row)))
-                       [:div]
-                       (when-let [render (get column :cell)]
-                         (let [id (str (:id row) "-" (:id column))
-                               width (get-column-size column sized-columns)
-                               select? (= (:id column) :select)
-                               add-property? (= (:id column) :add-property)
-                               style {:width width :min-width width}
-                               cell-opts {:key id
-                                          :select? select?
-                                          :add-property? add-property?
-                                          :style style}]
+                     (let [id (str (:id row) "-" (:id column))
+                           width (get-column-size column sized-columns)
+                           select? (= (:id column) :select)
+                           add-property? (= (:id column) :add-property)
+                           style {:width width :min-width width}
+                           cell-opts {:key id
+                                      :select? select?
+                                      :add-property? add-property?
+                                      :style style}
+                           cell-placeholder (shui/table-cell cell-opts nil)]
+                       (if (and scrolling? (not (:block/title row)))
+                         cell-placeholder
+                         (when-let [render (get column :cell)]
                            (lazy-table-cell
                             (fn [] (shui/table-cell cell-opts (render table row column style)))
-                            width)))))]
+                            cell-placeholder)))))]
     (shui/table-row
      (merge
       props
