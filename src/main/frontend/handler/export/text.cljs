@@ -517,8 +517,9 @@
      (let [content
            (cond
              ;; page
-             (uuid? root-block-uuids-or-page-uuid)
-             (common/get-page-content root-block-uuids-or-page-uuid)
+             (and (= 1 (count root-block-uuids-or-page-uuid))
+                  (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
+             (common/get-page-content (first root-block-uuids-or-page-uuid))
              (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
              (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
                   (string/join "\n"))
