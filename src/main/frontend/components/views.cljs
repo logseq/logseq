@@ -561,7 +561,8 @@
 
         nil))
 
-     (when-not (= view-feature-type :all-pages)
+     (when-not (or (= view-feature-type :all-pages)
+                   (and (= view-feature-type :property-objects) (:logseq.property/built-in? view-parent)))
        (update-table-state!)))))
 
 (defn- table-header
@@ -1739,8 +1740,7 @@
      * columns: view columns including properties and db attributes, which could be built by `build-columns`
      * add-new-object!: `fn` to create a new object (or row)
      * show-add-property?: whether to show `Add property`
-     * add-property!: `fn` to add a new property (or column)
-     * on-delete-rows: `fn` to trigger when deleting selected objects"
+     * add-property!: `fn` to add a new property (or column)"
   < (rum/local nil ::scroller-ref)
   [state view-entity option]
   (rum/with-key (view-inner view-entity
