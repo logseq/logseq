@@ -39,16 +39,9 @@
   [& props-and-children]
   (let [props (first props-and-children)
         children (rest props-and-children)
-        on-key-up' (:on-key-up props)
         children (if (map? props) children (cons props children))
-        props (assoc (if (map? props) props {})
-                     :on-key-up (fn [^js e]
-                                  ;; If on-key-up is provided, it should be able to control Enter behavior
-                                  (if (fn? on-key-up')
-                                    (on-key-up' e)
-                                    (when (= "Enter" (.-key e))
-                                      (some-> (.-target e) (.click))))))]
-    (apply button-base props children)))
+        props' (if (map? props) props {})]
+    (apply button-base props' children)))
 
 (defn button-icon
   [variant icon-name {:keys [icon-props size] :as props} child]
