@@ -14,7 +14,7 @@
 
 (defonce loaded? (atom false))
 
-(rum/defcs editor <
+(rum/defc editor <
   rum/reactive
   {:will-mount
    (fn [state]
@@ -30,20 +30,17 @@
                         (fn []
                           (reset! loaded? true)))
                       (reset! loaded? true)))))
-     (let [*loading? (atom true)
-           timeout (js/setTimeout #(reset! *loading? false) 0)]
-       (assoc state
-              ::loading? *loading?
-              ::timeout timeout)))
-   :will-unmount (fn [state]
-                   (js/clearTimeout (::timeout state))
-                   state)}
-  [state config id attr code options]
-  (let [*loading? (::loading? state)
-        loaded?' (rum/react loaded?)
+     state)}
+  [config id attr code options]
+  (let [loaded?' (rum/react loaded?)
         theme   (state/sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
-    (if (or (not loaded?') (rum/react *loading?))
-      (ui/loading "CodeMirror")
-      (@lazy-editor config id attr code theme options))))
+    (ui/lazy-visible
+     (fn []
+       (when loaded?' (@lazy-editor config id attr code theme options)))
+     {:trigger-once? true
+      :placeholder [:div
+                    {:style {:height (min
+                                      (* 23.2 (count (string/split-lines code)))
+                                      600)}}]})))
