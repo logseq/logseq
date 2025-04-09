@@ -670,12 +670,14 @@
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/get-page page-name)]
-      (when (db/page-empty? (state/get-current-repo) page-name)
-        (when-let [template (state/get-default-journal-template)]
-          (editor-handler/insert-template!
-           nil
-           template
-           {:target page}))))))
+      (p/do!
+       (db-async/<get-block (state/get-current-repo) (:db/id page))
+       (when (db/page-empty? (state/get-current-repo) page-name)
+         (when-let [template (state/get-default-journal-template)]
+           (editor-handler/insert-template!
+            nil
+            template
+            {:target page})))))))
 
 (defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
