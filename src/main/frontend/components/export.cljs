@@ -165,7 +165,7 @@
   [root-block-uuids-or-page-uuid export-type]
   (let [export-args (case export-type
                       :page
-                      {:page-id [:block/uuid root-block-uuids-or-page-uuid]}
+                      {:page-id [:block/uuid (first root-block-uuids-or-page-uuid)]}
                       :block
                       {:block-id [:block/uuid (first root-block-uuids-or-page-uuid)]}
                       :selected-nodes
