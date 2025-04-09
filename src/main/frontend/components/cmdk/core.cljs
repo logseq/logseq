@@ -150,8 +150,7 @@
                      ["Create"         :create       (create-items input)])
                    ["Current page"     :current-page   (visible-items :current-page)]
                    ["Nodes"            :nodes         (visible-items :nodes)]
-                   (when (and db-based? (string/blank? input))
-                     ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)])
+                   ["Recently updated" :recently-updated-pages (visible-items :recently-updated-pages)]
                    ["Commands"         :commands       (visible-items :commands)]
                    ["Files"            :files          (visible-items :files)]
                    ["Filters"          :filters        (visible-items :filters)]]
@@ -199,18 +198,16 @@
     "page"))
 
 (defmethod load-results :initial [_ state]
-  (let [!results (::results state)]
-    (if (config/db-based-graph?)
-      (let [recent-pages (map (fn [block]
-                                (let [text (block-handler/block-unique-title block)
-                                      icon (get-page-icon block)]
-                                  {:icon icon
-                                   :icon-theme :gray
-                                   :text text
-                                   :source-block block}))
-                              (ldb/get-recent-updated-pages (db/get-db)))]
-        (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))
-      !results)))
+  (let [!results (::results state)
+        recent-pages (map (fn [block]
+                            (let [text (block-handler/block-unique-title block)
+                                  icon (get-page-icon block)]
+                              {:icon icon
+                               :icon-theme :gray
+                               :text text
+                               :source-block block}))
+                          (ldb/get-recent-updated-pages (db/get-db)))]
+    (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages))))
 
 ;; The commands search uses the command-palette handler
 (defmethod load-results :commands [group state]
