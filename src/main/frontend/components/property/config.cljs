@@ -234,7 +234,6 @@
       (let [dirty? (not= (rum/deref *form-data) form-data)]
         (shui/button {:size "sm"
                       :disabled (not dirty?)
-                      :on-key-up util/stop
                       :on-click (fn []
                                   (-> (<upsert-closed-value! own-property
                                                              (cond-> form-data uuid (assoc :id uuid)))
