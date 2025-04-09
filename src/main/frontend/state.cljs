@@ -1967,50 +1967,44 @@ Similar to re-frame subscriptions"
   [edit-input-id content block cursor-range & {:keys [db move-cursor? container-id property-block direction event pos]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
-    (if (> (count content)
-           (block-content-max-length (get-current-repo)))
-      (let [elements (array-seq (js/document.getElementsByClassName (str "id" (:block/uuid block))))]
-        (when (first elements)
-          (util/scroll-to-element (gobj/get (first elements) "id")))
-        (exit-editing-and-set-selected-blocks! elements))
-      (when (and edit-input-id block
-                 (or
-                  (publishing-enable-editing?)
-                  (not common-config/PUBLISHING)))
-        (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-              container (util/get-block-container block-element)
-              block (if container
-                      (assoc block
-                             :block.temp/container (gobj/get container "id"))
-                      block)
-              block (assoc block :block.editing/direction direction
-                           :block.editing/event event
-                           :block.editing/pos pos)
-              content (string/trim (or content ""))]
-          (assert (and container-id (:block/uuid block))
-                  "container-id or block uuid is missing")
-          (set-state! :editor/block-refs #{})
-          (if property-block
-            (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
-            (set-editing-block-id! [container-id (:block/uuid block)]))
-          (set-state! :editor/container-id container-id)
-          (set-state! :editor/block block)
-          (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
-          (set-state! :editor/last-key-code nil)
-          (set-state! :editor/set-timestamp-block nil)
-          (set-state! :editor/cursor-range cursor-range)
-          (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
-            (pub-event! [:editor/focus-code-editor block block-element]))
-          (when-let [input (gdom/getElement edit-input-id)]
-            (let [pos (count cursor-range)]
-              (when content
-                (util/set-change-value input content))
+    (when (and edit-input-id block
+               (or
+                (publishing-enable-editing?)
+                (not common-config/PUBLISHING)))
+      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+            container (util/get-block-container block-element)
+            block (if container
+                    (assoc block
+                           :block.temp/container (gobj/get container "id"))
+                    block)
+            block (assoc block :block.editing/direction direction
+                         :block.editing/event event
+                         :block.editing/pos pos)
+            content (string/trim (or content ""))]
+        (assert (and container-id (:block/uuid block))
+                "container-id or block uuid is missing")
+        (set-state! :editor/block-refs #{})
+        (if property-block
+          (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
+          (set-editing-block-id! [container-id (:block/uuid block)]))
+        (set-state! :editor/container-id container-id)
+        (set-state! :editor/block block)
+        (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
+        (set-state! :editor/last-key-code nil)
+        (set-state! :editor/set-timestamp-block nil)
+        (set-state! :editor/cursor-range cursor-range)
+        (when (= :code (:logseq.property.node/display-type (d/entity db (:db/id block))))
+          (pub-event! [:editor/focus-code-editor block block-element]))
+        (when-let [input (gdom/getElement edit-input-id)]
+          (let [pos (count cursor-range)]
+            (when content
+              (util/set-change-value input content))
 
-              (when (and move-cursor? (not (block-component-editing?)))
-                (cursor/move-cursor-to input pos))
+            (when (and move-cursor? (not (block-component-editing?)))
+              (cursor/move-cursor-to input pos))
 
-              (when (or (util/mobile?) (mobile-util/native-platform?))
-                (set-state! :mobile/show-action-bar? false)))))))))
+            (when (or (util/mobile?) (mobile-util/native-platform?))
+              (set-state! :mobile/show-action-bar? false))))))))
 
 (defn action-bar-open?
   []
