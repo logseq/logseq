@@ -3954,10 +3954,10 @@
             [:div.ui-fenced-code-editor.flex.w-full
              {:ref (fn [el]
                      (set-inside-portal? (and el (whiteboard-handler/inside-portal? el))))
-              :on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "opacity-100")
+              :on-mouse-over #(dom/add-class! (hooks/deref *actions-ref) "!opacity-100")
               :on-mouse-leave (fn [e]
                                 (when (dom/has-class? (.-target e) "code-editor")
-                                  (dom/remove-class! (hooks/deref *actions-ref) "opacity-100")))}
+                                  (dom/remove-class! (hooks/deref *actions-ref) "!opacity-100")))}
              (cond
                (nil? inside-portal?) nil
 
@@ -3969,7 +3969,7 @@
 
                :else
                [:div.ls-code-editor-wrap
-                [:div.code-block-actions.flex.flex-row.gap-1.opacity-0.transition-opacity.ease-in.duration-300
+                [:div.code-block-actions
                  {:ref *actions-ref}
                  (shui/button
                   {:variant :text

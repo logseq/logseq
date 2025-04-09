@@ -45,11 +45,6 @@
   border-radius: 2px;
   line-height: 1.45em;
 
-  &-scroll {
-    padding-top: 14px;
-    padding-bottom: 62px;
-  }
-
   &:not(.CodeMirror-focused) {
     .CodeMirror-activeline-background {
       background: unset !important;

@@ -549,7 +549,7 @@
                            (fn [e]
                              (.stopPropagation e)))
         (.save editor)
-        (.setSize editor "100%" 600)
+        (.setSize editor "100%" 1024)
         (.refresh editor)))
     editor))
 
