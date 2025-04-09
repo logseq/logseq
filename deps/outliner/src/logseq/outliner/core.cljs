@@ -144,7 +144,9 @@
 
 (defn- file-rebuild-block-refs
   [repo db date-formatter {:block/keys [properties] :as block}]
-  (let [property-key-refs (keys properties)
+  (let [property-key-refs (->> (keys properties)
+                               (keep (fn [property-id]
+                                       (:block/uuid (ldb/get-page db (name property-id))))))
         property-value-refs (->> (vals properties)
                                  (mapcat (fn [v]
                                            (cond
@@ -166,7 +168,6 @@
         property-refs (->> (concat property-key-refs property-value-refs)
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-
         content-refs (when-let [content (:block/title block)]
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs)))

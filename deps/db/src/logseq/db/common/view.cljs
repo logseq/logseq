@@ -94,10 +94,18 @@
   [db {:keys [id asc?] :as sorting} entities partition?]
   (let [property (or (d/entity db id) {:db/ident id})
         get-value-fn (memoize (get-value-for-sort property))
-        sorted-entities (if (= id :block.temp/refs-count)
+        sorted-entities (cond
+                          (= id :block.temp/refs-count)
                           (cond-> (sort-by :block.temp/refs-count entities)
                             (not asc?)
                             reverse)
+
+                          (not (ldb/db-based-graph? db)) ; file graph properties don't support index
+                          (sort (by-sorting
+                                 [{:get-value get-value-fn
+                                   :asc? asc?}]) entities)
+
+                          :else
                           (let [ref-type? (= :db.type/ref (:db/valueType property))]
                             (if ref-type?
                               (sort-ref-entities-by-single-property entities sorting get-value-fn)
@@ -291,18 +299,23 @@
 
 (defn- get-linked-references
   [db id]
-  (let [entity (d/entity db id)
+  (let [db-based? (ldb/db-based-graph? db)
+        entity (d/entity db id)
         ids (set (cons id (ldb/get-block-alias db id)))
         refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)
         page-filters (get-filters db entity)
         full-ref-blocks (->> refs
                              (remove (fn [block]
-                                       (or
-                                        (= (:db/id block) id)
-                                        (= id (:db/id (:block/page block)))
-                                        (ldb/hidden? (:block/page block))
-                                        (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
-                                        (some? (get block (:db/ident entity))))))
+                                       (if db-based?
+                                         (or
+                                          (= (:db/id block) id)
+                                          (= id (:db/id (:block/page block)))
+                                          (ldb/hidden? (:block/page block))
+                                          (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
+                                          (some? (get block (:db/ident entity))))
+                                         (or
+                                          (= (:db/id block) id)
+                                          (= id (:db/id (:block/page block)))))))
                              (common-util/distinct-by :db/id))
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
@@ -523,30 +536,30 @@
                                      by-value))
                                  (if group-by-page? #(compare %2 %1) compare)))
                    (sort-entities db sorting filtered-entities))
-          data (cond->
-                {:count (count filtered-entities)
-                 :data (if group-by-property
-                         (map
-                          (fn [[by-value entities]]
-                            (let [by-value' (if (de/entity? by-value)
-                                              (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
-                                              by-value)
-                                  pages? (not (some :block/page entities))
-                                  group (if (and list-view? (not pages?))
-                                          (let [parent-groups (->> entities
-                                                                   (group-by :block/parent)
-                                                                   (sort-by (fn [[parent _]] (:block/order parent))))]
-                                            (map
-                                             (fn [[_parent blocks]]
-                                               [(:block/uuid (first blocks))
-                                                (map (fn [b]
-                                                       {:db/id (:db/id b)
-                                                        :block/parent (:block/uuid (:block/parent b))}) blocks)])
-                                             parent-groups))
-                                          (map :db/id entities))]
-                              [by-value' group]))
-                          result)
-                         (map :db/id result))}
-                 (= feat-type :linked-references)
-                 (assoc :ref-pages-count (:ref-pages-count entities-result)))]
-      data)))
+          data' (if group-by-property
+                  (map
+                   (fn [[by-value entities]]
+                     (let [by-value' (if (de/entity? by-value)
+                                       (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
+                                       by-value)
+                           pages? (not (some :block/page entities))
+                           group (if (and list-view? (not pages?))
+                                   (let [parent-groups (->> entities
+                                                            (group-by :block/parent)
+                                                            (sort-by (fn [[parent _]] (:block/order parent))))]
+                                     (map
+                                      (fn [[_parent blocks]]
+                                        [(:block/uuid (first blocks))
+                                         (map (fn [b]
+                                                {:db/id (:db/id b)
+                                                 :block/parent (:block/uuid (:block/parent b))}) blocks)])
+                                      parent-groups))
+                                   (map :db/id entities))]
+                       [by-value' group]))
+                   result)
+                  (map :db/id result))]
+      (cond->
+       {:count (count filtered-entities)
+        :data data'}
+        (= feat-type :linked-references)
+        (assoc :ref-pages-count (:ref-pages-count entities-result))))))
