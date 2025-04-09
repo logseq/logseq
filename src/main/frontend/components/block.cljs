@@ -2885,7 +2885,8 @@
        (merge attrs))
 
      [:<>
-      (when (> (count content) (state/block-content-max-length (state/get-current-repo)))
+      (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
+                 (not (contains? #{:code} (:logseq.property.node/display-type block))))
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
