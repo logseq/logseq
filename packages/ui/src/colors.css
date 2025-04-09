@@ -35,6 +35,7 @@ html {
     }
 
     &[data-theme=dark] {
+      --lx-gray-01: var(--ls-primary-background-color, hsl(var(--background)));
       --background: 192 100% 11%;
       --foreground: 0 0% 95%;
       --accent: 192 80% 10%;
