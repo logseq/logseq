@@ -2,6 +2,7 @@
 {:deps true
  :nrepl {:port 8701}
 
+ :ssl   {:password "logseq"}
  ;; "." for /static
  :dev-http {3001 ["static" "."]
             8021 "static/rtc-e2e-test"}
