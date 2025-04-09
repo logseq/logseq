@@ -137,14 +137,15 @@
 
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
-  (let [db? (config/db-based-graph? (state/get-current-repo))
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)
         search-f (fn []
                    (when-not (string/blank? q)
                      (p/let [result (if db-tag?
                                       (editor-handler/get-matched-classes q)
-                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
+                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                             :page-only? (not db-based?)}))]
                        (set-matched-pages! result))))]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
@@ -182,53 +183,53 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        (let [block (if-let [id (:block/uuid block)]
-                                      (or (db/entity [:block/uuid id]) block)
-                                      block)]
+                        (let [block' (if-let [id (:block/uuid block)]
+                                       (or (db/entity [:block/uuid id]) block)
+                                       block)]
                           [:div.flex.flex-col
-                           (when (and (not (:page? block)) (:block/uuid block))
+                           (when (and (not (:page? block)) (:block/uuid block'))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
+                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
                            [:div.flex.flex-row.items-center.gap-1
-                            (when-not db-tag?
+                            (when-not (or db-tag? (not db-based?))
                               [:div.flex.items-center
                                (cond
-                                 (:nlp-date? block)
+                                 (:nlp-date? block')
                                  (ui/icon "calendar" {:size 14})
 
-                                 (ldb/class? block)
+                                 (ldb/class? block')
                                  (ui/icon "hash" {:size 14})
 
-                                 (ldb/property? block)
+                                 (ldb/property? block')
                                  (ui/icon "letter-p" {:size 14})
 
-                                 (db-model/whiteboard-page? block)
+                                 (db-model/whiteboard-page? block')
                                  (ui/icon "whiteboard" {:extension? true})
 
-                                 (:page? block)
+                                 (:page? block')
                                  (ui/icon "page" {:extension? true})
 
-                                 (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                     (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                 (or (string/starts-with? (str (:block/title block')) (t :new-tag))
+                                     (string/starts-with? (str (:block/title block')) (t :new-page)))
                                  (ui/icon "plus" {:size 14})
 
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
                             (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block))]
+                                          (let [target (first (:block/_alias block'))]
                                             (if (ldb/class? target)
-                                              (str (:block/title block) " -> alias: " (:block/title target))
-                                              (:block/title block)))
-                                          (block-handler/block-unique-title block))]
+                                              (str (:block/title block') " -> alias: " (:block/title target))
+                                              (:block/title block')))
+                                          (block-handler/block-unique-title block'))]
                               (search-handler/highlight-exact-query title q))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
          :class "black"})
 
-       (when (and db? db-tag? (not (string/blank? q)))
+       (when (and db-based? db-tag? (not (string/blank? q)))
          [:p.px-1.opacity-50.text-sm
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))

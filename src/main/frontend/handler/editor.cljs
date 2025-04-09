@@ -1750,10 +1750,11 @@
 
 (defn <get-matched-blocks
   "Return matched blocks that are not built-in"
-  [q & [{:keys [nlp-pages?]}]]
+  [q & [{:keys [nlp-pages? page-only?]}]]
   (p/let [block (state/get-edit-block)
           result (search/block-search (state/get-current-repo) q {:built-in? false
-                                                                  :enable-snippet? false})
+                                                                  :enable-snippet? false
+                                                                  :page-only? page-only?})
           matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)]
     (-> (concat matched
                 (when nlp-pages?

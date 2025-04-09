@@ -272,7 +272,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :limit - Number of result to limit search results. Defaults to 100
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev?]
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only?]
                           :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
@@ -295,7 +295,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                       (str select pg-sql " title match ? or title match ? order by rank limit ?")
                       (str select pg-sql " title match ? order by rank limit ?"))
           non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
+          matched-result (when-not page-only?
+                           (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
           non-match-result (when non-match-input
                              (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
            ;; fuzzy is too slow for large graphs
