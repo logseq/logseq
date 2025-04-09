@@ -893,7 +893,7 @@
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
         ->ref (if db-based? page-ref/->page-ref block-ref/->block-ref)]
     [:span.warning.mr-1 {:title "Node ref invalid"}
-     (->ref id)]))
+     (->ref (str id))]))
 
 (defn inline-text
   ([format v]
@@ -1327,11 +1327,11 @@
                                            :skip-refresh? true})]
          (set-block! block)))
      [])
-    (if (and id (= (:block/uuid (:block config)) id))
+    (if (and block-id (= (:block/uuid (:block config)) block-id))
       [:span.warning.text-sm "Self reference"]
       (if block
-        (block-reference-aux config id label)
-        (invalid-node-ref id)))))
+        (block-reference-aux config block-id label)
+        (invalid-node-ref block-id)))))
 
 (defn- render-macro
   [config name arguments macro-content format]
