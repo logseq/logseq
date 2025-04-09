@@ -262,5 +262,5 @@ html.is-native-ios {
 }
 
 .ls-page-blocks {
-  @apply min-h-[60px];
+  @apply min-h-[60px] overflow-hidden;
 }

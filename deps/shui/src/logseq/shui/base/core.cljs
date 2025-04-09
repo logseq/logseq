@@ -43,10 +43,11 @@
         children (if (map? props) children (cons props children))
         props (assoc (if (map? props) props {})
                      :on-key-up (fn [^js e]
-                             ;; TODO: return value
-                                  (when (fn? on-key-up') (on-key-up' e))
-                                  (when (= "Enter" (.-key e))
-                                    (some-> (.-target e) (.click)))))]
+                                  ;; If on-key-up is provided, it should be able to control Enter behavior
+                                  (if (fn? on-key-up')
+                                    (on-key-up' e)
+                                    (when (= "Enter" (.-key e))
+                                      (some-> (.-target e) (.click))))))]
     (apply button-base props children)))
 
 (defn button-icon
