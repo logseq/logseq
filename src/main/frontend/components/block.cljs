@@ -3744,7 +3744,7 @@
                                                          (if-some [result (state/get-block-collapsed (:block/uuid block))]
                                                            result
                                                            (:block/collapsed? block)))
-                                             :skip-refresh? true})]
+                                             :skip-refresh? false})]
            (set-block! block)))
        []))
     (when (or (:view? config) (:block/title block))
