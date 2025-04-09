@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">logseq.local</domain>
+        <trust-anchors>
+            <certificates src="@raw/logseq_local" />
+        </trust-anchors>
+    </domain-config>
+    <!-- 如果需要允许所有域名（仅用于调试，生产环境不推荐） -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
