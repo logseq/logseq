@@ -1807,33 +1807,28 @@
         (:logseq.property.linked-references/excludes view-parent)
         (:filters view-parent)
         query-entity-ids]))
-
-    (let [linked-refs? (= :linked-references view-feature-type)]
-      (when-not (and linked-refs? (empty? data)
-                     (empty? (db-view/get-filters (db/get-db) view-parent))
-                     (empty? (:logseq.property.table/filters view-entity)))
-        (if loading?
-          [:div.flex.flex-col.space-2.gap-2.my-2
-           (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
-          [:div.flex.flex-col.gap-2
-           (view-container view-entity (assoc option
-                                              :data data
-                                              :full-data data
-                                              :filters filters
-                                              :sorting sorting
-                                              :set-filters! set-filters!
-                                              :set-sorting! set-sorting!
-                                              :set-data! set-data!
-                                              :set-input! set-input!
-                                              :input input
-                                              :items-count (if (every? number? data)
-                                                             (count data)
+    (if loading?
+      [:div.flex.flex-col.space-2.gap-2.my-2
+       (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
+      [:div.flex.flex-col.gap-2
+       (view-container view-entity (assoc option
+                                          :data data
+                                          :full-data data
+                                          :filters filters
+                                          :sorting sorting
+                                          :set-filters! set-filters!
+                                          :set-sorting! set-sorting!
+                                          :set-data! set-data!
+                                          :set-input! set-input!
+                                          :input input
+                                          :items-count (if (every? number? data)
+                                                         (count data)
                                                              ;; grouped
-                                                             (reduce (fn [total [_ col]]
-                                                                       (+ total (count col))) 0 data))
-                                              :ref-pages-count ref-pages-count
-                                              :load-view-data load-view-data
-                                              :set-view-entity! set-view-entity!))])))))
+                                                         (reduce (fn [total [_ col]]
+                                                                   (+ total (count col))) 0 data))
+                                          :ref-pages-count ref-pages-count
+                                          :load-view-data load-view-data
+                                          :set-view-entity! set-view-entity!))])))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
