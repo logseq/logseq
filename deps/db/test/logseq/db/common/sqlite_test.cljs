@@ -1,12 +1,15 @@
 (ns logseq.db.common.sqlite-test
+  "This ns is the only one to test against file based datascript connections.
+   These are useful integration tests"
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest async use-fixtures is testing]]
-            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.common.sqlite :as sqlite-common-db]
-            [logseq.db.sqlite.cli :as sqlite-cli]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.test.helper :as db-test]))
 
 (use-fixtures
   :each
@@ -41,30 +44,17 @@
           "Correct file with content is found"))))
 
 (deftest restore-initial-data
-  (testing "Restore a journal page"
-    (create-graph-dir "tmp/graphs" "test-db")
-    (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
-          page-uuid (random-uuid)
-          block-uuid (random-uuid)
-          created-at (js/Date.now)
-          date-int (date-time-util/date->int (js/Date.))
-          date-title (date-time-util/int->journal-title date-int "MMM do, yyyy")
-          blocks [{:db/id 100001
-                   :block/uuid page-uuid
-                   :block/journal-day date-int
-                   :block/name (string/lower-case date-title)
-                   :block/title date-title
-                   :block/created-at created-at
-                   :block/updated-at created-at}
-                  {:db/id 100002
-                   :block/title "test"
-                   :block/uuid block-uuid
-                   :block/page {:db/id 100001}
-                   :block/created-at created-at
-                   :block/updated-at created-at}]
-          _ (d/transact! conn* blocks)
+  (create-graph-dir "tmp/graphs" "test-db")
+  (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
+        _ (d/transact! conn* (sqlite-create-graph/build-db-initial-data "{}"))
+        {:keys [init-tx]}
+        (sqlite-build/build-blocks-tx
+         {:pages-and-blocks
+          [{:page {:block/title "page1"}
+            :blocks [{:block/title "b1"}]}]})
+        _ (d/transact! conn* init-tx)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
-          conn (sqlite-common-db/restore-initial-data initial-data schema)]
-      (is (nil? (d/entity @conn 100001))
-          "Journal page is not included in initial restore"))))
+        {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
+        conn (sqlite-common-db/restore-initial-data initial-data schema)]
+    (is (some? (db-test/find-page-by-title @conn "page1"))
+        "Restores recently updated page")))
