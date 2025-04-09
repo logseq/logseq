@@ -164,7 +164,8 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        block-refs-count? (some #{:block.temp/refs-count} properties)]
+        block-refs-count? (some #{:block.temp/refs-count} properties)
+        whiteboard? (common-entity-util/whiteboard? block)]
     (when block
       (let [children (when (or children? children-only?)
                        (let [page? (common-entity-util/page? block)
@@ -182,7 +183,11 @@
                                              (:block/_parent block))))
                                        (remove (fn [e] (or (:logseq.property/created-from-property e)
                                                            (:block/closed-value-property e)))))
-                             children-props (or children-props [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title :logseq.task/status :logseq.property.node/display-type])]
+                             children-props (if whiteboard?
+                                              '[*]
+                                              (or children-props
+                                                  [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
+                                                   :logseq.task/status :logseq.property.node/display-type]))]
                          (map
                           (fn [block]
                             (if (= children-props '[*])

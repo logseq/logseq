@@ -237,9 +237,10 @@
   [page-uuid block-id loaded-app set-loaded-app]
   (let [[loading? set-loading!] (hooks/use-state true)]
     (hooks/use-effect!
-     (p/do!
-      (db-async/<get-block (state/get-current-repo) page-uuid)
-      (set-loading! false))
+     (fn []
+       (p/do!
+        (db-async/<get-block (state/get-current-repo) page-uuid)
+        (set-loading! false)))
      [])
     (when-not loading?
       (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-uuid)
@@ -261,9 +262,10 @@
   [page-uuid block-id]
   (let [page-uuid (str page-uuid)
         [loaded-app set-loaded-app] (rum/use-state nil)]
-    (hooks/use-effect! (fn []
-                         (when (and loaded-app block-id)
-                           (state/focus-whiteboard-shape loaded-app block-id))
-                         #())
-                       [block-id loaded-app])
+    (hooks/use-effect!
+     (fn []
+       (when (and loaded-app block-id)
+         (state/focus-whiteboard-shape loaded-app block-id))
+       #())
+     [block-id loaded-app])
     (tldraw-app-inner page-uuid block-id loaded-app set-loaded-app)))

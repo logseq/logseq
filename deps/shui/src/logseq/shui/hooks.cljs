@@ -26,6 +26,7 @@
   "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn] (rum/use-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
+   (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
    (rum/use-effect! (fn [& deps]
                       (let [result (apply setup-fn deps)]
                         (when (fn? result) result)))
@@ -37,6 +38,7 @@
 (defn use-layout-effect!
   ([setup-fn] (rum/use-layout-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
+   (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
    (rum/use-layout-effect! (fn [& deps]
                              (let [result (apply setup-fn deps)]
                                (when (fn? result) result)))

@@ -42,10 +42,11 @@
   (when page-uuid
     (let [[loading? set-loading!] (hooks/use-state true)]
       (hooks/use-effect!
-       (p/do!
-        (loader/load :tldraw)
-        (db-async/<get-block (state/get-current-repo) page-uuid)
-        (set-loading! false))
+       (fn []
+         (p/do!
+          (loader/load :tldraw)
+          (db-async/<get-block (state/get-current-repo) page-uuid)
+          (set-loading! false)))
        [])
       (when-not loading?
         (let [tldr (whiteboard-handler/get-page-tldr page-uuid)
