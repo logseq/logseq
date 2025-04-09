@@ -121,7 +121,6 @@
                                       (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
-        db-based? (config/db-based-graph?)
         order* (cond
                  (= search-mode :graph)
                  []
