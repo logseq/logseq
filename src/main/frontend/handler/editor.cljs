@@ -335,8 +335,7 @@
                    true
 
                    :else
-                   (not has-children?))
-        current-user-id (user/user-uuid)]
+                   (not has-children?))]
     (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
@@ -344,7 +343,7 @@
                                                             :keep-uuid? keep-uuid?
                                                             :ordered-list? ordered-list?
                                                             :replace-empty-target? replace-empty-target?
-                                                            :created-by current-user-id}))))
+                                                            :created-by (user/user-block)}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
