@@ -676,7 +676,8 @@
                        (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
-      :on-click (fn [e] (when stop-click-event? (util/stop e)))
+      :on-click (fn [e]
+                  (when stop-click-event? (util/stop e)))
       :on-pointer-down (fn [^js e]
                          (cond
                            (and meta-click? (util/meta-key? e))
@@ -695,7 +696,8 @@
       :on-pointer-up (fn [e]
                        (when @*mouse-down?
                          (state/clear-edit!)
-                         (when-not (:disable-click? config)
+                         (when-not (or (:disable-click? config)
+                                       (:disable-redirect? config))
                            (open-page-ref config page-entity e page-name contents-page?))
                          (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
@@ -3092,7 +3094,9 @@
 
 (rum/defc breadcrumb-fragment
   [config block label opts]
-  [:a {:on-pointer-up
+  [:a {:on-pointer-down (fn [e]
+                          (when (some? (:sidebar-key config)) (util/stop e)))
+       :on-pointer-up
        (fn [e]
          (cond
            (gobj/get e "shiftKey")
@@ -3109,13 +3113,7 @@
              (reset! (:navigating-block opts) (:block/uuid block)))
 
            (some? (:sidebar-key config))
-           (do
-             (util/stop e)
-             (state/sidebar-replace-block!
-              (:sidebar-key config)
-              [(state/get-current-repo)
-               (:db/id block)
-               (if (:block/name block) :page :block)]))
+           nil
 
            :else
            (when-let [uuid (:block/uuid block)]
@@ -3148,7 +3146,11 @@
                   parents)
         more? (> (count parents) level-limit)
         parents (if more? (take-last level-limit parents) parents)
-        config (assoc config :breadcrumb? true)]
+        config (assoc config
+                      :breadcrumb? true
+                      :disable-redirect? true
+                      :disable-preview? true
+                      :stop-click-event? false)]
     (when show?
       (let [page-name-props (when show-page?
                               [page
