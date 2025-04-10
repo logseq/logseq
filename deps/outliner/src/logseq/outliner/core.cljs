@@ -704,9 +704,9 @@
                         true
                         (mapv block-with-timestamps)
                         db-based?
-                        (mapv #(-> %
-                                   (dissoc :block/properties)
-                                   (update-property-created-by created-by)))))
+                        (mapv #(cond-> %
+                                 true (dissoc :block/properties)
+                                 created-by (update-property-created-by created-by)))))
             insert-opts {:sibling? sibling?
                          :replace-empty-target? replace-empty-target?
                          :keep-uuid? keep-uuid?
