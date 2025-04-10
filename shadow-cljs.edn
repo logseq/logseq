@@ -2,9 +2,10 @@
 {:deps true
  :nrepl {:port 8701}
 
- :ssl   {:password "logseq"}
+ ;:ssl   {:password "logseq"}
  ;; "." for /static
  :dev-http {3001 ["static" "."]
+            3002 "static/capacitor"
             8021 "static/rtc-e2e-test"}
 
  :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
@@ -66,6 +67,43 @@
                    :watch-path "/static"
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]}}
+
+  :capacitor-new {:target        :browser
+                  :module-loader true
+                  :js-options    {:ignore-asset-requires true
+                                  :resolve {"react" {:target :global
+                                                     :global "React"}
+                                            "react-dom" {:target :global
+                                                         :global "ReactDOM"}}} ;; handle `require(xxx.css)`
+                  :modules       {:shared
+                                  {:entries []}
+                                  :main
+                                  {:init-fn capacitor.core/init
+                                   :depends-on #{:shared}}}
+
+                  :output-dir       "./static/capacitor"
+                  :asset-path       "/static/capacitor"
+                  :release          {:asset-path "https://asset.logseq.com/static/capacitor"}
+                  :compiler-options {:infer-externs      :auto
+                                     :output-feature-set :es-next-in
+                                     :source-map true
+                                     :externs ["datascript/externs.js"
+                                               "externs.js"]
+                                     :warnings {:fn-deprecated false
+                                                :redef false}
+                                     :cross-chunk-method-motion false}
+                  :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+                  :closure-defines {} ;; set by git-revision-hook
+
+                  ;; NOTE: electron, browser/mobile-app use different asset-paths.
+                  ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
+                  ;;   For electron devs, assets are located in ./js(via relative path).
+                  ;; :dev      {:asset-path "./js"}
+                  :devtools {:before-load capacitor.core/stop!          ;; before live-reloading any code call this function
+                             :after-load capacitor.core/start!          ;; after live-reloading finishes call this function
+                             :watch-path "/static/capacitor"
+                             :preloads [devtools.preload
+                                        shadow.remote.runtime.cljs.browser]}}
 
   :electron {:target :node-script
              :output-to "static/electron.js"
