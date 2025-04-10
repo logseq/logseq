@@ -317,12 +317,16 @@
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
-        columns' (filter (fn [column]
-                           (when (:id column)
-                             (when-let [p (db/entity (:id column))]
-                               (and (not (db-property/many? p))
-                                    (contains? #{:default :number :checkbox :url :node :date}
-                                               (:logseq.property/type p)))))) columns)]
+        group-by-columns (concat (filter (fn [column]
+                                           (when (:id column)
+                                             (when-let [p (db/entity (:id column))]
+                                               (and (not (db-property/many? p))
+                                                    (contains? #{:default :number :checkbox :url :node :date}
+                                                               (:logseq.property/type p)))))) columns)
+                                 (when (contains? #{:linked-references :unlinked-references}
+                                                  (:logseq.property.view/feature-type view-entity))
+                                   [{:id :block/page
+                                     :name "Block Page"}]))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
@@ -348,12 +352,12 @@
                :onCheckedChange #(column-toggle-visibility column %)
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
-       (when (seq columns')
+       (when (seq group-by-columns)
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
            "Group by")
           (shui/dropdown-menu-sub-content
-           (for [column columns']
+           (for [column group-by-columns]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
