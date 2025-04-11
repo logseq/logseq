@@ -85,19 +85,6 @@
    parse-jwt
    :sub))
 
-(defn user-block
-  "FIXME: move to somewhere else?"
-  []
-  (when-let [user-uuid* (user-uuid)]
-    (let [user-name (username)
-          email* (email)]
-      {:block/uuid (uuid user-uuid*)
-       :block/name user-name
-       :block/title user-name
-       :block/tags :logseq.class/Page
-       :logseq.property.user/name user-name
-       :logseq.property.user/email email*})))
-
 (defn logged-in? []
   (some? (state/get-auth-refresh-token)))
 
