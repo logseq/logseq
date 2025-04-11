@@ -410,6 +410,12 @@
       @apply inline;
     }
   }
+
+  .block-title-wrap {
+    > .prefix-link {
+      @apply inline mx-1;
+    }
+  }
 }
 
 .asset-ref {
