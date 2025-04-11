@@ -553,7 +553,8 @@
                                            :hide? true}}
      :logseq.property/created-by-ref {:title "Node created by"
                                       :schema {:type :entity
-                                               :hide? true}}
+                                               :hide? true}
+                                      :queryable? true}
      :logseq.property/used-template {:title "Used template"
                                      :schema {:type :node
                                               :public? false
