@@ -76,14 +76,15 @@
     title))
 
 (defn build-first-block-tx
-  [page-uuid]
+  [page-uuid & {:keys [created-by]}]
   (let [page-id [:block/uuid page-uuid]]
-    [(sqlite-util/block-with-timestamps
-      {:block/uuid (ldb/new-block-id)
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil nil)
-       :block/title ""})]))
+    [(cond-> (sqlite-util/block-with-timestamps
+              {:block/uuid (ldb/new-block-id)
+               :block/page page-id
+               :block/parent page-id
+               :block/order (db-order/gen-key nil nil)
+               :block/title ""})
+       created-by (assoc :logseq.property/created-by-ref created-by))]))
 
 (defn- get-page-by-parent-name
   [db parent-title child-title]
@@ -228,7 +229,8 @@
                                       create-first-block?
                                       (not (or whiteboard? class?))
                                       page-txs)
-                                 (build-first-block-tx (:block/uuid (first page-txs))))
+                                 (build-first-block-tx (:block/uuid (first page-txs))
+                                                       :created-by created-by))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents)
