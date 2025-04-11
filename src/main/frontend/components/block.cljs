@@ -2100,7 +2100,7 @@
   [block]
   (string/blank? (:block/title block)))
 
-(rum/defcs block-control < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
