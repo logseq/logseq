@@ -43,11 +43,12 @@
   [original-path & {:keys [href block]}]
   (let [web-link? (string/starts-with? original-path "http")
         blob-res? (some-> href (string/starts-with? "blob"))
+        asset-res? (some-> href (string/starts-with? "assets"))
         filename  (util/node-path.basename original-path)
         ext-name  "pdf"
         url       (if blob-res? href
                       (assets-handler/normalize-asset-resource-url original-path))
-        filename' (if (or web-link? blob-res?) filename
+        filename' (if (or asset-res? web-link? blob-res?) filename
                       (some-> (get-in-repo-assets-full-filename url)
                               (js/decodeURIComponent) (string/replace '"/" "_")))
         filekey   (util/safe-sanitize-file-name

@@ -768,7 +768,8 @@
             :fix migrate-views}]
    ["64.3" {:properties [:logseq.property/used-template :logseq.property/template-applied-to]
             :classes [:logseq.class/Template]}]
-   ["64.4" {:fix add-group-by-property-for-list-views}]])
+   ["64.4" {:properties [:logseq.property/created-by-ref]}]
+   ["64.5" {:fix add-group-by-property-for-list-views}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))
