@@ -90,8 +90,9 @@
     (file-async/<get-file-based-property-values graph property)))
 
 (defn <get-property-values
-  "For db graphs, returns property value ids for given property db-ident.
-   Separate from file version because values are lazy loaded"
+  "For db graphs, returns a vec of property value maps for given property
+  db-ident.  The map contains a :label key which can be a string or number (for
+  query builder) and a :value key which contains the entity or scalar property value"
   [property-id & {:as opts}]
   (when property-id
     (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)

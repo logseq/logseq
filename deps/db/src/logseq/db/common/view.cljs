@@ -473,10 +473,13 @@
                       distinct
                       (map (fn [v]
                              (let [e (when ref-type? (d/entity db v))
-                                   [label value] (if ref-type?
-                                                   [(db-property/property-value-content e)
-                                                    (select-keys e [:db/id :block/uuid])]
-                                                   [(str v) v])]
+                                   [label value] (cond ref-type?
+                                                       [(db-property/property-value-content e)
+                                                        (select-keys e [:db/id :block/uuid])]
+                                                       (= :datetime (:logseq.property/type property))
+                                                       [v v]
+                                                       :else
+                                                       [(str v) v])]
                                {:label label
                                 :value value})))
                       (common-util/distinct-by :label)))]
