@@ -52,16 +52,6 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
-(defn- update-property-created-by
-  [block created-by]
-  (assert (and (map? created-by)
-               (:block/uuid created-by)
-               (:logseq.property.user/name created-by))
-          created-by)
-  (cond-> block
-    (and created-by (nil? (:logseq.property/created-by-ref block)))
-    (assoc :logseq.property/created-by-ref created-by)))
-
 (defn- filter-top-level-blocks
   [db blocks]
   (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
@@ -660,11 +650,10 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
-      `created-by`: user-block, update `:logseq.property/created-by-ref` if exists
     ``"
   [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order?
                                          outliner-op replace-empty-target? update-timestamps?
-                                         created-by insert-template?]
+                                         insert-template?]
                                   :as opts
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
@@ -704,9 +693,7 @@
                         true
                         (mapv block-with-timestamps)
                         db-based?
-                        (mapv #(cond-> %
-                                 true (dissoc :block/properties)
-                                 created-by (update-property-created-by created-by)))))
+                        (mapv #(-> % (dissoc :block/properties)))))
             insert-opts {:sibling? sibling?
                          :replace-empty-target? replace-empty-target?
                          :keep-uuid? keep-uuid?

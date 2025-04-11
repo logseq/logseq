@@ -721,6 +721,11 @@
                                    :error])
         :export-edn-error))))
 
+(def-thread-api :thread-api/update-auth-tokens
+  [id-token access-token refresh-token]
+  (worker-state/set-auth-tokens! id-token access-token refresh-token)
+  nil)
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []

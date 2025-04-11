@@ -76,15 +76,14 @@
     title))
 
 (defn build-first-block-tx
-  [page-uuid & {:keys [created-by]}]
+  [page-uuid]
   (let [page-id [:block/uuid page-uuid]]
-    [(cond-> (sqlite-util/block-with-timestamps
-              {:block/uuid (ldb/new-block-id)
-               :block/page page-id
-               :block/parent page-id
-               :block/order (db-order/gen-key nil nil)
-               :block/title ""})
-       created-by (assoc :logseq.property/created-by-ref created-by))]))
+    [(sqlite-util/block-with-timestamps
+      {:block/uuid (ldb/new-block-id)
+       :block/page page-id
+       :block/parent page-id
+       :block/order (db-order/gen-key nil nil)
+       :block/title ""})]))
 
 (defn- get-page-by-parent-name
   [db parent-title child-title]
@@ -170,8 +169,7 @@
   "Pure function without side effects"
   [db title*
    {:keys [create-first-block? properties uuid persist-op? whiteboard?
-           class? today-journal? split-namespace? skip-existing-page-check?
-           created-by]
+           class? today-journal? split-namespace? skip-existing-page-check?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
@@ -206,8 +204,7 @@
                                                 :page-uuid (when (uuid? uuid) uuid)
                                                 :skip-existing-page-check? (if (some? skip-existing-page-check?)
                                                                              skip-existing-page-check?
-                                                                             true)
-                                                :created-by created-by})
+                                                                             true)})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
@@ -229,8 +226,7 @@
                                       create-first-block?
                                       (not (or whiteboard? class?))
                                       page-txs)
-                                 (build-first-block-tx (:block/uuid (first page-txs))
-                                                       :created-by created-by))
+                                 (build-first-block-tx (:block/uuid (first page-txs))))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents)

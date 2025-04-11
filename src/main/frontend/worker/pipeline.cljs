@@ -157,7 +157,43 @@
                                    :db-before (:db-before tx-report)))]
     {:tx-report final-tx-report}))
 
-(defn- invoke-hooks-default [repo conn {:keys [tx-meta] :as tx-report} context]
+(defn- gen-created-by-block
+  []
+  (when-let [id-token (worker-state/get-id-token)]
+    (let [decoded (worker-util/parse-jwt id-token)
+          user-uuid (:sub decoded)
+          user-name (:cognito:username decoded)
+          email (:email decoded)]
+      {:block/uuid (uuid user-uuid)
+       :block/name user-name
+       :block/title user-name
+       :block/tags :logseq.class/Page
+       :logseq.property.user/name user-name
+       :logseq.property.user/email email})))
+
+(defn- add-created-by-ref-hook
+  [db-after tx-data tx-meta]
+  (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta)))
+             (seq tx-data))
+    (let [created-by-block (gen-created-by-block)
+          created-by-ent (d/entity db-after [:block/uuid (:block/uuid created-by-block)])
+          created-by-id (or (:db/id created-by-ent) "created-by-id")
+          created-by-block' (when-not created-by-ent (assoc created-by-block :db/id "created-by-id"))
+          add-created-by-tx-data
+          (keep
+           (fn [datom]
+             (when (and (keyword-identical? :block/uuid (:a datom))
+                        (:added datom))
+               (let [e (:e datom)
+                     ent (d/entity db-after e)]
+                 (when-not (:logseq.property/created-by-ref ent)
+                   [:db/add e :logseq.property/created-by-ref created-by-id]))))
+           tx-data)]
+      (cond->> add-created-by-tx-data
+        created-by-block' (cons created-by-block')))))
+
+(defn- invoke-hooks-default
+  [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
           commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
@@ -165,7 +201,8 @@
           ;; :block/refs relies on those changes
           ;; idea: implement insert-templates using a command?
           insert-templates-tx (insert-tag-templates repo conn tx-report)
-          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx)
+          created-by-tx (add-created-by-ref-hook (:db-after tx-report) (:tx-data tx-report) (:tx-meta tx-report))
+          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke})]
@@ -194,12 +231,12 @@
                            (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
-                      ;; block path refs
+                        ;; block path refs
                         (when (seq blocks')
                           (let [blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
                             (compute-block-path-refs-tx tx-report* blocks')))
 
-                       ;; update block/tx-id
+                        ;; update block/tx-id
                         (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                      (concat pages blocks))
                               tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
