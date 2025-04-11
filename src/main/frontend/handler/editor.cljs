@@ -335,8 +335,7 @@
                    true
 
                    :else
-                   (not has-children?))
-        current-user-id (user/user-uuid)]
+                   (not has-children?))]
     (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
@@ -344,7 +343,7 @@
                                                             :keep-uuid? keep-uuid?
                                                             :ordered-list? ordered-list?
                                                             :replace-empty-target? replace-empty-target?
-                                                            :created-by current-user-id}))))
+                                                            :created-by (user/user-block)}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -1433,16 +1432,18 @@
                            (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
               dir (or (:dir matched-alias) repo-dir)]
         (if (util/electron?)
-          (let [from (not-empty (.-path file))]
-            (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
-            (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                (p/then
-                 (fn [dest]
-                   [file-rpath
-                    (if (string? dest) (js/File. #js[] dest) file)
-                    (path/path-join dir file-rpath)
-                    matched-alias]))
-                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+          (do (js/console.debug "Debug: Copy Asset #" dir file-rpath)
+              (-> (if-let [from (not-empty (.-path file))]
+                    (js/window.apis.copyFileToAssets dir file-rpath from)
+                    (p/let [content (.arrayBuffer file)]
+                      (fs/write-file! repo repo-dir file-rpath content {:skip-compare? true})))
+                  (p/then
+                   (fn [dest]
+                     [file-rpath
+                      (if (string? dest) (js/File. #js[] dest) file)
+                      (path/path-join dir file-rpath)
+                      matched-alias]))
+                  (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
           (->
            (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
