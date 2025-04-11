@@ -14,7 +14,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -63,9 +62,7 @@
            (p/let [options' (if db-based?
                               (cond-> (update options :tags concat (:block/tags parsed-result))
                                 (nil? (:split-namespace? options))
-                                (assoc :split-namespace? true)
-                                true
-                                (assoc :created-by (user/user-block)))
+                                (assoc :split-namespace? true))
                               options)
                    [_page-name page-uuid] (ui-outliner-tx/transact!
                                            {:outliner-op :create-page}

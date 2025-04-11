@@ -126,7 +126,8 @@
    (state/set-auth-access-token nil)
    (state/set-auth-refresh-token nil)
    (set-token-to-localstorage! "" "" "")
-   (clear-cognito-tokens!))
+   (clear-cognito-tokens!)
+   (state/<invoke-db-worker :thread-api/update-auth-tokens nil nil nil))
   ([except-refresh-token?]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
@@ -134,18 +135,21 @@
      (state/set-auth-refresh-token nil))
    (if except-refresh-token?
      (set-token-to-localstorage! "" "")
-     (set-token-to-localstorage! "" "" ""))))
+     (set-token-to-localstorage! "" "" ""))
+   (state/<invoke-db-worker :thread-api/update-auth-tokens nil nil (state/get-auth-refresh-token))))
 
 (defn- set-tokens!
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (set-token-to-localstorage! id-token access-token))
+   (set-token-to-localstorage! id-token access-token)
+   (state/<invoke-db-worker :thread-api/update-auth-tokens id-token access-token (state/get-auth-refresh-token)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
-   (set-token-to-localstorage! id-token access-token refresh-token)))
+   (set-token-to-localstorage! id-token access-token refresh-token)
+   (state/<invoke-db-worker :thread-api/update-auth-tokens id-token access-token refresh-token)))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
