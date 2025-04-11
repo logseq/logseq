@@ -1,5 +1,6 @@
 (ns frontend.worker.shared-service
   (:require [cljs-bean.core :as bean]
+            [goog.object :as gobj]
             [promesa.core :as p]))
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
@@ -67,7 +68,7 @@
                                                      (when (and (= type "providerChange") (not provider?))
                                                        (js/console.log "Provider change detected. Re-registering...")
                                                        (when on-provider-change
-                                                         (on-provider-change provider?))
+                                                         (on-provider-change client-id provider?))
                                                        (register)
                                                        (when (seq @*requests-in-flight)
                                                          (js/console.log "Requests were in flight when provider changed. Requeuing...")
@@ -86,12 +87,12 @@
 
         status {:ready (atom (p/create (fn [resolve] (reset! *ready-resolve resolve))))
                 :is-service-provider (atom
-                                      (p/let [locks (.query js/navigator.locks)
-                                              provider? (nil? (some #(= (.-name %) service-name)
-                                                                    (js/Array.from (.-held locks))))]
-                                        (when-not provider?
-                                          (on-not-provider provider?))
-                                        provider?))}
+                                      (p/create (fn [resolve]
+                                                  (p/let [^js locks (.query js/navigator.locks)
+                                                          provider? (nil? (some #(= (.-name %) service-name) (.-held locks)))]
+                                                    (resolve provider?)
+                                                    (when-not provider?
+                                                      (on-not-provider provider?))))))}
         on-become-provider (fn []
                              (p/do!
                               (reset! (:is-service-provider status) (p/resolved true))
@@ -131,7 +132,7 @@
                                (.postMessage common-channel #js {:type "providerChange" :serviceName service-name})
                                (when on-provider-change
                                  (p/let [provider? @(:is-service-provider status)]
-                                   (on-provider-change provider?)))
+                                   (on-provider-change nil provider?)))
 
                                (when (seq @*requests-in-flight)
                                  (js/console.log "Requests were in flight when tab became provider. Requeuing...")
@@ -163,10 +164,11 @@
                                      nil
 
                                      :else
-                                     (fn [& args]
+                                     (fn [args]
                                        (p/let [provider? @(:is-service-provider status)]
                                          (if provider?
-                                           (js-invoke target method (clj->js args))
+                                           (let [f (gobj/get target method)]
+                                             (apply f args))
                                            (p/create
                                             (fn [resolve reject]
                                               (let [id (random-id)
