@@ -175,22 +175,21 @@
   [db-after tx-data tx-meta]
   (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta)))
              (seq tx-data))
-    (let [created-by-block (gen-created-by-block)
-          created-by-ent (d/entity db-after [:block/uuid (:block/uuid created-by-block)])
-          created-by-id (or (:db/id created-by-ent) "created-by-id")
-          created-by-block' (when-not created-by-ent (assoc created-by-block :db/id "created-by-id"))
-          add-created-by-tx-data
-          (keep
-           (fn [datom]
-             (when (and (keyword-identical? :block/uuid (:a datom))
-                        (:added datom))
-               (let [e (:e datom)
-                     ent (d/entity db-after e)]
-                 (when-not (:logseq.property/created-by-ref ent)
-                   [:db/add e :logseq.property/created-by-ref created-by-id]))))
-           tx-data)]
-      (cond->> add-created-by-tx-data
-        created-by-block' (cons created-by-block')))))
+    (when-let [created-by-block (some-> (gen-created-by-block) (assoc :db/id "created-by-id"))]
+      (let [created-by-ent (d/entity db-after [:block/uuid (:block/uuid created-by-block)])
+            created-by-id (or (:db/id created-by-ent) "created-by-id")
+            add-created-by-tx-data
+            (keep
+             (fn [datom]
+               (when (and (keyword-identical? :block/uuid (:a datom))
+                          (:added datom))
+                 (let [e (:e datom)
+                       ent (d/entity db-after e)]
+                   (when-not (:logseq.property/created-by-ref ent)
+                     [:db/add e :logseq.property/created-by-ref created-by-id]))))
+             tx-data)]
+        (cond->> add-created-by-tx-data
+          (not (:db/id created-by-ent)) (cons created-by-block))))))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
