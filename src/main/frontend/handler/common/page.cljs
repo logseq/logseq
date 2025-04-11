@@ -60,13 +60,12 @@
        (if (and has-tags? (nil? title'))
          (notification/show! "Page name can't include \"#\"." :warning)
          (when-not (string/blank? title')
-           (p/let [current-user-id (user/user-uuid)
-                   options' (if db-based?
+           (p/let [options' (if db-based?
                               (cond-> (update options :tags concat (:block/tags parsed-result))
                                 (nil? (:split-namespace? options))
                                 (assoc :split-namespace? true)
-                                current-user-id
-                                (assoc :created-by current-user-id))
+                                true
+                                (assoc :created-by (user/user-block)))
                               options)
                    [_page-name page-uuid] (ui-outliner-tx/transact!
                                            {:outliner-op :create-page}

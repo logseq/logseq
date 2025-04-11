@@ -2100,7 +2100,7 @@
   [block]
   (string/blank? (:block/title block)))
 
-(rum/defcs block-control < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
@@ -2169,30 +2169,40 @@
                                         (assoc :class "selected"))
                          (when
                           order-list?
-                           [:label (str order-list-idx ".")])])]]]
-         (cond
-           (and (or (mobile-util/native-platform?)
-                    (:ui/show-empty-bullets? (state/get-config))
-                    collapsed?
-                    collapsable?
-                    (< (- (util/time-ms) (:block/created-at block)) 500))
-                (not doc-mode?))
-           bullet
+                           [:label (str order-list-idx ".")])])]]
+             bullet' (cond
+                       (and (or (mobile-util/native-platform?)
+                                (:ui/show-empty-bullets? (state/get-config))
+                                collapsed?
+                                collapsable?
+                                (< (- (util/time-ms) (:block/created-at block)) 500))
+                            (not doc-mode?))
+                       bullet
 
-           (or
-            (and empty-content?
-                 (not edit?)
-                 (not top?)
-                 (not bottom?)
-                 (not (util/react *control-show?))
-                 (not (:logseq.property/created-from-property  block)))
-            (and doc-mode?
-                 (not collapsed?)
-                 (not (util/react *control-show?))))
-           [:span.bullet-container]
+                       (or
+                        (and empty-content?
+                             (not edit?)
+                             (not top?)
+                             (not bottom?)
+                             (not (util/react *control-show?))
+                             (not (:logseq.property/created-from-property  block)))
+                        (and doc-mode?
+                             (not collapsed?)
+                             (not (util/react *control-show?))))
+                       [:span.bullet-container]
 
-           :else
-           bullet)))]))
+                       :else
+                       bullet)]
+         (if (config/db-based-graph?)
+           (ui/tippy
+            {:html (fn []
+                     [:div.flex.flex-col.gap-1.p-2
+                      (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db)) (:logseq.property/created-by-ref block))]
+                        [:div (:block/title created-by)])
+                      [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
+                      [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]])}
+            bullet')
+           bullet')))]))
 
 (rum/defc dnd-separator
   [move-to block-content?]
