@@ -23,6 +23,7 @@
             [frontend.worker.rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
@@ -847,22 +848,37 @@
 (defn init
   "web worker entry"
   []
-  (glogi-console/install!)
-  (check-worker-scope!)
-  (outliner-register-op-handlers!)
-  (<ratelimit-file-writes!)
-  (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-  (Comlink/expose #js{"remoteInvoke" thread-api/remote-function})
-  (let [^js wrapped-main-thread* (Comlink/wrap js/self)
-        wrapped-main-thread (fn [qkw direct-pass-args? & args]
-                              (-> (.remoteInvoke wrapped-main-thread*
-                                                 (str (namespace qkw) "/" (name qkw))
-                                                 direct-pass-args?
-                                                 (if direct-pass-args?
-                                                   (into-array args)
-                                                   (ldb/write-transit-str args)))
-                                  (p/chain ldb/read-transit-str)))]
-    (reset! worker-state/*main-thread wrapped-main-thread)))
+  (let [fns {"remoteInvoke" thread-api/remote-function}
+        service (shared-service/create-service "graph"
+                                               (bean/->js fns)
+                                               {:on-provider-change
+                                                (fn [_client-id provider?]
+                                                  (prn :debug :provider-changed
+                                                       :provider? provider?))})
+        proxy-object (->>
+                      (map (fn [k]
+                             [k (fn [& args]
+                                  ;; ensure service is ready
+                                  (p/let [_ready-value @(get-in service [:status :ready])]
+                                    (js-invoke (:proxy service) k args)))]) (keys fns))
+                      (into {})
+                      bean/->js)]
+    (glogi-console/install!)
+    (check-worker-scope!)
+    (outliner-register-op-handlers!)
+    (<ratelimit-file-writes!)
+    (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
+    (Comlink/expose proxy-object)
+    (let [^js wrapped-main-thread* (Comlink/wrap js/self)
+          wrapped-main-thread (fn [qkw direct-pass-args? & args]
+                                (-> (.remoteInvoke wrapped-main-thread*
+                                                   (str (namespace qkw) "/" (name qkw))
+                                                   direct-pass-args?
+                                                   (if direct-pass-args?
+                                                     (into-array args)
+                                                     (ldb/write-transit-str args)))
+                                    (p/chain ldb/read-transit-str)))]
+      (reset! worker-state/*main-thread wrapped-main-thread))))
 
 (comment
   (defn <remove-all-files!
