@@ -472,7 +472,8 @@
                    (util/electron?)
                    (mobile-util/native-platform?))
                (nil? @src))
-      (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
+      (p/then (assets-handler/<make-asset-url href)
+        #(reset! src (common-util/safe-decode-uri-component %))))
 
     (when @src
       (let [ext (keyword (or (util/get-file-ext @src)
@@ -523,6 +524,7 @@
           (= ext :pdf)
           [:a.asset-ref.is-pdf
            {:data-href href
+            :data-url @src
             :draggable true
             :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
