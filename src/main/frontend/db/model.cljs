@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.file-based.db :as common-file-db]
+            [frontend.common.graph-view :as graph-view]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
@@ -17,7 +18,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.common.graph :as db-graph]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.rules :as rules]
@@ -561,7 +561,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-pages-that-mentioned-page
   [repo page-id include-journals?]
   (when-let [db (conn/get-db repo)]
-    (db-graph/get-pages-that-mentioned-page db page-id include-journals?)))
+    (graph-view/get-pages-that-mentioned-page db page-id include-journals?)))
 
 (defn get-page-referenced-blocks-full
   ([page-id]

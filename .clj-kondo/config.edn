@@ -176,6 +176,7 @@
              logseq.db.common.order db-order
              logseq.db.common.property-util db-property-util
              logseq.db.common.sqlite sqlite-common-db
+             logseq.db.common.view db-view
              logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
              logseq.db.file-based.entity-util file-entity-util
