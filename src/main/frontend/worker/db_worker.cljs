@@ -10,6 +10,7 @@
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.cache :as common.cache]
+            [frontend.common.graph-view :as graph-view]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db.migrate :as db-migrate]
@@ -31,7 +32,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.graph :as db-graph]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.common.view :as db-view]
@@ -773,7 +773,7 @@
 (def-thread-api :thread-api/build-graph
   [repo option]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (db-graph/build-graph @conn option)))
+    (graph-view/build-graph @conn option)))
 
 (def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
 (defn- get-all-page-titles

@@ -1,4 +1,4 @@
-(ns logseq.db.common.graph
+(ns frontend.common.graph-view
   "Main namespace for graph view fns."
   (:require [clojure.set :as set]
             [clojure.string :as string]
@@ -6,9 +6,9 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.property-util :as db-property-util]
-            [logseq.db.file-based.builtins :as file-builtins]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.graph-parser.db :as gp-db]))
 
 (defn- build-links
   [links]
@@ -97,7 +97,7 @@
                            (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
-        build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names file-builtins/built-in-pages-names)
+        build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
                             (map string/lower-case)
                             set)
         nodes (cond->> full-pages'
@@ -232,7 +232,7 @@
        {:nodes nodes
         :links links}))))
 
-(defn ^:api build-graph
+(defn build-graph
   [db opts]
   (case (:type opts)
     :global (build-global-graph db opts)
