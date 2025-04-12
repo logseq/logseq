@@ -284,7 +284,7 @@
                                               entities)
                            ;; Delete property value block if it's no longer used by other blocks
                            retract-blocks-tx (when (seq deleting-entities)
-                                               (:tx-data (outliner-core/delete-blocks conn deleting-entities)))]
+                                               (:tx-data (outliner-core/delete-blocks @conn deleting-entities)))]
                        (concat
                         [[:db/retract (:db/id block) (:db/ident property)]]
                         retract-blocks-tx)))
@@ -627,7 +627,7 @@
                       {:type :notification
                        :payload {:message "The choice can't be deleted because it's built-in."
                                  :type :warning}}))
-      (let [data (:tx-data (outliner-core/delete-blocks conn [value-block]))
+      (let [data (:tx-data (outliner-core/delete-blocks @conn [value-block]))
             tx-data (conj data (outliner-core/block-with-updated-at
                                 {:db/id property-id}))]
         (ldb/transact! conn tx-data)))))

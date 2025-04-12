@@ -48,7 +48,7 @@
             blocks)))
 
 (defn- insert-tag-templates
-  [repo conn tx-report]
+  [repo tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
         journal-template? (some (fn [d] (and (:added d) (= (:a d) :block/tags) (= (:v d) journal-id))) (:tx-data tx-report))
@@ -83,8 +83,10 @@
                                                                                                                                               (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false
-                                                                                                                   :keep-uuid? journal-template?})]
+                                       (let [result (outliner-core/insert-blocks
+                                                     repo db template-blocks object
+                                                     {:sibling? false
+                                                      :keep-uuid? journal-template?})]
                                          (:tx-data result)))))))]
     tx-data))
 
@@ -192,19 +194,19 @@
           (not (:db/id created-by-ent)) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
-  [repo conn tx-report]
+  [repo tx-report]
   (let [{:keys [db-after tx-data tx-meta]} tx-report
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands tx-report))
-        insert-templates-tx (insert-tag-templates repo conn tx-report)
+        insert-templates-tx (insert-tag-templates repo tx-report)
         created-by-tx (add-created-by-ref-hook db-after tx-data tx-meta)]
     (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
-    (let [tx-before-refs (compute-extra-tx-data repo conn tx-report)
+    (let [tx-before-refs (compute-extra-tx-data repo tx-report)
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke})]
