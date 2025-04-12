@@ -473,7 +473,7 @@
                    (mobile-util/native-platform?))
                (nil? @src))
       (p/then (assets-handler/<make-asset-url href)
-        #(reset! src (common-util/safe-decode-uri-component %))))
+              #(reset! src (common-util/safe-decode-uri-component %))))
 
     (when @src
       (let [ext (keyword (or (util/get-file-ext @src)
@@ -2178,15 +2178,14 @@
                        :else
                        bullet)]
          (if (config/db-based-graph?)
-           (ui/tippy
-            {:html (fn []
-                     [:div.flex.flex-col.gap-1.p-2
-                      (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db))
-                                                 (:logseq.property/created-by-ref block))]
-                        [:div (:block/title created-by)])
-                      [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
-                      [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]])}
-            bullet')
+           (ui/tooltip
+            bullet'
+            [:div.flex.flex-col.gap-1.p-2
+             (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db))
+                                        (:logseq.property/created-by-ref block))]
+               [:div (:block/title created-by)])
+             [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
+             [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]])
            bullet')))]))
 
 (rum/defc dnd-separator
