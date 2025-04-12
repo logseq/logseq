@@ -75,11 +75,11 @@
                                                (fn [resolve _]
                                                  (letfn [(listener [event]
                                                            (let [{:keys [providerId clientId type]} (bean/->clj (.-data event))]
-                                                             (prn :debug :providerId providerId)
                                                              (.request js/navigator.locks providerId #js {:mode "exclusive"}
                                                                        (fn [_]
                                                                          ;; The provider has gone, elect the new provider
-                                                                         (prn :debug "Provider has gone")))
+                                                                         (prn :debug "Provider has gone")
+                                                                         (reset! *provider? :re-check)))
                                                              (when (and (= clientId client-id) (= type "registered"))
                                                                (.removeEventListener common-channel "message" listener)
                                                                (resolve nil))))]
