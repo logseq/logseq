@@ -191,17 +191,20 @@
         (cond->> add-created-by-tx-data
           (not (:db/id created-by-ent)) (cons created-by-block))))))
 
+(defn- compute-extra-tx-data
+  [repo conn tx-report]
+  (let [{:keys [db-after tx-data tx-meta]} tx-report
+        display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
+        commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
+                      (commands/run-commands tx-report))
+        insert-templates-tx (insert-tag-templates repo conn tx-report)
+        created-by-tx (add-created-by-ref-hook db-after tx-data tx-meta)]
+    (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
-    (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-          commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
-                        (commands/run-commands tx-report))
-          ;; :block/refs relies on those changes
-          ;; idea: implement insert-templates using a command?
-          insert-templates-tx (insert-tag-templates repo conn tx-report)
-          created-by-tx (add-created-by-ref-hook (:db-after tx-report) (:tx-data tx-report) (:tx-meta tx-report))
-          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)
+    (let [tx-before-refs (compute-extra-tx-data repo conn tx-report)
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke})]
@@ -227,7 +230,7 @@
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
+                           (ldb/transact! conn block-refs {:pipeline-replace? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
                         ;; block path refs
