@@ -7,6 +7,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
@@ -160,25 +161,28 @@
     {:tx-report final-tx-report}))
 
 (defn- gen-created-by-block
-  []
-  (when-let [id-token (worker-state/get-id-token)]
-    (let [decoded (worker-util/parse-jwt id-token)
-          user-uuid (:sub decoded)
-          user-name (:cognito:username decoded)
-          email (:email decoded)]
-      {:block/uuid (uuid user-uuid)
-       :block/name user-name
-       :block/title user-name
-       :block/tags :logseq.class/Page
-       :logseq.property.user/name user-name
-       :logseq.property.user/email email})))
+  [decoded-id-token]
+  (let [user-uuid (:sub decoded-id-token)
+        user-name (:cognito:username decoded-id-token)
+        email (:email decoded-id-token)
+        now (common-util/time-ms)]
+    {:block/uuid (uuid user-uuid)
+     :block/name user-name
+     :block/title user-name
+     :block/tags :logseq.class/Page
+     :block/created-at now
+     :block/updated-at now
+     :logseq.property.user/name user-name
+     :logseq.property.user/email email}))
 
 (defn- add-created-by-ref-hook
   [db-after tx-data tx-meta]
   (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta)))
              (seq tx-data))
-    (when-let [created-by-block (some-> (gen-created-by-block) (assoc :db/id "created-by-id"))]
-      (let [created-by-ent (d/entity db-after [:block/uuid (:block/uuid created-by-block)])
+    (when-let [decoded-id-token (some-> (worker-state/get-id-token) worker-util/parse-jwt)]
+      (let [created-by-ent (d/entity db-after [:block/uuid (uuid (:sub decoded-id-token))])
+            created-by-block (when (nil? created-by-ent)
+                               (assoc (gen-created-by-block decoded-id-token) :db/id "created-by-id"))
             created-by-id (or (:db/id created-by-ent) "created-by-id")
             add-created-by-tx-data
             (keep
@@ -191,7 +195,7 @@
                      [:db/add e :logseq.property/created-by-ref created-by-id]))))
              tx-data)]
         (cond->> add-created-by-tx-data
-          (not (:db/id created-by-ent)) (cons created-by-block))))))
+          (nil? created-by-ent) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
   [repo tx-report]
