@@ -3176,7 +3176,7 @@
                                    [block
                                     (when ast-title
                                       (if (seq ast-title)
-                                        (->elem :span.inline-wrap (map-inline config ast-title))
+                                        (->elem :span (map-inline config ast-title))
                                         (->elem :div (markup-elements-cp config ast-body))))]))))
               breadcrumbs (->> (into [] parents-props)
                                (concat [page-name-props] (when more? [:more]))
