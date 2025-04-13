@@ -2085,8 +2085,10 @@
      (every? #(= % ["Horizontal_Rule"]) ast-body))))
 
 (rum/defcs block-control < rum/reactive
+  (rum/local false ::dragging?)
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
-  (let [doc-mode?          (state/sub :document/mode?)
+  (let [*dragging?         (::dragging? state)
+        doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
         empty-content?     (block-content-empty? block)
@@ -2136,8 +2138,11 @@
                       {:id (str "dot-" uuid)
                        :draggable true
                        :on-drag-start (fn [event]
+                                        (reset! *dragging? true)
                                         (util/stop-propagation event)
                                         (bullet-drag-start event block uuid block-id))
+                       :on-drag-end (fn [_]
+                                      (reset! *dragging? false))
                        :blockid (str uuid)
                        :class (str (when collapsed? "bullet-closed")
                                    (when (and (:document/mode? config)
@@ -2177,7 +2182,7 @@
 
                        :else
                        bullet)]
-         (if (config/db-based-graph?)
+         (if (and (config/db-based-graph?) (not @*dragging?))
            (ui/tooltip
             bullet'
             [:div.flex.flex-col.gap-1.p-2
