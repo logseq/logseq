@@ -447,24 +447,30 @@
   [repo]
   (worker-state/get-sqlite-conn repo :search))
 
-(def-thread-api :thread-api/get-version
-  []
-  (when-let [sqlite @*sqlite]
-    (.-version sqlite)))
+(comment
+  (def-thread-api :thread-api/get-version
+    []
+    (when-let [sqlite @*sqlite]
+      (.-version sqlite))))
 
 (def-thread-api :thread-api/init
   [rtc-ws-url]
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+(defn- start-db!
+  [repo {:keys [close-other-db?]
+         :or {close-other-db? true}
+         :as opts}]
+  (p/do!
+   (when close-other-db?
+     (close-other-dbs! repo))
+   (create-or-open-db! repo (dissoc opts :close-other-db?))
+   nil))
+
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} opts]
-    (p/do!
-     (when close-other-db?
-       (close-other-dbs! repo))
-     (create-or-open-db! repo (dissoc opts :close-other-db?))
-     nil)))
+  (start-db! repo opts))
 
 (def-thread-api :thread-api/q
   [repo inputs]
@@ -586,16 +592,6 @@
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (sqlite-common-db/get-initial-data @conn)))
-
-(def-thread-api :thread-api/get-page-refs-count
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (sqlite-common-db/get-page->refs-count @conn)))
-
-(def-thread-api :thread-api/close-db
-  [repo]
-  (close-db! repo)
-  nil)
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -845,22 +841,29 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
+(defn on-become-provider
+  []
+  (p/do!
+   (init-sqlite-module!)
+   (when-let [repo (worker-state/get-current-repo)]
+     (start-db! repo {}))))
+
 (defn init
   "web worker entry"
   []
   (let [fns {"remoteInvoke" thread-api/remote-function}
         service (shared-service/create-service "graph"
                                                (bean/->js fns)
-                                               {:on-provider-change
-                                                (fn [_client-id provider?]
-                                                  (prn :debug :provider-changed
-                                                       :provider? provider?))})
+                                               {:on-provider-change on-become-provider})
         proxy-object (->>
-                      (map (fn [k]
+                      (map (fn [[k f]]
                              [k (fn [& args]
-                                  ;; ensure service is ready
-                                  (p/let [_ready-value @(get-in service [:status :ready])]
-                                    (js-invoke (:proxy service) k args)))]) (keys fns))
+                                  ;; what about undo and redo?
+                                  (if (contains? #{:thread-api/sync-app-state :thread-api/sync-ui-state :thread-api/record-editor-info} (keyword (first args)))
+                                    (apply f args)
+                                    ;; ensure service is ready
+                                    (p/let [_ready-value @(get-in service [:status :ready])]
+                                      (js-invoke (:proxy service) k args))))]) fns)
                       (into {})
                       bean/->js)]
     (glogi-console/install!)
