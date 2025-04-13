@@ -90,8 +90,6 @@
                                                     (let [{:keys [type]} (bean/->clj (.-data event))]
                                                       (when (= type "providerChange")
                                                         (js/console.log "Provider change detected. Re-registering...")
-                                                        (when on-provider-change
-                                                          (on-provider-change client-id))
                                                         (register)
                                                         (when (seq @*requests-in-flight)
                                                           (js/console.log "Requests were in flight when provider changed. Requeuing...")
@@ -113,7 +111,7 @@
                                       (js/console.error error)))))
 
         status {:ready (atom (p/create (fn [resolve] (reset! *ready-resolve resolve))))}
-        on-become-provider (fn []
+        on-become-provider (fn [re-elect?]
                              (when (nil? @*ready-resolve)
                                (reset! (:ready status) (p/create (fn [resolve] (reset! *ready-resolve resolve)))))
                              (p/let [provider-id (get-client-id)]
@@ -149,10 +147,10 @@
                                                                                  :clientId clientId
                                                                                  :providerId provider-id
                                                                                  :serviceName service-name})))))))
-                               (.postMessage common-channel #js {:type "providerChange" :serviceName service-name})
-                               (p/let [_ (when on-provider-change
-                                           (let [provider? @*provider?]
-                                             (on-provider-change nil provider?)))
+                               (.postMessage common-channel #js {:type "providerChange"
+                                                                 :providerId provider-id
+                                                                 :serviceName service-name})
+                               (p/let [_ (when (and re-elect? on-provider-change) (on-provider-change service-name))
                                        _ (when (seq @*requests-in-flight)
                                            (js/console.log "Requests were in flight when tab became provider. Requeuing...")
                                            (p/all (map
@@ -170,15 +168,16 @@
                                  (when-let [resolve @*ready-resolve]
                                    (resolve))
                                  (reset! *ready-resolve nil))))
-        check-provider-f #(check-provider? service-name {:on-become-provider on-become-provider
-                                                         :on-not-provider on-not-provider})]
+        check-provider-f (fn [re-elect?]
+                           (check-provider? service-name {:on-become-provider #(on-become-provider re-elect?)
+                                                          :on-not-provider on-not-provider}))]
 
-    (check-provider-f)
+    (check-provider-f false)
 
     (add-watch *provider? :check-provider
                (fn [_ _ _ new-value]
                  (when (= new-value :re-check)
-                   (check-provider-f))))
+                   (check-provider-f true))))
 
     {:proxy (js/Proxy. target
                        #js {:get (fn [target method]
