@@ -326,7 +326,7 @@
 
 (defn- remote-all-blocks=>client-blocks
   [all-blocks ignore-attr-set ignore-entity-set]
-  (let [{:keys [_ t blocks]} all-blocks
+  (let [{:keys [_ _t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))

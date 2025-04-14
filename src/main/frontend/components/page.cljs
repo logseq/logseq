@@ -88,7 +88,7 @@
   {:did-mount (fn [state]
                 (open-root-block! state)
                 state)}
-  [page-e blocks config sidebar? whiteboard? _block-uuid]
+  [page-e blocks config sidebar? _preview? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
       [:div.page-blocks-inner {:style {:min-height 29}}
