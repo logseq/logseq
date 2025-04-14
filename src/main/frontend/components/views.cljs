@@ -1598,7 +1598,8 @@
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! view-feature-type] :as option*}
    *scroller-ref]
-  (let [option (assoc option* :properties
+  (let [db-based? (config/db-based-graph?)
+        option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
@@ -1669,7 +1670,11 @@
                          :logseq.property.view/type.table
                          :logseq.property.view/type.list))
         gallery? (= display-type :logseq.property.view/type.gallery)
-        list-view? (= display-type :logseq.property.view/type.list)]
+        list-view? (= display-type :logseq.property.view/type.list)
+        group-by-property-ident (or (:db/ident group-by-property)
+                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
+                                      :block/page))]
+
     (run-effects! option table-map *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
@@ -1683,7 +1688,7 @@
                         :display-type display-type
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
-         (if (and group-by-property (not (number? (first (:rows table)))))
+         (if (and group-by-property-ident (not (number? (first (:rows table)))))
            (when (seq (:rows table))
              [:div.flex.flex-col.border-t.pt-2
               (ui/virtualized-list
@@ -1707,7 +1712,8 @@
                                       readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
                                                                  (db-property/property-value-content %)
                                                                  (str %))
-                                      group-by-page? (= :block/page (:db/ident group-by-property))]
+                                      group-by-page? (or (= :block/page group-by-property-ident)
+                                                         (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
                                   (rum/with-key
                                     (ui/foldable
                                      [:div
@@ -1828,7 +1834,7 @@
                                           :input input
                                           :items-count (if (every? number? data)
                                                          (count data)
-                                                             ;; grouped
+                                                         ;; grouped
                                                          (reduce (fn [total [_ col]]
                                                                    (+ total (count col))) 0 data))
                                           :ref-pages-count ref-pages-count
