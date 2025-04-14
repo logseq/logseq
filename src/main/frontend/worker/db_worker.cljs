@@ -861,9 +861,9 @@
 (defn- init-service!
   [graph]
   (when (and graph (not= graph (first @*service)))
-    (let [service (shared-service/create-service graph
-                                                 (bean/->js fns)
-                                                 {:on-provider-change on-become-provider})]
+    (p/let [service (shared-service/create-service graph
+                                                   (bean/->js fns)
+                                                   {:on-provider-change on-become-provider})]
       (reset! *service [graph service])
       service)))
 
@@ -884,7 +884,8 @@
                                         (when graph (init-service! graph))
                                         result)
                                       (or (contains? #{:thread-api/sync-ui-state :thread-api/record-editor-info} method-k)
-                                          (nil? service))
+                                          (nil? service)
+                                          @shared-service/*provider?)
                                       (apply f args)
                                       :else
                                       ;; ensure service is ready
