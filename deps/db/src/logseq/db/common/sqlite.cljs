@@ -244,12 +244,19 @@
 
 (defn get-structured-datoms
   [db]
-  (->> (concat
-        (d/datoms db :avet :block/tags :logseq.class/Tag)
-        (d/datoms db :avet :block/tags :logseq.class/Property)
-        (d/datoms db :avet :block/closed-value-property))
-       (mapcat (fn [d]
-                 (d/datoms db :eavt (:e d))))))
+  (let [class-property-id (:db/id (d/entity db :logseq.class/Property))]
+    (->> (concat
+          (d/datoms db :avet :block/tags :logseq.class/Tag)
+          (d/datoms db :avet :block/tags :logseq.class/Property)
+          (d/datoms db :avet :block/closed-value-property))
+         (mapcat (fn [d]
+                   (let [block-datoms (d/datoms db :eavt (:e d))
+                         property-desc-datoms (when (= (:v d) class-property-id)
+                                                (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
+                                                  (d/datoms db :eavt (:e desc))))]
+                     (if property-desc-datoms
+                       (concat block-datoms property-desc-datoms)
+                       block-datoms)))))))
 
 (defn get-favorites
   "Favorites page and its blocks"
