@@ -37,3 +37,5 @@
 (defonce ion-datetime-button (shui-util/react->rum (.-IonDatetimeButton ionic-react) false))
 (defonce ion-refresher (shui-util/react->rum (.-IonRefresher ionic-react) false))
 (defonce ion-refresher-content (shui-util/react->rum (.-IonRefresherContent ionic-react) false))
+(defonce ion-menu (shui-util/react->rum (.-IonMenu ionic-react) false))
+(defonce ion-menu-button (shui-util/react->rum (.-IonMenuButton ionic-react) false))
