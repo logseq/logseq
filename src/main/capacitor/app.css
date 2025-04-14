@@ -13,6 +13,5 @@ ion-button, ion-tab-button {
 }
 
 ion-app {
-  padding-top: var(--ion-safe-area-top) !important;
-  padding-top: 42px;
+  margin-top: 40px;
 }
