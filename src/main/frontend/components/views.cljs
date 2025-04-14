@@ -1803,7 +1803,8 @@
                            :filters filters}]
       (hooks/use-effect!
        load-view-data
-       [(hooks/use-debounced-value input 300)
+       [(:db/id view-entity)
+        (hooks/use-debounced-value input 300)
         sorting-filters
         (:logseq.property.view/group-by-property view-entity)
         ;; page filters
