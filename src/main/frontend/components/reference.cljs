@@ -50,7 +50,7 @@
       (when-not loading?
         (block-linked-references-aux e)))))
 
-(rum/defc references-cp
+(rum/defc references-aux
   [page-entity config]
   (let [filters (db-view/get-filters (db/get-db) page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
@@ -83,6 +83,11 @@
       :additional-actions [reference-filter]
       :columns (views/build-columns config [] {})
       :config config})))
+
+(rum/defc references-cp < rum/reactive db-mixins/query
+  [page-entity config]
+  (let [page (db/sub-block (:db/id page-entity))]
+    (references-aux page config)))
 
 (rum/defc references
   [entity config]
