@@ -462,11 +462,12 @@
   [repo {:keys [close-other-db?]
          :or {close-other-db? true}
          :as opts}]
-  (p/do!
-   (when close-other-db?
-     (close-other-dbs! repo))
-   (create-or-open-db! repo (dissoc opts :close-other-db?))
-   nil))
+  (when @shared-service/*provider?
+    (p/do!
+     (when close-other-db?
+       (close-other-dbs! repo))
+     (create-or-open-db! repo (dissoc opts :close-other-db?))
+     nil)))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
@@ -848,22 +849,42 @@
    (when-let [repo (worker-state/get-current-repo)]
      (start-db! repo {}))))
 
+;; [graph service]
+(def *service (atom []))
+(defonce fns {"remoteInvoke" thread-api/remote-function})
+
+(defn- init-service!
+  [graph]
+  (when (and graph (not= graph (first @*service)))
+    (let [service (shared-service/create-service graph
+                                                 (bean/->js fns)
+                                                 {:on-provider-change on-become-provider})]
+      (reset! *service [graph service])
+      service)))
+
 (defn init
   "web worker entry"
   []
-  (let [fns {"remoteInvoke" thread-api/remote-function}
-        service (shared-service/create-service "graph"
-                                               (bean/->js fns)
-                                               {:on-provider-change on-become-provider})
-        proxy-object (->>
+  (let [proxy-object (->>
+                      fns
                       (map (fn [[k f]]
                              [k (fn [& args]
-                                  ;; what about undo and redo?
-                                  (if (contains? #{:thread-api/sync-app-state :thread-api/sync-ui-state :thread-api/record-editor-info} (keyword (first args)))
-                                    (apply f args)
-                                    ;; ensure service is ready
-                                    (p/let [_ready-value @(get-in service [:status :ready])]
-                                      (js-invoke (:proxy service) k args))))]) fns)
+                                  (let [[_graph service] @*service
+                                        method-k (keyword (first args))]
+                                    ;; what about undo and redo?
+                                    (cond
+                                      (= method-k :thread-api/sync-app-state)
+                                      (let [graph (:git/current-repo (first (ldb/read-transit-str (nth args 2))))
+                                            result (apply f args)]
+                                        (when graph (init-service! graph))
+                                        result)
+                                      (or (contains? #{:thread-api/sync-ui-state :thread-api/record-editor-info} method-k)
+                                          (nil? service))
+                                      (apply f args)
+                                      :else
+                                      ;; ensure service is ready
+                                      (p/let [_ready-value @(get-in service [:status :ready])]
+                                        (js-invoke (:proxy service) k args)))))]))
                       (into {})
                       bean/->js)]
     (glogi-console/install!)

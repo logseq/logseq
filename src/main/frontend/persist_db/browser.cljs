@@ -97,11 +97,11 @@
       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
-                  _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (state/<invoke-db-worker :thread-api/sync-app-state
+      (-> (p/let [_ (state/<invoke-db-worker :thread-api/sync-app-state
                                              {:git/current-repo (state/get-current-repo)
                                               :config (:config @state/state)})
+                  _ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
+                  _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
                   _ (sync-app-state!)
                   _ (sync-ui-state!)
                   _ (ask-persist-permission!)
