@@ -101,17 +101,15 @@
 }
 
 .breadcrumb {
-  @apply flex flex-row items-center flex-wrap;
+  @apply inline;
 
   .asset-container > img {
     height: 18px;
     width: unset !important;
   }
 
-  .inline-wrap {
-    & > div, & > div > div {
-      display: inherit;
-    }
+  a, svg, div {
+    @apply inline;
   }
 
   &.block-parents {

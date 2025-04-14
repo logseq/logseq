@@ -287,7 +287,7 @@
     (transact-block-refs! repo)))
 
 (defn- blocks-resolve-temp-id
-  [blocks]
+  [schema-blocks blocks]
   (let [uuids (map :block/uuid blocks)
         idents (map :db/ident blocks)
         ids (map :db/id blocks)
@@ -300,10 +300,16 @@
                               ident
                               (assoc :db/ident ident)))) ids)
         id-ref-exists? (fn [v] (and (string? v) (or (get id->ident v) (get id->uuid v))))
+        ref-k-set (set (keep (fn [b] (when (= :db.type/ref (:db/valueType b))
+                                       (:db/ident b)))
+                             schema-blocks))
+        ref-k? (fn [k] (contains? ref-k-set k))
         blocks-tx-data (map (fn [block]
                               (->> (map
                                     (fn [[k v]]
-                                      (let [v (cond
+                                      (let [v
+                                            (if (ref-k? k)
+                                              (cond
                                                 (id-ref-exists? v)
                                                 (or (get id->ident v) [:block/uuid (get id->uuid v)])
 
@@ -311,15 +317,16 @@
                                                 (map (fn [id] (or (get id->ident id) [:block/uuid (get id->uuid id)])) v)
 
                                                 :else
-                                                v)]
+                                                v)
+                                              v)]
                                         [k v]))
                                     (dissoc block :db/id))
                                    (into {}))) blocks)]
     (concat id-tx-data blocks-tx-data)))
 
-(defn- remote-all-blocks=>client-blocks+t
+(defn- remote-all-blocks=>client-blocks
   [all-blocks ignore-attr-set ignore-entity-set]
-  (let [{:keys [t blocks]} all-blocks
+  (let [{:keys [_ t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
@@ -336,43 +343,58 @@
                         (into {} (remove (comp (partial contains? ignore-attr-set) first)) block))))
                 blocks2)
         blocks (fill-block-fields blocks)]
-    {:blocks blocks :t t}))
+    blocks))
 
-(defn- new-task--transact-remote-all-blocks
-  [all-blocks repo graph-uuid]
-  (let [{:keys [t blocks]} (remote-all-blocks=>client-blocks+t
-                            all-blocks
-                            rtc-const/ignore-attrs-when-init-download
-                            rtc-const/ignore-entities-when-init-download)
+(defn- remote-all-blocks->tx-data+t
+  "Return
+  {:remote-t ...
+   :init-tx-data ...
+   :tx-data ...}
+  init-tx-data - schema data and other init-data, need to be transacted first
+  tx-data - all other data"
+  [remote-all-blocks graph-uuid]
+  (let [t (:t remote-all-blocks)
+        blocks (remote-all-blocks=>client-blocks
+                remote-all-blocks
+                rtc-const/ignore-attrs-when-init-download
+                rtc-const/ignore-entities-when-init-download)
         [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
-                 (blocks-resolve-temp-id normal-blocks)
+                 (blocks-resolve-temp-id schema-blocks normal-blocks)
                  [(ldb/kv :logseq.kv/graph-uuid graph-uuid)])
         init-tx-data (cons (ldb/kv :logseq.kv/db-type "db") schema-blocks)]
+    {:remote-t t
+     :init-tx-data init-tx-data
+     :tx-data tx-data}))
+
+(defn- new-task--transact-remote-all-blocks!
+  [all-blocks repo graph-uuid]
+  (let [{:keys [remote-t init-tx-data tx-data]}
+        (remote-all-blocks->tx-data+t all-blocks graph-uuid)]
     (m/sp
-      (client-op/update-local-tx repo t)
-      (rtc-log-and-state/update-local-t graph-uuid t)
-      (rtc-log-and-state/update-remote-t graph-uuid t)
+      (client-op/update-local-tx repo remote-t)
+      (rtc-log-and-state/update-local-t graph-uuid remote-t)
+      (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (if rtc-const/RTC-E2E-TEST
         (create-graph-for-rtc-test repo init-tx-data tx-data)
         (c.m/<?
          (p/do!
-          ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
-          ((@thread-api/*thread-apis :thread-api/export-db) repo)
-          ((@thread-api/*thread-apis :thread-api/transact)
-           repo init-tx-data
-           {:rtc-download-graph? true
-            :gen-undo-ops? false
-            ;; only transact db schema, skip validation to avoid warning
-            :frontend.worker.pipeline/skip-validate-db? true
-            :persist-op? false}
-           (worker-state/get-context))
-          ((@thread-api/*thread-apis :thread-api/transact)
-           repo tx-data {:rtc-download-graph? true
-                         :gen-undo-ops? false
-                         :persist-op? false} (worker-state/get-context))
-          (transact-remote-schema-version! repo)
-          (transact-block-refs! repo))))
+           ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+           ((@thread-api/*thread-apis :thread-api/export-db) repo)
+           ((@thread-api/*thread-apis :thread-api/transact)
+            repo init-tx-data
+            {:rtc-download-graph? true
+             :gen-undo-ops? false
+             ;; only transact db schema, skip validation to avoid warning
+             :frontend.worker.pipeline/skip-validate-db? true
+             :persist-op? false}
+            (worker-state/get-context))
+           ((@thread-api/*thread-apis :thread-api/transact)
+            repo tx-data {:rtc-download-graph? true
+                          :gen-undo-ops? false
+                          :persist-op? false} (worker-state/get-context))
+           (transact-remote-schema-version! repo)
+           (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -437,7 +459,7 @@
                                                         :graph-uuid graph-uuid})
           (let [all-blocks (ldb/read-transit-str body)]
             (worker-state/set-rtc-downloading-graph! true)
-            (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
+            (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
             (client-op/update-graph-uuid repo graph-uuid)
             (when-not rtc-const/RTC-E2E-TEST
               (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
