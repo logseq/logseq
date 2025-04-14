@@ -2105,7 +2105,7 @@
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
   (rum/local false ::dragging?)
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
-  (let [*dragging?         (::dragging? state)
+  (let [*bullet-dragging?         (::dragging? state)
         doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -2156,11 +2156,11 @@
                       {:id (str "dot-" uuid)
                        :draggable true
                        :on-drag-start (fn [event]
-                                        (reset! *dragging? true)
+                                        (reset! *bullet-dragging? true)
                                         (util/stop-propagation event)
                                         (bullet-drag-start event block uuid block-id))
                        :on-drag-end (fn [_]
-                                      (reset! *dragging? false))
+                                      (reset! *bullet-dragging? false))
                        :blockid (str uuid)
                        :class (str (when collapsed? "bullet-closed")
                                    (when (and (:document/mode? config)
@@ -2200,7 +2200,7 @@
 
                        :else
                        bullet)]
-         (if (and (config/db-based-graph?) (not @*dragging?))
+         (if (and (config/db-based-graph?) (not @*bullet-dragging?))
            (ui/tooltip
             bullet'
             [:div.flex.flex-col.gap-1.p-2
