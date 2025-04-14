@@ -37,6 +37,10 @@
                        :config {}
                        :git/current-repo nil
 
+                       :auth/id-token nil
+                       :auth/access-token nil
+                       :auth/refresh-token nil
+
                        :rtc/downloading-graph? false
 
                        :undo/repo->page-block-uuid->undo-ops (atom {})
@@ -127,3 +131,14 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
+
+(defn set-auth-tokens!
+  [id-token access-token refresh-token]
+  (swap! *state assoc
+         :auth/id-token id-token
+         :auth/access-token access-token
+         :auth/refresh-token refresh-token))
+
+(defn get-id-token
+  []
+  (:auth/id-token @*state))

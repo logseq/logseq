@@ -88,11 +88,10 @@
   {:did-mount (fn [state]
                 (open-root-block! state)
                 state)}
-  [page-e blocks config sidebar? whiteboard? _block-uuid]
+  [page-e blocks config sidebar? _preview? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
-      [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)
-                                       :min-height 29}}
+      [:div.page-blocks-inner {:style {:min-height 29}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup
@@ -146,7 +145,8 @@
                  ;; The same as .dnd-separator
                 :border-top (if hover
                               "3px solid #ccc"
-                              nil)}
+                              nil)
+                :margin-left 20}
         :ref *el-ref
         :tabIndex 0
         :on-click click-handler-fn
@@ -677,6 +677,7 @@
 
             (when (or (not show-tabs?) tabs-rendered?)
               [:div.ls-page-blocks
+               {:style {:margin-left (if whiteboard? 0 -20)}}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
