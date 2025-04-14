@@ -1874,5 +1874,5 @@
                            :set-views! set-views!
                            :set-view-entity! set-view-entity!)]
         (rum/with-key
-          (view-aux view-entity option')
+          (sub-view view-entity option')
           (str "view-" (:db/id view-entity)))))))
