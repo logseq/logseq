@@ -1317,7 +1317,9 @@
                (block-reference-preview inner
                                         {:repo repo :config config :id block-id})
                inner)])))
-      (invalid-node-ref block-id))))
+      (do
+        (log/warn :invalid-node block)
+        (invalid-node-ref block-id)))))
 
 (rum/defc block-reference
   [config id label]
