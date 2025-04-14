@@ -317,12 +317,16 @@
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
-        columns' (filter (fn [column]
-                           (when (:id column)
-                             (when-let [p (db/entity (:id column))]
-                               (and (not (db-property/many? p))
-                                    (contains? #{:default :number :checkbox :url :node :date}
-                                               (:logseq.property/type p)))))) columns)]
+        group-by-columns (concat (filter (fn [column]
+                                           (when (:id column)
+                                             (when-let [p (db/entity (:id column))]
+                                               (and (not (db-property/many? p))
+                                                    (contains? #{:default :number :checkbox :url :node :date}
+                                                               (:logseq.property/type p)))))) columns)
+                                 (when (contains? #{:linked-references :unlinked-references}
+                                                  (:logseq.property.view/feature-type view-entity))
+                                   [{:id :block/page
+                                     :name "Block Page"}]))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
@@ -348,12 +352,12 @@
                :onCheckedChange #(column-toggle-visibility column %)
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
-       (when (seq columns')
+       (when (seq group-by-columns)
          (shui/dropdown-menu-sub
           (shui/dropdown-menu-sub-trigger
            "Group by")
           (shui/dropdown-menu-sub-content
-           (for [column columns']
+           (for [column group-by-columns]
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
@@ -1594,7 +1598,8 @@
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
   [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! view-feature-type] :as option*}
    *scroller-ref]
-  (let [option (assoc option* :properties
+  (let [db-based? (config/db-based-graph?)
+        option (assoc option* :properties
                       (-> (remove #{:id :select} (map :id columns))
                           (conj :block/uuid :block/name)
                           vec))
@@ -1665,7 +1670,11 @@
                          :logseq.property.view/type.table
                          :logseq.property.view/type.list))
         gallery? (= display-type :logseq.property.view/type.gallery)
-        list-view? (= display-type :logseq.property.view/type.list)]
+        list-view? (= display-type :logseq.property.view/type.list)
+        group-by-property-ident (or (:db/ident group-by-property)
+                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
+                                      :block/page))]
+
     (run-effects! option table-map *scroller-ref gallery?)
 
     [:div.flex.flex-col.gap-2.grid
@@ -1679,7 +1688,7 @@
                         :display-type display-type
                         :row-selection row-selection
                         :add-new-object! add-new-object!}]
-         (if (and group-by-property (not (number? (first (:rows table)))))
+         (if (and group-by-property-ident (not (number? (first (:rows table)))))
            (when (seq (:rows table))
              [:div.flex.flex-col.border-t.pt-2
               (ui/virtualized-list
@@ -1703,7 +1712,8 @@
                                       readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
                                                                  (db-property/property-value-content %)
                                                                  (str %))
-                                      group-by-page? (= :block/page (:db/ident group-by-property))]
+                                      group-by-page? (or (= :block/page group-by-property-ident)
+                                                         (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
                                   (rum/with-key
                                     (ui/foldable
                                      [:div
@@ -1799,7 +1809,8 @@
                            :filters filters}]
       (hooks/use-effect!
        load-view-data
-       [(hooks/use-debounced-value input 300)
+       [(:db/id view-entity)
+        (hooks/use-debounced-value input 300)
         sorting-filters
         (:logseq.property.view/group-by-property view-entity)
         ;; page filters
@@ -1823,7 +1834,7 @@
                                           :input input
                                           :items-count (if (every? number? data)
                                                          (count data)
-                                                             ;; grouped
+                                                         ;; grouped
                                                          (reduce (fn [total [_ col]]
                                                                    (+ total (count col))) 0 data))
                                           :ref-pages-count ref-pages-count

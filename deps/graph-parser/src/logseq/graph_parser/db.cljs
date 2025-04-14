@@ -1,16 +1,24 @@
 (ns logseq.graph-parser.db
   "File graph specific db fns"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
-            [logseq.db.file-based.builtins :as file-builtins]
             [logseq.db.file-based.schema :as file-schema]))
 
-(defonce built-in-markers file-builtins/built-in-markers)
-(defonce built-in-priorities file-builtins/built-in-priorities)
-(defonce built-in-pages-names file-builtins/built-in-pages-names)
+(defonce built-in-markers
+  ["NOW" "LATER" "DOING" "DONE" "CANCELED" "CANCELLED" "IN-PROGRESS" "TODO" "WAIT" "WAITING"])
+
+(defonce built-in-priorities
+  ["A" "B" "C"])
+
+(defonce built-in-pages-names
+  (set/union
+   (set built-in-markers)
+   (set built-in-priorities)
+   #{"Favorites" "Contents" "card"}))
 
 (defn- page-title->block
   [title]

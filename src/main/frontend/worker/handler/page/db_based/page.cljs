@@ -169,8 +169,7 @@
   "Pure function without side effects"
   [db title*
    {:keys [create-first-block? properties uuid persist-op? whiteboard?
-           class? today-journal? split-namespace? skip-existing-page-check?
-           created-by]
+           class? today-journal? split-namespace? skip-existing-page-check?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
@@ -205,8 +204,7 @@
                                                 :page-uuid (when (uuid? uuid) uuid)
                                                 :skip-existing-page-check? (if (some? skip-existing-page-check?)
                                                                              skip-existing-page-check?
-                                                                             true)
-                                                :created-by created-by})
+                                                                             true)})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
