@@ -1,6 +1,8 @@
 (ns frontend.worker.shared-service
   (:require [cljs-bean.core :as bean]
+            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
@@ -8,7 +10,7 @@
 
 (defonce *provider? (atom false))
 (defonce *common-channel (atom nil))
-(defonce *broadcast-channel (atom nil))
+(defonce *client-channel (atom nil))
 (defonce *ready-resolve (atom nil))
 (defonce *requests-in-flight (atom {}))
 (defonce *client-id (atom nil))
@@ -72,10 +74,10 @@
    (reset! *ready-resolve nil)
    (when-let [^js channel @*common-channel]
      (.close channel))
-   (when-let [^js channel @*broadcast-channel]
+   (when-let [^js channel @*client-channel]
      (.close channel))
    (reset! *common-channel nil)
-   (reset! *broadcast-channel nil)
+   (reset! *client-channel nil)
    (reset! *requests-in-flight {})))
 
 (defn create-service
@@ -91,7 +93,7 @@
                                              (let [{:keys [id type error result]} (bean/->clj (.-data event))]
                                                (when (and (= id id') (not= type "request"))
                                                  (swap! *requests-in-flight dissoc id')
-                                                 (.removeEventListener @*broadcast-channel "message" listener)
+                                                 (.removeEventListener @*client-channel "message" listener)
                                                  (if error
                                                    (do (js/console.error "Error processing request" error)
                                                        (reject-fn error))
@@ -100,7 +102,7 @@
          on-not-provider (fn []
                            (->
                             (p/let [client-id (get-client-id)]
-                              (reset! *broadcast-channel (js/BroadcastChannel. (get-broadcast-channel-name client-id service-name)))
+                              (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name client-id service-name)))
                               (let [register (fn register []
                                                (p/create
                                                 (fn [resolve _]
@@ -118,21 +120,28 @@
                                                     (.postMessage common-channel #js {:type "register" :clientId client-id})))))]
                                 (.addEventListener common-channel "message"
                                                    (fn [event]
-                                                     (let [{:keys [type]} (bean/->clj (.-data event))]
-                                                       (when (= type "providerChange")
-                                                         (js/console.log "Provider change detected. Re-registering...")
-                                                         (register)
-                                                         (when (seq @*requests-in-flight)
-                                                           (js/console.log "Requests were in flight when provider changed. Requeuing...")
-                                                           (p/all (map
-                                                                   (fn [[id {:keys [method args resolve reject]}]]
-                                                                     (let [listener (get-on-request-listener id resolve reject)]
-                                                                       (.addEventListener @*broadcast-channel "message" listener)
-                                                                       (.postMessage @*broadcast-channel (bean/->js {:id id
-                                                                                                                     :type "request"
-                                                                                                                     :method method
-                                                                                                                     :args args}))))
-                                                                   @*requests-in-flight)))))))
+                                                     (let [{:keys [type data]} (bean/->clj (.-data event))]
+                                                       (case type
+                                                         "providerChange"
+                                                         (do
+                                                           (js/console.log "Provider change detected. Re-registering...")
+                                                           (register)
+                                                           (when (seq @*requests-in-flight)
+                                                             (js/console.log "Requests were in flight when provider changed. Requeuing...")
+                                                             (p/all (map
+                                                                     (fn [[id {:keys [method args resolve reject]}]]
+                                                                       (let [listener (get-on-request-listener id resolve reject)]
+                                                                         (.addEventListener @*client-channel "message" listener)
+                                                                         (.postMessage @*client-channel (bean/->js {:id id
+                                                                                                                    :type "request"
+                                                                                                                    :method method
+                                                                                                                    :args args}))))
+                                                                     @*requests-in-flight))))
+
+                                                         "sync-db-changes"
+                                                         (worker-util/post-message :sync-db-changes (ldb/read-transit-str data))
+
+                                                         nil))))
                                 (p/do!
                                  (register)
                                  (when-let [resolve @*ready-resolve]
@@ -224,14 +233,19 @@
                                              (fn [resolve reject]
                                                (let [id (random-id)
                                                      listener (get-on-request-listener id resolve reject)]
-                                                 (.addEventListener @*broadcast-channel "message" listener)
-                                                 (.postMessage @*broadcast-channel (bean/->js
-                                                                                    {:id id
-                                                                                     :type "request"
-                                                                                     :method method
-                                                                                     :args args}))
+                                                 (.addEventListener @*client-channel "message" listener)
+                                                 (.postMessage @*client-channel (bean/->js
+                                                                                 {:id id
+                                                                                  :type "request"
+                                                                                  :method method
+                                                                                  :args args}))
                                                  (swap! *requests-in-flight assoc id {:method method
                                                                                       :args args
                                                                                       :resolve resolve
                                                                                       :reject reject})))))))))})
       :status status})))
+
+(defn broadcast-to-clients!
+  [payload]
+  (when-let [channel @*common-channel]
+    (.postMessage channel payload)))
