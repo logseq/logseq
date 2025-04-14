@@ -11,6 +11,11 @@
   (api/watch :electron)
   (api/repl :electron))
 
+(defn capacitor-repl
+  []
+  (api/watch :capacitor-new)
+  (api/repl :capacitor-new))
+
 ;; Get the runtime id from http://localhost:9630/runtimes, pick the one which shows `browser-worker`
 (defn worker-repl
   ([]
