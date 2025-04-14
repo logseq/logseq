@@ -187,6 +187,7 @@
                                               '[*]
                                               (or children-props
                                                   [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
+                                                   ;; pre-loading feature-related properties to avoid UI refreshing
                                                    :logseq.task/status :logseq.property.node/display-type]))]
                          (map
                           (fn [block]
