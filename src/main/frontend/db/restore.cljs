@@ -12,6 +12,8 @@
   [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
+          _ (state/<invoke-db-worker :thread-api/init-shared-service repo)
+          _ (p/delay 100)
           {:keys [schema initial-data]} (persist-db/<fetch-init-data repo opts)
           ;; Without valid schema app fails hard downstream
           _ (assert (some? schema) "No valid schema found when reloading db")

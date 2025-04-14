@@ -458,16 +458,21 @@
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+;; [graph service]
+(defonce *service (atom []))
+(defonce fns {"remoteInvoke" thread-api/remote-function})
+(declare init-service!)
+
 (defn- start-db!
   [repo {:keys [close-other-db?]
          :or {close-other-db? true}
          :as opts}]
-  (when @shared-service/*provider?
-    (p/do!
-     (when close-other-db?
-       (close-other-dbs! repo))
-     (create-or-open-db! repo (dissoc opts :close-other-db?))
-     nil)))
+  (p/do!
+   (when close-other-db?
+     (close-other-dbs! repo))
+   (when @shared-service/*provider?
+     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+   nil))
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
@@ -848,24 +853,26 @@
            (js/console.error (str "DB is not found for " repo))))))))
 
 (defn on-become-provider
-  []
+  [repo]
   (p/do!
    (init-sqlite-module!)
-   (when-let [repo (worker-state/get-current-repo)]
-     (start-db! repo {}))))
-
-;; [graph service]
-(def *service (atom []))
-(defonce fns {"remoteInvoke" thread-api/remote-function})
+   (start-db! repo {})))
 
 (defn- init-service!
   [graph]
+  (when-let [prev-graph (first @*service)]
+    (close-db! prev-graph))
   (when (and graph (not= graph (first @*service)))
     (p/let [service (shared-service/create-service graph
                                                    (bean/->js fns)
-                                                   {:on-provider-change on-become-provider})]
+                                                   {:on-provider-change #(on-become-provider graph)})]
       (reset! *service [graph service])
       service)))
+
+(def-thread-api :thread-api/init-shared-service
+  [graph]
+  (init-service! graph)
+  nil)
 
 (defn init
   "web worker entry"
@@ -878,15 +885,11 @@
                                         method-k (keyword (first args))]
                                     ;; what about undo and redo?
                                     (cond
-                                      (= method-k :thread-api/sync-app-state)
-                                      (let [graph (:git/current-repo (first (ldb/read-transit-str (nth args 2))))
-                                            result (apply f args)]
-                                        (when graph (init-service! graph))
-                                        result)
-                                      (or (contains? #{:thread-api/sync-ui-state :thread-api/record-editor-info} method-k)
+                                      (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state :thread-api/sync-ui-state :thread-api/record-editor-info} method-k)
                                           (nil? service)
                                           @shared-service/*provider?)
                                       (apply f args)
+
                                       :else
                                       ;; ensure service is ready
                                       (p/let [_ready-value @(get-in service [:status :ready])]
