@@ -6,6 +6,10 @@
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
 
+(defonce *provider? (atom false))
+(defonce *common-channel (atom nil))
+(defonce *broadcast-channel (atom nil))
+
 (defn get-broadcast-channel-name [client-id service-name]
   (str client-id "-" service-name))
 
@@ -33,8 +37,6 @@
   (let [f (gobj/get target method)]
     (apply f args)))
 
-(defonce *provider? (atom false))
-
 (defn check-provider?
   [service-name {:keys [on-become-provider on-not-provider]}]
   (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
@@ -49,15 +51,28 @@
                                     (reset! *provider? false)
                                     (on-not-provider))))))
 
+(defn- clear-old-service!
+  []
+  (reset! *provider? false)
+  (when-let [^js channel @*common-channel]
+    (.close channel))
+  (when-let [^js channel @*broadcast-channel]
+    (.close channel))
+  (reset! *common-channel nil)
+  (reset! *broadcast-channel nil))
+
 (defn create-service
   [service-name target {:keys [on-provider-change]}]
-  (let [common-channel (js/BroadcastChannel. (str "shared-service-common-channel-" service-name))
+  (clear-old-service!)
+  (let [common-channel (or @*common-channel
+                           (let [channel (js/BroadcastChannel. (str "shared-service-common-channel-" service-name))]
+                             (reset! *common-channel channel)
+                             channel))
         *requests-in-flight (atom {})
-        *broadcast-channel (atom nil)
         *ready-resolve (atom nil)
         get-on-request-listener (fn get-on-request-listener [id' resolve-fn reject-fn]
                                   (letfn [(listener [event]
-                                            (let [{:keys [id type error result] :as response} (bean/->clj (.-data event))]
+                                            (let [{:keys [id type error result]} (bean/->clj (.-data event))]
                                               (when (and (= id id') (not= type "request"))
                                                 (swap! *requests-in-flight dissoc id')
                                                 (.removeEventListener @*broadcast-channel "message" listener)
@@ -111,7 +126,7 @@
                                       (js/console.error error)))))
 
         status {:ready (atom (p/create (fn [resolve] (reset! *ready-resolve resolve))))}
-        on-become-provider (fn [re-elect?]
+        on-become-provider (fn [_re-elect?]
                              (when (nil? @*ready-resolve)
                                (reset! (:ready status) (p/create (fn [resolve] (reset! *ready-resolve resolve)))))
                              (p/let [provider-id (get-client-id)]
@@ -150,7 +165,7 @@
                                (.postMessage common-channel #js {:type "providerChange"
                                                                  :providerId provider-id
                                                                  :serviceName service-name})
-                               (p/let [_ (when (and re-elect? on-provider-change) (on-provider-change service-name))
+                               (p/let [_ (when on-provider-change (on-provider-change service-name))
                                        _ (when (seq @*requests-in-flight)
                                            (js/console.log "Requests were in flight when tab became provider. Requeuing...")
                                            (p/all (map
@@ -171,7 +186,6 @@
         check-provider-f (fn [re-elect?]
                            (check-provider? service-name {:on-become-provider #(on-become-provider re-elect?)
                                                           :on-not-provider on-not-provider}))]
-
     (check-provider-f false)
 
     (add-watch *provider? :check-provider
