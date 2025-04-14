@@ -1,7 +1,4 @@
 @charset "utf-8";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
+@import "packages/ui/src/index.css";  /* Tailwind base imported here */
 @import-glob "src/main/capacitor/**/[!_]*.css";

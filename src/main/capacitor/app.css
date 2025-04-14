@@ -1,3 +1,13 @@
 #root {
   @apply p-4;
 }
+
+@media (platform: android) {
+  ion-content {
+    --ion-safe-area-top: 25px;
+  }
+}
+
+ion-content {
+  padding-top: var(--ion-safe-area-top) !important;
+}
