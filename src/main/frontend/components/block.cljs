@@ -472,7 +472,8 @@
                    (util/electron?)
                    (mobile-util/native-platform?))
                (nil? @src))
-      (p/then (assets-handler/<make-asset-url href) #(reset! src %)))
+      (p/then (assets-handler/<make-asset-url href)
+              #(reset! src (common-util/safe-decode-uri-component %))))
 
     (when @src
       (let [ext (keyword (or (util/get-file-ext @src)
@@ -523,6 +524,7 @@
           (= ext :pdf)
           [:a.asset-ref.is-pdf
            {:data-href href
+            :data-url @src
             :draggable true
             :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
@@ -2101,8 +2103,10 @@
   (string/blank? (:block/title block)))
 
 (rum/defcs ^:large-vars/cleanup-todo block-control < rum/reactive
+  (rum/local false ::dragging?)
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected? top? bottom?]}]
-  (let [doc-mode?          (state/sub :document/mode?)
+  (let [*dragging?         (::dragging? state)
+        doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
         empty-content?     (block-content-empty? block)
@@ -2152,8 +2156,11 @@
                       {:id (str "dot-" uuid)
                        :draggable true
                        :on-drag-start (fn [event]
+                                        (reset! *dragging? true)
                                         (util/stop-propagation event)
                                         (bullet-drag-start event block uuid block-id))
+                       :on-drag-end (fn [_]
+                                      (reset! *dragging? false))
                        :blockid (str uuid)
                        :class (str (when collapsed? "bullet-closed")
                                    (when (and (:document/mode? config)
@@ -2193,15 +2200,15 @@
 
                        :else
                        bullet)]
-         (if (config/db-based-graph?)
-           (ui/tippy
-            {:html (fn []
-                     [:div.flex.flex-col.gap-1.p-2
-                      (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db)) (:logseq.property/created-by-ref block))]
-                        [:div (:block/title created-by)])
-                      [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
-                      [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]])}
-            bullet')
+         (if (and (config/db-based-graph?) (not @*dragging?))
+           (ui/tooltip
+            bullet'
+            [:div.flex.flex-col.gap-1.p-2
+             (when-let [created-by (and (ldb/get-graph-rtc-uuid (db/get-db))
+                                        (:logseq.property/created-by-ref block))]
+               [:div (:block/title created-by)])
+             [:div "Created: " (date/int->local-time-2 (:block/created-at block))]
+             [:div "Last edited: " (date/int->local-time-2 (:block/updated-at block))]])
            bullet')))]))
 
 (rum/defc dnd-separator
@@ -3181,7 +3188,7 @@
                                  [block
                                   (when ast-title
                                     (if (seq ast-title)
-                                      (->elem :span.inline-wrap (map-inline config ast-title))
+                                      (->elem :span (map-inline config ast-title))
                                       (->elem :div (markup-elements-cp config ast-body))))]))))
             breadcrumbs (->> (into [] parents-props)
                              (concat [page-name-props] (when more? [:more]))

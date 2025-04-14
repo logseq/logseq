@@ -91,8 +91,7 @@
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
-      [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)
-                                       :min-height 29}}
+      [:div.page-blocks-inner {:style {:min-height 29}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup
@@ -677,6 +676,7 @@
 
             (when (or (not show-tabs?) tabs-rendered?)
               [:div.ls-page-blocks
+               {:style {:margin-left (if whiteboard? 0 -20)}}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
