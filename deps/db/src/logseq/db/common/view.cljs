@@ -501,8 +501,12 @@
        :data ids})
     :else
     (let [view (d/entity db view-id)
+          db-based? (ldb/db-based-graph? db)
           group-by-property (:logseq.property.view/group-by-property view)
-          group-by-property-ident (:db/ident group-by-property)
+          group-by-property-ident (if db-based?
+                                    (:db/ident group-by-property)
+                                    (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+                                      :block/page))
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)
@@ -523,7 +527,7 @@
                               (filter (fn [row] (row-matched? db row filters input)) entities)
                               entities)
           group-by-page? (= group-by-property-ident :block/page)
-          result (if group-by-property
+          result (if group-by-property-ident
                    (->> filtered-entities
                         (group-by group-by-property-ident)
                         (seq)
@@ -539,7 +543,7 @@
                                      by-value))
                                  (if group-by-page? #(compare %2 %1) compare)))
                    (sort-entities db sorting filtered-entities))
-          data' (if group-by-property
+          data' (if group-by-property-ident
                   (map
                    (fn [[by-value entities]]
                      (let [by-value' (if (de/entity? by-value)
