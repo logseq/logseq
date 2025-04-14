@@ -486,7 +486,9 @@
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (hidden-or-internal-tag? e)
+             (when-not (or (hidden-or-internal-tag? e)
+                           ;; Why this happened?
+                           (nil? (:block/title e)))
                e))))))
 
 (def built-in? entity-util/built-in?)

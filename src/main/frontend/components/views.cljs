@@ -1765,17 +1765,15 @@
   (state/<invoke-db-worker :thread-api/get-view-data (state/get-current-repo) (:db/id view) opts))
 
 (rum/defc view-aux
-  [view-entity {:keys [view-parent view-feature-type data query-entity-ids] :as option}]
-  (let [[view-entity set-view-entity!] (when (:db/id view-entity)
-                                         (db/sub-entity view-entity (str "view-" (:db/id view-entity))))
-        [input set-input!] (hooks/use-state "")
+  [view-entity {:keys [view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
+  (let [[input set-input!] (hooks/use-state "")
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                   [{:id :block/updated-at, :asc? false}]
                   sorting*)
         [sorting set-sorting!] (rum/use-state sorting)
-        filters (:logseq.property.table/filters view-entity)
-        [filters set-filters!] (rum/use-state (or filters {}))
+        view-filters (:logseq.property.table/filters view-entity)
+        [filters set-filters!] (rum/use-state (or view-filters {}))
         query? (= view-feature-type :query-result)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
@@ -1841,6 +1839,11 @@
                                           :load-view-data load-view-data
                                           :set-view-entity! set-view-entity!))])))
 
+(rum/defc sub-view < rum/reactive db-mixins/query
+  [view-entity option]
+  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)]
+    (view-aux view option)))
+
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
   (let [[views set-views!] (hooks/use-state nil)
@@ -1868,7 +1871,8 @@
                                         (= view-feature-type :all-pages)))
       (let [option' (assoc option
                            :views views
-                           :set-views! set-views!)]
+                           :set-views! set-views!
+                           :set-view-entity! set-view-entity!)]
         (rum/with-key
-          (view-aux view-entity option')
+          (sub-view view-entity option')
           (str "view-" (:db/id view-entity)))))))
