@@ -145,7 +145,8 @@
                  ;; The same as .dnd-separator
                 :border-top (if hover
                               "3px solid #ccc"
-                              nil)}
+                              nil)
+                :margin-left 20}
         :ref *el-ref
         :tabIndex 0
         :on-click click-handler-fn
