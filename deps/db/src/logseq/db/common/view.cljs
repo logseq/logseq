@@ -437,35 +437,39 @@
                      nil)]
     (get-entities db view feat-type index-attr view-for-id sorting)))
 
-(defn ^:api get-property-values
+(defn- get-view-property-values
   [db property-ident {:keys [view-id query-entity-ids]}]
+  (let [empty-id (:db/id (d/entity db :logseq.property/empty-placeholder))
+        entities-result (get-view-entities db view-id)
+        entities (cond
+                   query-entity-ids
+                   (keep #(d/entity db %) query-entity-ids)
+                   (map? entities-result)
+                   (:ref-blocks entities-result)
+                   :else
+                   entities-result)]
+    (->> (mapcat (fn [entity]
+                   (let [v (get entity property-ident)]
+                     (if (set? v) v #{v})))
+                 entities)
+         (remove nil?)
+         (keep (fn [e]
+                 (when-let [label (get-property-value-content db e)]
+                   (when-not (or (string/blank? (str label))
+                                 (= empty-id (:db/id e)))
+                     {:label (str label)
+                      :value (if (de/entity? e)
+                               (select-keys e [:db/id :block/uuid])
+                               e)}))))
+         (common-util/distinct-by :label))))
+
+(defn ^:api get-property-values
+  [db property-ident {:keys [view-id _query-entity-ids] :as option}]
   (let [property (d/entity db property-ident)
         default-value (:logseq.property/default-value property)
-        empty-id (:db/id (d/entity db :logseq.property/empty-placeholder))
         ref-type? (= :db.type/ref (:db/valueType property))
         values (if view-id
-                 (let [entities-result (get-view-entities db view-id)
-                       entities (cond
-                                  query-entity-ids
-                                  (keep #(d/entity db %) query-entity-ids)
-                                  (map? entities-result)
-                                  (:ref-blocks entities-result)
-                                  :else
-                                  entities-result)]
-                   (->> (mapcat (fn [entity]
-                                  (let [v (get entity property-ident)]
-                                    (if (set? v) v #{v})))
-                                entities)
-                        (remove nil?)
-                        (keep (fn [e]
-                                (when-let [label (get-property-value-content db e)]
-                                  (when-not (or (string/blank? (str label))
-                                                (= empty-id (:db/id e)))
-                                    {:label (str label)
-                                     :value (if (de/entity? e)
-                                              (select-keys e [:db/id :block/uuid])
-                                              e)}))))
-                        (common-util/distinct-by :label)))
+                 (get-view-property-values db property-ident option)
                  ;; get all values
                  (->> (d/datoms db :avet property-ident)
                       (map (fn [d]
