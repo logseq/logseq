@@ -4,9 +4,11 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.outliner.batch-tx :as batch-tx]
             [promesa.core :as p]))
 
@@ -26,7 +28,10 @@
                    :tx-data (:tx-data tx-report')
                    :tx-meta tx-meta}
                   (dissoc result :tx-report))]
-        (worker-util/post-message :sync-db-changes data))
+        (worker-util/post-message :sync-db-changes data)
+        (shared-service/broadcast-to-clients!
+         #js {:type "sync-db-changes"
+              :data (ldb/write-transit-str data)}))
 
       (when-not from-disk?
         (p/do!
