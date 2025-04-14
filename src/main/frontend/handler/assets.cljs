@@ -178,6 +178,7 @@
         (resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
+        ;; fullpath will be encoded
         (path/prepend-protocol "assets:" full-path)
 
         (mobile-util/native-platform?)

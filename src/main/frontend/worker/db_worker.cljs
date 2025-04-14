@@ -24,8 +24,8 @@
             [frontend.worker.rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
-            [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
-            [frontend.worker.undo-redo2 :as undo-redo]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
@@ -794,6 +794,11 @@
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
   (get-all-page-titles-with-cache repo))
+
+(def-thread-api :thread-api/update-auth-tokens
+  [id-token access-token refresh-token]
+  (worker-state/set-auth-tokens! id-token access-token refresh-token)
+  nil)
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs

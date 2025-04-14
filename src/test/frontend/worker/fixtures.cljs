@@ -4,16 +4,13 @@
             [frontend.db.conn :as conn]
             [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
-            [frontend.worker.undo-redo :as worker-undo-redo]
             [logseq.db.sqlite.util :as sqlite-util]))
-
 
 (defn listen-test-db-fixture
   [handler-keys]
   (fn [f]
     (let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
       (assert (some? test-db-conn))
-      (worker-undo-redo/clear-undo-redo-stack)
       (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
                                              {:handler-keys handler-keys})
 
