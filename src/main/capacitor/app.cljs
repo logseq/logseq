@@ -1,7 +1,10 @@
 (ns capacitor.app
-  (:require [rum.core :as rum]
+  (:require ["@capacitor/app" :refer [App]]
+            [rum.core :as rum]
             [promesa.core :as p]
-            [capacitor.ionic :as ionic]))
+            [capacitor.ionic :as ionic]
+            [capacitor.state :as state]
+            [capacitor.pages.settings :as settings]))
 
 (rum/defc home []
   (let [[open? set-open!] (rum/use-state false)
@@ -11,10 +14,12 @@
        [:h1.text-6xl.text-center.py-20.border.p-8.m-2.rounded-xl
         "Hello World, capacitor!"]
        [:p.flex.p-4.justify-center.bg-gray-03.flex-col.gap-6
-        (ionic/ion-button {:on-click #(js/alert "hello click me!")} "Default primary")
+        (ionic/ion-button {:on-click #(js/alert "hello click me!")
+                           :size "large"}
+          "Default primary")
         (ionic/ion-button {:color "warning"
-                           :size "small"
-                           :fill "clear"
+                           :size "large"
+                           :fill "outline"
                            :on-click #(set-open! true)} "Primary Button")
         (ionic/ion-button {:color "success"
                            :size "large"
@@ -25,7 +30,21 @@
                                  #js {:source "PHOTOS"
                                       :resultType (.-DataUrl ionic/ionic-camera-result-type)})
                                (p/then #(set-selected-src (.-dataUrl %)))))}
-          "获取图片" (ionic/ion-badge {:color "danger"} "99+")
+          [:span.pl-2 {:slot "end"} (ionic/tabler-icon "cloud-upload" {:size 22})]
+          [:strong "获取图片"]
+          (ionic/ion-badge {:color "danger"} "99+"))
+
+        [:<>
+         (ionic/ion-datetime-button {:datetime "datetime"})
+         (ionic/ion-modal
+           {:keepContentsMounted true}
+           (ionic/ion-datetime {:id "datetime"}))]]
+
+       [:div.p-4.flex.justify-center
+        (ionic/ion-nav-link
+          {:routerDirection "forward"
+           :component settings/page}
+          (ionic/ion-button {:size "large"} "Go to settings page")
           )]
 
        ;; selected image
@@ -54,4 +73,21 @@
       )))
 
 (rum/defc main []
-  [:> (.-IonApp ionic/ionic-react) (home)])
+  (let [nav-ref (rum/use-ref nil)
+        [_ set-nav-root!] (state/use-nav-root)]
+    (rum/use-effect!
+      (fn []
+        (let [handle-back! (fn []
+                             (-> (rum/deref nav-ref) (.pop)))
+              ^js back-listener (.addListener App "backButton" handle-back!)]
+          #(.remove back-listener)))
+      [])
+
+    (rum/use-effect!
+      (fn []
+        (set-nav-root! (rum/deref nav-ref))
+        #())
+      [(rum/deref nav-ref)])
+    [:> (.-IonApp ionic/ionic-react)
+     (ionic/ion-nav {:ref nav-ref :root home
+                     :animated false :swipeGesture false})]))

@@ -8,6 +8,11 @@
   }
 }
 
-ion-content {
+ion-button, ion-tab-button {
+  --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
+}
+
+ion-app {
   padding-top: var(--ion-safe-area-top) !important;
+  padding-top: 42px;
 }
