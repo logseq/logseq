@@ -29,7 +29,6 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.user :as user]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
@@ -342,8 +341,7 @@
      (outliner-op/insert-blocks! [new-block] current-block {:sibling? sibling?
                                                             :keep-uuid? keep-uuid?
                                                             :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?
-                                                            :created-by (user/user-block)}))))
+                                                            :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]

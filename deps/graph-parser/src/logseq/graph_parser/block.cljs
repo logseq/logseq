@@ -373,12 +373,7 @@
     as there's no chance to introduce timestamps via editing in page
    `skip-existing-page-check?`: if true, allows pages to have the same name"
   [original-page-name db with-timestamp? date-formatter
-   & {:keys [page-uuid class? created-by] :as options}]
-  (assert (or (nil? created-by)
-              (and (map? created-by)
-                   (:block/uuid created-by)
-                   (:logseq.property.user/name created-by)))
-          created-by)
+   & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (ldb/db-based-graph? db)
@@ -404,9 +399,7 @@
           (let [tags (if class? [:logseq.class/Tag]
                          (or (:block/tags page)
                              [:logseq.class/Page]))]
-            (cond-> (assoc page :block/tags tags)
-              created-by
-              (assoc :logseq.property/created-by-ref created-by)))
+            (assoc page :block/tags tags))
           (assoc page :block/type (or (:block/type page) "page")))))))
 
 (defn- db-namespace-page?
