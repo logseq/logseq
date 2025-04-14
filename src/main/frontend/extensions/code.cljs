@@ -470,7 +470,10 @@
                                  (code-handler/save-code-editor!))
                                (state/set-block-component-editing-mode! false)
                                (state/set-state! :editor/code-block-context nil)
-                               (when (not esc?) (state/clear-edit!))
+                               (when (and (not esc?)
+                                          (= (:db/id (state/get-edit-block))
+                                             (:db/id edit-block)))
+                                 (state/clear-edit!))
                                (vreset! *cursor-curr nil)
                                (vreset! *cursor-prev nil))))
         (.on editor "focus" (fn [_e]

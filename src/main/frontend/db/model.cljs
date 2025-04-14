@@ -56,7 +56,7 @@
     :block/heading-level
     :block/file
     :logseq.property/parent
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/page [:db/id :block/name :block/title :block/uuid :block/journal-day :block/type]}
     {:block/_parent ...}])
 
 (def hidden-page? ldb/hidden?)

@@ -14,6 +14,19 @@
 
 (defonce loaded? (atom false))
 
+(rum/defc editor-aux
+  [config id attr code theme options codemirror-loaded?]
+  (let [^js state (ui/useInView #js {:rootMargin "0px"})
+        in-view? (.-inView state)
+        placeholder [:div
+                     {:style {:height (min
+                                       (* 23.2 (count (string/split-lines code)))
+                                       600)}}]]
+    [:div {:ref (.-ref state)}
+     (if (and codemirror-loaded? in-view?)
+       (@lazy-editor config id attr code theme options)
+       placeholder)]))
+
 (rum/defc editor <
   rum/reactive
   {:will-mount
@@ -36,11 +49,4 @@
         theme   (state/sub :ui/theme)
         code    (or code "")
         code    (string/replace-first code #"\n$" "")]      ;; See-also: #3410
-    (ui/lazy-visible
-     (fn []
-       (when loaded?' (@lazy-editor config id attr code theme options)))
-     {:trigger-once? true
-      :placeholder [:div
-                    {:style {:height (min
-                                      (* 23.2 (count (string/split-lines code)))
-                                      600)}}]})))
+    (editor-aux config id attr code theme options loaded?')))
