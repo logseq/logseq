@@ -7,7 +7,6 @@
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
-            [frontend.util.page :as page-util]
             [goog.functions :refer [debounce]]
             [logseq.db :as ldb]
             [promesa.core :as p]))
