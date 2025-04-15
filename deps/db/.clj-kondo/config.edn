@@ -13,6 +13,7 @@
              logseq.db.common.order db-order
              logseq.db.common.property-util db-property-util
              logseq.db.common.sqlite sqlite-common-db
+             logseq.db.common.view db-view
              logseq.db.frontend.content db-content
              logseq.db.frontend.class db-class
              logseq.db.frontend.db-ident db-ident

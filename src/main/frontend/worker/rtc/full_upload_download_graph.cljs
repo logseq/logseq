@@ -326,7 +326,7 @@
 
 (defn- remote-all-blocks=>client-blocks
   [all-blocks ignore-attr-set ignore-entity-set]
-  (let [{:keys [_ t blocks]} all-blocks
+  (let [{:keys [_ _t blocks]} all-blocks
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
@@ -379,22 +379,22 @@
         (create-graph-for-rtc-test repo init-tx-data tx-data)
         (c.m/<?
          (p/do!
-           ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
-           ((@thread-api/*thread-apis :thread-api/export-db) repo)
-           ((@thread-api/*thread-apis :thread-api/transact)
-            repo init-tx-data
-            {:rtc-download-graph? true
-             :gen-undo-ops? false
+          ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+          ((@thread-api/*thread-apis :thread-api/export-db) repo)
+          ((@thread-api/*thread-apis :thread-api/transact)
+           repo init-tx-data
+           {:rtc-download-graph? true
+            :gen-undo-ops? false
              ;; only transact db schema, skip validation to avoid warning
-             :frontend.worker.pipeline/skip-validate-db? true
-             :persist-op? false}
-            (worker-state/get-context))
-           ((@thread-api/*thread-apis :thread-api/transact)
-            repo tx-data {:rtc-download-graph? true
-                          :gen-undo-ops? false
-                          :persist-op? false} (worker-state/get-context))
-           (transact-remote-schema-version! repo)
-           (transact-block-refs! repo))))
+            :frontend.worker.pipeline/skip-validate-db? true
+            :persist-op? false}
+           (worker-state/get-context))
+          ((@thread-api/*thread-apis :thread-api/transact)
+           repo tx-data {:rtc-download-graph? true
+                         :gen-undo-ops? false
+                         :persist-op? false} (worker-state/get-context))
+          (transact-remote-schema-version! repo)
+          (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;

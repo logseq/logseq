@@ -5,13 +5,14 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-pages-by-name
@@ -53,12 +54,6 @@
   [db block]
   (update block :block/refs (fn [refs] (map (fn [ref] (d/pull db '[*] (:db/id ref))) refs))))
 
-(defn- with-block-link
-  [db block]
-  (if (:block/link block)
-    (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
-    block))
-
 (defn with-parent
   [db block]
   (cond
@@ -73,6 +68,13 @@
     :else
     block))
 
+(comment
+  (defn- with-block-link
+    [db block]
+    (if (:block/link block)
+      (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
+      block)))
+
 (defn- mark-block-fully-loaded
   [b]
   (assoc b :block.temp/fully-loaded? true))
@@ -80,37 +82,42 @@
 (comment
   (defn- property-without-db-attrs
     [property]
-    (dissoc property :db/index :db/valueType :db/cardinality)))
+    (dissoc property :db/index :db/valueType :db/cardinality))
 
-(defn- property-with-values
-  [db block]
-  (when (entity-plus/db-based-graph? db)
-    (let [block (d/entity db (:db/id block))]
-      (->> (:block/properties block)
-           vals
-           (mapcat
-            (fn [property-values]
-              (let [values (->>
-                            (if (and (coll? property-values)
-                                     (map? (first property-values)))
-                              property-values
-                              #{property-values})
-                            (remove entity-util/page?))
-                    value-ids (when (every? map? values)
-                                (->> (map :db/id values)
-                                     (filter (fn [id] (or (int? id) (keyword? id))))))
-                    value-blocks (->>
-                                  (when (seq value-ids)
-                                    (map
-                                     (fn [id] (d/pull db '[*] id))
-                                     value-ids))
-                             ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
-                                  (keep (fn [block]
-                                          (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
-                                            (if (keyword? from-property-id)
-                                              (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
-                                              block)))))]
-                value-blocks)))))))
+  (defn- property-with-values
+    [db block properties]
+    (when (entity-plus/db-based-graph? db)
+      (let [block (d/entity db (:db/id block))
+            property-vals (if properties
+                            (map block properties)
+                            (vals (:block/properties block)))]
+        (->> property-vals
+             (mapcat
+              (fn [property-values]
+                (let [values (->>
+                              (if (and (coll? property-values)
+                                       (map? (first property-values)))
+                                property-values
+                                #{property-values}))
+                      value-ids (when (every? map? values)
+                                  (->> (map :db/id values)
+                                       (filter (fn [id] (or (int? id) (keyword? id))))))
+                      value-blocks (->>
+                                    (when (seq value-ids)
+                                      (map
+                                       (fn [id] (d/pull db '[:db/id :block/uuid
+                                                             :block/name :block/title
+                                                             :logseq.property/value
+                                                             :block/tags :block/page
+                                                             :logseq.property/created-from-property] id))
+                                       value-ids))
+                                  ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
+                                    (keep (fn [block]
+                                            (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
+                                              (if (keyword? from-property-id)
+                                                (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
+                                                block)))))]
+                  value-blocks))))))))
 
 (defn get-block-children-ids
   "Returns children UUIDs"
@@ -139,80 +146,93 @@
       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
         (d/pull-many db '[*] ids')))))
 
-(defn get-block-and-children
-  [db id {:keys [children? nested-children?]}]
+(defn- with-raw-title
+  [m entity]
+  (if-let [raw-title (:block/raw-title entity)]
+    (assoc m :block/title raw-title)
+    m))
+
+(defn- entity->map
+  [entity]
+  (-> (into {} entity)
+      (with-raw-title entity)
+      (assoc :db/id (:db/id entity))))
+
+(defn ^:large-vars/cleanup-todo get-block-and-children
+  [db id {:keys [children? children-only? nested-children? including-property-vals? properties children-props]
+          :or {including-property-vals? true}}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        page? (common-entity-util/page? block)
-        get-children (fn [block children]
-                       (let [long-page? (and (> (count children) 500) (not (common-entity-util/whiteboard? block)))]
-                         (if long-page?
-                           (->> (map (fn [e]
-                                       (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))
-                                     children)
-                                (map #(with-block-link db %)))
-                           (->> (d/pull-many db '[*] (map :db/id children))
-                                (map #(with-block-refs db %))
-                                (map #(with-block-link db %))
-                                (mapcat (fn [block]
-                                          (let [e (d/entity db (:db/id block))]
-                                            (conj
-                                             (if (seq (:block/properties e))
-                                               (vec (property-with-values db e))
-                                               [])
-                                             block))))))))]
+        block-refs-count? (some #{:block.temp/refs-count} properties)
+        whiteboard? (common-entity-util/whiteboard? block)]
     (when block
-      (let [block' (->> (d/pull db '[*] (:db/id block))
-                        (with-parent db)
-                        (with-block-refs db)
-                        (with-block-link db))
-            block' (if (or children? nested-children?)
-                     (mark-block-fully-loaded block')
-                     block')]
-        (cond->
-         {:block block'
-          :properties (property-with-values db block)}
-          children?
-          (assoc :children (get-children block
-                                         (if (and nested-children? (not page?))
-                                           (get-block-children db (:block/uuid block))
-                                           (if page?
+      (let [children (when (or children? children-only?)
+                       (let [page? (common-entity-util/page? block)
+                             children (->>
+                                       (cond
+                                         (and nested-children? (not page?))
+                                         (get-block-children db (:block/uuid block))
+                                         nested-children?
+                                         (:block/_page block)
+                                         :else
+                                         (let [short-page? (when page?
+                                                             (<= (count (:block/_page block)) 100))]
+                                           (if short-page?
                                              (:block/_page block)
-                                             (:block/_parent block))))))))))
+                                             (:block/_parent block))))
+                                       (remove (fn [e] (or (:logseq.property/created-from-property e)
+                                                           (:block/closed-value-property e)))))
+                             children-props (if whiteboard?
+                                              '[*]
+                                              (or children-props
+                                                  [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
+                                                   ;; pre-loading feature-related properties to avoid UI refreshing
+                                                   :logseq.task/status :logseq.property.node/display-type]))]
+                         (map
+                          (fn [block]
+                            (if (= children-props '[*])
+                              (entity->map block)
+                              (-> (select-keys block children-props)
+                                  (with-raw-title block))))
+                          children)))]
+        (if children-only?
+          {:children children}
+          (let [block' (if (seq properties)
+                         (-> (select-keys block properties)
+                             (with-raw-title block)
+                             (assoc :db/id (:db/id block)))
+                         (entity->map block))
+                block' (cond->
+                        (mark-block-fully-loaded block')
+                         including-property-vals?
+                         (update-vals (fn [v]
+                                        (cond
+                                          (de/entity? v)
+                                          (entity->map v)
+                                          (and (coll? v) (every? de/entity? v))
+                                          (map entity->map v)
+
+                                          :else
+                                          v)))
+                         block-refs-count?
+                         (assoc :block.temp/refs-count (count (:block/_refs block))))]
+            (cond->
+             {:block block'}
+              children?
+              (assoc :children children))))))))
 
 (defn get-latest-journals
-  [db n]
-  (let [today (date-time-util/date->int (js/Date.))]
-    (->>
-     (d/q '[:find [(pull ?page [:db/id :block/journal-day]) ...]
-            :in $ ?today
-            :where
-            [?page :block/name ?page-name]
-            [?page :block/journal-day ?journal-day]
-            [(<= ?journal-day ?today)]]
-          db
-          today)
-     (sort-by :block/journal-day)
-     (reverse)
-     (take n)
-     (mapcat (fn [p]
-               (d/datoms db :eavt (:db/id p)))))))
-
-(defn get-all-pages
-  "Get all pages including property page's default value"
   [db]
-  (let [datoms (d/datoms db :avet :block/name)]
-    (mapcat (fn [d]
-              (let [datoms (d/datoms db :eavt (:e d))]
-                (mapcat
-                 (fn [d]
-                   (if (keyword-identical? (:a d) :logseq.property/default-value)
-                     (concat
-                      (d/datoms db :eavt (:v d))
-                      datoms)
-                     datoms))
-                 datoms))) datoms)))
+  (let [today (date-time-util/date->int (js/Date.))]
+    (->> (d/datoms db :avet :block/journal-day)
+         vec
+         rseq
+         (keep (fn [d]
+                 (and (<= (:v d) today)
+                      (let [e (d/entity db (:e d))]
+                        (when (and (common-entity-util/journal? e) (:db/id e))
+                          e))))))))
 
 (defn get-page->refs-count
   [db]
@@ -225,9 +245,19 @@
 
 (defn get-structured-datoms
   [db]
-  (->> (d/datoms db :avet :block/closed-value-property)
-       (mapcat (fn [d]
-                 (d/datoms db :eavt (:e d))))))
+  (let [class-property-id (:db/id (d/entity db :logseq.class/Property))]
+    (->> (concat
+          (d/datoms db :avet :block/tags :logseq.class/Tag)
+          (d/datoms db :avet :block/tags :logseq.class/Property)
+          (d/datoms db :avet :block/closed-value-property))
+         (mapcat (fn [d]
+                   (let [block-datoms (d/datoms db :eavt (:e d))
+                         property-desc-datoms (when (= (:v d) class-property-id)
+                                                (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
+                                                  (d/datoms db :eavt (:db/id desc))))]
+                     (if property-desc-datoms
+                       (concat block-datoms property-desc-datoms)
+                       block-datoms)))))))
 
 (defn get-favorites
   "Favorites page and its blocks"
@@ -248,8 +278,21 @@
   (let [page-id (get-first-page-by-name db common-config/views-page-name)
         children (when page-id (:block/_parent (d/entity db page-id)))]
     (when (seq children)
-      (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
-              children))))
+      (into
+       (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
+               children)
+       (d/datoms db :eavt page-id)))))
+
+(defn get-recent-updated-pages
+  [db]
+  (->> (d/datoms db :avet :block/updated-at)
+       vec
+       rseq
+       (keep (fn [datom]
+               (let [e (d/entity db (:e datom))]
+                 (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
+                   e))))
+       (take 30)))
 
 (defn get-initial-data
   "Returns current database schema and initial data.
@@ -270,19 +313,23 @@
                         :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
-        latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
-        all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
+        recent-updated-pages (let [pages (get-recent-updated-pages db)]
+                               (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
+        pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
+                           views-id (get-first-page-by-title db common-config/views-page-name)]
+                       (mapcat #(d/datoms db :eavt %)
+                               (remove nil? [contents-id views-id])))
         data (distinct
               (concat idents
-                      all-pages
                       structured-datoms
                       favorites
+                      recent-updated-pages
                       views
-                      latest-journals
-                      all-files))]
+                      all-files
+                      pages-datoms))]
     {:schema schema
      :initial-data data}))
 

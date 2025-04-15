@@ -376,7 +376,6 @@
  :linked-references/filter-heading                  "Filtro"
  :linked-references/filter-includes                 "Incluye: "
  :linked-references/filter-search                   "Buscar en las páginas vinculadas"
- :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " de ")) total (if (= total 1) " Referencia vinculada" " Referencias vinculadas")))
  :notification/clear-all                            "Limpiar todo"
  :on-boarding/command-palette-quick-tour            "Tour rápido para acostumbrarse"
  :on-boarding/importing-desc                        "Si están en formato JSON, EDN o Markdown Logseq puede trabajar con ellos."
@@ -619,7 +618,6 @@
  :shortcut.category/whiteboard                      "Pizarra"
  :text/image                                        "Imagen"
  :tips/all-done                                     "¡Todo hecho!"
- :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Referencia desvinculada" " Referencias desvinculadas")))
  :updater/new-version-install                       "Se descargó una nueva versión."
  :updater/quit-and-install                          "Reiniciar para instalar"
  :whiteboard/add-block-or-page                      "Añadir bloque o página"

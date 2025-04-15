@@ -159,7 +159,7 @@
     (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
-               properties (db-async/<db-based-get-all-properties repo)
+               properties (db-async/db-based-get-all-properties repo)
                classes (->> (db-model/get-all-classes repo)
                             (remove ldb/built-in?))]
          (set-classes! classes)
@@ -294,6 +294,7 @@
                                                          (.focus input)))}
                                    :align "start"
                                    :as-dropdown? true}))}
+
    (:block/title property)))
 
 (rum/defc property-key-cp < rum/static
@@ -570,7 +571,7 @@
                                                  {:db/id (:db/id block)})]
                                                {:outliner-op :save-block})))})))
 
-(rum/defc properties-section < rum/reactive db-mixins/query
+(rum/defc properties-section < rum/static
   [block properties opts]
   (when (seq properties)
       ;; Sort properties by :block/order
@@ -580,28 +581,13 @@
                                    (:block/order (db/entity k)))) properties)]
       (ordered-properties block properties' opts))))
 
-(defn- async-load-classes!
-  [block]
-  (let [repo (state/get-current-repo)
-        classes (concat (:block/tags block) (outliner-property/get-classes-parents (:block/tags block)))]
-    (doseq [class classes]
-      (db-async/<get-block repo (:db/id class) :children? false))
-    (when (ldb/class? block)
-      (doseq [property (:logseq.property.class/properties block)]
-        (db-async/<get-block repo (:db/id property) :children? false)))
-    classes))
-
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [target-block (first (:rum/args state))
                  block (resolve-linked-block-if-exists target-block)]
              (assoc state
                     ::id (str (random-uuid))
-                    ::block block
-                    ::classes (async-load-classes! block))))
-   :will-remount (fn [state]
-                   (let [block (db/entity (:db/id (::block state)))]
-                     (assoc state ::classes (async-load-classes! block))))}
+                    ::block block)))}
   [state _target-block {:keys [sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
@@ -610,8 +596,6 @@
                                             (and show?
                                                  (or (= mode :global)
                                                      (and (set? ids) (contains? ids (:block/uuid block))))))
-        _ (doseq [class (::classes state)]
-            (db/sub-block (:db/id class)))
         class? (ldb/class? block)
         properties (:block/properties block)
         remove-built-in-or-other-position-properties

@@ -14,6 +14,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.text :as text-util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -43,6 +44,27 @@
        row]
       row)))
 
+(rum/defc search-input
+  [*input {:keys [prompt-key input-default-placeholder input-opts on-input]}]
+  (let [[input set-input!] (hooks/use-state @*input)]
+    (hooks/use-effect!
+     (fn []
+       (reset! *input input)
+       (when (fn? on-input) (on-input input)))
+     [(hooks/use-debounced-value input 100)])
+    [:div.input-wrap
+     {:style {:margin-bottom "-2px"}}
+     [:input.cp__select-input.w-full
+      (merge {:type        "text"
+              :class "!p-1.5"
+              :placeholder (or input-default-placeholder (t prompt-key))
+              :auto-focus  true
+              :value       input
+              :on-change   (fn [e]
+                             (let [v (util/evalue e)]
+                               (set-input! v)))}
+             input-opts)]]))
+
 (rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
@@ -54,6 +76,7 @@
    * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
    * :transform-fn - Optional fn to transform search results given results and current input
    * :new-case-sensitive? - Boolean to allow new values to be case sensitive
+   * :loading? - whether it's loading the items
    TODO: Describe more options"
   < rum/reactive
   shortcut/disable-all-shortcuts
@@ -76,7 +99,7 @@
                  item-cp transform-fn tap-*input-val
                  multiple-choices? on-apply new-case-sensitive?
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
-                 input-container initial-open?]
+                 input-container initial-open? loading?]
           :or {limit 100
                prompt-key :select/default-prompt
                empty-placeholder (fn [_t] [:div])
@@ -123,54 +146,50 @@
         input-opts' (if (fn? input-opts) (input-opts (empty? search-result)) input-opts)
         input-container (or
                          input-container
-                         [:div.input-wrap
-                          {:style {:margin-bottom "-2px"}}
-                          [:input.cp__select-input.w-full
-                           (merge {:type        "text"
-                                   :class "!p-1.5"
-                                   :placeholder (or input-default-placeholder (t prompt-key))
-                                   :auto-focus  true
-                                   :value       @input
-                                   :on-change   (fn [e]
-                                                  (let [v (util/evalue e)]
-                                                    (reset! input v)
-                                                    (and (fn? on-input) (on-input v))))}
-                                  input-opts')]])
-        results-container [:div
-                           {:class (when (seq search-result) "py-1")}
-                           [:div.item-results-wrap
-                            (ui/auto-complete
-                             search-result
-                             {:grouped? grouped?
-                              :item-render       (or item-cp (fn [result chosen?]
-                                                               (render-item result chosen? multiple-choices? *selected-choices)))
-                              :class             "cp__select-results"
-                              :on-chosen         (fn [raw-chosen e]
-                                                   (reset! input "")
-                                                   (let [chosen (extract-chosen-fn raw-chosen)]
-                                                     (if multiple-choices?
-                                                       (if (selected-choices chosen)
-                                                         (do
-                                                           (swap! *selected-choices disj chosen)
-                                                           (when on-chosen (on-chosen chosen false @*selected-choices e)))
-                                                         (do
-                                                           (swap! *selected-choices conj chosen)
-                                                           (when on-chosen (on-chosen chosen true @*selected-choices e))))
-                                                       (do
-                                                         (when (and close-modal? (not multiple-choices?))
-                                                           (state/close-modal!))
-                                                         (when on-chosen
-                                                           (on-chosen chosen true @*selected-choices e))))))
-                              :empty-placeholder (empty-placeholder t)})]
+                         (search-input input
+                                       {:prompt-key prompt-key
+                                        :input-default-placeholder input-default-placeholder
+                                        :input-opts input-opts'
+                                        :on-input on-input}))
+        results-container-f (fn []
+                              (if loading?
+                                [:div.px-1.py-2
+                                 (ui/loading "Loading ...")]
+                                [:div
+                                 {:class (when (seq search-result) "py-1")}
+                                 [:div.item-results-wrap
+                                  (ui/auto-complete
+                                   search-result
+                                   {:grouped? grouped?
+                                    :item-render       (or item-cp (fn [result chosen?]
+                                                                     (render-item result chosen? multiple-choices? *selected-choices)))
+                                    :class             "cp__select-results"
+                                    :on-chosen         (fn [raw-chosen e]
+                                                         (reset! input "")
+                                                         (let [chosen (extract-chosen-fn raw-chosen)]
+                                                           (if multiple-choices?
+                                                             (if (selected-choices chosen)
+                                                               (do
+                                                                 (swap! *selected-choices disj chosen)
+                                                                 (when on-chosen (on-chosen chosen false @*selected-choices e)))
+                                                               (do
+                                                                 (swap! *selected-choices conj chosen)
+                                                                 (when on-chosen (on-chosen chosen true @*selected-choices e))))
+                                                             (do
+                                                               (when (and close-modal? (not multiple-choices?))
+                                                                 (state/close-modal!))
+                                                               (when on-chosen
+                                                                 (on-chosen chosen true @*selected-choices e))))))
+                                    :empty-placeholder (empty-placeholder t)})]
 
-                           (when (and multiple-choices? (fn? on-apply))
-                             [:div.p-4 (ui/button "Apply"
-                                                  {:small? true
-                                                   :on-pointer-down (fn [e]
-                                                                      (util/stop e)
-                                                                      (when @*toggle (@*toggle))
-                                                                      (on-apply selected-choices)
-                                                                      (when close-modal? (state/close-modal!)))})])]]
+                                 (when (and multiple-choices? (fn? on-apply))
+                                   [:div.p-4 (ui/button "Apply"
+                                                        {:small? true
+                                                         :on-pointer-down (fn [e]
+                                                                            (util/stop e)
+                                                                            (when @*toggle (@*toggle))
+                                                                            (on-apply selected-choices)
+                                                                            (when close-modal? (state/close-modal!)))})])]))]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
@@ -180,12 +199,12 @@
      (if dropdown?
        (ui/dropdown
         (if (fn? input-container) input-container (fn [] input-container))
-        (fn [] results-container)
+        results-container-f
         {:initial-open? initial-open?
          :*toggle-fn *toggle})
        [:<>
         (if (fn? input-container) (input-container) input-container)
-        results-container])]))
+        (results-container-f)])]))
 
 (defn select-config
   "Config that supports multiple types (uses) of this component. To add a new

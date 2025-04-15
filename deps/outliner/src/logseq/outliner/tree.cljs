@@ -53,7 +53,7 @@
 ;; TODO: entity can already be used as a tree
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
-  [repo db blocks root-id]
+  [repo db blocks root-id & {:as option}]
   (let [blocks (map (fn [b] (if (de/entity? b)
                               (assoc (into {} b) :db/id (:db/id b))
                               b)) blocks)
@@ -61,7 +61,7 @@
     (if-not root ; custom query
       blocks
       (let [result (blocks->vec-tree-aux repo db blocks root)]
-        (if page?
+        (if (and page? (not (:link option)))
           result
           ;; include root block
           (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)

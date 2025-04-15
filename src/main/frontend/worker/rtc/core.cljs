@@ -238,7 +238,8 @@
           (update-remote-schema-version! conn @*server-schema-version)
           (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
-                  (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
+                  (c.m/run-task :assets-sync-loop-task
+                    assets-sync-loop-task))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
@@ -348,10 +349,11 @@
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
-              canceler (c.m/run-task rtc-loop-task :rtc-loop-task
-                                     :fail (fn [e]
-                                             (reset! *last-stop-exception e)
-                                             (log/info :rtc-loop-task e)))
+              canceler (c.m/run-task :rtc-loop-task
+                         rtc-loop-task
+                         :fail (fn [e]
+                                 (reset! *last-stop-exception e)
+                                 (log/info :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
           (if-let [start-ex (:ex-data start-ex)]
             (do (log/info :start-ex start-ex) (r.ex/->map start-ex))

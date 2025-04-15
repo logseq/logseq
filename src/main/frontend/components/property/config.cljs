@@ -363,27 +363,19 @@
 
 (rum/defc add-existing-values
   [property values {:keys [toggle-fn]}]
-  (let [uuid-values? (every? uuid? values)
-        values' (if uuid-values?
-                  (let [values' (map #(db/entity [:block/uuid %]) values)]
-                    (->> values'
-                         (util/distinct-by db-property/closed-value-content)
-                         (map :block/uuid)))
-                  values)]
-    [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
-     {:class "max-h-[50dvh]"}
-     [:div "Existing values:"]
-     [:ol
-      (for [value values']
-        [:li (if (uuid? value)
-               (let [result (db/entity [:block/uuid value])]
-                 (db-property/closed-value-content result))
-               (str value))])]
-     (shui/button
-      {:on-click (fn []
-                   (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property) values')]
-                     (toggle-fn)))}
-      "Add choices")]))
+  [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
+   {:class "max-h-[50dvh]"}
+   [:div "Existing values:"]
+   [:ol
+    (for [value values]
+      [:li (:label value)])]
+   (shui/button
+    {:on-click (fn []
+                 (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property)
+                                                                                      (map (fn [{:keys [value]}]
+                                                                                             (:block/uuid value)) values))]
+                   (toggle-fn)))}
+    "Add choices")])
 
 (rum/defc choices-sub-pane < rum/reactive db-mixins/query
   [property {:keys [disabled?] :as opts}]
@@ -431,29 +423,29 @@
         {:icon :plus :title "Add choice"
          :item-props {:on-click
                       (fn [^js e]
-                        (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
+                        (p/let [values (db-async/<get-property-values (:db/ident property) {})
                                 existing-values (seq (:property/closed-values property))
-                                values (if (seq existing-values)
-                                         (let [existing-ids (set (map :db/id existing-values))]
-                                           (remove (fn [id] (existing-ids id)) values))
-                                         values)]
-                          (shui/popup-show! (.-target e)
-                                            (fn [{:keys [id]}]
-                                              (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                                    values' (->> (if (contains? db-property-type/all-ref-property-types (:logseq.property/type property))
-                                                                   (->> values
-                                                                        (map db/entity)
-                                                                        (remove (fn [e]
-                                                                                  (let [value (db-property/property-value-content e)]
-                                                                                    (and (string? value) (string/blank? value)))))
-                                                                        (map :block/uuid))
-                                                                   (remove string/blank? values))
-                                                                 distinct)]
-                                                (if (seq values')
-                                                  (add-existing-values property values' opts)
-                                                  (choice-base-edit-form property {:create? true}))))
-                                            {:id :ls-base-edit-form
-                                             :align "start"})))}}))]))
+                                values' (if (seq existing-values)
+                                          (let [existing-ids (set (map :db/id existing-values))
+                                                existing-titles (set (map db-property/property-value-content existing-values))]
+                                            (remove (fn [{:keys [label value]}]
+                                                      (or (existing-ids (:db/id value))
+                                                          (existing-titles label)
+                                                          (string/blank? label))) values))
+                                          (remove (fn [{:keys [label _value]}]
+                                                    (string/blank? label))
+                                                  values))]
+                          (p/do!
+                           (when (seq values')
+                             (db-async/<get-blocks (state/get-current-repo) (map (fn [{:keys [value]}] (:db/id value)) values)))
+                           (shui/popup-show! (.-target e)
+                                             (fn [{:keys [id]}]
+                                               (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                                                 (if (seq values')
+                                                   (add-existing-values property values' opts)
+                                                   (choice-base-edit-form property {:create? true}))))
+                                             {:id :ls-base-edit-form
+                                              :align "start"}))))}}))]))
 
 (rum/defc checkbox-state-mapping
   [choices]
@@ -762,11 +754,9 @@
 (rum/defcs dropdown-editor < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*values (atom :loading)
-                 repo (state/get-current-repo)
                  property (first (:rum/args state))
                  ident (:db/ident property)]
-             (p/let [_ (db-async/<get-block repo (:block/uuid property))
-                     result (db-async/<get-block-property-values repo ident)]
+             (p/let [result (db-async/<get-property-values ident)]
                (reset! *values result))
              (assoc state ::values *values)))}
   [state property* owner-block opts]

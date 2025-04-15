@@ -530,14 +530,6 @@
                                 :block    "center"}))))))
 
 #?(:cljs
-   (defn bottom-reached?
-     [node threshold]
-     (let [full-height (gobj/get node "scrollHeight")
-           scroll-top' (gobj/get node "scrollTop")
-           client-height (gobj/get node "clientHeight")]
-       (<= (- full-height scroll-top' client-height) threshold))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -828,6 +820,10 @@
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
+
+#?(:cljs
+   (defn atom? [v]
+     (instance? Atom v)))
 
 #?(:cljs
    (defn react
@@ -1349,10 +1345,6 @@
 (defn collapsed?
   [block]
   (:block/collapsed? block))
-
-#?(:cljs
-   (defn atom? [v]
-     (instance? Atom v)))
 
 ;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
 #?(:cljs

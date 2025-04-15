@@ -81,3 +81,8 @@
                      :logseq.class/Whiteboard :whiteboard
                      :logseq.class/Page :page}]
     (set (map #(ident->type (:db/ident %)) (:block/tags entity)))))
+
+(defn built-in?
+  "Built-in page or block"
+  [entity]
+  (:logseq.property/built-in? entity))

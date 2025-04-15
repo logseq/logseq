@@ -135,20 +135,6 @@
  :linked-references/filter-directions "برای شمول کلیک و برای استثناء کردن، شیفت کلیک کنید. دوباره کلیک کنید تا پاک شود."
  :linked-references/filter-includes "شامل شده‌ها: "
  :linked-references/filter-excludes "استثناء شده‌ها: "
- :linked-references/reference-count (fn [filtered-count total]
-                                      ;; 1 Linked Reference
-                                      ;; 1 of 1 Linked Reference
-                                      ;; 2 of 5 Linked References
-                                      (str
-                                       (when filtered-count
-                                         (str filtered-count " از "))
-                                       total
-                                       (if (= total 1) " ارجاع پیوندی" " ارجاع پیوندی")))
- :unlinked-references/reference-count (fn [total]
-                                        ;; 1 Unlinked Reference
-                                        ;; 5 Unlinked References
-                                        (str total
-                                         (if (= total 1) " ارجاع غیر پیوندی" " ارجاع غیر پیوندی")))
  :editor/block-search "جستجو برای بلوک"
  :text/image "تصویر"
  :asset/show-in-folder "نمایش تصویر در پوشه"

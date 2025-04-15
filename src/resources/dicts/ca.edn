@@ -377,7 +377,6 @@
  :linked-references/filter-heading                  "Filtre"
  :linked-references/filter-includes                 "Incloure: "
  :linked-references/filter-search                   "Cercar a les pàgines vinculades"
- :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " de ")) total (if (= total 1) " Referència vinculada" " Referencies vinculades")))
  :notification/clear-all                            "Netejar tot"
  :on-boarding/command-palette-quick-tour            "Tour ràpid per acostumar-se"
  :on-boarding/importing-desc                        "Si estan en format JSON, EDN o Markdown Logseq pot treballar amb ells."
@@ -415,7 +414,7 @@
  :on-boarding/welcome-whiteboard-modal-description  "Les pissarres son una gran eina per fer pluja de idees i organització. Ara pots col·locar qualsevol pensament de la base de coneixement o nou un al costat de l'altre en un llenç especial per connectar-los, associar-los i entendre'ls de noves maneres."
  :on-boarding/welcome-whiteboard-modal-skip         "Ometre"
  :on-boarding/welcome-whiteboard-modal-start        "Començar a utilitzar la pissarra"
- :on-boarding/welcome-whiteboard-modal-title        "Un nou llenç pels teus pensaments." 
+ :on-boarding/welcome-whiteboard-modal-title        "Un nou llenç pels teus pensaments."
  :page/add-to-favorites                             "Afegir a Preferits"
  :page/backlinks                                    "Enllaços per retrocedir"
  :page/copy-page-url                                "Copiar URL de la pàgina"
@@ -620,7 +619,6 @@
  :shortcut.category/whiteboard                      "Pissarra"
  :text/image                                        "Imatge"
  :tips/all-done                                     "¡Tot fet!"
- :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Referència desvinculada" " Referències desvinculades")))
  :updater/new-version-install                       "S'ha descarregat una nova versió."
  :updater/quit-and-install                          "Reiniciar per instal·lar"
  :whiteboard/add-block-or-page                      "Afegir bloc o pàgina"

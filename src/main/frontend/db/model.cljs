@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.file-based.db :as common-file-db]
+            [frontend.common.graph-view :as graph-view]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
@@ -17,9 +18,11 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.rules :as rules]
-            [logseq.graph-parser.db :as gp-db]))
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.shui.hooks :as hooks]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -53,27 +56,10 @@
     :block/heading-level
     :block/file
     :logseq.property/parent
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/page [:db/id :block/name :block/title :block/uuid :block/journal-day :block/type]}
     {:block/_parent ...}])
 
 (def hidden-page? ldb/hidden?)
-
-(defn get-all-tagged-pages
-  [repo]
-  (d/q '[:find ?page ?tag
-         :where
-         [?page :block/tags ?tag]]
-       (conn/get-db repo)))
-
-(defn get-all-pages
-  [repo]
-  (when-let [db (conn/get-db repo)]
-    (ldb/get-all-pages db)))
-
-(defn get-all-page-titles
-  [repo]
-  (->> (get-all-pages repo)
-       (map :block/title)))
 
 (defn get-alias-source-page
   "return the source page of an alias"
@@ -214,10 +200,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn page-alias-set
   [repo-url page-id]
-  (->>
-   (ldb/get-block-alias (conn/get-db repo-url) page-id)
-   (set)
-   (set/union #{page-id})))
+  (ldb/page-alias-set (conn/get-db repo-url) page-id))
 
 (defn get-page-alias-names
   [repo page-id]
@@ -244,17 +227,34 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  [id]
+  "Used together with rum/reactive db-mixins/query"
+  [id & {:keys [ref?]
+         :or {ref? false}}]
   (when-let [repo (state/get-current-repo)]
     (when id
       (let [ref (react/q repo [:frontend.worker.react/block id]
                          {:query-fn (fn [_]
-                                      (let [e (db-utils/entity id)]
-                                        [e (:block/tx-id e)]))}
-                         nil)
-            e (-> ref react first)]
-        (when-let [id (:db/id e)]
-          (db-utils/entity id))))))
+                                      (db-utils/entity id))}
+                         nil)]
+        (if ref? ref
+            (let [e (-> ref react)]
+              (when-let [id (:db/id e)]
+                (db-utils/entity id))))))))
+
+(defn sub-entity
+  "Used for react function components"
+  [entity* watch-id]
+  (let [id (:db/id entity*)
+        *ref (sub-block id {:ref? true})
+        [entity set-entity!] (hooks/use-state @*ref)]
+    (add-watch *ref watch-id (fn [_ _ _ new-value]
+                               (set-entity! new-value)))
+    (hooks/use-effect!
+     (fn []
+       #(remove-watch *ref watch-id))
+     [])
+
+    [entity set-entity!]))
 
 (defn sort-by-order-recursive
   [form]
@@ -482,9 +482,9 @@ independent of format as format specific heading characters are stripped"
        first))))
 
 (defn get-page
-  [page-name-or-uuid]
-  (when page-name-or-uuid
-    (ldb/get-page (conn/get-db) page-name-or-uuid)))
+  [page-id-name-or-uuid]
+  (when page-id-name-or-uuid
+    (ldb/get-page (conn/get-db) page-id-name-or-uuid)))
 
 (defn get-case-page
   [page-name-or-uuid]
@@ -554,60 +554,14 @@ independent of format as format specific heading characters are stripped"
   ([n]
    (get-latest-journals (state/get-current-repo) n))
   ([repo-url n]
-   (when (conn/get-db repo-url)
-     (let [date (js/Date.)
-           _ (.setDate date (- (.getDate date) (dec n)))
-           today (date-time-util/date->int (js/Date.))]
-       (->>
-        (react/q repo-url [:frontend.worker.react/journals] {:use-cache? false}
-                 '[:find [(pull ?page [*]) ...]
-                   :in $ ?today
-                   :where
-                   [?page :block/name ?page-name]
-                   [?page :block/journal-day ?journal-day]
-                   [(<= ?journal-day ?today)]]
-                 today)
-        (react)
-        (sort-by :block/journal-day)
-        (reverse)
-        (take n))))))
-
-;; get pages that this page referenced
-(defn get-page-referenced-pages
-  [repo page-id]
-  (when-let [db (conn/get-db repo)]
-    (let [pages (page-alias-set repo page-id)
-          ref-pages (d/q
-                     '[:find [?ref-page ...]
-                       :in $ ?pages
-                       :where
-                       [(untuple ?pages) [?page ...]]
-                       [?block :block/page ?page]
-                       [?block :block/refs ?ref-page]]
-                     db
-                     pages)]
-      ref-pages)))
+   (when-let [db (conn/get-db repo-url)]
+     (take n (ldb/get-latest-journals db)))))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page-id include-journals?]
-  (when (conn/get-db repo)
-    (let [pages (page-alias-set repo page-id)
-          mentioned-pages (->>
-                           (mapcat
-                            (fn [id]
-                              (let [page (db-utils/entity repo id)]
-                                (->> (:block/_refs page)
-                                     (keep (fn [ref]
-                                             (if (ldb/page? ref)
-                                               page
-                                               (:block/page ref)))))))
-                            pages)
-                           (util/distinct-by :db/id))]
-      (keep (fn [page]
-              (when-not (and (not include-journals?) (ldb/journal? page))
-                (:db/id page)))
-            mentioned-pages))))
+  (when-let [db (conn/get-db repo)]
+    (graph-view/get-pages-that-mentioned-page db page-id include-journals?)))
 
 (defn get-page-referenced-blocks-full
   ([page-id]
@@ -822,15 +776,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-structured-children
   [repo eid]
-  (->>
-   (d/q '[:find [?children ...]
-          :in $ ?parent %
-          :where
-          (parent ?parent ?children)]
-        (conn/get-db repo)
-        eid
-        (:parent rules/rules))
-   (remove #{eid})))
+  (db-class/get-structured-children (conn/get-db repo) eid))
 
 (defn get-class-objects
   [repo class-id]
@@ -845,34 +791,9 @@ independent of format as format specific heading characters are stripped"
        (:block/_tags class))
      (remove ldb/hidden?))))
 
-(defn sub-class-objects
-  [repo class-id]
-  (when class-id
-    (-> (react/q repo [:frontend.worker.react/objects class-id]
-                 {:query-fn (fn [_] (get-class-objects repo class-id))}
-                 nil)
-        react)))
-
-(defn get-property-related-objects
-  [repo property-id]
-  (when-let [property (db-utils/entity repo property-id)]
-    (->> (d/q '[:find [?b ...]
-                :in $ % ?prop
-                :where
-                (has-property-or-default-value? ?b ?prop)]
-              (conn/get-db repo)
-              (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
-                                   {:deps rules/rules-dependencies})
-              (:db/ident property))
-         (map #(db-utils/entity repo %))
-         (remove ldb/hidden?))))
-
 (defn get-all-namespace-relation
   [repo]
-  (d/q '[:find ?page ?parent
-         :where
-         [?page :block/namespace ?parent]]
-       (conn/get-db repo)))
+  (ldb/get-all-namespace-relation (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
@@ -880,35 +801,6 @@ independent of format as format specific heading characters are stripped"
     (->> (get-all-namespace-relation repo)
          (map (fn [[_ ?parent]]
                 (db-utils/entity db ?parent))))))
-
-;; Ignore files with empty blocks for now
-(defn get-pages-relation
-  [repo with-journal?]
-  (when-let [db (conn/get-db repo)]
-    (if (config/db-based-graph?)
-      (let [q (if with-journal?
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?block :block/refs ?ref-page]]
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?p :block/tags]
-                  (not [?p :block/tags :logseq.class/Journal])
-                  [?block :block/refs ?ref-page]])]
-        (d/q q db))
-      (let [q (if with-journal?
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  [?block :block/refs ?ref-page]]
-                '[:find ?p ?ref-page
-                  :where
-                  [?block :block/page ?p]
-                  (not [?p :block/type "journal"])
-                  [?block :block/refs ?ref-page]])]
-        (d/q q db)))))
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

@@ -17,7 +17,6 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
 (def <q db-async-util/<q)
@@ -50,7 +49,7 @@
     (p/let [templates (<get-all-templates repo)]
       (get templates name))))
 
-(defn <db-based-get-all-properties
+(defn db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
   [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
             :or {remove-built-in-property? true
@@ -79,7 +78,7 @@
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph opts)
+      (db-based-get-all-properties graph opts)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))
@@ -90,109 +89,86 @@
   (when-not (config/db-based-graph? graph)
     (file-async/<get-file-based-property-values graph property)))
 
-(defn <get-block-property-values
-  "For db graphs, returns property value ids for given property db-ident.
-   Separate from file version because values are lazy loaded"
-  [graph property-id]
-  (let [default-value-id (:db/id (:logseq.property/default-value (db/entity property-id)))
-        empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
-    (p/let [result (<q graph {:transact-db? false}
-                       '[:find [?v ...]
-                         :in $ ?property-id ?empty-id
-                         :where
-                         [?b ?property-id ?v]
-                         [(not= ?v ?empty-id)]]
-                       property-id
-                       empty-id)]
-      (if default-value-id
-        ;; put default value the first
-        (concat [default-value-id] result)
-        result))))
+(defn <get-property-values
+  "For db graphs, returns a vec of property value maps for given property
+  db-ident.  The map contains a :label key which can be a string or number (for
+  query builder) and a :value key which contains the entity or scalar property value"
+  [property-id & {:as opts}]
+  (when property-id
+    (state/<invoke-db-worker :thread-api/get-property-values (state/get-current-repo)
+                             (assoc opts :property-ident property-id))))
 
-(comment
-  (defn <get-block-property-value-entity
-    [graph property-id value]
-    (p/let [result (<q graph {}
-                       '[:find [(pull ?vid [*]) ...]
-                         :in $ ?property-id ?value
-                         :where
-                         [?b ?property-id ?vid]
-                         [(not= ?vid :logseq.property/empty-placeholder)]
-                         (or
-                          [?vid :logseq.property/value ?value]
-                          [?vid :block/title ?value])]
-                       property-id
-                       value)]
-      (db/entity (:db/id (first result))))))
-
-;; TODO: batch queries for better performance and UX
 (defn <get-block
-  [graph name-or-uuid & {:keys [children? nested-children?]
-                         :or {children? true
-                              nested-children? false}
-                         :as opts}]
-  (let [name' (str name-or-uuid)
-        *async-queries (:db/async-queries @state/state)
-        async-requested? (get @*async-queries [name' opts])
+  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? children-only? properties]
+                            :or {children? true}
+                            :as opts}]
+
+  ;; (prn :debug :<get-block id-uuid-or-name)
+  ;; (js/console.trace)
+  (let [name' (str id-uuid-or-name)
+        opts (assoc opts :children? children?)
         e (cond
-            (number? name-or-uuid)
-            (db/entity name-or-uuid)
+            (number? id-uuid-or-name)
+            (db/entity id-uuid-or-name)
             (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else
             (db/get-page name'))
         id (or (and (:block/uuid e) (str (:block/uuid e)))
                (and (util/uuid-string? name') name')
-               name-or-uuid)]
-    (if (or (:block.temp/fully-loaded? e) async-requested?)
-      e
-      (do
-        (swap! *async-queries assoc [name' opts] true)
-        (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
-        (p/let [{:keys [properties block children] :as result'}
-                (state/<invoke-db-worker :thread-api/get-block-and-children
-                                         graph id {:children? children?
-                                                   :nested-children? nested-children?})
-                conn (db/get-db graph false)
-                block-and-children (concat properties [block] children)
-                _ (d/transact! conn block-and-children)
-                affected-keys (->> (keep :db/id block-and-children)
-                                   (map #(vector :frontend.worker.react/block %)))]
-          (react/refresh-affected-queries! graph affected-keys)
-          (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
-          (if children?
-            block
-            result'))))))
+               id-uuid-or-name)]
+    (cond
+      (and (:block.temp/fully-loaded? e) ; children may not be fully loaded
+           (not children-only?)
+           (not nested-children?)
+           (not (some #{:block.temp/refs-count} properties)))
+      (p/promise e)
+
+      :else
+      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                              [{:id id :opts opts}])
+              {:keys [block children]} (first result)]
+        (when-not skip-transact?
+          (let [conn (db/get-db graph false)
+                block-and-children (if block (cons block children) children)
+                affected-keys [[:frontend.worker.react/block (:db/id block)]]
+                tx-data (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)]
+            (when (seq tx-data) (d/transact! conn tx-data))
+            (when-not skip-refresh?
+              (react/refresh-affected-queries! graph affected-keys))))
+
+        (if children-only? children block)))))
+
+(defn <get-blocks
+  [graph ids* & {:as opts}]
+  (let [ids (remove (fn [id] (:block.temp/fully-loaded? (db/entity id))) ids*)]
+    (when (seq ids)
+      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                              (map (fn [id]
+                                                     {:id id :opts (assoc opts :children? false)})
+                                                   ids))]
+        (let [conn (db/get-db graph false)
+              result' (map :block result)]
+          (when (seq result')
+            (let [result'' (map (fn [b] (assoc b :block.temp/fully-loaded? true)) result')]
+              (d/transact! conn result'')))
+          result')))))
 
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
-  (when-let [block-id (:block/uuid (db/entity graph id))]
-    (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
+  (when (:block/uuid (db/entity graph id))
     (p/let [result (state/<invoke-db-worker :thread-api/get-block-parents graph id depth)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
-      (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
       result)))
-
-(defn <get-page-all-blocks
-  [page-name]
-  (when-let [page (some-> page-name (db-model/get-page))]
-    (p/let [result (state/<invoke-db-worker :thread-api/get-block-and-children
-                                            (state/get-current-repo)
-                                            (:block/uuid page)
-                                            {:children? true
-                                             :nested-children? false})]
-      (:children result))))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
   (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
           conn (db/get-db graph false)
           _ (d/transact! conn result)]
-    (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
     result))
 
 (defn <get-block-refs-count
@@ -271,24 +247,13 @@
 
 (defn <get-tag-pages
   [graph tag-id]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at])]
+  (<q graph {:transact-db? false}
+      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
         :in $ ?tag-id
         :where
         [?page :block/tags ?tag-id]
         [?page :block/name]]
       tag-id))
-
-(defn <get-property-objects
-  [graph property-ident]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
-        :in $ % ?prop
-        :where
-        (has-property-or-default-value? ?b ?prop)]
-      (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
-                           {:deps rules/rules-dependencies})
-      property-ident))
 
 (defn <get-tag-objects
   [graph class-id]

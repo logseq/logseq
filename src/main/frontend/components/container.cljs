@@ -20,6 +20,7 @@
             [frontend.context.i18n :refer [t tt]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -56,6 +57,7 @@
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
+            [promesa.core :as p]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -707,8 +709,7 @@
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        latest-journals (db/get-latest-journals (state/get-current-repo) 1)
         graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
       (or
@@ -736,7 +737,7 @@
          (ui/loading (t :loading-files))
 
          (seq latest-journals)
-         (journal/journals latest-journals)
+         (journal/all-journals)
 
          ;; FIXME: why will this happen?
          :else
@@ -748,6 +749,7 @@
   (when-not (or (gobj/get e "shiftKey")
                 (util/meta-key? e)
                 (state/get-edit-input-id)
+                (some-> (.-target e) util/input?)
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))
@@ -916,7 +918,9 @@
                                   (when block
                                     (state/clear-selection!)
                                     (state/conj-selection-block! block :down))
-                                  (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?)))
+                                  (p/do!
+                                   (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
+                                   (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
 
                                 :else
                                 false)]

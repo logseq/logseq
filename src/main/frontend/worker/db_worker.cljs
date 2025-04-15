@@ -3,11 +3,14 @@
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
+            [cljs.cache :as cache]
             [clojure.edn :as edn]
             [clojure.set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage] :as storage]
+            [frontend.common.cache :as common.cache]
+            [frontend.common.graph-view :as graph-view]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db.migrate :as db-migrate]
@@ -21,8 +24,8 @@
             [frontend.worker.rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
-            [frontend.worker.state :as worker-state] ;; [frontend.worker.undo-redo :as undo-redo]
-            [frontend.worker.undo-redo2 :as undo-redo]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
@@ -31,6 +34,8 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -475,11 +480,24 @@
                (d/pull @conn selector)
                (sqlite-common-db/with-parent @conn)))))
 
-(def-thread-api :thread-api/get-block-and-children
-  [repo id opts]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-      (sqlite-common-db/get-block-and-children @conn id opts))))
+(def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
+(def ^:private get-blocks-with-cache
+  (common.cache/cache-fn
+   *get-blocks-cache
+   (fn [repo requests]
+     (let [db (some-> (worker-state/get-datascript-conn repo) deref)]
+       [[repo (:max-tx db) requests]
+        [db requests]]))
+   (fn [db requests]
+     (when db
+       (mapv (fn [{:keys [id opts]}]
+               (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                 (-> (sqlite-common-db/get-block-and-children db id' opts)
+                     (assoc :id id)))) requests)))))
+
+(def-thread-api :thread-api/get-blocks
+  [repo requests]
+  (get-blocks-with-cache repo requests))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
@@ -491,17 +509,38 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs-count @conn id)))
 
+(def-thread-api :thread-api/block-refs-check
+  [repo id {:keys [unlinked?]}]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [db @conn
+          block (d/entity db id)
+          db-based? (entity-plus/db-based-graph? db)]
+      (if unlinked?
+        (let [title (string/lower-case (:block/title block))]
+          (when-not (string/blank? title)
+            (let [datoms (d/datoms db :avet :block/title)]
+              (if db-based?
+                (some (fn [d]
+                        (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title)))
+                      datoms)
+                (some (fn [d]
+                        (and (not= id (:e d))
+                             (string/includes? (string/lower-case (:v d)) title)
+                             (let [refs (map :db/id (:block/refs (d/entity db (:e d))))]
+                               (contains? (set refs) (:e d)))))
+                      datoms)))))
+        (boolean
+         (some
+          ;; check if there's any entity reference this `block` except the view-entity
+          (fn [ref] (not= id (:db/id (:logseq.property/view-for ref))))
+          (:block/_refs block)))))))
+
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [block-id (:block/uuid (d/entity @conn id))]
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
            (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
-
-(def-thread-api :thread-api/get-page-unlinked-refs
-  [repo page-id search-result-eids]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))
 
 (def-thread-api :thread-api/set-context
   [context]
@@ -720,6 +759,41 @@
                                   ["An unexpected error occurred during export. See the javascript console for details."
                                    :error])
         :export-edn-error))))
+
+(def-thread-api :thread-api/get-view-data
+  [repo view-id option]
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (db-view/get-view-data db view-id option)))
+
+(def-thread-api :thread-api/get-property-values
+  [repo {:keys [property-ident] :as option}]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (db-view/get-property-values @conn property-ident option)))
+
+(def-thread-api :thread-api/build-graph
+  [repo option]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (graph-view/build-graph @conn option)))
+
+(def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
+(defn- get-all-page-titles
+  [db]
+  (let [pages (ldb/get-all-pages db)]
+    (sort (map :block/title pages))))
+
+(def ^:private get-all-page-titles-with-cache
+  (common.cache/cache-fn
+   *get-all-page-titles-cache
+   (fn [repo]
+     (let [db @(worker-state/get-datascript-conn repo)]
+       [[repo (:max-tx db)] ;cache-key
+        [db]             ;f-args
+        ]))
+   get-all-page-titles))
+
+(def-thread-api :thread-api/get-all-page-titles
+  [repo]
+  (get-all-page-titles-with-cache repo))
 
 (def-thread-api :thread-api/update-auth-tokens
   [id-token access-token refresh-token]

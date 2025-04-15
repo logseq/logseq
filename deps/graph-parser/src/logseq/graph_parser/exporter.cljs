@@ -927,12 +927,12 @@
                            (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property/parent n))))
                                            {:node n})))))]
     (when-let [parent (get-parent node)]
-     (loop [current-parent parent
-            parents' []]
-       (if (and current-parent (not (contains? parents' current-parent)))
-         (recur (get-parent current-parent)
-                (conj parents' current-parent))
-         (vec (reverse parents')))))))
+      (loop [current-parent parent
+             parents' []]
+        (if (and current-parent (not (contains? parents' current-parent)))
+          (recur (get-parent current-parent)
+                 (conj parents' current-parent))
+          (vec (reverse parents')))))))
 
 (defn- get-all-existing-page-uuids
   "Returns a map of unique page names mapped to their uuids. The page names

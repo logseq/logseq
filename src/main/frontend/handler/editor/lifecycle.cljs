@@ -1,13 +1,10 @@
 (ns ^:no-doc frontend.handler.editor.lifecycle
-  (:require [frontend.handler.editor :as editor-handler]
+  (:require [dommy.core :as dom]
+            [frontend.db :as db]
+            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]
-            [frontend.db :as db]
-            [dommy.core :as dom]
-            ;; [clojure.string :as string]
-            ;; [frontend.handler.block :as block-handler]
-            ))
+            [goog.dom :as gdom]))
 
 (defn did-mount!
   [state]
@@ -55,7 +52,6 @@
 ;;         (util/set-change-value input
 ;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/title new-block))))))
 ;;   state)
-
 
 (def lifecycle
   {:did-mount did-mount!

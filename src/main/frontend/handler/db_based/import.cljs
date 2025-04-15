@@ -1,7 +1,7 @@
 (ns frontend.handler.db-based.import
   "Handles DB graph imports"
-  (:require [clojure.edn :as edn]
-            [cljs.pprint :as pprint]
+  (:require [cljs.pprint :as pprint]
+            [clojure.edn :as edn]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -125,7 +125,6 @@
                   (when (seq misc-tx)
                     (db/transact! repo misc-tx tx-meta))
                   (when-not import-block?
-                    (state/clear-async-query-state!)
                     (ui-handler/re-render-root!)
                     (notification/show! "Import successful!" :success)))
                 (p/catch (fn [e]

@@ -18,13 +18,17 @@
   (assert (vector? params) params)
   `(vswap! *thread-apis assoc
            ~qualified-keyword-name
-           (fn ~params ~@body)))
+           (fn ~(symbol (str "thread-api--" (name qualified-keyword-name))) ~params ~@body)))
+
+
+#?(:cljs (def *profile (volatile! {})))
 
 #?(:cljs
    (defn remote-function
      "Return a promise whose value is transit-str."
      [qualified-kw-str args-direct-passthrough? args-transit-str-or-args-array]
      (let [qkw (keyword qualified-kw-str)]
+       (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
          (let [result (apply f (cond-> args-transit-str-or-args-array
                                  (not args-direct-passthrough?) ldb/read-transit-str))

@@ -3,7 +3,6 @@
   (:require ["ignore" :as Ignore]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
@@ -42,26 +41,6 @@
         (error-message-or-handler e)
         (println error-message-or-handler))
       {})))
-
-(defn fix-pages-timestamps
-  [pages]
-  (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]
-         (cond->
-          p
-
-           (nil? created-at)
-           (assoc :block/created-at
-                  (if journal-day
-                    (date/journal-day->utc-ms journal-day)
-                    (util/time-ms)))
-
-           (nil? updated-at)
-           (assoc :block/updated-at
-                  ;; Not exact true
-                  (if journal-day
-                    (date/journal-day->utc-ms journal-day)
-                    (util/time-ms)))))
-       pages))
 
 (defn listen-to-scroll!
   [element]

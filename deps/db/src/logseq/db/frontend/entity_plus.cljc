@@ -20,7 +20,7 @@
     ;; File graph only attributes. Can these be removed if this is only called in db graphs?
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
-    :block.temp/ast-title :block.temp/top? :block.temp/bottom? :block.temp/search?
+    :block.temp/ast-title :block.temp/search?
     :block.temp/fully-loaded? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
@@ -77,7 +77,7 @@
   "Whether the current graph is db-only"
   [db]
   (when db
-    (= "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
+    (identical? "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
 
 (defn- get-journal-title
   [db e]
@@ -92,7 +92,7 @@
       (get-journal-title db e)
       (let [search? (get (.-kv e) :block.temp/search?)]
         (or
-         (when-not (and search? (= k :block/title))
+         (when-not (and search? (keyword-identical? k :block/title))
            (get (.-kv e) k))
          (let [result (lookup-entity e k default-value)
                refs (:block/refs e)
@@ -115,7 +115,7 @@
        (when (qualified-keyword? k)
          (when-let [property (entity-memoized db k)]
            (let [property-type (lookup-entity property :logseq.property/type nil)]
-             (if (= :checkbox property-type)
+             (if (keyword-identical? :checkbox property-type)
                (lookup-entity property :logseq.property/scalar-default-value nil)
                (lookup-entity property :logseq.property/default-value nil)))))))))
 
@@ -177,8 +177,8 @@
            (lookup-entity e :block/_parent default-value)
 
            :property/closed-values
-           (->> (lookup-entity e :block/_closed-value-property default-value)
-                (sort-by :block/order))
+           (some->> (lookup-entity e :block/_closed-value-property default-value)
+                    (sort-by :block/order))
 
            (lookup-kv-with-default-value db e k default-value))))
      (catch :default e

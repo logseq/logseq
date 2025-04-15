@@ -138,7 +138,9 @@
 
 (defn- file-rebuild-block-refs
   [repo db date-formatter {:block/keys [properties] :as block}]
-  (let [property-key-refs (keys properties)
+  (let [property-key-refs (->> (keys properties)
+                               (keep (fn [property-id]
+                                       (:block/uuid (ldb/get-page db (name property-id))))))
         property-value-refs (->> (vals properties)
                                  (mapcat (fn [v]
                                            (cond
@@ -160,7 +162,6 @@
         property-refs (->> (concat property-key-refs property-value-refs)
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
-
         content-refs (when-let [content (:block/title block)]
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs)))
@@ -233,7 +234,7 @@
                   db-based?
                   (dissoc :block/properties))
           m* (-> data'
-                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
+                 (dissoc :block/children :block/meta :block/unordered
                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
@@ -711,7 +712,8 @@
                               (map (fn [uuid'] {:block/uuid uuid'})))
                 tx (assign-temp-id blocks-tx replace-empty-target? target-block)
                 from-property (:logseq.property/created-from-property target-block)
-                property-values-tx (when (and sibling? from-property)
+                many? (= :db.cardinality/many (:db/cardinality from-property))
+                property-values-tx (when (and sibling? from-property many?)
                                      (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
                                        (mapcat (fn [block]
                                                  (when-let [new-id (or (id->new-uuid (:db/id block)) (:block/uuid block))]

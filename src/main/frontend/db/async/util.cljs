@@ -12,9 +12,10 @@
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
   (let [*async-queries (:db/async-queries @state/state)
         async-requested? (get @*async-queries [inputs opts])]
-    (if async-requested?
-      (let [db (db-conn/get-db graph)]
-        (apply d/q (first inputs) db (rest inputs)))
+    (if (and async-requested? transact-db?)
+      (p/promise
+       (let [db (db-conn/get-db graph)]
+         (apply d/q (first inputs) db (rest inputs))))
       (p/let [result (state/<invoke-db-worker :thread-api/q graph inputs)]
         (swap! *async-queries assoc [inputs opts] true)
         (when result

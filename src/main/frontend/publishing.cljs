@@ -88,6 +88,7 @@
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/inline-title block/inline-title)
   (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/reference block/block-reference)

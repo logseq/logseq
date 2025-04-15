@@ -286,14 +286,13 @@
                                        :body asset-file
                                        :with-credentials? false
                                        :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
-                 @*progress-flow)
-       :upload-asset-progress
-       :succ (constantly nil))
+      (c.m/run-task :upload-asset-progress
+        (m/reduce (fn [_ v]
+                    (state/update-state!
+                     :rtc/asset-upload-download-progress
+                     (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                  @*progress-flow)
+        :succ (constantly nil))
       (let [{:keys [status] :as r} (m/? http-task)]
         (when-not (http/unexceptional-status? status)
           {:ex-data {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)}})))))
@@ -306,14 +305,13 @@
                                        :response-type :array-buffer
                                        :*progress-flow *progress-flow})
           progress-canceler
-          (c.m/run-task
-           (m/reduce (fn [_ v]
-                       (state/update-state!
-                        :rtc/asset-upload-download-progress
-                        (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
-                     @*progress-flow)
-           :download-asset-progress
-           :succ (constantly nil))]
+          (c.m/run-task :download-asset-progress
+            (m/reduce (fn [_ v]
+                        (state/update-state!
+                         :rtc/asset-upload-download-progress
+                         (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                      @*progress-flow)
+            :succ (constantly nil))]
       (try
         (let [{:keys [status body] :as r} (m/? http-task)]
           (if-not (http/unexceptional-status? status)
