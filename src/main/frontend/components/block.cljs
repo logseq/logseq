@@ -2655,26 +2655,11 @@
   [state block tag config popup-opts]
   (let [*hover? (::hover? state)
         *hover-container? (::hover-container? state)]
-    [:div.block-tag.items-center.relative
+    [:div.block-tag.items-center.relative.px-1
      {:key (str "tag-" (:db/id tag))
+      :class (if @*hover? "bg-gray-03 rounded" "")
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
-     (when (not (ldb/private-tags (:db/ident tag)))
-       [:div.absolute.bg-gray-03.transition-opacity.duration-300.ease-in-out
-        {:class (if @*hover-container? "!opacity-100" "!opacity-0")
-         :style {:top -2
-                 :z-index (if @*hover-container? 99 -1)
-                 :left -23}}
-        (shui/button
-         {:size :sm
-          :variant :ghost
-          :class "px-1 py-1 h-6 text-muted-foreground"
-          :title "Remove this tag"
-          :on-pointer-down
-          (fn [e]
-            (util/stop e)
-            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
-         (ui/icon "x" {:size 14}))])
      [:div.flex.items-center
       {:on-mouse-over #(reset! *hover? true)
        :on-mouse-out #(reset! *hover? false)
@@ -2699,8 +2684,17 @@
                                 :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                                "Remove tag")])
                            popup-opts))}
-      [:a.hash-symbol.select-none.flex
-       "#"]
+      (if (and @*hover? (not (ldb/private-tags (:db/ident tag))))
+        [:a.inline-flex.text-muted-foreground.mr-1
+         {:title "Remove this tag"
+          :style {:margin-top 1}
+          :on-pointer-down
+          (fn [e]
+            (util/stop e)
+            (db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag)))}
+         (ui/icon "x" {:size 13})]
+        [:a.hash-symbol.select-none.flex
+         "#"])
       (page-cp (assoc config
                       :disable-preview? true
                       :tag? true
