@@ -506,16 +506,16 @@
        :data ids})
     :else
     (let [view (d/entity db view-id)
-          db-based? (ldb/db-based-graph? db)
           group-by-property (:logseq.property.view/group-by-property view)
-          group-by-property-ident (if db-based?
-                                    (:db/ident group-by-property)
-                                    (when (contains? #{:linked-references :unlinked-references} view-feature-type)
-                                      :block/page))
+          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
+          group-by-property-ident (or (:db/ident group-by-property)
+                                      (when (and list-view? (nil? group-by-property))
+                                        :block/page)
+                                      (when (contains? #{:linked-references :unlinked-references} view-feature-type)
+                                        :block/page))
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)
-          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           query? (= feat-type :query-result)
           entities-result (if query?
