@@ -2,13 +2,14 @@
   "Undo redo new implementation"
   (:require [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]
-            [frontend.db :as db]
-            [promesa.core :as p]
-            [frontend.state :as state]))
+            [promesa.core :as p]))
 
 (defkeywords
   ::record-editor-info {:doc "record current editor and cursor"}
@@ -272,21 +273,29 @@
                                        :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
-                                :undo? undo?))]
+                                :undo? undo?))
+                  handler (fn handler []
+                            ((if undo? push-redo-op push-undo-op) repo op)
+                            (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
+                                                      (map second))
+                                  block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
+                                                                                            (if undo?
+                                                                                              (first editor-cursors)
+                                                                                              (last editor-cursors)))]))]
+                              {:undo? undo?
+                               :editor-cursors editor-cursors
+                               :block-content block-content}))]
               (when (seq reversed-tx-data)
-                (p/do!
-                 ;; async write to the master worker
-                 (ldb/transact! repo reversed-tx-data tx-meta')
-                 ((if undo? push-redo-op push-undo-op) repo op)
-                 (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
-                                           (map second))
-                       block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
-                                                                                 (if undo?
-                                                                                   (first editor-cursors)
-                                                                                   (last editor-cursors)))]))]
-                   {:undo? undo?
-                    :editor-cursors editor-cursors
-                    :block-content block-content}))))))))
+                (when-not util/node-test?
+                  (prn :debug :reversed-tx-data reversed-tx-data))
+                (if util/node-test?
+                  (do
+                    (ldb/transact! conn reversed-tx-data tx-meta')
+                    (handler))
+                  (p/do!
+                   ;; async write to the master worker
+                   (ldb/transact! repo reversed-tx-data tx-meta')
+                   (handler)))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))
@@ -316,34 +325,38 @@
   (when ui-state-str
     (push-undo-op repo [[::ui-state ui-state-str]])))
 
+(defn gen-undo-ops!
+  [repo {:keys [tx-data tx-meta db-after db-before]}]
+  (let [{:keys [outliner-op]} tx-meta]
+    (when (and
+           (or util/node-test? (= (:client-id tx-meta) (:client-id @state/state)))
+           outliner-op
+           (not (false? (:gen-undo-ops? tx-meta)))
+           (not (:create-today-journal? tx-meta)))
+      (let [all-ids (distinct (map :e tx-data))
+            retracted-ids (set
+                           (filter
+                            (fn [id] (and (nil? (d/entity db-after id)) (d/entity db-before id)))
+                            all-ids))
+            added-ids (set
+                       (filter
+                        (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
+                        all-ids))
+            tx-data' (->> (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
+                          vec)
+            editor-info @state/*editor-info
+            _ (reset! state/*editor-info nil)
+            op (->> [(when editor-info [::record-editor-info editor-info])
+                     [::db-transact
+                      {:tx-data tx-data'
+                       :tx-meta tx-meta
+                       :added-ids added-ids
+                       :retracted-ids retracted-ids}]]
+                    (remove nil?)
+                    vec)]
+        (push-undo-op repo op)))))
+
 (defn listen-db-changes!
   [repo conn]
   (d/listen! conn ::gen-undo-ops
-             (fn [{:keys [tx-data tx-meta db-after db-before]}]
-               (let [{:keys [outliner-op]} tx-meta]
-                 (when (and
-                        (= (:client-id tx-meta) (:client-id @state/state))
-                        outliner-op (not (false? (:gen-undo-ops? tx-meta)))
-                        (not (:create-today-journal? tx-meta)))
-                   (let [all-ids (distinct (map :e tx-data))
-                         retracted-ids (set
-                                        (filter
-                                         (fn [id] (and (nil? (d/entity db-after id)) (d/entity db-before id)))
-                                         all-ids))
-                         added-ids (set
-                                    (filter
-                                     (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
-                                     all-ids))
-                         tx-data' (->> (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
-                                       vec)
-                         editor-info @state/*editor-info
-                         _ (reset! state/*editor-info nil)
-                         op (->> [(when editor-info [::record-editor-info editor-info])
-                                  [::db-transact
-                                   {:tx-data tx-data'
-                                    :tx-meta tx-meta
-                                    :added-ids added-ids
-                                    :retracted-ids retracted-ids}]]
-                                 (remove nil?)
-                                 vec)]
-                     (push-undo-op repo op)))))))
+             (fn [tx-report] (gen-undo-ops! repo tx-report))))
