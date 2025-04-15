@@ -40,6 +40,7 @@
             [rum.core :as rum]))
 
 (declare icon)
+(declare tooltip)
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -911,18 +912,13 @@
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
-  [shortcut-key position content]
+  [shortcut-key _position content]
   (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         enabled-tooltip? (state/enable-tooltip?)]
     (if (and enabled-tooltip? shortcut-tooltip?)
-      (tippy
-       {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
-        :interactive true
-        :position    position
-        :theme       "monospace"
-        :delay       [1000, 100]
-        :arrow       true}
-       content)
+      (tooltip content
+        [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+        {:trigger-props {:as-child true}})
       content)))
 
 (rum/defc progress-bar
@@ -1020,11 +1016,11 @@
       :small? true)]]))
 
 (rum/defc tooltip
-  [trigger tooltip-content & {:keys [trigger-props]}]
+  [trigger tooltip-content & {:keys [root-props trigger-props content-props]}]
   (shui/tooltip-provider
-   (shui/tooltip
+   (shui/tooltip root-props
     (shui/tooltip-trigger trigger-props trigger)
-    (shui/tooltip-content tooltip-content))))
+    (shui/tooltip-content content-props tooltip-content))))
 
 (rum/defc DelDateButton
   [on-delete]

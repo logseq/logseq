@@ -381,13 +381,7 @@
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
                       [:div.flex.items-center
-                       (ui/tippy
-                        {:html (case color
-                                 :none [:p {:style {:max-width "300px"}}
-                                        "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                                 :logseq "Logseq classical color"
-                                 (str (name color) " color"))
-                         :delay [1000, 100]}
+                       (ui/tooltip
                         (shui/button
                          {:class "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
                           :auto-focus (and _in-modal? active?)
@@ -402,7 +396,13 @@
                           {:class (if none? "h-0.5 w-full bg-red-700"
                                       "w-2 h-2 rounded-full transition ease-in duration-100")
                            :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
-                                   :opacity (if (or none? active?) 1 0)}}]))])]]
+                                   :opacity (if (or none? active?) 1 0)}}])
+
+                         (case color
+                           :none [:p {:style {:max-width "300px"}}
+                                  "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
+                           :logseq "Logseq classical color"
+                           (str (name color) " color")))])]]
 
     [:div
      (row-with-button-action
