@@ -970,6 +970,7 @@
         [:div.w-full.h-full
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
+          :style {:min-height 20}
           :on-click #(<create-new-block! block property "")}]))))
 
 (rum/defc property-block-value
