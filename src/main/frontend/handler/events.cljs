@@ -16,6 +16,7 @@
             [frontend.components.encryption :as encryption]
             [frontend.components.file-based.git :as git-component]
             [frontend.components.file-sync :as file-sync]
+            [frontend.components.page :as component-page]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
             [frontend.components.repo :as repo]
@@ -29,6 +30,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
@@ -72,7 +74,6 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
-            [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -128,7 +129,6 @@
                                     (util/uuid-string? (first (:sync-meta %)))
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
-            (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
 
 (defmethod handle :user/logout [[_]]
@@ -198,10 +198,9 @@
 (defmethod handle :graph/switch [[_ graph opts]]
   (export/cancel-db-backup!)
   (persist-db/export-current-graph!)
-  (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
   (st/refresh!)
-  (reset! r/*key->atom {})
+
   (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
           request-finished? (db-transact/request-finished?)]
     (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
@@ -333,6 +332,12 @@
 
 (defmethod handle :page/renamed [[_ repo data]]
   (page-common-handler/after-page-renamed! repo data))
+
+(defmethod handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
+  (shui/dialog-open!
+   (component-page/batch-delete-dialog
+    selected-rows false
+    ok-handler)))
 
 (defmethod handle :page/create-today-journal [[_ _repo]]
   (p/let [_ (page-handler/create-today-journal!)]
@@ -664,12 +669,14 @@
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/get-page page-name)]
-      (when (db/page-empty? (state/get-current-repo) page-name)
-        (when-let [template (state/get-default-journal-template)]
-          (editor-handler/insert-template!
-           nil
-           template
-           {:target page}))))))
+      (p/do!
+       (db-async/<get-block (state/get-current-repo) (:db/id page))
+       (when (db/page-empty? (state/get-current-repo) page-name)
+         (when-let [template (state/get-default-journal-template)]
+           (editor-handler/insert-template!
+            nil
+            template
+            {:target page})))))))
 
 (defmethod handle :editor/set-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
@@ -1085,6 +1092,15 @@
 
 (defmethod handle :editor/hide-action-bar []
   (shui/popup-hide! :selection-action-bar))
+
+(defmethod handle :editor/load-blocks [[_ ids]]
+  (when (seq ids)
+    ;; not using `<get-blocks` here becuase because we want to
+    ;; load all nested children here for copy/export
+    (p/all (map (fn [id]
+                  (db-async/<get-block (state/get-current-repo) id
+                                       {:nested-children? true
+                                        :skip-refresh? false})) ids))))
 
 (defn run!
   []

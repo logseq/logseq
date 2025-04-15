@@ -651,6 +651,16 @@
                  (common-util/distinct-by :db/id (concat tags properties)))]
     tx-data))
 
+(defn- add-group-by-property-for-list-views
+  [conn _search-db]
+  (let [db @conn
+        list-type-id (:db/id (d/entity db :logseq.property.view/type.list))
+        list-views (d/datoms db :avet :logseq.property.view/type list-type-id)
+        block-page-prop-id (:db/id (d/entity db :block/page))]
+    (map (fn [view-datom]
+           [:db/add (:e view-datom) :logseq.property.view/group-by-property block-page-prop-id])
+         list-views)))
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -758,7 +768,8 @@
             :fix migrate-views}]
    ["64.3" {:properties [:logseq.property/used-template :logseq.property/template-applied-to]
             :classes [:logseq.class/Template]}]
-   ["64.4" {:properties [:logseq.property/created-by-ref]}]])
+   ["64.4" {:properties [:logseq.property/created-by-ref]}]
+   ["64.5" {:fix add-group-by-property-for-list-views}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))

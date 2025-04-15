@@ -43,4 +43,4 @@
  :tasks/config
  {:large-vars
   {:max-lines-count 50
-   :metadata-exceptions #{:large-vars/doc-var}}}}
+   :metadata-exceptions #{:large-vars/doc-var :large-vars/cleanup-todo}}}}

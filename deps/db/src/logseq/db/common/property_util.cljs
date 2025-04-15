@@ -1,17 +1,31 @@
 (ns logseq.db.common.property-util
   "Property related util fns. Fns used in both DB and file graphs should go here"
   (:require [datascript.core :as d]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))
 
+(defn- get-file-pid-by-ident
+  [db-ident]
+  (get-in db-property/built-in-properties [db-ident :name] (name db-ident)))
+
+;; TODO: refactor later to remove this fn
 (defn get-pid
   "Get a built-in property's id (keyword name for file graph and db-ident for db
   graph) given its db-ident. No need to use this fn in a db graph only context"
   [repo db-ident]
   (if (sqlite-util/db-based-graph? repo)
     db-ident
-    (get-in db-property/built-in-properties [db-ident :name] (name db-ident))))
+    (get-file-pid-by-ident db-ident)))
+
+(defn get-pid-2
+  "Get a built-in property's id (keyword name for file graph and db-ident for db
+  graph) given its db-ident. No need to use this fn in a db graph only context"
+  [db db-ident]
+  (if (entity-plus/db-based-graph? db)
+    db-ident
+    (get-file-pid-by-ident db-ident)))
 
 (defn built-in-has-ref-value?
   "Given a built-in's db-ident, determine if its property value is a ref"

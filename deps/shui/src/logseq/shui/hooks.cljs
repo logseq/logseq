@@ -1,7 +1,9 @@
 (ns logseq.shui.hooks
   "React custom hooks."
   (:refer-clojure :exclude [ref deref])
-  (:require [goog.functions :as gfun]
+  (:require [frontend.common.missionary :as c.m]
+            [goog.functions :as gfun]
+            [missionary.core :as m]
             [rum.core :as rum]))
 
 (defn- memo-deps
@@ -24,6 +26,7 @@
   "setup-fn will be invoked every render of component when no deps arg provided"
   ([setup-fn] (rum/use-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
+   (assert (fn? setup-fn) "use-effect! setup-fn should be a function")
    (rum/use-effect! (fn [& deps]
                       (let [result (apply setup-fn deps)]
                         (when (fn? result) result)))
@@ -35,6 +38,7 @@
 (defn use-layout-effect!
   ([setup-fn] (rum/use-layout-effect! setup-fn))
   ([setup-fn deps & {:keys [equal-fn]}]
+   (assert (fn? setup-fn) "use-layout-effect! setup-fn should be a function")
    (rum/use-layout-effect! (fn [& deps]
                              (let [result (apply setup-fn deps)]
                                (when (fn? result) result)))
@@ -67,3 +71,16 @@
         cb (use-callback (gfun/debounce set-value! msec) [])]
     (use-effect! #(cb value) [value])
     debounced-value))
+
+(defn use-flow-state
+  "Return values from `flow`, default init-value is nil"
+  ([flow] (use-flow-state nil flow))
+  ([init-value flow]
+   (let [[value set-value!] (use-state init-value)]
+     (use-effect!
+      #(c.m/run-task*
+        (m/reduce
+         (constantly nil)
+         (m/ap (set-value! (m/?> flow)))))
+      [])
+     value)))

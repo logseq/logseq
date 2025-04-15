@@ -45,7 +45,6 @@
   []
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
-  (state/clear-async-query-state!)
   (ui-handler/re-render-root!)
   (route-handler/redirect-to-home!)
   (js/setTimeout ui-handler/re-render-root! 500))

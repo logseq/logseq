@@ -41,10 +41,10 @@
       (t/async
        done
        (c.m/run-task-throw
+        :clear-test-remote-graphs
         (m/sp
           (m/? helper/new-task--clear-all-test-remote-graphs)
-          (done))
-        :clear-test-remote-graphs)))})
+          (done)))))})
 
 (def upload-example-graph-fixture
   {:before
@@ -52,6 +52,7 @@
       (t/async
        done
        (c.m/run-task-throw
+        :upload-example-graph-fixture
         (m/sp
           (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo)
           (swap! worker-state/*client-ops-conns assoc
@@ -60,14 +61,14 @@
             (assert (some? graph-uuid))
             (m/? (helper/new-task--wait-creating-graph graph-uuid))
             (println :uploaded-graph graph-uuid))
-          (done))
-        :upload-example-graph-fixture)))})
+          (done)))))})
 
 (def build-conn-by-download-example-graph-fixture
   {:before
    #(t/async
      done
      (c.m/run-task-throw
+      :build-conn-by-download-example-graph-fixture
       (m/sp
         (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo)
         (swap! worker-state/*client-ops-conns assoc
@@ -75,8 +76,7 @@
         (let [graph-uuid (m/? helper/new-task--get-remote-example-graph-uuid)]
           (assert (some? graph-uuid))
           (m/? (helper/new-task--download-graph graph-uuid const/downloaded-test-graph-name)))
-        (done))
-      :build-conn-by-download-example-graph-fixture))
+        (done))))
    :after
    #(do (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo)
         (swap! worker-state/*client-ops-conns dissoc const/downloaded-test-repo))})

@@ -596,7 +596,8 @@
                         (string/blank? (:block/title last-block)))
                  (edit-block! last-block :max)
                  (edit-block! new-block :max)))
-             new-block)))))))
+             (when-let [id (:block/uuid new-block)]
+               (db/entity [:block/uuid id])))))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-uuid-or-title]
@@ -922,7 +923,7 @@
 
 (defn- compose-copied-blocks-contents
   [repo block-ids & {:as opts}]
-  (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
+  (let [blocks (map (fn [id] (db/entity [:block/uuid id])) block-ids)
         top-level-block-uuids (->> (block-handler/get-top-level-blocks blocks)
                                    (map :block/uuid))
         content (export-text/export-blocks-as-markdown
@@ -948,11 +949,8 @@
 (defn copy-selection-blocks
   [html? & {:keys [selected-blocks] :as opts}]
   (let [repo (state/get-current-repo)
-        blocks (seq (state/get-selection-blocks))
-        ids (if blocks
-              (distinct (keep #(when-let [id (dom/attr % "blockid")]
-                                 (uuid id)) blocks))
-              (map :block/uuid selected-blocks))
+        selected-ids (state/get-selection-block-ids)
+        ids (or (seq selected-ids) (map :block/uuid selected-blocks))
         [top-level-block-uuids content] (compose-copied-blocks-contents repo ids opts)
         block (db/entity [:block/uuid (first ids)])
         db-based? (config/db-based-graph? repo)]
@@ -1433,17 +1431,17 @@
               dir (or (:dir matched-alias) repo-dir)]
         (if (util/electron?)
           (do (js/console.debug "Debug: Copy Asset #" dir file-rpath)
-            (-> (if-let [from (not-empty (.-path file))]
-                  (js/window.apis.copyFileToAssets dir file-rpath from)
-                  (p/let [content (.arrayBuffer file)]
-                    (fs/write-file! repo repo-dir file-rpath content {:skip-compare? true})))
-              (p/then
-                (fn [dest]
-                  [file-rpath
-                   (if (string? dest) (js/File. #js[] dest) file)
-                   (path/path-join dir file-rpath)
-                   matched-alias]))
-              (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+              (-> (if-let [from (not-empty (.-path file))]
+                    (js/window.apis.copyFileToAssets dir file-rpath from)
+                    (p/let [content (.arrayBuffer file)]
+                      (fs/write-file! repo repo-dir file-rpath content {:skip-compare? true})))
+                  (p/then
+                   (fn [dest]
+                     [file-rpath
+                      (if (string? dest) (js/File. #js[] dest) file)
+                      (path/path-join dir file-rpath)
+                      matched-alias]))
+                  (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
           (->
            (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
@@ -1634,7 +1632,8 @@
               format
               {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                :restore?     true
-               :command      :insert-asset}))))
+               :command      :insert-asset})
+             entities)))
         (p/catch (fn [e]
                    (js/console.error e)))
         (p/finally
@@ -1750,16 +1749,12 @@
 
 (defn <get-matched-blocks
   "Return matched blocks that are not built-in"
-  [q & [{:keys [nlp-pages?]}]]
+  [q & [{:keys [nlp-pages? page-only?]}]]
   (p/let [block (state/get-edit-block)
-          nodes (search/block-search (state/get-current-repo) q {:built-in? false
-                                                                 :enable-snippet? false})
-          matched (keep (fn [b]
-                          (when-let [id (:block/uuid b)]
-                            (when-not (= id (:block/uuid block)) ; avoid block self-reference
-                              (assoc (db/entity [:block/uuid id])
-                                     :block/title (:block/title b)))))
-                        nodes)]
+          result (search/block-search (state/get-current-repo) q {:built-in? false
+                                                                  :enable-snippet? false
+                                                                  :page-only? page-only?})
+          matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)]
     (-> (concat matched
                 (when nlp-pages?
                   (map (fn [title] {:block/title title :nlp-date? true})
@@ -1821,6 +1816,7 @@
   [up?]
   (fn [event]
     (util/stop event)
+    (state/pub-event! [:editor/hide-action-bar])
     (let [edit-block-id (:block/uuid (state/get-edit-block))
           move-nodes (fn [blocks]
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
@@ -2968,6 +2964,7 @@
       (state/selection?)
       (do
         (util/stop e)
+        (state/pub-event! [:editor/hide-action-bar])
         (on-tab direction)))
     nil))
 
@@ -3554,7 +3551,7 @@
                                    semantic?))))
          false)))))
 
-(defn all-blocks-with-level
+(defn <all-blocks-with-level
   "Return all blocks associated with correct level
    if :root-block is not nil, only return root block with its children
    if :expanded? true, return expanded children
@@ -3576,13 +3573,17 @@
   (when-let [page (or page
                       (state/get-current-page)
                       (date/today))]
-    (let [block-id (or root-block (parse-uuid page))
-          page-id (when-not block-id
-                    (:db/id (db/get-page page)))
-          blocks (if block-id
-                   (db/get-block-and-children (state/get-current-repo) block-id)
-                   (db/get-page-blocks-no-cache page-id))
-          root-block (or block-id root-block)]
+    (p/let [block-id (or root-block (parse-uuid page))
+            page-id (when-not block-id
+                      (:db/id (db/get-page page)))
+            repo (state/get-current-repo)
+            result (db-async/<get-block repo (or block-id page-id)
+                                        {:children-only? true
+                                         :nested-children? true})
+            blocks (if page-id
+                     result
+                     (cons (db/entity [:block/uuid block-id]) result))
+            root-block (or block-id root-block)]
       (if incremental?
         (let [blocks (tree/blocks->vec-tree blocks (or block-id page-id))]
           (->>
@@ -3651,10 +3652,13 @@
       (set-blocks-collapsed! [block-id] true))
     (state/set-collapsed-block! block-id true)))
 
-(defn expand-block! [block-id]
-  (when-not (skip-collapsing-in-db?)
-    (set-blocks-collapsed! [block-id] false))
-  (state/set-collapsed-block! block-id false))
+(defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
+  (let [repo (state/get-current-repo)]
+    (p/do!
+     (db-async/<get-block repo block-id {:children-only? true})
+     (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
+       (set-blocks-collapsed! [block-id] false))
+     (state/set-collapsed-block! block-id false))))
 
 (defn expand!
   ([e] (expand! e false))
@@ -3680,8 +3684,8 @@
 
      :else
      ;; expand one level
-     (let [blocks-with-level (all-blocks-with-level {})
-           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+     (p/let [blocks-with-level (<all-blocks-with-level {})
+             max-level (or (apply max (map :block/level blocks-with-level)) 99)]
        (loop [level 1]
          (if (> level max-level)
            nil
@@ -3717,9 +3721,9 @@
 
      :else
      ;; collapse by one level from outside
-     (let [blocks-with-level
-           (all-blocks-with-level {:collapse? true})
-           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+     (p/let [blocks-with-level
+             (<all-blocks-with-level {:collapse? true})
+             max-level (or (apply max (map :block/level blocks-with-level)) 99)]
        (loop [level max-level]
          (if (zero? level)
            nil
@@ -3774,74 +3778,79 @@
    (collapse-all! nil {}))
   ([block-id {:keys [collapse-self?]
               :or {collapse-self? true}}]
-   (let [blocks (all-blocks-with-level {:incremental? false
-                                        :expanded? true
-                                        :root-block block-id})
-         block-ids (cond->> (mapv :block/uuid blocks)
-                     (not collapse-self?)
-                     (remove #{block-id}))]
+   (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                           :expanded? true
+                                           :root-block block-id})
+           block-ids (cond->> (mapv :block/uuid blocks)
+                       (not collapse-self?)
+                       (remove #{block-id}))]
      (set-blocks-collapsed! block-ids true))))
 
 (defn expand-all!
   ([]
    (expand-all! nil))
   ([block-id]
-   (let [blocks (all-blocks-with-level {:incremental? false
-                                        :collapse? true
-                                        :root-block block-id})
-         block-ids (map :block/uuid blocks)]
+   (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                           :collapse? true
+                                           :root-block block-id})
+           block-ids (map :block/uuid blocks)]
      (set-blocks-collapsed! block-ids false))))
 
 (defn collapse-all-selection!
   []
-  (let [block-ids (->> (get-selected-toplevel-block-uuids)
-                       (map #(all-blocks-with-level {:incremental? false
-                                                     :expanded? true
-                                                     :root-block %}))
-                       flatten
-                       (map :block/uuid)
-                       distinct)]
+  (p/let [blocks (p/all
+                  (map #(<all-blocks-with-level {:incremental? false
+                                                 :expanded? true
+                                                 :root-block %})
+                       (get-selected-toplevel-block-uuids)))
+          block-ids (->> blocks
+                         (map :block/uuid)
+                         distinct)]
     (set-blocks-collapsed! block-ids true)))
 
 (defn expand-all-selection!
   []
-  (let [block-ids (->> (get-selected-toplevel-block-uuids)
-                       (map #(all-blocks-with-level {:incremental? false
-                                                     :collapse? true
-                                                     :root-block %}))
-                       flatten
+  (let [blocks (p/all
+                (map #(<all-blocks-with-level {:incremental? false
+                                               :expanded? true
+                                               :root-block %})
+                     (get-selected-toplevel-block-uuids)))
+        block-ids (->> blocks
                        (map :block/uuid)
                        distinct)]
     (set-blocks-collapsed! block-ids false)))
 
 (defn toggle-open! []
-  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
-                                                      :collapse? true}))]
+  (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                          :collapse? true})
+          all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all!)
       (expand-all!))))
 
 (defn toggle-open-block-children! [block-id]
-  (let [all-expanded? (empty? (all-blocks-with-level {:incremental? false
-                                                      :collapse? true
-                                                      :root-block block-id}))]
+  (p/let [blocks (<all-blocks-with-level {:incremental? false
+                                          :collapse? true})
+          all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all! block-id {:collapse-self? false})
       (expand-all! block-id))))
 
 (defn select-all-blocks!
   [{:keys [page]}]
-  (if-let [current-input-id (state/get-edit-input-id)]
-    (let [input (gdom/getElement current-input-id)
-          blocks-container (util/rec-get-blocks-container input)
-          blocks (dom/by-class blocks-container "ls-block")]
-      (state/exit-editing-and-set-selected-blocks! blocks))
-    (->> (all-blocks-with-level {:page page
-                                 :collapse? true})
-         (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
-         (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
-         state/exit-editing-and-set-selected-blocks!))
-  (state/set-state! :selection/selected-all? true))
+  (p/do!
+   (if-let [current-input-id (state/get-edit-input-id)]
+     (let [input (gdom/getElement current-input-id)
+           blocks-container (util/rec-get-blocks-container input)
+           blocks (dom/by-class blocks-container "ls-block")]
+       (state/exit-editing-and-set-selected-blocks! blocks))
+     (p/let [blocks (<all-blocks-with-level {:page page
+                                             :collapse? true})]
+       (->> blocks
+            (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
+            (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
+            state/exit-editing-and-set-selected-blocks!)))
+   (state/set-state! :selection/selected-all? true)))
 
 (defn select-parent [e]
   (let [edit-input (some-> (state/get-edit-input-id) gdom/getElement)
@@ -3961,17 +3970,14 @@
 
 (defn block-default-collapsed?
   "Whether a block should be collapsed by default.
-  Currently, this handles several cases:
-  1. References.
-  2. Custom queries."
+  Currently, this handles all the kinds of views."
   [block config]
-  (or
-   (and
-    (or (:ref? config) (:custom-query? config))
-    (>= (:block/level block) (state/get-ref-open-blocks-level))
-    ;; has children
-    (first (:block/_parent (db/entity (:db/id block)))))
-   (util/collapsed? block)))
+  (let [block (or (db/entity (:db/id block)) block)]
+    (or
+     (util/collapsed? block)
+     (and (:view? config)
+          (or (ldb/page? block)
+              (some? (:block/_parent block)))))))
 
 (defn batch-set-heading!
   [block-ids heading]

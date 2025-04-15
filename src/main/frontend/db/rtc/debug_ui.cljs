@@ -28,16 +28,15 @@
   (rum/local nil ::keys-state)
   {:will-mount (fn [state]
                  (let [canceler
-                       (c.m/run-task
-                        (m/reduce
-                         (fn [logs log]
-                           (let [logs* (if log
-                                         (take 10 (conj logs log))
-                                         logs)]
-                             (reset! (get state ::logs) logs*)
-                             logs*))
-                         nil rtc-flows/rtc-log-flow)
-                        ::sub-logs)]
+                       (c.m/run-task ::sub-logs
+                         (m/reduce
+                          (fn [logs log]
+                            (let [logs* (if log
+                                          (take 10 (conj logs log))
+                                          logs)]
+                              (reset! (get state ::logs) logs*)
+                              logs*))
+                          nil rtc-flows/rtc-log-flow))]
                    (reset! (get state ::sub-log-canceler) canceler)
                    state))
    :will-unmount (fn [state]
@@ -83,9 +82,8 @@
        (shui/tabler-icon "download") "graph-list")
       (shui/button
        {:size :sm
-        :on-click #(c.m/run-task
-                    (user/new-task--upload-user-avatar "TEST_AVATAR")
-                    :upload-test-avatar)}
+        :on-click #(c.m/run-task :upload-test-avatar
+                     (user/new-task--upload-user-avatar "TEST_AVATAR"))}
        (shui/tabler-icon "upload") "upload-test-avatar")]
 
      [:div.pb-4

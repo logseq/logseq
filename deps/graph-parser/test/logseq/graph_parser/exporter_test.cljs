@@ -10,6 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
@@ -19,8 +20,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [promesa.core :as p]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [promesa.core :as p]))
 
 ;; Helpers
 ;; =======
