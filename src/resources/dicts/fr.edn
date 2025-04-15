@@ -132,9 +132,8 @@
     :linked-references/filter-excludes "Exclut : "
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
-    :linked-references/reference-count (fn [filtered-count total] (str filtered-count (when filtered-count (if (= filtered-count 1) " référence liée" " références liées")) " parmi " total))
     :linked-references/filter-search "Rechercher dans les pages liées"
- :page/add-to-favorites "Ajouter aux Favoris"
+    :page/add-to-favorites "Ajouter aux Favoris"
     :page/backlinks "Rétro-lien"
     :page/copy-page-url "Copier l'URL de la page"
     :page/created-at "Créée le"
@@ -714,4 +713,4 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count  (fn [total] (str total (if (= total 1) " référence non liée" " références non liées")))}
+ }

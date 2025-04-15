@@ -728,8 +728,6 @@
 :linked-references/filter-excludes "Nezahrnuje: "
 :linked-references/filter-heading "Filtruje"
 :linked-references/filter-includes "Zahrnuje: "
-:linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " z ")) total (if (= total 1) " Propojený odkaz" " Propojené odkazy")))
 :settings-page/git-commit-on-close "Git commit při zavření okna"
 :settings-page/tab-editor "Editor"
-:unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Nepropojený odkaz" " Nepropojené odkazy")))
 :whiteboard/text "Text"}

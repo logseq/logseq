@@ -28,9 +28,4 @@
 
     (state/pub-event! [:graph/restored repo])
     (state/set-state! :graph/loading? false)
-    (state/pub-event! [:ui/re-render-root])
-
-    ;; (async/go
-    ;;   (async/<! (async/timeout 100))
-    ;;   (db-async/<fetch-all-pages repo))
-    ))
+    (state/pub-event! [:ui/re-render-root])))

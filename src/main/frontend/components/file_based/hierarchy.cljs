@@ -4,11 +4,11 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.state :as state]
-            [logseq.graph-parser.text :as text]
             [frontend.ui :as ui]
+            [frontend.util :as util]
+            [logseq.graph-parser.text :as text]
             [medley.core :as medley]
-            [rum.core :as rum]
-            [frontend.util :as util]))
+            [rum.core :as rum]))
 
 (defn- get-relation
   "Get all parent pages along the namespace hierarchy path.
@@ -49,7 +49,7 @@
   [page]
   (let [{:keys [namespaces]} (get-relation page)]
     (when (seq namespaces)
-      [:div.page-hierarchy.mt-6
+      [:div.page-hierarchy
        (ui/foldable
         [:h2.font-bold.opacity-30 "Hierarchy"]
         [:ul.namespaces {:style {:margin "12px 24px"}}

@@ -1,11 +1,9 @@
 (ns frontend.extensions.code
-  (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            ["codemirror" :as CodeMirror]
+  (:require ["codemirror" :as CodeMirror]
             ["codemirror/addon/edit/closebrackets"]
             ["codemirror/addon/edit/matchbrackets"]
-            ["codemirror/addon/selection/active-line"]
             ["codemirror/addon/hint/show-hint"]
+            ["codemirror/addon/selection/active-line"]
             ["codemirror/mode/apl/apl"]
             ["codemirror/mode/asciiarmor/asciiarmor"]
             ["codemirror/mode/asn.1/asn.1"]
@@ -128,20 +126,22 @@
             ["codemirror/mode/yaml-frontmatter/yaml-frontmatter"]
             ["codemirror/mode/yaml/yaml"]
             ["codemirror/mode/z80/z80"]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.code :as code-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.schema.handler.common-config :refer [Config-edn]]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.config :as config]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.schema.handler.common-config :refer [Config-edn]]
             [malli.core :as m]
-            [rum.core :as rum]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; codemirror
 
@@ -466,11 +466,14 @@
                              (when e (util/stop e))
                              (let [esc? (gobj/get cm "escPressed")]
                                (when (or (= :file (state/get-current-route))
-                                       (not esc?))
+                                         (not esc?))
                                  (code-handler/save-code-editor!))
                                (state/set-block-component-editing-mode! false)
                                (state/set-state! :editor/code-block-context nil)
-                               (when (not esc?) (state/clear-edit!))
+                               (when (and (not esc?)
+                                          (= (:db/id (state/get-edit-block))
+                                             (:db/id edit-block)))
+                                 (state/clear-edit!))
                                (vreset! *cursor-curr nil)
                                (vreset! *cursor-prev nil))))
         (.on editor "focus" (fn [_e]

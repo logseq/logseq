@@ -494,15 +494,6 @@
  :linked-references/filter-excludes               "Wyklucza: "
  :linked-references/filter-heading                "Filtruj"
  :linked-references/filter-includes               "Uwzględnia: "
- :linked-references/reference-count                (fn [filtered-count total]
-                                                    ;; 1 Linked Reference
-                                                    ;; 1 of 1 Linked Reference
-                                                    ;; 2 of 5 Linked References
-                                                    (str
-                                                        (when filtered-count
-                                                            (str filtered-count " z "))
-                                                        total
-                                                        (if (= total 1) " Powiązana referencja" " Powiązane referencje")))
  :notification/clear-all                          "Wyczyść wszystkie"
  :on-boarding/command-palette-quick-tour          "Szybka prezentacja wprowadzająca"
  :on-boarding/importing-desc                      "Logseq może z nimi pracować jeśli są w formacie JSON, EDN lub Markdown."
@@ -640,11 +631,6 @@
  :shortcut.category/plugins                       "Pluginy"
  :shortcut.category/whiteboard                    "Tablice"
  :tips/all-done                                   "Wszystko zrobione!"
- :unlinked-references/reference-count             (fn [total]
-                                        ;; 1 Unlinked Reference
-                                        ;; 5 Unlinked References
-                                        (str total
-                                         (if (= total 1) " Niepowiązana referencja" " Niepowiązane referencje")))
  :whiteboard/add-block-or-page                    "Dodaj blok lb stronę"
  :whiteboard/align-bottom                         "Wyrównaj do dołu"
  :whiteboard/align-center-horizontally            "Wycentruj w poziomie"
@@ -680,7 +666,7 @@
  :whiteboard/flip-horizontally                    "Odwróć w poziomie"
  :whiteboard/flip-vertically                      "Odwróć w pionie"
  :whiteboard/group                                "Grupuj"
- :whiteboard/highlight                            "Wyróżnij"                            
+ :whiteboard/highlight                            "Wyróżnij"
  :whiteboard/huge                                 "Ogromne"
  :whiteboard/italic                               "Kursywa"
  :whiteboard/large                                "Duże"

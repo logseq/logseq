@@ -1,7 +1,6 @@
 (ns frontend.handler.page
   "Provides util handler fns for pages"
-  (:require [cljs.reader :as reader]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [electron.ipc :as ipc]
@@ -14,7 +13,6 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -36,13 +34,11 @@
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.text :as text]
             [promesa.core :as p]))
 
@@ -155,16 +151,6 @@
               (outliner-op/save-block! (assoc block :block/link page-block-db-id)))))
          (state/update-favorites-updated!))))))
 
-(defn has-more-journals?
-  []
-  (let [current-length (:journals-length @state/state)]
-    (< current-length (db/get-journals-length))))
-
-(defn load-more-journals!
-  []
-  (when (has-more-journals?)
-    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
-
 (defn update-public-attribute!
   [repo page value]
   (if (config/db-based-graph? repo)
@@ -225,44 +211,6 @@
         (ok-handler e))
       (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
     opts)))
-
-(defn get-all-pages
-  [repo]
-  (let [db-based? (config/db-based-graph? repo)
-        graph-specific-hidden?
-        (if db-based?
-          (fn [p]
-            (and (ldb/property? p) (ldb/built-in? p)))
-          (fn [p]
-            (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
-    (cond->>
-     (->> (db/get-all-pages repo)
-          (remove graph-specific-hidden?))
-      (not db-based?)
-      (common-handler/fix-pages-timestamps))))
-
-(defn get-filters
-  [page]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (let [included-pages (:logseq.property.linked-references/includes page)
-          excluded-pages (:logseq.property.linked-references/excludes page)]
-      {:included included-pages
-       :excluded excluded-pages})
-    (let [k :filters
-          properties (:block/properties page)
-          properties-str (or (get properties k) "{}")]
-      (try (let [result (reader/read-string properties-str)]
-             (when (seq result)
-               (let [excluded-pages (->> (filter #(false? (second %)) result)
-                                         (keep first)
-                                         (keep db/get-page))
-                     included-pages (->> (filter #(true? (second %)) result)
-                                         (keep first)
-                                         (keep db/get-page))]
-                 {:included included-pages
-                  :excluded excluded-pages})))
-           (catch :default e
-             (log/error :syntax/filters e))))))
 
 (defn file-based-save-filter!
   [page filter-state]

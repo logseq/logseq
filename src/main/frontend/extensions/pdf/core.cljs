@@ -690,12 +690,12 @@
            (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
              (let [page-hls (get grouped-hls page)
                    hls-render (pdf-highlights-region-container
-                                   viewer page-hls {:show-ctx-menu! show-ctx-menu!
-                                                    :upd-hl! upd-hl!})
+                               viewer page-hls {:show-ctx-menu! show-ctx-menu!
+                                                :upd-hl! upd-hl!})
                    ^js mounted-root (.-mountedRoot hls-layer)]
                (if (nil? mounted-root)
                  (->> (rum/mount hls-render hls-layer)
-                   (set! (. hls-layer -mountedRoot)))
+                      (set! (. hls-layer -mountedRoot)))
                  (.render mounted-root hls-render))))))
        ;; destroy
        #())

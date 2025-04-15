@@ -164,20 +164,6 @@
  :linked-references/filter-directions "Dahil etmek için tıklayın, hariç tutmak için Shift tuşunu basılı tutarak tıklayın. Kaldırmak için tekrar tıklayın."
  :linked-references/filter-includes "Dahil et: "
  :linked-references/filter-excludes "Hariç tut: "
- :linked-references/reference-count (fn [filtered-count total]
-                                      ;; 1 Linked Reference
-                                      ;; 1 of 1 Linked Reference
-                                      ;; 2 of 5 Linked References
-                                      (str
-                                       (when filtered-count
-                                         (str filtered-count " / "))
-                                       total
-                                       (if (= total 1) " Bağlantılı Referans" " Bağlantılı Referans")))
- :unlinked-references/reference-count (fn [total]
-                                        ;; 1 Unlinked Reference
-                                        ;; 5 Unlinked References
-                                        (str total
-                                         (if (= total 1) " Bağlantısız Referans" " Bağlantısız Referans")))
  :editor/block-search "Blok ara"
  :text/image "Resim"
  :asset/show-in-folder "Resmi klasörde göster"

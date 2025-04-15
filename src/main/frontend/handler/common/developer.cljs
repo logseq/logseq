@@ -39,7 +39,8 @@
     (println pull-data)
     (notification/show!
      [:div.ls-wrap-widen
-      [:pre.code pull-data]
+      [:pre.code (str "ID: " (:db/id result) "\n"
+                      pull-data)]
       [:br]
       (ui/button "Copy to clipboard"
                  :on-click #(.writeText js/navigator.clipboard pull-data))]

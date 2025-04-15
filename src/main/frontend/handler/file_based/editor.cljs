@@ -129,8 +129,6 @@
                         (select-keys properties (file-property-handler/hidden-properties))
                         (:block/properties block))]
     (-> block
-        (dissoc :block.temp/top?
-                :block.temp/bottom?)
         (assoc :block/title content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))

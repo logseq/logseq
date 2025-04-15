@@ -16,7 +16,7 @@
 
 (defn- row-selected?
   [row row-selection]
-  (let [id (:id row)]
+  (let [id (:db/id row)]
     (or
      (and (:selected-all? row-selection)
           ;; exclude ids
@@ -30,14 +30,14 @@
   (boolean
    (or
     (and (seq (:selected-ids row-selection))
-         (some (:selected-ids row-selection) (map :db/id rows)))
+         (some (:selected-ids row-selection) rows))
     (and (seq (:exclude-ids row-selection))
          (not= (count rows) (count (:exclude-ids row-selection)))))))
 
 (defn- select-all?
   [row-selection rows]
   (and (seq (:selected-ids row-selection))
-       (set/subset? (set (map :db/id rows))
+       (set/subset? (set rows)
                     (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
@@ -48,7 +48,7 @@
       (and group-by-property value)
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/union (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/union (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       value
@@ -57,7 +57,7 @@
       group-by-property
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/difference (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/difference (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       :else
@@ -71,7 +71,7 @@
 
 (defn- row-toggle-selected!
   [row value set-row-selection! row-selection]
-  (let [id (:id row)
+  (let [id (:db/id row)
         new-selection (if (:selected-all? row-selection)
                         (update row-selection :excluded-ids (if value disj set-conj) id)
                         (update row-selection :selected-ids (if value set-conj disj) id))]
@@ -86,7 +86,7 @@
                        (remove (fn [item] (= (:id item) id)) sorting)
                        (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
                      (when-not (nil? asc?)
-                       (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
+                       (into [{:id id :asc? asc?}] sorting)))
                    (remove nil?)
                    vec)]
     (set-sorting! value)
@@ -97,11 +97,11 @@
   (if (:selected-all? row-selection)
     (let [excluded-ids (:excluded-ids row-selection)]
       (if (seq excluded-ids)
-        (remove #(excluded-ids (:id %)) rows)
+        (remove #(excluded-ids %) rows)
         rows))
     (let [selected-ids (:selected-ids row-selection)]
       (when (seq selected-ids)
-        (filter #(selected-ids (:id %)) rows)))))
+        (filter #(selected-ids %) rows)))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
@@ -276,14 +276,15 @@
 (rum/defc table-row < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-row.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
-                                                         prop)
+    [:div.ls-table-row.flex.flex-row.items-center
+     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+            prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.flex.relative prop
+    [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
                         (cond
                           (:select? prop)
@@ -305,5 +306,3 @@
              :style {:z-index 101}}
             prop)
      children]))
-
-(def table-sort-rows impl/sort-rows)

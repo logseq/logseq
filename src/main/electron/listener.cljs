@@ -5,23 +5,23 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
-            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [frontend.handler.property.util :as pu]
-            [frontend.db :as db]
-            [frontend.db.async :as db-async]))
+            [promesa.core :as p]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -87,7 +87,7 @@
                          (route-handler/redirect-to-page! page-name {:block-id block-id}))
 
                        block-id
-                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
                          (if block
                            (if (pu/shape-block? block)
                              (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
