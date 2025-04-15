@@ -55,7 +55,7 @@
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
                                 org.clojure/tools.namespace      {:mvn/version "0.2.11"}
-                                cider/cider-nrepl                {:mvn/version "0.50.2"}
+                                cider/cider-nrepl                {:mvn/version "0.55.1"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.14.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
@@ -66,7 +66,7 @@
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
                                 tortue/spy                       {:mvn/version "2.14.0"}
-                                cider/cider-nrepl                {:mvn/version "0.50.2"}}
+                                cider/cider-nrepl                {:mvn/version "0.55.1"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :rtc-e2e-test {:extra-paths ["src/rtc_e2e_test"]
