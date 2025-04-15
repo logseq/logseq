@@ -1,4 +1,5 @@
 (ns frontend.worker.shared-service
+  "This allows multiple workers to share some resources (e.g. db access)"
   (:require [cljs-bean.core :as bean]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
@@ -84,7 +85,7 @@
    (reset! *client-channel nil)
    (reset! *requests-in-flight {})))
 
-(defn create-service
+(defn ^:large-vars/cleanup-todo create-service
   [service-name target {:keys [on-provider-change]}]
   (p/do!
    (clear-old-service!)
