@@ -4,6 +4,7 @@
   (:require [borkdude.rewrite-edn :as rewrite]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -22,6 +23,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
@@ -59,9 +61,10 @@
 (defn start-repo-db-if-not-exists!
   [repo & {:as opts}]
   (state/set-current-repo! repo)
-  (db/start-db-conn! repo (merge
-                           opts
-                           {:db-graph? (config/db-based-graph? repo)})))
+  (db/start-db-conn! repo (assoc opts
+                                 :db-graph? (config/db-based-graph? repo)
+                                 :listen-handler (fn [conn]
+                                                   (undo-redo/listen-db-changes! repo conn)))))
 
 (defn restore-and-setup-repo!
   "Restore the db of a graph from the persisted data, and setup. Create a new

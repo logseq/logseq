@@ -33,6 +33,7 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *editor-info (atom nil))
 
 (defn- <invoke-db-worker*
   [qkw direct-pass-args? args-list]
@@ -61,7 +62,8 @@
                          (when graph (ipc/ipc "setCurrentGraph" graph))
                          graph)]
     (atom
-     {:route-match                           nil
+     {:client-id                             (str (random-uuid))
+      :route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
       :file/unlinked-dirs                    #{}

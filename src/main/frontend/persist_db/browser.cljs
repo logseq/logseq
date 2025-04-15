@@ -12,6 +12,7 @@
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
             [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -56,9 +57,7 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (state/<invoke-db-worker :thread-api/sync-ui-state
-                                              (state/get-current-repo)
-                                              {:old-state old-state :new-state new-state})))))))
+                     (undo-redo/record-ui-state! (state/get-current-repo) (ldb/write-transit-str {:old-state old-state :new-state new-state}))))))))
 
 (defn transact!
   [repo tx-data tx-meta]
@@ -112,7 +111,7 @@
                (db-transact/transact transact!
                                      (if (string? repo) repo (state/get-current-repo))
                                      tx-data
-                                     tx-meta)))
+                                     (assoc tx-meta :client-id (:client-id @state/state)))))
             (db-transact/listen-for-requests))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")

@@ -85,7 +85,7 @@
                    (gp-db/start-conn))]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
-       (listen-handler repo)))))
+       (listen-handler db-conn)))))
 
 (defn destroy-all!
   []
