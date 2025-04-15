@@ -254,7 +254,7 @@
                    (let [block-datoms (d/datoms db :eavt (:e d))
                          property-desc-datoms (when (= (:v d) class-property-id)
                                                 (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
-                                                  (d/datoms db :eavt (:e desc))))]
+                                                  (d/datoms db :eavt (:db/id desc))))]
                      (if property-desc-datoms
                        (concat block-datoms property-desc-datoms)
                        block-datoms)))))))

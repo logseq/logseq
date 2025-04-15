@@ -200,8 +200,9 @@ DROP TRIGGER IF EXISTS blocks_au;
   [db]
   (let [page-ids (->> (d/datoms db :avet :block/name)
                       (map :e))
-        object-ids (->> (d/datoms db :avet :block/tags)
-                        (map :e))
+        object-ids (when (ldb/db-based-graph? db)
+                     (->> (d/datoms db :avet :block/tags)
+                          (map :e)))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
     (remove ldb/hidden? blocks)))
@@ -297,7 +298,7 @@ DROP TRIGGER IF EXISTS blocks_au;
           non-match-sql (str select pg-sql " title like ? limit ?")
           matched-result (when-not page-only?
                            (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
-          non-match-result (when non-match-input
+          non-match-result (when (and (not page-only?) non-match-input)
                              (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
            ;; fuzzy is too slow for large graphs
           fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
