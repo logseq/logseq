@@ -417,7 +417,7 @@
      hiccup
      [:div.cursor (t :content/click-to-edit)])])
 
-(rum/defc non-hiccup-content < rum/reactive
+(rum/defc non-hiccup-content
   [id content on-click on-hide config format]
   (let [edit? (state/sub-editing? id)]
     (if edit?

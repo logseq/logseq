@@ -9,7 +9,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.export :as sqlite-export]
-            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]

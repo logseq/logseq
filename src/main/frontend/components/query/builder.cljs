@@ -19,7 +19,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.db :as gp-db]
             [logseq.shui.hooks :as hooks]
@@ -172,55 +171,43 @@
 
 (rum/defc property-value-select-inner
   < rum/reactive db-mixins/query
-  [repo *property *private-property? *find *tree opts loc values {:keys [db-graph? ref-property? property-type]}]
-  (let [;; FIXME: lazy load property values consistently on first call
-        ;; Guard against non ref properties like :logseq.property/icon
-        _ (when (and db-graph? ref-property?)
-            (doseq [id values] (db/sub-block id)))
-        values' (if db-graph?
-                  (if ref-property?
-                    (map #(db-property/property-value-content (db/entity repo %)) values)
-                    (if (contains? #{:checkbox :keyword :raw-number :string} property-type)
-                      values
-                      ;; Don't display non-ref property values as they don't have display and query support
-                      []))
-                  values)
-        values'' (map #(hash-map :value (str %)
-                                   ;; Preserve original-value as some values like boolean do not display in select
-                                 :original-value %)
-                      (cons "Select all" values'))]
-    (select values''
-            (fn [{:keys [original-value]}]
+  [*property *private-property? *find *tree opts loc values {:keys [db-graph?]}]
+  (let [values' (cons {:label "Select all"
+                       :value "Select all"}
+                      values)
+        find' (rum/react *find)]
+    (select values'
+            (fn [{:keys [value]}]
               (let [k (cond
                         db-graph? (if @*private-property? :private-property :property)
-                        (= (rum/react *find) :page) :page-property
+                        (= find' :page) :page-property
                         :else :property)
-                    x (if (= original-value "Select all")
+                    x (if (= value "Select all")
                         [k @*property]
-                        [k @*property original-value])]
+                        [k @*property value])]
                 (reset! *property nil)
                 (append-tree! *tree opts loc x))))))
 
 (rum/defc property-value-select
   [repo *property *private-property? *find *tree opts loc]
   (let [db-graph? (sqlite-util/db-based-graph? repo)
-        property-type (when db-graph? (:logseq.property/type (db/entity repo @*property)))
-        ref-property? (and db-graph? (contains? db-property-type/all-ref-property-types property-type))
         [values set-values!] (rum/use-state nil)]
     (hooks/use-effect!
-     (fn []
+     (fn [_property]
        (p/let [result (if db-graph?
-                        (db-async/<get-block-property-values repo @*property)
-                        (db-async/<file-get-property-values repo @*property))]
-         (when (and db-graph? ref-property?)
-           (doseq [db-id result]
-             (db-async/<get-block repo db-id :children? false)))
+                        (p/let [result (db-async/<get-property-values @*property)]
+                          (map (fn [{:keys [label _value]}]
+                                 {:label label
+                                  :value label})
+                               result))
+                        (p/let [result (db-async/<file-get-property-values repo @*property)]
+                          (map (fn [value]
+                                 {:label (str value)
+                                  :value value}) result)))]
          (set-values! result)))
      [@*property])
-    (property-value-select-inner repo *property *private-property? *find *tree opts loc values
-                                 {:db-graph? db-graph?
-                                  :ref-property? ref-property?
-                                  :property-type property-type})))
+    (property-value-select-inner *property *private-property? *find *tree opts loc values
+                                 {:db-graph? db-graph?})))
 
 (rum/defc tags
   [repo *tree opts loc]
@@ -237,6 +224,19 @@
       (select items
               (fn [{:keys [value]}]
                 (append-tree! *tree opts loc [(if db-based? :tags :page-tags) value]))))))
+
+(rum/defc page-search
+  [on-chosen]
+  (let [[result set-result!] (hooks/use-state nil)
+        [loading? set-loading!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-loading! true)
+       (p/let [result (state/<invoke-db-worker :thread-api/get-all-page-titles (state/get-current-repo))]
+         (set-result! result)
+         (set-loading! false)))
+     [])
+    (select result on-chosen {:loading? loading?})))
 
 (defn- db-based-query-filter-picker
   [state *find *tree loc clause opts]
@@ -291,18 +291,14 @@
                               (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page value]))))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page value])))
 
        ;; TODO: replace with node reference
        "page reference"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-ref value]))
-                 {}))
+
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page-ref value])))
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))
@@ -376,17 +372,12 @@
                               (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page value]))))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page value])))
 
        "page reference"
-       (let [pages (sort (db-model/get-all-page-titles repo))]
-         (select pages
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-ref value]))
-                 {}))
+       (page-search (fn [{:keys [value]}]
+                      (append-tree! *tree opts loc [:page-ref value])))
 
        "full text search"
        (search (fn [v] (append-tree! *tree opts loc v))

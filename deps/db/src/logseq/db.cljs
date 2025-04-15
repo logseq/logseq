@@ -232,12 +232,14 @@
 
 (defn get-page
   "Get a page given its unsanitized name"
-  [db page-name-or-uuid]
+  [db page-id-name-or-uuid]
   (when db
-    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                    (parse-uuid page-name-or-uuid))]
-      (d/entity db [:block/uuid id])
-      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
+    (if (number? page-id-name-or-uuid)
+      (d/entity db page-id-name-or-uuid)
+      (if-let [id (if (uuid? page-id-name-or-uuid) page-id-name-or-uuid
+                      (parse-uuid page-id-name-or-uuid))]
+        (d/entity db [:block/uuid id])
+        (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
@@ -301,7 +303,8 @@
 
 (defn has-children?
   [db block-id]
-  (some? (:block/_parent (d/entity db [:block/uuid block-id]))))
+  (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
+    (some? (:block/_parent (d/entity db eid)))))
 
 (defn- collapsed-and-has-children?
   [db block]
@@ -435,15 +438,37 @@
     (:alias rules/rules))
    distinct))
 
+(defn page-alias-set
+  [db page-id]
+  (->>
+   (get-block-alias db page-id)
+   (set)
+   (set/union #{page-id})))
+
 (defn get-block-refs
   [db id]
-  (let [alias (->> (get-block-alias db id)
+  (let [entity (d/entity db id)
+        db-based? (db-based-graph? db)
+        alias (->> (get-block-alias db id)
                    (cons id)
                    distinct)
-        refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
-                  distinct)]
-    (when (seq refs)
-      (d/pull-many db '[*] (map :db/id refs)))))
+        ref-ids (->> (mapcat (fn [id]
+                               (cond->> (:block/_refs (d/entity db id))
+                                 db-based?
+                                 (remove (fn [ref]
+                                           ;; remove refs that have the block as either tag or property
+                                           (or (and
+                                                (class? entity)
+                                                (d/datom db :eavt (:db/id ref) :block/tags (:db/id entity)))
+                                               (and
+                                                (property? entity)
+                                                (d/datom db :eavt (:db/id ref) (:db/ident entity))))))
+                                 true
+                                 (map :db/id)))
+                             alias)
+                     distinct)]
+    (when (seq ref-ids)
+      (d/pull-many db '[*] ref-ids))))
 
 (defn get-block-refs-count
   [db id]
@@ -451,21 +476,9 @@
           :block/_refs
           count))
 
-(defn get-page-unlinked-refs
-  "Get unlinked refs from search result"
-  [db page-id search-result-eids]
-  (let [alias (->> (get-block-alias db page-id)
-                   (cons page-id)
-                   set)
-        eids (remove
-              (fn [eid]
-                (when-let [e (d/entity db eid)]
-                  (or (some alias (map :db/id (:block/refs e)))
-                      (:block/link e)
-                      (nil? (:block/title e)))))
-              search-result-eids)]
-    (when (seq eids)
-      (d/pull-many db '[*] eids))))
+(defn hidden-or-internal-tag?
+  [e]
+  (or (entity-util/hidden? e) (db-class/internal-tags (:db/ident e))))
 
 (defn get-all-pages
   [db]
@@ -473,13 +486,12 @@
    (d/datoms db :avet :block/name)
    (keep (fn [d]
            (let [e (d/entity db (:e d))]
-             (when-not (or (hidden? e) (internal-tags (:db/ident e)))
+             (when-not (or (hidden-or-internal-tag? e)
+                           ;; Why this happened?
+                           (nil? (:block/title e)))
                e))))))
 
-(defn built-in?
-  "Built-in page or block"
-  [entity]
-  (:logseq.property/built-in? entity))
+(def built-in? entity-util/built-in?)
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
@@ -602,12 +614,47 @@
     :logseq.class/Quote-block :quote
     nil))
 
-(defn get-recent-updated-pages
+(def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
+
+(def get-latest-journals sqlite-common-db/get-latest-journals)
+
+(defn get-all-namespace-relation
   [db]
-  (->> (d/datoms db :avet :block/updated-at)
-       (reverse)
-       (keep (fn [datom]
-               (let [e (d/entity db (:e datom))]
-                 (when (and (page? e) (not (hidden? e)))
-                   e))))
-       (take 30)))
+  (d/q '[:find ?page ?parent
+         :where
+         [?page :block/namespace ?parent]]
+       db))
+
+(defn get-pages-relation
+  [db with-journal?]
+  (if (entity-plus/db-based-graph? db)
+    (let [q (if with-journal?
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]]
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?p :block/tags]
+                (not [?p :block/tags :logseq.class/Journal])
+                [?block :block/refs ?ref-page]])]
+      (d/q q db))
+    (let [q (if with-journal?
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]]
+              '[:find ?p ?ref-page
+                :where
+                [?block :block/page ?p]
+                (not [?p :block/type "journal"])
+                [?block :block/refs ?ref-page]])]
+      (d/q q db))))
+
+(defn get-all-tagged-pages
+  [db]
+  (d/q '[:find ?page ?tag
+         :where
+         [?page :block/tags ?tag]]
+       db))

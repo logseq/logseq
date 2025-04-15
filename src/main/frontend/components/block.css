@@ -1040,7 +1040,7 @@ html.is-mac {
   }
 
   > .code-block-actions {
-    @apply absolute right-1 top-1 select-none z-[1] text-xs;
+    @apply flex flex-row gap-1 opacity-0 transition-opacity ease-in duration-300 absolute right-1 top-1 select-none z-[1] text-xs bg-gray-01;
 
     button {
       @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;

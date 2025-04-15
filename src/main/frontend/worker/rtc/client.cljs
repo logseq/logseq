@@ -48,20 +48,19 @@
           (swap! *sent assoc ws false))
         (when (not (@*sent ws))
           (let [recv-flow (ws/recv-flow (m/? get-ws-create-task))]
-            (c.m/run-task
-             (m/sp
-               (when-let [online-users (:online-users
-                                        (m/?
-                                         (m/timeout
-                                          (m/reduce
-                                           (fn [_ v]
-                                             (when (= "online-users-updated" (:req-id v))
-                                               (reduced v)))
-                                           recv-flow)
-                                          10000)))]
-                 (reset! *online-users online-users)))
-             :update-online-user-when-register-graph-updates
-             :succ (constantly nil)))
+            (c.m/run-task :update-online-user-when-register-graph-updates
+              (m/sp
+                (when-let [online-users (:online-users
+                                         (m/?
+                                          (m/timeout
+                                           (m/reduce
+                                            (fn [_ v]
+                                              (when (= "online-users-updated" (:req-id v))
+                                                (reduced v)))
+                                            recv-flow)
+                                           10000)))]
+                  (reset! *online-users online-users)))
+              :succ (constantly nil)))
           (let [{:keys [max-remote-schema-version]}
                 (m/?
                  (c.m/backoff

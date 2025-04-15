@@ -200,8 +200,9 @@ DROP TRIGGER IF EXISTS blocks_au;
   [db]
   (let [page-ids (->> (d/datoms db :avet :block/name)
                       (map :e))
-        object-ids (->> (d/datoms db :avet :block/tags)
-                        (map :e))
+        object-ids (when (ldb/db-based-graph? db)
+                     (->> (d/datoms db :avet :block/tags)
+                          (map :e)))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
     (remove ldb/hidden? blocks)))
@@ -272,11 +273,13 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :limit - Number of result to limit search results. Defaults to 100
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev?]
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only?]
                           :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (let [match-input (get-match-input q)
+          page-count (count (d/datoms @conn :avet :block/name))
+          large-graph? (> page-count 2500)
           non-match-input (when (<= (count q) 2)
                             (str "%" (string/replace q #"\s+" "%") "%"))
           limit  (or limit 100)
@@ -293,10 +296,12 @@ DROP TRIGGER IF EXISTS blocks_au;
                       (str select pg-sql " title match ? or title match ? order by rank limit ?")
                       (str select pg-sql " title match ? order by rank limit ?"))
           non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
-          non-match-result (when non-match-input
+          matched-result (when-not page-only?
+                           (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
+          non-match-result (when (and (not page-only?) non-match-input)
                              (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
-          fuzzy-result (when-not page (fuzzy-search repo @conn q option))
+           ;; fuzzy is too slow for large graphs
+          fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
           result (->> (concat fuzzy-result matched-result non-match-result)
                       (common-util/distinct-by :id)
                       (keep (fn [result]

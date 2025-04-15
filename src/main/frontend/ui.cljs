@@ -313,12 +313,13 @@
            [:div.flex-shrink-0.pt-2
             svg]
            [:div.ml-3.w-0.flex-1.pt-2
+
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-             {:button-props {:aria-label "Close"}
+             {:button-props {"aria-label" "Close"}
               :variant :ghost
               :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
@@ -947,7 +948,7 @@
   [:div {:style {:height height}}])
 
 (rum/defc lazy-visible-inner
-  [visible? content-fn ref fade-in?]
+  [visible? content-fn ref fade-in? placeholder]
   (let [[set-ref rect] (r/use-bounding-client-rect)
         placeholder-height (or (when rect (.-height rect)) 24)]
     [:div.lazy-visibility {:ref ref}
@@ -960,12 +961,12 @@
                       (.add cls "fade-enter-active"))}
              (content-fn)]
             (content-fn)))
-        (lazy-loading-placeholder placeholder-height))]]))
+        (or placeholder (lazy-loading-placeholder placeholder-height)))]]))
 
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin _debug-id]
+  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin placeholder _debug-id]
                 :or {initial-state false
                      trigger-once? true
                      fade-in? true
@@ -978,7 +979,7 @@
                                                  (when-not (= in-view? visible?)
                                                    (set-visible! in-view?)))})
          ref (.-ref inViewState)]
-     (lazy-visible-inner visible? content-fn ref fade-in?))))
+     (lazy-visible-inner visible? content-fn ref fade-in? placeholder))))
 
 (rum/defc menu-heading
   ([add-heading-fn auto-heading-fn rm-heading-fn]

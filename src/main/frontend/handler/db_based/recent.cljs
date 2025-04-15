@@ -5,16 +5,15 @@
             [logseq.db :as ldb]))
 
 (defn add-page-to-recent!
-  [db-id click-from-recent?]
+  [db-id _click-from-recent?]
   (assert db-id (number? db-id))
   (when-not (:db/restoring? @state/state)
     (when-let [page (db/entity db-id)]
-      (when-not (ldb/hidden? page)
-        (let [pages (state/get-recent-pages)]
-          (when (or (and click-from-recent? (not ((set pages) db-id)))
-                    (not click-from-recent?))
-            (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]
-              (state/set-recent-pages! new-pages))))))))
+      (let [pages (state/get-recent-pages)]
+        (when-not (or (ldb/hidden? page)
+                      ((set pages) db-id))
+          (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]
+            (state/set-recent-pages! new-pages)))))))
 
 (defn get-recent-pages
   []

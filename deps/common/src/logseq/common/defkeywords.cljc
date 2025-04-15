@@ -37,5 +37,4 @@
 (comment
   "update anything here to trigger this ns to be recompiled,
 so macro get-all-defined-kw->config's result will be updated."
-  1
-  )
+  1)

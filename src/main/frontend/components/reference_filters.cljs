@@ -1,17 +1,18 @@
 (ns frontend.components.reference-filters
   "References filters"
   (:require [clojure.string :as string]
+            [datascript.impl.entity :as de]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.handler.page :as page-handler]
             [frontend.search :as search]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.db.common.view :as db-view]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.config :as config]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [datascript.impl.entity :as de]))
+            [rum.core :as rum]))
 
 (defn- frequencies-sort
   [references]
@@ -51,11 +52,11 @@
                :variant :outline
                :key ref-name)))))])
 
-(rum/defcs filter-dialog < rum/reactive (rum/local "" ::filterSearch)
-  [state page-entity *filters *references]
-  (let [filters (rum/react *filters)
+(rum/defcs filter-dialog < (rum/local "" ::filterSearch) rum/reactive
+  [state page references]
+  (let [page-entity (db/sub-block (:db/id page))
         filter-search (get state ::filterSearch)
-        references (rum/react *references)
+        filters (db-view/get-filters (db/get-db) page-entity)
         filtered-references  (frequencies-sort
                               (if (= @filter-search "")
                                 references

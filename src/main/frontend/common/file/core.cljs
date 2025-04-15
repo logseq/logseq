@@ -99,7 +99,7 @@
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
                                   content)
-                        content (content-with-collapsed-state repo format content collapsed?)
+                        content (if db-based? content (content-with-collapsed-state repo format content collapsed?))
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (if (or markdown-top-heading?
                                     (string/blank? new-content))
@@ -111,13 +111,13 @@
       content)))
 
 (defn- tree->file-content-aux
-  [repo db tree {:keys [init-level] :as opts} context]
+  [repo db tree {:keys [init-level link] :as opts} context]
   (let [block-contents (transient [])]
     (loop [[f & r] tree level init-level]
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
-              content (if page? nil (transform-content repo db f level opts context))
+              content (if (and page? (not link)) nil (transform-content repo db f level opts context))
               new-content
               (if-let [children (seq (:block/children f))]
                 (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
