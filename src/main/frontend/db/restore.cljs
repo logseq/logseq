@@ -4,6 +4,7 @@
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [promesa.core :as p]))
 
@@ -16,10 +17,14 @@
           _ (p/delay 100)
           {:keys [schema initial-data]} (persist-db/<fetch-init-data repo opts)
           ;; Without valid schema app fails hard downstream
-          _ (assert (some? schema) "No valid schema found when reloading db")
+          _ (when (nil? schema)
+              (throw (ex-info "No valid schema found when reloading db" {:repo repo})))
           conn (try
                  (sqlite-common-db/restore-initial-data initial-data schema)
                  (catch :default e
+                   (prn :error :restore-initial-data-failed
+                        (ldb/write-transit-str {:schema schema
+                                                :initial-data initial-data}))
                    (js/console.error e)
                    (throw e)))
           db-name (db-conn/get-repo-path repo)
