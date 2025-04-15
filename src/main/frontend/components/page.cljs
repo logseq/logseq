@@ -185,7 +185,7 @@
       :tab-index 0}
      [:div.flex.flex-row
       [:div.flex.items-center {:style {:height 28
-                                       :margin-left 2}}
+                                       :margin-left 22}}
        [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
         [:span.bullet]]]]]))
 
