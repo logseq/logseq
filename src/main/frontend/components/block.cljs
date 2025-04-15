@@ -2776,7 +2776,7 @@
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property opts)]))]
-        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6
+        [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
          (for [pid properties]
            (when-let [property (db/entity pid)]
@@ -2946,7 +2946,7 @@
   (when (> block-refs-count' 0)
     (shui/button {:variant :ghost
                   :title "Open block references"
-                  :class "px-2 py-0 w-6 h-6 opacity-70 hover:opacity-100"
+                  :class "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100"
                   :size  :sm
                   :on-click (fn [e]
                               (if (gobj/get e "shiftKey")
@@ -3066,15 +3066,16 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
+       [:div.flex.flex-row.items-center.self-start.gap-1
+        (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
-       (when-not (or (:table? config) (:property? config) (:page-title? config))
-         (block-refs-count block refs-count *hide-block-refs?))
+        (when-not (or (:table? config) (:property? config) (:page-title? config))
+          (block-refs-count block refs-count *hide-block-refs?))
 
-       (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-                     (:property? config))
-         (when (and db-based? (seq (:block/tags block)))
-           (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]
+        (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+                      (:property? config))
+          (when (and db-based? (seq (:block/tags block)))
+            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]]
 
       (when (and (not (or (:table? config) (:property? config)))
                  (not hide-block-refs?)
