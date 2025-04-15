@@ -53,7 +53,7 @@
   [service-name {:keys [on-become-provider on-not-provider]}]
   (p/let [client-id (or @*client-id (get-client-id))]
     (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
-                                (fn [lock]
+                                (fn [_lock]
                                   (p/let [^js locks (.query js/navigator.locks)
                                           locked? (some #(when (and (= (.-name %) service-name)
                                                                     (= (.-clientId %) client-id))
@@ -114,7 +114,7 @@
                                                             (let [{:keys [_providerId clientId type]} (bean/->clj (.-data event))]
                                                               (when (and (= clientId client-id) (= type "registered"))
                                                                 (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                                                                            (fn [lock]
+                                                                                            (fn [_lock]
                                                                                               ;; The provider has gone, elect the new provider
                                                                                               (prn :debug "Provider has gone")
                                                                                               (reset! *provider? :re-check)))
