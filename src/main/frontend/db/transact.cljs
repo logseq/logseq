@@ -2,8 +2,8 @@
   "Provides async transact for use with ldb/transact!"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [promesa.core :as p]
-            [frontend.common.async-util :include-macros true :refer [<?]]))
+            [frontend.common.async-util :include-macros true :refer [<?]]
+            [promesa.core :as p]))
 
 (defonce *request-id (atom 0))
 (defonce requests (async/chan 1000))
@@ -55,4 +55,4 @@
                         ;; not from remote(rtc)
                         :local-tx? true)]
     (add-request! request-id (fn async-request []
-                                   (worker-transact repo tx-data tx-meta')))))
+                               (worker-transact repo tx-data tx-meta')))))

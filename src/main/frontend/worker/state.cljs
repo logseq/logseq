@@ -1,12 +1,7 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [logseq.common.config :as common-config]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]))
-
-(defkeywords
-  :undo/repo->page-block-uuid->undo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"}
-  :undo/repo->page-block-uuid->redo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"})
 
 (defonce *main-thread (atom nil))
 
@@ -41,14 +36,7 @@
                        :auth/access-token nil
                        :auth/refresh-token nil
 
-                       :rtc/downloading-graph? false
-
-                       :undo/repo->page-block-uuid->undo-ops (atom {})
-                       :undo/repo->page-block-uuid->redo-ops (atom {})
-
-                       ;; new implementation
-                       :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})}))
+                       :rtc/downloading-graph? false}))
 
 (defonce *rtc-ws-url (atom nil))
 

@@ -26,7 +26,6 @@
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
@@ -708,11 +707,6 @@
   (worker-state/set-new-state! new-state)
   nil)
 
-(def-thread-api :thread-api/sync-ui-state
-  [repo state]
-  (undo-redo/record-ui-state! repo (ldb/write-transit-str state))
-  nil)
-
 (def-thread-api :thread-api/export-get-debug-datoms
   [repo]
   (when-let [db (worker-state/get-sqlite-conn repo)]
@@ -729,20 +723,15 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-page->content repo @conn)))
 
-(def-thread-api :thread-api/undo
-  [repo _page-block-uuid-str]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (undo-redo/undo repo conn)))
+;; (def-thread-api :thread-api/undo
+;;   [repo _page-block-uuid-str]
+;;   (when-let [conn (worker-state/get-datascript-conn repo)]
+;;     (undo-redo/undo repo conn)))
 
-(def-thread-api :thread-api/redo
-  [repo _page-block-uuid-str]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (undo-redo/redo repo conn)))
-
-(def-thread-api :thread-api/record-editor-info
-  [repo _page-block-uuid-str editor-info]
-  (undo-redo/record-editor-info! repo editor-info)
-  nil)
+;; (def-thread-api :thread-api/redo
+;;   [repo _page-block-uuid-str]
+;;   (when-let [conn (worker-state/get-datascript-conn repo)]
+;;     (undo-redo/redo repo conn)))
 
 (def-thread-api :thread-api/validate-db
   [repo]
@@ -885,7 +874,7 @@
                                         method-k (keyword (first args))]
                                     ;; what about undo and redo?
                                     (cond
-                                      (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state :thread-api/sync-ui-state :thread-api/record-editor-info} method-k)
+                                      (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
                                           (nil? service)
                                           @shared-service/*provider?)
                                       (apply f args)
