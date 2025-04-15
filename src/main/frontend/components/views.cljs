@@ -1672,6 +1672,8 @@
         gallery? (= display-type :logseq.property.view/type.gallery)
         list-view? (= display-type :logseq.property.view/type.list)
         group-by-property-ident (or (:db/ident group-by-property)
+                                    (when (and list-view? (nil? group-by-property))
+                                      :block/page)
                                     (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
                                       :block/page))]
 
