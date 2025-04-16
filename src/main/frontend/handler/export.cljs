@@ -195,7 +195,7 @@
   (p/let [result (export-common-handler/<get-debug-datoms repo)
           filename (file-name (str repo "-debug-datoms") :transit)
           data-str (str "data:text/transit;charset=utf-8,"
-                        (js/encodeURIComponent result))]
+                        (js/encodeURIComponent (ldb/write-transit-str result)))]
     (when-let [anchor (gdom/getElement "download-as-transit-debug")]
       (.setAttribute anchor "href" data-str)
       (.setAttribute anchor "download" filename)
