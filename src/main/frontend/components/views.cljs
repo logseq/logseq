@@ -1814,7 +1814,7 @@
        [(:db/id view-entity)
         (hooks/use-debounced-value input 300)
         sorting-filters
-        (:logseq.property.view/group-by-property view-entity)
+        (:db/id (:logseq.property.view/group-by-property view-entity))
         ;; page filters
         (:logseq.property.linked-references/includes view-parent)
         (:logseq.property.linked-references/excludes view-parent)
