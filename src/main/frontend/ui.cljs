@@ -5,7 +5,6 @@
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
             ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
             [cljs-bean.core :as bean]
@@ -48,7 +47,6 @@
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
@@ -792,45 +790,6 @@
           :checked selected}]
         label])]))
 
-(rum/defcs tippy < rum/static
-  (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open? html] :as opts} child]
-  (let [*mounted? (::mounted? state)
-        manual (not= open? nil)
-        open? (if manual open? @*mounted?)
-        disabled? (not (state/enable-tooltip?))]
-    (Tippy (->
-            (merge {:arrow true
-                    :sticky true
-                    :delay 600
-                    :theme "customized"
-                    :disabled disabled?
-                    :unmountHTMLWhenHide true
-                    :open (if disabled? false open?)
-                    :trigger (if manual "manual" "mouseenter focus")
-                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
-                    :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
-                                                :hide {:enabled false}
-                                                :preventOverflow {:enabled false}}}
-                    :onShow #(when-not (or (state/editing?)
-                                           @(:ui/scrolling? @state/state))
-                               (reset! *mounted? true))
-                    :onHide #(reset! *mounted? false)}
-                   opts)
-            (assoc :html (or
-                          (when open?
-                            (try
-                              (when html
-                                (if (fn? html)
-                                  (html)
-                                  [:div.px-2.py-1
-                                   html]))
-                              (catch :default e
-                                (log/error :exception e)
-                                [:div])))
-                          [:div {:key "tippy"} ""])))
-           (rum/fragment {:key "tippy-children"} child))))
-
 (rum/defcs slider < rum/reactive
   {:init (fn [state]
            (assoc state ::value (atom (first (:rum/args state)))))}
@@ -1016,11 +975,14 @@
       :small? true)]]))
 
 (rum/defc tooltip
-  [trigger tooltip-content & {:keys [root-props trigger-props content-props]}]
+  [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
   (shui/tooltip-provider
-   (shui/tooltip root-props
-    (shui/tooltip-trigger trigger-props trigger)
-    (shui/tooltip-content content-props tooltip-content))))
+    (shui/tooltip root-props
+      (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
+      (if (not (false? portal?))
+        (shui/tooltip-portal
+          (shui/tooltip-content content-props tooltip-content))
+        (shui/tooltip-content content-props tooltip-content)))))
 
 (rum/defc DelDateButton
   [on-delete]

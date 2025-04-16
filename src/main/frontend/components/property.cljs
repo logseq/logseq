@@ -145,11 +145,8 @@
                                             (when (= "Enter" (.-key e))
                                               (util/stop-propagation e)))} label)))))
      (when show-type-change-hints?
-       (ui/tippy {:html        "Changing the property type clears some property configurations."
-                  :class       "tippy-hover ml-2"
-                  :interactive true
-                  :disabled    false}
-                 (svg/info)))]))
+       (ui/tooltip (svg/info)
+         [:span "Changing the property type clears some property configurations."]))]))
 
 (rum/defc property-select
   [exclude-properties select-opts]

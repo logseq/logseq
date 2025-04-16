@@ -81,10 +81,9 @@
 (defn priority-cp
   [{:block/keys [pre-block? priority] :as block}]
   (when (and (not pre-block?) priority)
-    (ui/tippy
-     {:interactive true
-      :html (set-priority block priority)}
-     (priority-text priority))))
+    (ui/tooltip
+      (priority-text priority)
+      (set-priority block priority))))
 
 (defn clock-summary-cp
   [block body]

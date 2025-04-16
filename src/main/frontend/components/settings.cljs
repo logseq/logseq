@@ -431,11 +431,8 @@
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
     (when-not (config/db-based-graph? (state/get-current-repo))
-      (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
-                 :class       "tippy-hover ml-2"
-                 :interactive true
-                 :disabled    false}
-                (svg/info)))]
+      (ui/tooltip [:span.flex.px-2 (svg/info)]
+        [:span (t :settings-page/custom-date-format-warning)]))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -484,11 +481,8 @@
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
           [(t :settings-page/preferred-outdenting)
-           (ui/tippy {:html        (outdenting-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+             (outdenting-hint) {:content-props {:side "right"}})]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
@@ -501,22 +495,16 @@
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           [(t :settings-page/preferred-pasting-file)
-           (ui/tippy {:html        (t :settings-page/preferred-pasting-file-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+             [:span.block.w-64 (t :settings-page/preferred-pasting-file-hint)])]
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
           [(t :settings-page/auto-expand-block-refs)
-           (ui/tippy {:html        (auto-expand-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+             (auto-expand-hint))]
           auto-expand-block-refs?
           config-handler/toggle-auto-expand-block-refs!))
 
@@ -866,26 +854,23 @@
   (row-with-button-action
    {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
     :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tippy {:html        [:div
-                                   [:div (t :settings-page/sync-diff-merge-desc)]
-                                   [:div (t :settings-page/sync-diff-merge-warn)]]
-                     :class       "tippy-hover ml-2"
-                     :interactive true
-                     :disabled    false}
-                    (svg/info))}))
+    :desc (ui/tooltip [:span.inline-flex.px-1 (svg/info)]
+            [:div
+             [:div (t :settings-page/sync-diff-merge-desc)]
+             [:div (t :settings-page/sync-diff-merge-warn)]])}))
 
 (rum/defc rtc-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (state/set-rtc-enabled! value)))
-             true))
+    (fn []
+      (let [value (not enabled?)]
+        (state/set-rtc-enabled! value)))
+    true))
 
 (defn rtc-switcher-row [enabled?]
   (row-with-button-action
-   {:left-label "RTC"
-    :action (rtc-enabled-switcher enabled?)}))
+    {:left-label "RTC"
+     :action (rtc-enabled-switcher enabled?)}))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
