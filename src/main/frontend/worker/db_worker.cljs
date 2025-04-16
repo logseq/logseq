@@ -532,7 +532,13 @@
         (boolean
          (some
           ;; check if there's any entity reference this `block` except the view-entity
-          (fn [ref] (not= id (:db/id (:logseq.property/view-for ref))))
+          (fn [ref]
+            (not
+             (or (= id (:db/id (:logseq.property/view-for ref)))
+                 (ldb/hidden? (:block/page ref))
+                 (ldb/hidden? ref)
+                 (contains? (set (map :db/id (:block/tags ref))) id)
+                 (some? (get ref (:db/ident block))))))
           (:block/_refs block)))))))
 
 (def-thread-api :thread-api/get-block-parents
