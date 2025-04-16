@@ -54,7 +54,8 @@
     (fn read-transit-str* [s]
       ;; TODO: delete the following pred later
       ;; https://github.com/logseq/logseq/pull/11790#discussion_r2014120469
-      (if (and (string? s) (identical? "[" (first s)))
+      (if (and (string? s) (or (identical? "[" (first s))
+                               (identical? "(" (first s))))
         (transit/read reader s)
         (do (prn :invalid-transit-string s)
             s)))))
