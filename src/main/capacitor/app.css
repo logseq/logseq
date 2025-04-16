@@ -8,10 +8,12 @@
   }
 }
 
-ion-button, ion-tab-button {
-  --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
-}
+html.plt-capacitor {
+  ion-button, ion-tab-button {
+    --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
+  }
 
-ion-app {
-  margin-top: 40px;
+  ion-app {
+    margin-top: 40px;
+  }
 }

@@ -1,10 +1,12 @@
 (ns capacitor.app
   (:require ["@capacitor/app" :refer [App]]
+            ["@capacitor/status-bar" :refer [StatusBar Style]]
             [rum.core :as rum]
             [promesa.core :as p]
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
             [capacitor.pages.settings :as settings]))
+
 (rum/defc app-sidebar []
   (ionic/ion-menu {:content-id "app-main-content"
                    :type "push"}
@@ -18,19 +20,34 @@
 (rum/defc home []
   (let [[open? set-open!] (rum/use-state false)
         [selected-src set-selected-src] (rum/use-state nil)]
+
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout
+          (fn []
+            (.setStyle StatusBar #js {:style (.-Light Style)})
+            (.setBackgroundColor StatusBar #js {:color "#ffffff"}))
+          200)
+        #())
+      [])
+
     [:<>
      (app-sidebar)
+
      (ionic/ion-page
        {:id "app-main-content"}
        (ionic/ion-header
          (ionic/ion-toolbar
            (ionic/ion-buttons {:slot "start"}
-             (ionic/ion-menu-button))))
+             (ionic/ion-menu-button)
+             (ionic/ion-button {:class "opacity-90"} (ionic/tabler-icon "search" {:size 22 :stroke 2}))
+             )
+           [:a.px-2 {:slot "end"}
+            (ionic/tabler-icon "help" {:size 24 :class "opacity-70"})]))
        (ionic/ion-content
-         [:div.mt-12
-          [:h1.text-6xl.text-center.py-20.border.p-8.m-2.rounded-xl
-           "Hello World, capacitor!"]
-          [:p.flex.p-4.justify-center.bg-gray-03.flex-col.gap-6
+         [:div.pt-10.px-8
+          [:h1.text-3xl.font-mono.font-bold.py-2 "Suggested"]
+          [:p.flex.py-4.justify-center.bg-gray-03.flex-col.gap-6
            (ionic/ion-button {:on-click #(js/alert "hello click me!")
                               :size "large"}
              "Default primary")
@@ -92,6 +109,8 @@
 (rum/defc main []
   (let [nav-ref (rum/use-ref nil)
         [_ set-nav-root!] (state/use-nav-root)]
+
+    ;; navigation
     (rum/use-effect!
       (fn []
         (let [handle-back! (fn []
@@ -107,4 +126,4 @@
       [(rum/deref nav-ref)])
     [:> (.-IonApp ionic/ionic-react)
      (ionic/ion-nav {:ref nav-ref :root home
-                     :animated false :swipeGesture false})]))
+                     :animated true :swipeGesture false})]))
