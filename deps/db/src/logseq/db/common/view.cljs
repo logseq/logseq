@@ -566,9 +566,11 @@
                                         [(:block/uuid (first blocks))
                                          (map (fn [b]
                                                 {:db/id (:db/id b)
-                                                 :block/parent (:block/uuid (:block/parent b))}) blocks)])
+                                                 :block/parent (:block/uuid (:block/parent b))})
+                                              (ldb/sort-by-order blocks))])
                                       parent-groups))
-                                   (map :db/id entities))]
+                                   (->> (sort-entities db sorting entities)
+                                        (map :db/id)))]
                        [by-value' group]))
                    result)
                   (map :db/id result))]
