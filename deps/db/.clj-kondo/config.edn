@@ -16,6 +16,7 @@
              logseq.db.common.view db-view
              logseq.db.frontend.content db-content
              logseq.db.frontend.class db-class
+             logseq.db.frontend.db db-db
              logseq.db.frontend.db-ident db-ident
              logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.property db-property
