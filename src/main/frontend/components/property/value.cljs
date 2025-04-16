@@ -970,6 +970,7 @@
         [:div.w-full.h-full
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
+          :style {:min-height 20}
           :on-click #(<create-new-block! block property "")}]))))
 
 (rum/defc property-block-value
@@ -1269,15 +1270,17 @@
          type (:logseq.property/type property)
          multiple-values? (db-property/many? property)
          v (let [v (get block (:db/ident property))]
-             (cond
-               (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
-               v
-               multiple-values?
-               #{v}
-               (set? v)
-               (first v)
-               :else
-               v))
+             (or
+              (cond
+                (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+                v
+                multiple-values?
+                #{v}
+                (set? v)
+                (first v)
+                :else
+                v)
+              (:logseq.property/default-value property)))
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded

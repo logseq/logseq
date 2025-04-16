@@ -182,6 +182,7 @@
              logseq.db.file-based.entity-util file-entity-util
              logseq.db.frontend.class db-class
              logseq.db.frontend.content db-content
+             logseq.db.frontend.db db-db
              logseq.db.frontend.db-ident db-ident
              logseq.db.frontend.entity-plus entity-plus
              logseq.db.frontend.entity-util entity-util

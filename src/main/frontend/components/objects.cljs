@@ -70,6 +70,7 @@
                                                              (when (seq entities)
                                                                (set-data! (concat full-data (map :db/id entities))))))})]))
                                         (p/let [block (add-new-class-object! class properties)]
+                                          (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
                                           (set-data! (conj (vec full-data) (:db/id block)))))))
                  :show-add-property? true
                  :show-items-count? true
@@ -113,6 +114,7 @@
                                     (p/let [set-data! (get-in table [:data-fns :set-data!])
                                             full-data (:full-data table)
                                             block (add-new-property-object! property properties)]
+                                      (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
                                       (set-data! (conj (vec full-data) (:db/id block)))))
                  ;; TODO: Add support for adding column
                  :show-add-property? false})))
