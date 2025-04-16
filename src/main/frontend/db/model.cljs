@@ -793,7 +793,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-all-namespace-relation
   [repo]
-  (ldb/get-all-namespace-relation (conn/get-db repo)))
+  (gp-db/get-all-namespace-relation (conn/get-db repo)))
 
 (defn get-all-namespace-parents
   [repo]
