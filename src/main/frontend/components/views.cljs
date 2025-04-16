@@ -1339,6 +1339,8 @@
         {:ref #(reset! *scroller-ref %)
          :total-count (count blocks)
          :custom-scroll-parent (gdom/getElement "main-content-container")
+         :compute-item-key (fn [idx]
+                             (str (:db/id view-entity) "-card-" idx))
          :item-content (fn [idx]
                          (lazy-item (:data table) idx {}
                                     (fn [block]
@@ -1698,7 +1700,7 @@
                 :custom-scroll-parent (gdom/getElement "main-content-container")
                 :increase-viewport-by {:top 300 :bottom 300}
                 :compute-item-key (fn [idx]
-                                    (str "table-group" idx))
+                                    (str "table-group-" idx))
                 :skipAnimationFrameInResizeObserver true
                 :total-count (count (:rows table))
                 :item-content (fn [idx]
