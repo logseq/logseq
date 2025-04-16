@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0">
     <link href="./ionic.bundle.css" rel="stylesheet">
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@ionic/core/dist/ionic/ionic.esm.js"></script>
-    <script nomodule src="https://cdn.jsdelivr.net/npm/@ionic/core/dist/ionic/ionic.js"></script>
     <link href="./style.css" rel="stylesheet" type="text/css">
     <title>Logseq: A privacy-first platform for knowledge management and collaboration</title>
 </head>
@@ -14,13 +12,14 @@
 <script defer src="./js/react.production.min.js"></script>
 <script defer src="./js/react-dom.production.min.js"></script>
 <script defer src="./js/prop-types.min.js"></script>
+<script defer type="module" src="./js/ionic.esm.js"></script>
 <script defer src="./js/tabler-icons-react.min.js"></script>
 <script defer src="./shared.js"></script>
 <script defer src="./main.js"></script>
 <script>
   document.addEventListener('DOMContentLoaded', () => {
     window.Ionic?.initialize?.()
-    window.Capacitor?.Plugins.SplashScreen.hide()
+    window.Capacitor?.Plugins?.SplashScreen?.hide()
   })
 </script>
 </body>
