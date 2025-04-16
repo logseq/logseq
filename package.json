@@ -63,6 +63,7 @@
         "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app electron",
         "cljs:storybook-watch": "clojure -M:cljs watch stories-dev",
+        "gulp:capacitor-new-watch": "gulp capacitorNewWatch",
         "css:capacitor-new-watch": "cross-env TAILWIND_MODE=watch postcss tailwind.capacitor.css -o static/capacitor/style.css --verbose --watch",
         "cljs:capacitor-new-watch": "clojure -M:cljs watch capacitor-new",
         "cljs:app-watch": "clojure -M:cljs watch app",

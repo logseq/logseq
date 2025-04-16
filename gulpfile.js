@@ -23,6 +23,14 @@ const css = {
     })
   },
 
+  watchCapacitorNewCSS () {
+    return cp.spawn(`yarn css:capacitor-new-watch`, {
+      shell: true,
+      stdio: 'inherit',
+    })
+  },
+
+
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
@@ -102,6 +110,14 @@ const common = {
         'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+      () => gulp.src([
+        'node_modules/@ionic/core/dist/ionic/**',
+        'node_modules/react/umd/react.production.min.js',
+        'node_modules/react/umd/react.development.js',
+        'node_modules/react-dom/umd/react-dom.production.min.js',
+        'node_modules/react-dom/umd/react-dom.development.js',
+        'node_modules/prop-types/prop-types.min.js'
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js')))
     )(...params)
   },
 
@@ -237,5 +253,8 @@ exports.watch = gulp.series(common.syncResourceFile,
   common.syncAssetFiles, common.syncAllStatic,
   common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
+exports.capacitorNewWatch = gulp.series(common.syncResourceFile,
+  common.syncAssetFiles, common.syncAllStatic,
+  gulp.parallel(common.keepSyncResourceFile, css.watchCapacitorNewCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
