@@ -25,7 +25,7 @@
 (defn new-task--wait-creating-graph
   [graph-uuid]
   (c.m/backoff
-   (take 4 c.m/delays)
+   {}
    (m/sp
      (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
            graph (some (fn [graph] (when (= graph-uuid (:graph-uuid graph)) graph)) graphs)]
@@ -47,7 +47,7 @@
 
 (def new-task--get-remote-example-graph-uuid
   (c.m/backoff
-   (take 5 c.m/delays)
+   {}
    (m/sp
      (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
            graph
@@ -94,11 +94,11 @@
   #_:clj-kondo/ignore
   (me/find
    client-op
-   [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
-   [?op-type ?block-uuid (map vector !a !v !add)]
+    [?op-type _ {:block-uuid ?block-uuid :av-coll [[!a !v _ !add] ...]}]
+    [?op-type ?block-uuid (map vector !a !v !add)]
 
-   [?op-type _ {:block-uuid ?block-uuid}]
-   [?op-type ?block-uuid]))
+    [?op-type _ {:block-uuid ?block-uuid}]
+    [?op-type ?block-uuid]))
 
 (defn new-task--wait-all-client-ops-sent
   [& {:keys [timeout] :or {timeout 10000}}]
@@ -144,7 +144,7 @@
   "Return a task that return message from other client"
   [block-title-pred-fn & {:keys [retry-message retry-count] :or {retry-count 4}}]
   (c.m/backoff
-   (take retry-count c.m/delays)
+   {:delay-seq (take retry-count c.m/delays)}
    (m/sp
      (let [conn (get-downloaded-test-conn)
            message-page-id (:db/id (ldb/get-page @conn const/message-page-uuid))

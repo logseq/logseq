@@ -25,6 +25,7 @@
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.thread-atom]
             [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
