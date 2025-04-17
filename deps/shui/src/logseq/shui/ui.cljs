@@ -53,6 +53,7 @@
 (def tooltip-portal (util/lsui-wrap "TooltipPortal"))
 (def tooltip-content (util/lsui-wrap "TooltipContent"))
 (def tooltip-provider (util/lsui-wrap "TooltipProvider"))
+(def tooltip-arrow (util/lsui-wrap "TooltipArrow"))
 
 (def card (util/lsui-wrap "Card"))
 (def card-header (util/lsui-wrap "CardHeader"))
