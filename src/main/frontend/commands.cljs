@@ -241,19 +241,16 @@
                 (if db-based?
                   (db-based-statuses)
                   (file-based-statuses))
-                (mapv (fn [m]
-                        (let [command (if db-based?
-                                        [:div.flex.flex-row.items-center.gap-2 m [:div.text-xs.opacity-50 "Status"]]
-                                        m)
-                              icon (if db-based?
-                                     (case m
+                (mapv (fn [command]
+                        (let [icon (if db-based?
+                                     (case command
                                        "Canceled" "Cancelled"
                                        "Doing" "InProgress50"
-                                       m)
+                                       command)
                                      "square-asterisk")]
-                          [command (->marker m) (str "Set status to " m) icon]))))]
+                          [command (->marker command) (str "Set status to " command) icon]))))]
     (when (seq result)
-      (map (fn [v] (conj v "TASK")) result))))
+      (map (fn [v] (conj v "TASK STATUS")) result))))
 
 (defn file-based-priorities
   []
@@ -273,17 +270,17 @@
                   (db-based-priorities)
                   (file-based-priorities))
                 (mapv (fn [item]
-                        (let [command (if db-based?
-                                        [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
-                                        item)]
-                          [command (->priority item) (str "Set priority to " item)
+                        (let [command item]
+                          [command
+                           (->priority item)
+                           (str "Set priority to " item)
                            (if db-based?
                              (str "priorityLvl" item)
                              (str "circle-letter-" (util/safe-lower-case item)))])))
                 (with-no-priority)
                 (vec))]
     (when (seq result)
-      (map (fn [v] (conj v "PRIORITY")) result))))
+      (map (fn [v] (into v ["PRIORITY"])) result))))
 
 ;; Credits to roamresearch.com
 
@@ -297,7 +294,7 @@
   []
   (mapv (fn [level]
           (let [heading (str "Heading " level)]
-            [heading (->heading level) heading (str "h-" level)])) (range 1 7)))
+            [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
 
 (defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
