@@ -31,7 +31,7 @@
         (worker-util/post-message :sync-db-changes data)
         (shared-service/broadcast-to-clients!
          #js {:type "sync-db-changes"
-              :data (ldb/write-transit-str data)}))
+              :data (ldb/write-transit-str [:sync-db-changes data])}))
 
       (when-not from-disk?
         (p/do!
