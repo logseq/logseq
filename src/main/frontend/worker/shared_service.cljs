@@ -1,14 +1,11 @@
 (ns frontend.worker.shared-service
   "This allows multiple workers to share some resources (e.g. db access)"
   (:require [cljs-bean.core :as bean]
-            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 ;; TODO:
 ;; - client-channel close before re-creating new one
-;; - don't use worker-util/post-message. Otherwise, there will be one extra transit-write/read.
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
@@ -155,7 +152,7 @@
                                         @*requests-in-flight))))
 
                              "sync-db-changes"
-                             (worker-util/post-message :sync-db-changes (ldb/read-transit-str data))
+                             (.postMessage js/self data)
 
                              nil))))
     (->
