@@ -215,7 +215,11 @@
                           {:align :start})
                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
-       [:div (inline-title (:block/title block))]
+       [:div (inline-title
+              (some->> (:block/title block)
+                       string/trim
+                       string/split-lines
+                       first))]
        [:div])]))
 
 (defn build-columns
