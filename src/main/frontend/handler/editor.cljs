@@ -818,7 +818,7 @@
                     concat-prev-block?
                     (let [children (:block/_parent (db/entity (:db/id block)))
                           db-based? (config/db-based-graph? repo)
-                          prev-block-is-not-parent? (not= (:block/uuid (:block/parent block)) (:block/uuid prev-block))
+                          prev-block-is-not-parent? (empty? (:block/_parent prev-block))
                           delete-prev-block? (and db-based?
                                                   prev-block-is-not-parent?
                                                   (empty? (:block/tags block))
