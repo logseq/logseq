@@ -471,7 +471,7 @@
   (p/do!
    (when close-other-db?
      (close-other-dbs! repo))
-   (when @shared-service/*provider?
+   (when @shared-service/*master-client?
      (create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
@@ -839,7 +839,7 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
-(defn on-become-provider
+(defn on-become-master
   [repo]
   (p/do!
    (init-sqlite-module!)
@@ -852,7 +852,7 @@
   (when (and graph (not= graph (first @*service)))
     (p/let [service (shared-service/create-service graph
                                                    (bean/->js fns)
-                                                   {:on-provider-change #(on-become-provider graph)})]
+                                                   #(on-become-master graph))]
       (assert (p/promise? (get-in service [:status :ready])))
       (reset! *service [graph service])
       service)))
@@ -875,7 +875,7 @@
                                     (cond
                                       (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
                                           (nil? service)
-                                          @shared-service/*provider?)
+                                          @shared-service/*master-client?)
                                       (apply f args)
 
                                       :else
