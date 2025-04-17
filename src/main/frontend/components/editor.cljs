@@ -38,7 +38,7 @@
             [react-draggable]
             [rum.core :as rum]))
 
-(defonce no-matched-coomands [["No matched commands" [[:editor/move-cursor-to-end]]]])
+(defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])
 
 (defn filter-commands
   [page? commands]
@@ -58,7 +58,7 @@
         _ (when (state/get-editor-action)
             (reset! *matched matched'))
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
-        matched (or (filter-commands page? @*matched) no-matched-coomands)
+        matched (or (filter-commands page? @*matched) no-matched-commands)
         filtered? (not= matched @commands/*initial-commands)]
     (ui/auto-complete
      matched
