@@ -81,13 +81,7 @@
             [:div.has-help
              {:title plugin-id}
              command-name
-             (when doc (ui/tippy
-                        {:html doc
-                         :interactive true
-                         :fixed-position? true
-                         :position "right"}
-
-                        [:small (svg/help-circle)]))]
+             (when doc (ui/tooltip [:small (svg/help-circle)] doc))]
 
             (string? doc)
             [:div {:title doc}

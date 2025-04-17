@@ -48,7 +48,12 @@
 
                        ;; new implementation
                        :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})}))
+                       :redo/repo->ops (atom {})
+
+
+                       ;; thread atoms, these atoms' value are syncing from ui-thread
+                       :thread-atom/online-event (atom nil)
+                       }))
 
 (defonce *rtc-ws-url (atom nil))
 
