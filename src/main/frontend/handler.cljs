@@ -17,6 +17,7 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
+            [frontend.handler.events.ui]
             [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]

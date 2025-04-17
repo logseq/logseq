@@ -908,30 +908,35 @@
                                (reset! *excluded-pages? value)
                                (set-setting! :excluded-pages? value)))
                            true)]]
+
               (when (config/db-based-graph? (state/get-current-repo))
                 [:div.flex.flex-col.mb-2
                  [:p "Created before"]
                  (when created-at-filter
                    [:div (.toDateString (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])
-                 (ui/tippy {:html [:div.pr-3 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))]}
-                     ;; Slider keeps track off the range from min created-at to max created-at
-                     ;; because there were bugs with setting min and max directly
-                           (ui/slider created-at-filter
-                                      {:min 0
-                                       :max (- (get-in graph [:all-pages :created-at-max])
-                                               (get-in graph [:all-pages :created-at-min]))
-                                       :on-change #(do
-                                                     (reset! *created-at-filter (int %))
-                                                     (set-setting! :created-at-filter (int %)))}))])
+
+                 (ui/tooltip
+                   ;; Slider keeps track off the range from min created-at to max created-at
+                   ;; because there were bugs with setting min and max directly
+                   (ui/slider created-at-filter
+                     {:min 0
+                      :max (- (get-in graph [:all-pages :created-at-max])
+                             (get-in graph [:all-pages :created-at-min]))
+                      :on-change #(do
+                                    (reset! *created-at-filter (int %))
+                                    (set-setting! :created-at-filter (int %)))})
+                   [:div.px-1 (str (js/Date. (+ created-at-filter (get-in graph [:all-pages :created-at-min]))))])])
+
               (when (seq focus-nodes)
                 [:div.flex.flex-col.mb-2
                  [:p {:title "N hops from selected nodes"}
                   "N hops from selected nodes"]
-                 (ui/tippy {:html [:div.pr-3 n-hops]}
-                           (ui/slider (or n-hops 10)
-                                      {:min 1
-                                       :max 10
-                                       :on-change #(reset! *n-hops (int %))}))])
+                 (ui/tooltip
+                   (ui/slider (or n-hops 10)
+                     {:min 1
+                      :max 10
+                      :on-change #(reset! *n-hops (int %))})
+                   [:div n-hops])])
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
                                                       (swap! *graph-reset? not)
@@ -977,39 +982,45 @@
               [:div.flex.flex-col.mb-2
                [:p {:title "Link Distance"}
                 "Link Distance"]
-               (ui/tippy {:html [:div.pr-3 link-dist]}
-                         (ui/slider (/ link-dist 10)
-                                    {:min 1   ;; 10
-                                     :max 18  ;; 180
-                                     :on-change #(let [value (int %)]
-                                                   (reset! *link-dist (* value 10))
-                                                   (set-forcesetting! :link-dist (* value 10)))}))]
+               (ui/tooltip
+                 (ui/slider (/ link-dist 10)
+                   {:min 1                                  ;; 10
+                    :max 18                                 ;; 180
+                    :on-change #(let [value (int %)]
+                                  (reset! *link-dist (* value 10))
+                                  (set-forcesetting! :link-dist (* value 10)))})
+                 [:div link-dist])]
+
               [:div.flex.flex-col.mb-2
                [:p {:title "Charge Strength"}
                 "Charge Strength"]
-               (ui/tippy {:html [:div.pr-3 charge-strength]}
-                         (ui/slider (/ charge-strength 100)
-                                    {:min -10  ;;-1000
-                                     :max 10   ;;1000
-                                     :on-change #(let [value (int %)]
-                                                   (reset! *charge-strength (* value 100))
-                                                   (set-forcesetting! :charge-strength (* value 100)))}))]
+               (ui/tooltip
+                 (ui/slider (/ charge-strength 100)
+                   {:min -10                                ;;-1000
+                    :max 10                                 ;;1000
+                    :on-change #(let [value (int %)]
+                                  (reset! *charge-strength (* value 100))
+                                  (set-forcesetting! :charge-strength (* value 100)))})
+                 [:div charge-strength])]
+
               [:div.flex.flex-col.mb-2
                [:p {:title "Charge Range"}
                 "Charge Range"]
-               (ui/tippy {:html [:div.pr-3 charge-range]}
-                         (ui/slider (/ charge-range 100)
-                                    {:min 5    ;;500
-                                     :max 40   ;;4000
-                                     :on-change #(let [value (int %)]
-                                                   (reset! *charge-range (* value 100))
-                                                   (set-forcesetting! :charge-range (* value 100)))}))]
+               (ui/tooltip
+                 (ui/slider (/ charge-range 100)
+                   {:min 5                                  ;;500
+                    :max 40                                 ;;4000
+                    :on-change #(let [value (int %)]
+                                  (reset! *charge-range (* value 100))
+                                  (set-forcesetting! :charge-range (* value 100)))})
+                 [:div charge-range])]
 
-              [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                      (swap! *graph-forcereset? not)
-                                                      (reset! *link-dist 70)
-                                                      (reset! *charge-strength -600)
-                                                      (reset! *charge-range 600))}
+              [:a
+               {:on-click (fn []
+                            (swap! *graph-forcereset? not)
+                            (reset! *link-dist 70)
+                            (reset! *charge-strength -600)
+                            (reset! *charge-range 600))}
                "Reset Forces"]]]))
          {})
         (graph-filter-section

@@ -330,9 +330,7 @@
                       views
                       all-files
                       pages-datoms))]
-    (prn :debug "db-graph?" db-graph?)
-    (prn :debug "block/journal-day schema" (str (:block/journal-day (:schema db))))
-    {:schema (assoc schema :block/journal-day {:db/index true})
+    {:schema schema
      :initial-data data}))
 
 (defn restore-initial-data

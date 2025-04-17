@@ -45,7 +45,7 @@
               (or
                (= "Add new property" (first item))
                (when (= (count item) 5)
-                 (contains? #{"TASK" "PRIORITY"} (last item))))) commands)
+                 (contains? #{"TASK STATUS" "PRIORITY"} (last item))))) commands)
     commands))
 
 (rum/defcs commands < rum/reactive
@@ -56,63 +56,59 @@
         _ (when (state/get-editor-action)
             (reset! *matched matched'))
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
-        matched (filter-commands page? @*matched)]
+        matched (filter-commands page? @*matched)
+        filtered? (not= matched @commands/*initial-commands)]
     (ui/auto-complete
      matched
-     {:get-group-name
-      (fn [item]
-        (when (= (count item) 5) (last item)))
+     (cond->
+      {:item-render
+       (fn [item]
+         (let [command-name (first item)
+               command-doc (get item 2)
+               plugin-id (get-in item [1 1 1 :pid])
+               doc (when (state/show-command-doc?) command-doc)
+               options (some-> item (get 3))
+               icon-name (some-> (if (map? options) (:icon options) options) (name))
+               command-name (if icon-name
+                              [:span.flex.items-center.gap-1
+                               (shui/tabler-icon icon-name)
+                               [:strong.font-normal command-name]]
+                              command-name)]
+           (cond
+             (or plugin-id (vector? doc))
+             [:div.has-help
+              {:title plugin-id}
+              command-name
+              (when doc (ui/tooltip [:small (svg/help-circle)] doc))]
 
-      :item-render
-      (fn [item]
-        (let [command-name (first item)
-              command-doc (get item 2)
-              plugin-id (get-in item [1 1 1 :pid])
-              doc (when (state/show-command-doc?) command-doc)
-              options (some-> item (get 3))
-              icon-name (some-> (if (map? options) (:icon options) options) (name))
-              command-name (if icon-name
-                             [:span.flex.items-center.gap-1
-                              (shui/tabler-icon icon-name)
-                              [:strong.font-normal command-name]]
-                             command-name)]
-          (cond
-            (or plugin-id (vector? doc))
-            [:div.has-help
-             {:title plugin-id}
-             command-name
-             (when doc (ui/tippy
-                        {:html doc
-                         :interactive true
-                         :fixed-position? true
-                         :position "right"}
+             (string? doc)
+             [:div {:title doc}
+              command-name]
 
-                        [:small (svg/help-circle)]))]
+             :else
+             [:div command-name])))
 
-            (string? doc)
-            [:div {:title doc}
-             command-name]
-
-            :else
-            [:div command-name])))
-
-      :on-chosen
-      (fn [chosen-item]
-        (let [command (first chosen-item)]
-          (reset! commands/*current-command command)
-          (let [command-steps (get (into {} matched) command)
-                restore-slash? (or
-                                (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
-                                (and
-                                 (not (fn? command-steps))
-                                 (not (contains? (set (map first command-steps)) :editor/input))
-                                 (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
-            (editor-handler/insert-command! id command-steps
-                                            format
-                                            {:restore? restore-slash?
-                                             :command command}))))
-      :class
-      "cp__commands-slash"})))
+       :on-chosen
+       (fn [chosen-item]
+         (let [command (first chosen-item)]
+           (reset! commands/*current-command command)
+           (let [command-steps (get (into {} matched) command)
+                 restore-slash? (or
+                                 (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
+                                 (and
+                                  (not (fn? command-steps))
+                                  (not (contains? (set (map first command-steps)) :editor/input))
+                                  (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+             (editor-handler/insert-command! id command-steps
+                                             format
+                                             {:restore? restore-slash?
+                                              :command command}))))
+       :class
+       "cp__commands-slash"}
+       (not filtered?)
+       (assoc :get-group-name
+              (fn [item]
+                (when (= (count item) 5) (last item))))))))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
