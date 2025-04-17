@@ -601,19 +601,17 @@
        (dropdown-editor-menuitem {:icon :letter-t
                                   :title "Property type"
                                   :desc (if disabled?'
-                                          (ui/tippy {:html        [:div.w-96
-                                                                   "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."]
-                                                     :class       "tippy-hover ml-2"
-                                                     :interactive true
-                                                     :disabled    false}
-                                                    (str property-type-label'))
+                                          (ui/tooltip
+                                            [:span (str property-type-label')]
+                                            [:div.w-96
+                                             "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
                                           (str property-type-label'))
                                   :disabled? disabled?'
                                   :submenu-content (fn [ops]
                                                      (property-type-sub-pane property ops))}))
 
      (when (and (= property-type :node)
-                (not (contains? #{:logseq.property/parent} (:db/ident property))))
+             (not (contains? #{:logseq.property/parent} (:db/ident property))))
        (dropdown-editor-menuitem {:icon :hash
                                   :disabled? disabled?
                                   :title "Specify node tags"

@@ -782,19 +782,20 @@
 (rum/defc new-block-mode < rum/reactive
   []
   (when (state/sub [:document/mode?])
-    (ui/tippy {:html [:div.p-2
-                      [:p.mb-2 [:b "Document mode"]]
-                      [:ul
-                       [:li
-                        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
-                        [:p.inline-block "to create new block"]]
-                       [:li
-                        [:p.inline-block.mr-1 "Click `D` or type"]
-                        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
-                        [:p.inline-block "to toggle document mode"]]]]}
-              [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
-               {:on-click state/toggle-document-mode!}
-               "D"])))
+    (ui/tooltip
+      [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+       {:on-click state/toggle-document-mode!}
+       "D"]
+      [:div.p-2
+       [:p.mb-2 [:b "Document mode"]]
+       [:ul
+        [:li
+         [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
+         [:p.inline-block "to create new block"]]
+        [:li
+         [:p.inline-block.mr-1 "Click `D` or type"]
+         [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
+         [:p.inline-block "to toggle document mode"]]]])))
 
 (def help-menu-items
   [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}

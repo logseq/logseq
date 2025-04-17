@@ -13,6 +13,7 @@
             [frontend.common.graph-view :as graph-view]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
+            [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
@@ -332,6 +333,7 @@
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
+            _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
                 (let [data (map (fn [datom]
                                   [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
