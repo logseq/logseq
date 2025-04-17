@@ -1929,9 +1929,9 @@
 (defn resize-image!
   [config block-id metadata full_text size]
   (let [asset (:asset-block config)]
-    (if (and asset (config/db-based-graph?))
+    (if (config/db-based-graph?)
       (property-handler/set-block-property! (state/get-current-repo)
-                                            (:db/id asset)
+                                            (if asset (:db/id asset) block-id)
                                             :logseq.property.asset/resize-metadata
                                             size)
       (let [new-meta (merge metadata size)
