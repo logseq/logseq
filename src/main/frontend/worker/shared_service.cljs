@@ -8,6 +8,7 @@
 
 ;; TODO:
 ;; - client-channel close before re-creating new one
+;; - don't use worker-util/post-message. Otherwise, there will be one extra transit-write/read.
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
@@ -163,69 +164,75 @@
      (p/catch (fn [error]
                 (js/console.error error))))))
 
-(defn ^:large-vars/cleanup-todo create-service
+(defn- on-become-master
+  [master-client-id service-name common-channel target on-become-master-handler status-ready-deferred-p]
+  (p/do!
+   (prn :debug :become-master master-client-id :service service-name)
+   (.addEventListener
+    common-channel "message"
+    (fn [event]
+      (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
+        (when (= type "slave-register")
+          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
+            (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
+                                        (fn [_]
+                                           ;; The client has gone. Clean up
+                                          (.close client-channel)))
+
+            (.addEventListener client-channel "message"
+                               (fn [event]
+                                 (let [{:keys [type method args id]} (bean/->clj (.-data event))]
+                                   (when (not= type "response")
+                                     (p/let [[result error] (p/catch
+                                                             (p/then (apply-target-f! target method args)
+                                                                     (fn [res] [res nil]))
+                                                             (fn [e] [nil (if (instance? js/Error e)
+                                                                            (bean/->clj e)
+                                                                            e)]))]
+                                       (.postMessage client-channel (bean/->js
+                                                                     {:id id
+                                                                      :type "response"
+                                                                      :result result
+                                                                      :error error
+                                                                      :method-key (first args)})))))))
+            (.postMessage common-channel (bean/->js {:type "slave-registered"
+                                                     :slave-client-id slave-client-id
+                                                     :master-client-id master-client-id
+                                                     :serviceName service-name})))))))
+   (.postMessage common-channel #js {:type "master-changed"
+                                     :master-client-id master-client-id
+                                     :serviceName service-name})
+   (p/let [_  (on-become-master-handler service-name)
+           _ (when (seq @*requests-in-flight)
+               (js/console.log "Requests were in flight when tab became master. Requeuing...")
+               (p/all (map
+                       (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+                         (->
+                          (p/let [result (apply-target-f! target method args)]
+                            (resolve-fn result))
+                          (p/catch (fn [e]
+                                     (js/console.error "Error processing request" e)
+                                     (reject-fn e)))
+                          (p/finally (fn []
+                                       (swap! *requests-in-flight dissoc id)))))
+                       @*requests-in-flight)))]
+     (p/resolve! status-ready-deferred-p))))
+
+(defn create-service
   [service-name target on-become-master-handler]
   (p/let [_ (clear-old-service!)
           status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)
           client-id (or @*client-id (get-client-id))
-          on-become-master (fn [_re-elect?]
-                             (p/let [master-client-id client-id]
-                               (prn :debug :become-master master-client-id :service service-name)
-                               (.addEventListener
-                                common-channel "message"
-                                (fn [event]
-                                  (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
-                                    (when (= type "slave-register")
-                                      (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
-                                        (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
-                                                                    (fn [_]
-                                                                       ;; The client has gone. Clean up
-                                                                      (.close client-channel)))
-
-                                        (.addEventListener client-channel "message"
-                                                           (fn [event]
-                                                             (let [{:keys [type method args id]} (bean/->clj (.-data event))]
-                                                               (when (not= type "response")
-                                                                 (p/let [[result error] (p/catch
-                                                                                         (p/then (apply-target-f! target method args)
-                                                                                                 (fn [res] [res nil]))
-                                                                                         (fn [e] [nil (if (instance? js/Error e)
-                                                                                                        (bean/->clj e)
-                                                                                                        e)]))]
-                                                                   (.postMessage client-channel (bean/->js
-                                                                                                 {:id id
-                                                                                                  :type "response"
-                                                                                                  :result result
-                                                                                                  :error error
-                                                                                                  :method-key (first args)})))))))
-                                        (.postMessage common-channel (bean/->js {:type "slave-registered"
-                                                                                 :slave-client-id slave-client-id
-                                                                                 :master-client-id master-client-id
-                                                                                 :serviceName service-name})))))))
-                               (.postMessage common-channel #js {:type "master-changed"
-                                                                 :master-client-id master-client-id
-                                                                 :serviceName service-name})
-                               (p/let [_  (on-become-master-handler service-name)
-                                       _ (when (seq @*requests-in-flight)
-                                           (js/console.log "Requests were in flight when tab became master. Requeuing...")
-                                           (p/all (map
-                                                   (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                                                     (->
-                                                      (p/let [result (apply-target-f! target method args)]
-                                                        (resolve-fn result))
-                                                      (p/catch (fn [e]
-                                                                 (js/console.error "Error processing request" e)
-                                                                 (reject-fn e)))
-                                                      (p/finally (fn []
-                                                                   (swap! *requests-in-flight dissoc id)))))
-                                                   @*requests-in-flight)))]
-                                 (p/resolve! (:ready status)))))
-          check-master-slave-fn! (fn [re-elect?]
-                                   (check-master-or-slave-client!
-                                    service-name
-                                    #(on-become-master re-elect?)
-                                    #(on-become-slave client-id service-name common-channel (:ready status))))]
+          check-master-slave-fn!
+          (fn [_re-elect?]
+            (check-master-or-slave-client!
+             service-name
+             #(on-become-master
+               client-id service-name common-channel target
+               on-become-master-handler (:ready status))
+             #(on-become-slave
+               client-id service-name common-channel (:ready status))))]
     (check-master-slave-fn! false)
 
     (add-watch *master-client? :check-master
@@ -239,7 +246,7 @@
                        #js {:get (fn [target method]
                                    (cond
                                      (#{:then :catch :finally} (keyword method))
-                                       ;; Return nil for these methods to allow promise chaining to work correctly
+                                     ;; Return nil for these methods to allow promise chaining to work correctly
                                      nil
 
                                      :else
