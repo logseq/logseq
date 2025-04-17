@@ -40,7 +40,7 @@
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
-  missionary/missionary                 {:mvn/version "b.39"}
+  missionary/missionary                 {:mvn/version "b.44"}
   meander/epsilon                       {:mvn/version "0.0.650"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "0e70e96a73cf63c85dcc2df4d022edf12806b239"

@@ -1082,3 +1082,9 @@ html.is-mac {
   aspect-ratio: 16 / 9;
   height: auto;
 }
+
+.ls-filters {
+    div[data-testid='virtuoso-item-list'] button {
+        @apply mb-2;
+    }
+}

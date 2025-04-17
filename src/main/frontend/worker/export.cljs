@@ -65,6 +65,7 @@
                   (if (and (contains? #{:block/title :block/name} a)
                            (let [entity (d/entity @conn e)]
                              (and (not (:db/ident entity))
-                                  (not (ldb/journal? entity)))))
+                                  (not (ldb/journal? entity))
+                                  (not (:logseq.property/built-in? entity)))))
                     (d/datom e a (str "debug " e) t)
                     (d/datom e a v t))))))

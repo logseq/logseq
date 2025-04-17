@@ -77,8 +77,8 @@
 (def edit-block! block-handler/edit-block!)
 
 (defn- outliner-save-block!
-  [block]
-  (outliner-op/save-block! block))
+  [block & {:as opts}]
+  (outliner-op/save-block! block opts))
 
 (defn get-block-own-order-list-type
   [block]
@@ -3642,7 +3642,7 @@
              (when-not (= current-value value)
                (let [block {:block/uuid block-id
                             :block/collapsed? value}]
-                 (outliner-save-block! block)))))))
+                 (outliner-save-block! block {:outliner-op :collapse-expand-blocks})))))))
       (doseq [block-id block-ids]
         (state/set-collapsed-block! block-id value)))))
 

@@ -311,6 +311,7 @@
                                           (= (:db/id block) id)
                                           (= id (:db/id (:block/page block)))
                                           (ldb/hidden? (:block/page block))
+                                          (ldb/hidden? block)
                                           (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
                                           (some? (get block (:db/ident entity))))
                                          (or
@@ -331,7 +332,8 @@
                                         distinct))
                                      full-ref-blocks)
                              (remove nil?)
-                             (frequencies))]
+                             (frequencies)
+                             (sort-by second #(> %1 %2)))]
     {:ref-pages-count ref-pages-count
      :ref-blocks ref-blocks}))
 
@@ -564,9 +566,11 @@
                                         [(:block/uuid (first blocks))
                                          (map (fn [b]
                                                 {:db/id (:db/id b)
-                                                 :block/parent (:block/uuid (:block/parent b))}) blocks)])
+                                                 :block/parent (:block/uuid (:block/parent b))})
+                                              (ldb/sort-by-order blocks))])
                                       parent-groups))
-                                   (map :db/id entities))]
+                                   (->> (sort-entities db sorting entities)
+                                        (map :db/id)))]
                        [by-value' group]))
                    result)
                   (map :db/id result))]
