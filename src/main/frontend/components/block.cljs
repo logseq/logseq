@@ -1068,7 +1068,7 @@
         (contains? config/video-formats asset-type))))
 
 (declare block-positioned-properties)
-(rum/defc page-reference < rum/reactive
+(rum/defc page-reference < rum/reactive db-mixins/query
   "Component for page reference"
   [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
   (when uuid-or-title*
@@ -1077,7 +1077,8 @@
                           uuid-or-title*)
           show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
           contents-page? (= "contents" (string/lower-case (str id)))
-          block (db/get-page uuid-or-title)
+          block* (db/get-page uuid-or-title)
+          block (or (some-> (:db/id block*) db/sub-block) block*)
           config' (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?
