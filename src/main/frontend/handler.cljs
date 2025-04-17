@@ -17,6 +17,7 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.events :as events]
+            [frontend.handler.events.ui]
             [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -104,7 +105,9 @@
 (defn- handle-connection-change
   [e]
   (let [online? (= (gobj/get e "type") "online")]
-    (state/set-online! online?)))
+    (state/set-online! online?)
+    (state/<invoke-db-worker :thread-api/update-thread-atom
+                             :thread-atom/online-event online?)))
 
 (defn set-network-watcher!
   []
@@ -155,7 +158,6 @@
   (i18n/start)
   (instrument/init)
   (state/set-online! js/navigator.onLine)
-  (set-network-watcher!)
 
   (-> (util/indexeddb-check?)
       (p/catch (fn [_e]
@@ -177,6 +179,7 @@
                _ (if (empty? repos)
                    (repo-handler/new-db! config/demo-repo)
                    (restore-and-setup! repo))]
+         (set-network-watcher!)
          (when (util/electron?)
            (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)

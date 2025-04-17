@@ -9,11 +9,13 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Export fns
 ;; ==========
@@ -40,7 +42,7 @@
 
 (defn- build-pvalue-entity-for-build-page
   [pvalue]
-  (cond (ldb/internal-page? pvalue)
+  (cond (entity-util/internal-page? pvalue)
         ;; Should page properties be pulled here?
         [:build/page (cond-> (shallow-copy-page pvalue)
                        (seq (:block/tags pvalue))
@@ -48,7 +50,10 @@
         (entity-util/journal? pvalue)
         [:build/page {:build/journal (:block/journal-day pvalue)}]))
 
-(defn- build-pvalue-entity-default [ent-properties pvalue options]
+(defn- build-pvalue-entity-default [db ent-properties pvalue
+                                    {:keys [include-uuid-fn]
+                                     :or {include-uuid-fn (constantly false)}
+                                     :as options}]
   (if (or (seq ent-properties) (seq (:block/tags pvalue)))
     (cond-> {:build/property-value :block
              :block/title (or (block-title pvalue)
@@ -57,7 +62,17 @@
       (assoc :build/tags (->build-tags (:block/tags pvalue)))
 
       (seq ent-properties)
-      (assoc :build/properties ent-properties)
+      (assoc :build/properties
+             ;; TODO: Add support for ref properties here and in sqlite.build
+             (->> ent-properties
+                  (keep (fn [[k v]]
+                          (let [prop-type (:logseq.property/type (d/entity db k))]
+                            (when-not (contains? db-property-type/all-ref-property-types prop-type)
+                              [k v]))))
+                  (into {})))
+
+      (include-uuid-fn (:block/uuid pvalue))
+      (assoc :block/uuid (:block/uuid pvalue) :build/keep-uuid? true)
 
       (:include-timestamps? options)
       (merge (select-keys pvalue [:block/created-at :block/updated-at])))
@@ -87,7 +102,7 @@
                                                (medley/filter-keys db-property/internal-property?))
                           ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                            (buildable-properties db' ent-properties* properties-config' options'))]
-                      (build-pvalue-entity-default ent-properties pvalue options'))))))]
+                      (build-pvalue-entity-default db ent-properties pvalue options'))))))]
     (->> ent-properties
          (map (fn [[k v]]
                 [k
@@ -259,7 +274,8 @@
        (mapcat (fn [val-or-vals]
                  (keep #(when (and (vector? %)
                                    (= :block/uuid (first %))
-                                   (::existing-property-value? (meta %))) (second %))
+                                   (::existing-property-value? (meta %)))
+                          (second %))
                        (if (set? val-or-vals) val-or-vals [val-or-vals]))))
        set))
 
@@ -293,7 +309,7 @@
         (when-let [prop-ids (seq (map :db/ident (filter entity-util/property? ents)))]
           (build-export-properties db prop-ids export-opts))
         classes
-        (when-let [class-ents (seq (filter ldb/class? ents))]
+        (when-let [class-ents (seq (filter entity-util/class? ents))]
           (->> class-ents
                (map #(vector (:db/ident %) (build-export-class % export-opts)))
                (into {})))]
@@ -328,7 +344,7 @@
   (let [class-parent-ents (->> classes-config
                                (filter #(:build/class-parent (val %)))
                                (map #(d/entity db (key %)))
-                               ldb/get-classes-parents)
+                               db-db/get-classes-parents)
         classes
         (->> class-parent-ents
              (remove #(db-class/logseq-class? (:db/ident %)))
@@ -670,8 +686,16 @@
         (update :pages-and-blocks
                 (fn [pages-and-blocks]
                   (mapv (fn [{:keys [page blocks]}]
-                          {:page (remove-uuid-if-not-ref page)
-                           :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)})
+                          (let [page-map {:page (remove-uuid-if-not-ref page)
+                                          :blocks (sqlite-build/update-each-block blocks remove-uuid-if-not-ref)}
+                                ;; TODO: Walk data structure via :build/properties instead of slower walk
+                                page-map'
+                                (walk/postwalk (fn [f]
+                                                 (if (and (map? f) (:build/property-value f))
+                                                   (remove-uuid-if-not-ref f)
+                                                   f))
+                                               page-map)]
+                            page-map'))
                         pages-and-blocks))))))
 
 (defn- add-ontology-for-include-namespaces
@@ -750,12 +774,19 @@
     undefined))
 
 (defn- find-undefined-uuids [{:keys [classes properties pages-and-blocks]}]
-  (let [known-uuids
+  (let [pvalue-known-uuids (atom #{})
+        _ (walk/postwalk (fn [f]
+                           (if (and (map? f) (:build/property-value f) (:block/uuid f))
+                             (swap! pvalue-known-uuids conj (:block/uuid f))
+                             f))
+                         pages-and-blocks)
+        known-uuids
         (->> (concat (keep :block/uuid (vals classes))
                      (keep :block/uuid (vals properties))
                      (keep #(get-in % [:page :block/uuid]) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) (fn [m] (some-> m :block/uuid vector)))
-                             pages-and-blocks))
+                             pages-and-blocks)
+                     @pvalue-known-uuids)
              set)
         ;; Only looks one-level deep in properties e.g. not inside :build/page
         ;; Doesn't find :block/link refs

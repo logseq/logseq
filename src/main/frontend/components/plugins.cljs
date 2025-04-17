@@ -585,14 +585,14 @@
 
       (when (and develop-mode? (util/electron?) (not market?))
         [:div
-         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
-                    :arrow true}
-                   (ui/button
-                    (t :plugin/load-unpacked)
-                    {:icon "upload"
-                     :intent "link"
-                     :class "load-unpacked"
-                     :on-click plugin-handler/load-unpacked-plugin}))
+         (ui/tooltip
+           (ui/button
+             (t :plugin/load-unpacked)
+             {:icon "upload"
+              :intent "link"
+              :class "load-unpacked"
+              :on-click plugin-handler/load-unpacked-plugin})
+           [:div (t :plugin/unpacked-tips)])
 
          (when (util/electron?)
            (unpacked-plugin-loader selected-unpacked-pkg))])]
@@ -1075,9 +1075,7 @@
 
            [:div.px-4
             (when-not (string/blank? notes)
-              (ui/tippy
-               {:html [:p notes]}
-               [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")]))]])]
+              (ui/tooltip [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")] [:p notes]))]])]
 
        ;; all done
        [:div.py-4 [:strong.text-4xl (str "\uD83C\uDF89 " (t :plugin/all-updated))]])

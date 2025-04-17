@@ -221,7 +221,7 @@
 
 (extend-type Entity
   otree/INode
-  (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes]
+  (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes outliner-op]
                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
@@ -233,12 +233,16 @@
                    data)
                   db-based?
                   (dissoc :block/properties))
-          m* (-> data'
-                 (dissoc :block/children :block/meta :block/unordered
-                         :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
-                 common-util/remove-nils
-                 block-with-updated-at
-                 (fix-tag-ids db {:db-graph? db-based?}))
+          collapse-or-expand? (= outliner-op :collapse-expand-blocks)
+          m* (cond->
+              (-> data'
+                  (dissoc :block/children :block/meta :block/unordered
+                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
+                  common-util/remove-nils
+
+                  (fix-tag-ids db {:db-graph? db-based?}))
+               (not collapse-or-expand?)
+               block-with-updated-at)
           db-id (:db/id this)
           block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
@@ -292,7 +296,8 @@
                                               retract-attributes)))))))
 
         ;; Update block's page attributes
-        (update-page-when-save-block *txs-state block-entity m)
+        (when-not collapse-or-expand?
+          (update-page-when-save-block *txs-state block-entity m))
         ;; Remove orphaned refs from block
         (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save db *txs-state block-entity m {:db-graph? db-based?})))
