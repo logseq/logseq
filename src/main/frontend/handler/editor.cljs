@@ -1773,22 +1773,24 @@
   [property q]
   (search/property-value-search property q))
 
-(defn get-matched-commands
+(defn get-last-command
   [input]
   (try
     (let [edit-content (or (gobj/get input "value") "")
           pos (cursor/pos input)
           last-slash-caret-pos (:pos (:pos (state/get-editor-action-data)))
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
-      (when (> pos 0)
-        (or
-         (and (= commands/command-trigger (util/nth-safe edit-content (dec pos)))
-              @commands/*initial-commands)
-         (and last-command
-              (commands/get-matched-commands last-command)))))
+      (when (> pos 0) last-command))
     (catch :default e
       (js/console.error e)
       nil)))
+
+(defn get-matched-commands
+  [command]
+  (condp = command
+    nil nil
+    "" @commands/*initial-commands
+    (commands/get-matched-commands command)))
 
 (defn auto-complete?
   []
@@ -3206,10 +3208,13 @@
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
           (if (= commands/command-trigger (second (re-find #"(\S+)\s+$" value)))
             (state/clear-editor-action!)
-            (let [matched-commands (get-matched-commands input)]
+            (let [command (get-last-command input)
+                  matched-commands (get-matched-commands command)]
               (if (seq matched-commands)
-                (reset! commands/*matched-commands matched-commands)
-                (state/clear-editor-action!))))
+                (commands/set-matched-commands! command matched-commands)
+                (if (> (- (count command) (count @commands/*latest-matched-command)) 1)
+                  (state/clear-editor-action!)
+                  (reset! commands/*matched-commands nil)))))
 
           :else
           (default-case-for-keyup-handler input current-pos k code is-processed?))
