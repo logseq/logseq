@@ -856,8 +856,9 @@
 
 (def-thread-api :thread-api/init-shared-service
   [graph]
-  (init-service! graph)
-  nil)
+  (p/do!
+    (init-service! graph)
+    nil))
 
 (defn init
   "web worker entry"
