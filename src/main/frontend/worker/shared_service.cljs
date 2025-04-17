@@ -23,14 +23,14 @@
     (p/resolve! d nil)
     nil))
 
-(defn get-broadcast-channel-name [client-id service-name]
+(defn- get-broadcast-channel-name [client-id service-name]
   (str client-id "-" service-name))
 
 (defn- random-id
   []
   (str (random-uuid)))
 
-(defn get-client-id []
+(defn- get-client-id []
   (let [id (random-id)]
     (p/let [client-id (js/navigator.locks.request id #js {:mode "exclusive"}
                                                   (fn [_]
@@ -50,7 +50,7 @@
   (when-let [f (gobj/get target method)]
     (apply f args)))
 
-(defn check-provider?
+(defn- check-provider?
   [service-name {:keys [on-become-provider on-not-provider]}]
   (p/let [client-id (or @*client-id (get-client-id))]
     (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
@@ -110,7 +110,7 @@
                               (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name client-id service-name)))
                               (let [register (fn register []
                                                (p/create
-                                                (fn [resolve _]
+                                                (fn [resolve-fn _]
                                                   (letfn [(listener [event]
                                                             (let [{:keys [_providerId clientId type]} (bean/->clj (.-data event))]
                                                               (when (and (= clientId client-id) (= type "registered"))
@@ -120,7 +120,7 @@
                                                                                               (prn :debug "Provider has gone")
                                                                                               (reset! *provider? :re-check)))
                                                                 (.removeEventListener common-channel "message" listener)
-                                                                (resolve nil))))]
+                                                                (resolve-fn nil))))]
                                                     (.addEventListener common-channel "message" listener)
                                                     (.postMessage common-channel #js {:type "register" :clientId client-id})))))]
                                 (.addEventListener common-channel "message"
@@ -134,8 +134,8 @@
                                                            (when (seq @*requests-in-flight)
                                                              (js/console.log "Requests were in flight when provider changed. Requeuing...")
                                                              (p/all (map
-                                                                     (fn [[id {:keys [method args resolve reject]}]]
-                                                                       (let [listener (get-on-request-listener id resolve reject)]
+                                                                     (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+                                                                       (let [listener (get-on-request-listener id resolve-fn reject-fn)]
                                                                          (when-let [channel @*client-channel]
                                                                            (.addEventListener channel "message" listener)
                                                                            (.postMessage channel (bean/->js {:id id
@@ -150,16 +150,17 @@
                                                          nil))))
                                 (p/do!
                                  (register)
-                                 (when-let [resolve @*ready-resolve]
-                                   (resolve))
+                                 (when-let [resolve-fn @*ready-resolve]
+                                   (resolve-fn))
                                  (reset! *ready-resolve nil))))
                             (p/catch (fn [error]
                                        (js/console.error error)))))
 
-         status {:ready (atom (p/create (fn [resolve] (reset! *ready-resolve resolve))))}
+         status {:ready (atom (p/create (fn [resolve-fn] (reset! *ready-resolve resolve-fn))))}
          on-become-provider (fn [_re-elect?]
                               (when (nil? @*ready-resolve)
-                                (reset! (:ready status) (p/create (fn [resolve] (reset! *ready-resolve resolve)))))
+                                (reset! (:ready status)
+                                        (p/create (fn [resolve-fn] (reset! *ready-resolve resolve-fn)))))
                               (p/let [provider-id (or @*client-id (get-client-id))]
                                 (prn :debug :become-provider provider-id :service service-name)
                                 (.addEventListener
@@ -200,19 +201,19 @@
                                         _ (when (seq @*requests-in-flight)
                                             (js/console.log "Requests were in flight when tab became provider. Requeuing...")
                                             (p/all (map
-                                                    (fn [[id {:keys [method args resolve reject]}]]
+                                                    (fn [[id {:keys [method args resolve-fn reject-fn]}]]
                                                       (->
                                                        (p/let [result (apply-target-f! target method args)]
-                                                         (resolve result))
+                                                         (resolve-fn result))
                                                        (p/catch (fn [e]
                                                                   (js/console.error "Error processing request" e)
-                                                                  (reject e)))
+                                                                  (reject-fn e)))
                                                        (p/finally (fn []
                                                                     (swap! *requests-in-flight dissoc id)))))
                                                     @*requests-in-flight)))]
 
-                                  (when-let [resolve @*ready-resolve]
-                                    (resolve))
+                                  (when-let [resolve-fn @*ready-resolve]
+                                    (resolve-fn))
                                   (reset! *ready-resolve nil))))
          check-provider-f (fn [re-elect?]
                             (check-provider? service-name {:on-become-provider #(on-become-provider re-elect?)
@@ -239,9 +240,9 @@
                                           (if provider?
                                             (apply-target-f! target method args)
                                             (p/create
-                                             (fn [resolve reject]
+                                             (fn [resolve-fn reject-fn]
                                                (let [id (random-id)
-                                                     listener (get-on-request-listener id resolve reject)
+                                                     listener (get-on-request-listener id resolve-fn reject-fn)
                                                      channel @*client-channel]
                                                  (when channel
                                                    (.addEventListener channel "message" listener)
@@ -252,8 +253,8 @@
                                                                            :args args})))
                                                  (swap! *requests-in-flight assoc id {:method method
                                                                                       :args args
-                                                                                      :resolve resolve
-                                                                                      :reject reject})))))))))})
+                                                                                      :resolve-fn resolve-fn
+                                                                                      :reject-fn reject-fn})))))))))})
       :status status})))
 
 (defn broadcast-to-clients!
