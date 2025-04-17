@@ -391,3 +391,12 @@
                                     (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (file-sync/maybe-onboarding-show status)))))))
+
+(defmethod events/handle :file-sync/onboarding-tip [[_ type opts]]
+  (let [type (keyword type)]
+    (when-not (config/db-based-graph? (state/get-current-repo))
+      (shui/dialog-open!
+       (file-sync/make-onboarding-panel type)
+       (merge {:close-btn? false
+               :center? true
+               :close-backdrop? (not= type :welcome)} opts)))))
