@@ -12,7 +12,6 @@
 (defonce *provider? (atom false))
 (defonce *common-channel (atom nil))
 (defonce *client-channel (atom nil))
-(defonce *ready-resolve (atom nil))
 (defonce *requests-in-flight (atom {}))
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
 (defonce *client-id (atom nil))
@@ -78,7 +77,6 @@
   (p/do!
    (release-provider-lock!)
    (reset! *provider? false)
-   (reset! *ready-resolve nil)
    (when-let [^js channel @*common-channel]
      (.close channel))
    (when-let [^js channel @*client-channel]
@@ -110,160 +108,151 @@
 (defn ^:large-vars/cleanup-todo create-service
   [service-name target {:keys [on-provider-change]}]
   (p/do!
-    (clear-old-service!)
-    (let [common-channel (ensure-common-channel service-name)
-          on-not-provider (fn []
-                            (->
-                             (p/let [client-id (or @*client-id (get-client-id))]
-                               (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name client-id service-name)))
-                               (let [register (fn register []
-                                                (p/create
-                                                 (fn [resolve-fn _]
-                                                   (letfn [(listener [event]
-                                                             (let [{:keys [_providerId clientId type]} (bean/->clj (.-data event))]
-                                                               (when (and (= clientId client-id) (= type "registered"))
-                                                                 (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                                                                             (fn [_lock]
+   (clear-old-service!)
+   (let [status {:ready (p/deferred)}
+         common-channel (ensure-common-channel service-name)
+         on-not-provider (fn []
+                           (->
+                            (p/let [client-id (or @*client-id (get-client-id))]
+                              (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name client-id service-name)))
+                              (let [register (fn register []
+                                               (p/create
+                                                (fn [resolve-fn _]
+                                                  (letfn [(listener [event]
+                                                            (let [{:keys [_providerId clientId type]} (bean/->clj (.-data event))]
+                                                              (when (and (= clientId client-id) (= type "registered"))
+                                                                (js/navigator.locks.request service-name #js {:mode "exclusive"}
+                                                                                            (fn [_lock]
                                                                                                ;; The provider has gone, elect the new provider
-                                                                                               (prn :debug "Provider has gone")
-                                                                                               (reset! *provider? :re-check)))
-                                                                 (.removeEventListener common-channel "message" listener)
-                                                                 (resolve-fn nil))))]
-                                                     (.addEventListener common-channel "message" listener)
-                                                     (.postMessage common-channel #js {:type "register" :clientId client-id})))))]
-                                 (.addEventListener common-channel "message"
-                                                    (fn [event]
-                                                      (let [{:keys [type data]} (bean/->clj (.-data event))]
-                                                        (case type
-                                                          "providerChange"
-                                                          (do
-                                                            (js/console.log "Provider change detected. Re-registering...")
-                                                            (register)
-                                                            (when (seq @*requests-in-flight)
-                                                              (js/console.log "Requests were in flight when provider changed. Requeuing...")
-                                                              (p/all (map
-                                                                      (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                                                                        (let [listener (get-on-request-listener id resolve-fn reject-fn)]
-                                                                          (when-let [channel @*client-channel]
-                                                                            (.addEventListener channel "message" listener)
-                                                                            (.postMessage channel (bean/->js {:id id
-                                                                                                              :type "request"
-                                                                                                              :method method
-                                                                                                              :args args})))))
-                                                                      @*requests-in-flight))))
+                                                                                              (prn :debug "Provider has gone")
+                                                                                              (reset! *provider? :re-check)))
+                                                                (.removeEventListener common-channel "message" listener)
+                                                                (resolve-fn nil))))]
+                                                    (.addEventListener common-channel "message" listener)
+                                                    (.postMessage common-channel #js {:type "register" :clientId client-id})))))]
+                                (.addEventListener common-channel "message"
+                                                   (fn [event]
+                                                     (let [{:keys [type data]} (bean/->clj (.-data event))]
+                                                       (case type
+                                                         "providerChange"
+                                                         (do
+                                                           (js/console.log "Provider change detected. Re-registering...")
+                                                           (register)
+                                                           (when (seq @*requests-in-flight)
+                                                             (js/console.log "Requests were in flight when provider changed. Requeuing...")
+                                                             (p/all (map
+                                                                     (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+                                                                       (let [listener (get-on-request-listener id resolve-fn reject-fn)]
+                                                                         (when-let [channel @*client-channel]
+                                                                           (.addEventListener channel "message" listener)
+                                                                           (.postMessage channel (bean/->js {:id id
+                                                                                                             :type "request"
+                                                                                                             :method method
+                                                                                                             :args args})))))
+                                                                     @*requests-in-flight))))
 
-                                                          "sync-db-changes"
-                                                          (worker-util/post-message :sync-db-changes (ldb/read-transit-str data))
+                                                         "sync-db-changes"
+                                                         (worker-util/post-message :sync-db-changes (ldb/read-transit-str data))
 
-                                                          nil))))
-                                 (p/do!
-                                   (register)
-                                   (when-let [resolve-fn @*ready-resolve]
-                                     (resolve-fn))
-                                   (reset! *ready-resolve nil))))
-                             (p/catch (fn [error]
-                                        (js/console.error error)))))
-
-          status {:ready (atom (p/create (fn [resolve-fn] (reset! *ready-resolve resolve-fn))))}
-          on-become-provider (fn [_re-elect?]
-                               (when (nil? @*ready-resolve)
-                                 (reset! (:ready status)
-                                         (p/create (fn [resolve-fn] (reset! *ready-resolve resolve-fn)))))
-                               (p/let [provider-id (or @*client-id (get-client-id))]
-                                 (prn :debug :become-provider provider-id :service service-name)
-                                 (.addEventListener
-                                  common-channel "message"
-                                  (fn [event]
-                                    (let [{:keys [clientId type]} (bean/->clj (.-data event))]
-                                      (when (= type "register")
-                                        (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name clientId service-name))]
-                                          (js/navigator.locks.request clientId #js {:mode "exclusive"}
-                                                                      (fn [_]
+                                                         nil))))
+                                (p/do!
+                                 (register)
+                                 (p/resolve! (:ready status)))))
+                            (p/catch (fn [error]
+                                       (js/console.error error)))))
+         on-become-provider (fn [_re-elect?]
+                              (p/let [provider-id (or @*client-id (get-client-id))]
+                                (prn :debug :become-provider provider-id :service service-name)
+                                (.addEventListener
+                                 common-channel "message"
+                                 (fn [event]
+                                   (let [{:keys [clientId type]} (bean/->clj (.-data event))]
+                                     (when (= type "register")
+                                       (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name clientId service-name))]
+                                         (js/navigator.locks.request clientId #js {:mode "exclusive"}
+                                                                     (fn [_]
                                                                         ;; The client has gone. Clean up
-                                                                        (.close client-channel)))
+                                                                       (.close client-channel)))
 
-                                          (.addEventListener client-channel "message"
-                                                             (fn [event]
-                                                               (let [{:keys [type method args id]} (bean/->clj (.-data event))]
-                                                                 (when (not= type "response")
-                                                                   (p/let [[result error] (p/catch
-                                                                                              (p/then (apply-target-f! target method args)
-                                                                                                      (fn [res] [res nil]))
-                                                                                              (fn [e] [nil (if (instance? js/Error e)
-                                                                                                             (bean/->clj e)
-                                                                                                             e)]))]
-                                                                     (.postMessage client-channel (bean/->js
-                                                                                                   {:id id
-                                                                                                    :type "response"
-                                                                                                    :result result
-                                                                                                    :error error
-                                                                                                    :method-key (first args)})))))))
-                                          (.postMessage common-channel (bean/->js {:type "registered"
-                                                                                   :clientId clientId
-                                                                                   :providerId provider-id
-                                                                                   :serviceName service-name})))))))
-                                 (.postMessage common-channel #js {:type "providerChange"
-                                                                   :providerId provider-id
-                                                                   :serviceName service-name})
-                                 (p/let [_ (when on-provider-change (on-provider-change service-name))
-                                         _ (when (seq @*requests-in-flight)
-                                             (js/console.log "Requests were in flight when tab became provider. Requeuing...")
-                                             (p/all (map
-                                                     (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                                                       (->
-                                                        (p/let [result (apply-target-f! target method args)]
-                                                          (resolve-fn result))
-                                                        (p/catch (fn [e]
-                                                                   (js/console.error "Error processing request" e)
-                                                                   (reject-fn e)))
-                                                        (p/finally (fn []
-                                                                     (swap! *requests-in-flight dissoc id)))))
-                                                     @*requests-in-flight)))]
+                                         (.addEventListener client-channel "message"
+                                                            (fn [event]
+                                                              (let [{:keys [type method args id]} (bean/->clj (.-data event))]
+                                                                (when (not= type "response")
+                                                                  (p/let [[result error] (p/catch
+                                                                                          (p/then (apply-target-f! target method args)
+                                                                                                  (fn [res] [res nil]))
+                                                                                          (fn [e] [nil (if (instance? js/Error e)
+                                                                                                         (bean/->clj e)
+                                                                                                         e)]))]
+                                                                    (.postMessage client-channel (bean/->js
+                                                                                                  {:id id
+                                                                                                   :type "response"
+                                                                                                   :result result
+                                                                                                   :error error
+                                                                                                   :method-key (first args)})))))))
+                                         (.postMessage common-channel (bean/->js {:type "registered"
+                                                                                  :clientId clientId
+                                                                                  :providerId provider-id
+                                                                                  :serviceName service-name})))))))
+                                (.postMessage common-channel #js {:type "providerChange"
+                                                                  :providerId provider-id
+                                                                  :serviceName service-name})
+                                (p/let [_ (when on-provider-change (on-provider-change service-name))
+                                        _ (when (seq @*requests-in-flight)
+                                            (js/console.log "Requests were in flight when tab became provider. Requeuing...")
+                                            (p/all (map
+                                                    (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+                                                      (->
+                                                       (p/let [result (apply-target-f! target method args)]
+                                                         (resolve-fn result))
+                                                       (p/catch (fn [e]
+                                                                  (js/console.error "Error processing request" e)
+                                                                  (reject-fn e)))
+                                                       (p/finally (fn []
+                                                                    (swap! *requests-in-flight dissoc id)))))
+                                                    @*requests-in-flight)))]
+                                  (p/resolve! (:ready status)))))
+         check-provider-f (fn [re-elect?]
+                            (check-provider? service-name {:on-become-provider #(on-become-provider re-elect?)
+                                                           :on-not-provider on-not-provider}))]
+     (check-provider-f false)
 
-                                   (when-let [resolve-fn @*ready-resolve]
-                                     (resolve-fn))
-                                   (reset! *ready-resolve nil))))
-          check-provider-f (fn [re-elect?]
-                             (check-provider? service-name {:on-become-provider #(on-become-provider re-elect?)
-                                                            :on-not-provider on-not-provider}))]
-      (check-provider-f false)
+     (add-watch *provider? :check-provider
+                (fn [_ _ _ new-value]
+                  (when (= new-value :re-check)
+                    (p/do!
+                     (p/delay 100)
+                     (check-provider-f true)))))
 
-      (add-watch *provider? :check-provider
-                 (fn [_ _ _ new-value]
-                   (when (= new-value :re-check)
-                     (p/do!
-                       (p/delay 100)
-                       (check-provider-f true)))))
-
-      {:proxy (js/Proxy. target
-                         #js {:get (fn [target method]
-                                     (cond
-                                       (#{:then :catch :finally} (keyword method))
+     {:proxy (js/Proxy. target
+                        #js {:get (fn [target method]
+                                    (cond
+                                      (#{:then :catch :finally} (keyword method))
                                        ;; Return nil for these methods to allow promise chaining to work correctly
-                                       nil
+                                      nil
 
-                                       :else
-                                       (fn [args]
-                                         (let [provider? @*provider?]
-                                           (if provider?
-                                             (apply-target-f! target method args)
-                                             (p/create
-                                              (fn [resolve-fn reject-fn]
-                                                (let [id (random-id)
-                                                      listener (get-on-request-listener id resolve-fn reject-fn)
-                                                      channel @*client-channel]
-                                                  (when channel
-                                                    (.addEventListener channel "message" listener)
-                                                    (.postMessage channel (bean/->js
-                                                                           {:id id
-                                                                            :type "request"
-                                                                            :method method
-                                                                            :args args})))
-                                                  (swap! *requests-in-flight assoc id {:method method
-                                                                                       :args args
-                                                                                       :resolve-fn resolve-fn
-                                                                                       :reject-fn reject-fn})))))))))})
-       :status status})))
+                                      :else
+                                      (fn [args]
+                                        (let [provider? @*provider?]
+                                          (if provider?
+                                            (apply-target-f! target method args)
+                                            (p/create
+                                             (fn [resolve-fn reject-fn]
+                                               (let [id (random-id)
+                                                     listener (get-on-request-listener id resolve-fn reject-fn)
+                                                     channel @*client-channel]
+                                                 (when channel
+                                                   (.addEventListener channel "message" listener)
+                                                   (.postMessage channel (bean/->js
+                                                                          {:id id
+                                                                           :type "request"
+                                                                           :method method
+                                                                           :args args})))
+                                                 (swap! *requests-in-flight assoc id {:method method
+                                                                                      :args args
+                                                                                      :resolve-fn resolve-fn
+                                                                                      :reject-fn reject-fn})))))))))})
+      :status status})))
 
 (defn broadcast-to-clients!
   [payload]

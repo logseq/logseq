@@ -851,6 +851,7 @@
     (p/let [service (shared-service/create-service graph
                                                    (bean/->js fns)
                                                    {:on-provider-change #(on-become-provider graph)})]
+      (assert (p/promise? (get-in service [:status :ready])))
       (reset! *service [graph service])
       service)))
 
@@ -877,7 +878,7 @@
 
                                       :else
                                       ;; ensure service is ready
-                                      (p/let [_ready-value @(get-in service [:status :ready])]
+                                      (p/let [_ready-value (get-in service [:status :ready])]
                                         (js-invoke (:proxy service) k args)))))]))
                       (into {})
                       bean/->js)]
