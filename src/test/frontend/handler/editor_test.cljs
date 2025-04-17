@@ -82,8 +82,10 @@
   (state/set-editor-action! action)
   ;; Default cursor pos to end of line
   (let [pos (or cursor-pos (count value))
-        input #js {:value value}]
-    (with-redefs [editor/get-matched-commands (constantly commands)
+        input #js {:value value}
+        command (subs value 1)]
+    (with-redefs [editor/get-last-command (constantly command)
+                  editor/get-matched-commands (constantly commands)
                   ;; Ignore as none of its behaviors are tested
                   editor/default-case-for-keyup-handler (constantly nil)
                   cursor/pos (constantly pos)]
@@ -93,17 +95,24 @@
 
 (deftest keyup-handler-test
   (testing "Command autocompletion"
-    (keyup-handler {:value "/b"
+    ;; default last matching command is ""
+    (keyup-handler {:value "/z"
                     :action :commands
-                    :commands [:fake-command]})
+                    :commands []})
     (is (= :commands (state/get-editor-action))
-        "Completion stays open if there is a matching command")
+        "Completion stays open if no matches but differs by 1 character from last matching command")
 
     (keyup-handler {:value "/zz"
                     :action :commands
                     :commands []})
     (is (= nil (state/get-editor-action))
         "Completion closed if there no matching commands")
+
+    (keyup-handler {:value "/b"
+                    :action :commands
+                    :commands [:fake-command]})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if there is a matching command")
 
     (keyup-handler {:value "/ " :action :commands})
     (is (= nil (state/get-editor-action))
