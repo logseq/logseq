@@ -296,6 +296,7 @@
           (let [heading (str "Heading " level)]
             [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
 
+(defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
@@ -471,12 +472,18 @@
 (defn init-commands!
   [get-page-ref-text]
   (let [commands (commands-map get-page-ref-text)]
+    (reset! *latest-matched-command "")
     (reset! *initial-commands commands)
     (reset! *matched-commands commands)))
 
+(defn set-matched-commands!
+  [command matched-commands]
+  (reset! *latest-matched-command command)
+  (reset! *matched-commands matched-commands))
+
 (defn reinit-matched-commands!
   []
-  (reset! *matched-commands @*initial-commands))
+  (set-matched-commands! "" @*initial-commands))
 
 (defn restore-state
   []
