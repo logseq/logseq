@@ -11,7 +11,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.common :as common-handler]
