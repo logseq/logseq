@@ -116,22 +116,23 @@
 (defn- on-become-slave
   [slave-client-id service-name common-channel status-ready-deferred-p]
   (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name)))
-  (let [register (fn register []
-                   (p/create
-                    (fn [resolve-fn _]
-                      (letfn [(listener [event]
-                                (let [{:keys [_master-client-id type]
-                                       slave-client-id* :slave-client-id} (bean/->clj (.-data event))]
-                                  (when (and (= slave-client-id* slave-client-id) (= type "slave-registered"))
-                                    (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                                                (fn [_lock]
-                                                                  ;; The master has gone, elect the new master
-                                                                  (prn :debug "master has gone")
-                                                                  (reset! *master-client? :re-check)))
-                                    (.removeEventListener common-channel "message" listener)
-                                    (resolve-fn nil))))]
-                        (.addEventListener common-channel "message" listener)
-                        (.postMessage common-channel #js {:type "slave-register" :slave-client-id slave-client-id})))))]
+  (let [register
+        (fn register []
+          (p/create
+           (fn [resolve-fn _]
+             (letfn [(listener [event]
+                       (let [{:keys [_master-client-id type]
+                              slave-client-id* :slave-client-id} (bean/->clj (.-data event))]
+                         (when (and (= slave-client-id* slave-client-id) (= type "slave-registered"))
+                           (js/navigator.locks.request service-name #js {:mode "exclusive"}
+                                                       (fn [_lock]
+                                                         ;; The master has gone, elect the new master
+                                                         (prn :debug "master has gone")
+                                                         (reset! *master-client? :re-check)))
+                           (.removeEventListener common-channel "message" listener)
+                           (resolve-fn nil))))]
+               (.addEventListener common-channel "message" listener)
+               (.postMessage common-channel #js {:type "slave-register" :slave-client-id slave-client-id})))))]
     (.addEventListener common-channel "message"
                        (fn [event]
                          (let [{:keys [type data]} (bean/->clj (.-data event))]
@@ -166,57 +167,57 @@
 
 (defn- on-become-master
   [master-client-id service-name common-channel target on-become-master-handler status-ready-deferred-p]
-  (p/do!
-   (prn :debug :become-master master-client-id :service service-name)
-   (.addEventListener
-    common-channel "message"
-    (fn [event]
-      (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
-        (when (= type "slave-register")
-          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
-            (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
-                                        (fn [_]
-                                           ;; The client has gone. Clean up
-                                          (.close client-channel)))
+  (prn :debug :become-master master-client-id :service service-name)
+  (.addEventListener
+   common-channel "message"
+   (fn [event]
+     (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
+       (when (= type "slave-register")
+         (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
+           (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
+                                       (fn [_]
+                                         ;; The client has gone. Clean up
+                                         (.close client-channel)))
 
-            (.addEventListener client-channel "message"
-                               (fn [event]
-                                 (let [{:keys [type method args id]} (bean/->clj (.-data event))]
-                                   (when (not= type "response")
-                                     (p/let [[result error] (p/catch
-                                                             (p/then (apply-target-f! target method args)
-                                                                     (fn [res] [res nil]))
-                                                             (fn [e] [nil (if (instance? js/Error e)
-                                                                            (bean/->clj e)
-                                                                            e)]))]
-                                       (.postMessage client-channel (bean/->js
-                                                                     {:id id
-                                                                      :type "response"
-                                                                      :result result
-                                                                      :error error
-                                                                      :method-key (first args)})))))))
-            (.postMessage common-channel (bean/->js {:type "slave-registered"
-                                                     :slave-client-id slave-client-id
-                                                     :master-client-id master-client-id
-                                                     :serviceName service-name})))))))
-   (.postMessage common-channel #js {:type "master-changed"
-                                     :master-client-id master-client-id
-                                     :serviceName service-name})
-   (p/let [_  (on-become-master-handler service-name)
-           _ (when (seq @*requests-in-flight)
-               (js/console.log "Requests were in flight when tab became master. Requeuing...")
-               (p/all (map
-                       (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                         (->
-                          (p/let [result (apply-target-f! target method args)]
-                            (resolve-fn result))
-                          (p/catch (fn [e]
-                                     (js/console.error "Error processing request" e)
-                                     (reject-fn e)))
-                          (p/finally (fn []
-                                       (swap! *requests-in-flight dissoc id)))))
-                       @*requests-in-flight)))]
-     (p/resolve! status-ready-deferred-p))))
+           (.addEventListener client-channel "message"
+                              (fn [event]
+                                (let [{:keys [type method args id]} (bean/->clj (.-data event))]
+                                  (when (not= type "response")
+                                    (p/let [[result error] (p/catch
+                                                            (p/then (apply-target-f! target method args)
+                                                                    (fn [res] [res nil]))
+                                                            (fn [e] [nil (if (instance? js/Error e)
+                                                                           (bean/->clj e)
+                                                                           e)]))]
+                                      (.postMessage client-channel (bean/->js
+                                                                    {:id id
+                                                                     :type "response"
+                                                                     :result result
+                                                                     :error error
+                                                                     :method-key (first args)})))))))
+           (.postMessage common-channel (bean/->js {:type "slave-registered"
+                                                    :slave-client-id slave-client-id
+                                                    :master-client-id master-client-id
+                                                    :serviceName service-name})))))))
+  (.postMessage common-channel #js {:type "master-changed"
+                                    :master-client-id master-client-id
+                                    :serviceName service-name})
+  (p/do!
+   (on-become-master-handler service-name)
+   (when (seq @*requests-in-flight)
+     (js/console.log "Requests were in flight when tab became master. Requeuing...")
+     (p/all (map
+             (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+               (->
+                (p/let [result (apply-target-f! target method args)]
+                  (resolve-fn result))
+                (p/catch (fn [e]
+                           (js/console.error "Error processing request" e)
+                           (reject-fn e)))
+                (p/finally (fn []
+                             (swap! *requests-in-flight dissoc id)))))
+             @*requests-in-flight)))
+   (p/resolve! status-ready-deferred-p)))
 
 (defn create-service
   [service-name target on-become-master-handler]
