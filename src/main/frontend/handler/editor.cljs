@@ -3212,7 +3212,7 @@
                   matched-commands (get-matched-commands command)]
               (if (seq matched-commands)
                 (commands/set-matched-commands! command matched-commands)
-                (if (> (- (count command) (count @commands/*latest-matched-command)) 1)
+                (if (> (- (count command) (count @commands/*latest-matched-command)) 2)
                   (state/clear-editor-action!)
                   (reset! commands/*matched-commands nil)))))
 

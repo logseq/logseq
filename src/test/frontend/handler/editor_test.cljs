@@ -93,20 +93,26 @@
        #js {:key (subs value (dec (count value)))}
        nil))))
 
-(deftest keyup-handler-test
+(deftest ^:focus keyup-handler-test
   (testing "Command autocompletion"
     ;; default last matching command is ""
     (keyup-handler {:value "/z"
                     :action :commands
                     :commands []})
     (is (= :commands (state/get-editor-action))
-        "Completion stays open if no matches but differs by 1 character from last matching command")
+        "Completion stays open if no matches but differs from last success by <= 2 chars")
 
     (keyup-handler {:value "/zz"
                     :action :commands
                     :commands []})
+    (is (= :commands (state/get-editor-action))
+        "Completion stays open if no matches but differs from last success by <= 2 chars")
+
+    (keyup-handler {:value "/zzz"
+                    :action :commands
+                    :commands []})
     (is (= nil (state/get-editor-action))
-        "Completion closed if there no matching commands")
+        "Completion closed if no matches and > 2 chars form last success")
 
     (keyup-handler {:value "/b"
                     :action :commands
