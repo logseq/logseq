@@ -1224,7 +1224,8 @@
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
-        [item set-item!] (hooks/use-state nil)
+        block (some-> db-id db/entity)
+        [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block) block))
         opts (if list-view?
                {:skip-refresh? true
                 :children? false}
@@ -1255,7 +1256,7 @@
                                 (gdom/getElement "main-content-container"))
         :compute-item-key (fn [idx]
                             (let [block-id (util/nth-safe rows idx)]
-                              (str "table-row-" (:group-idx option) "-" block-id)))
+                              (str "table-row-" block-id)))
         :skipAnimationFrameInResizeObserver true
         :total-count (count rows)
         :context {:scrolling scrolling?}
@@ -1302,8 +1303,8 @@
                       :compute-item-key (fn [idx]
                                           (let [block-id (util/nth-safe rows idx)]
                                             (str "list-row-" block-id)))
-                      ;; :skipAnimationFrameInResizeObserver true
                       :total-count (count rows)
+                      :skipAnimationFrameInResizeObserver true
                       :item-content (fn [idx] (lazy-item-render rows idx))})))
         breadcrumb (state/get-component :block/breadcrumb)
         all-numbers? (every? number? rows)]
@@ -1343,6 +1344,7 @@
         {:ref #(reset! *scroller-ref %)
          :total-count (count blocks)
          :custom-scroll-parent (gdom/getElement "main-content-container")
+         :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
                              (str (:db/id view-entity) "-card-" idx))
          :item-content (fn [idx]
@@ -1698,52 +1700,45 @@
                         :add-new-object! add-new-object!}]
          (if (and group-by-property-ident (not (number? (first (:rows table)))))
            (when (seq (:rows table))
-             [:div.flex.flex-col.border-t.pt-2
-              (ui/virtualized-list
-               {:class (when list-view? "group-list-view")
-                :custom-scroll-parent (gdom/getElement "main-content-container")
-                :increase-viewport-by {:top 300 :bottom 300}
-                :compute-item-key (fn [idx]
-                                    (str "table-group-" idx))
-                :skipAnimationFrameInResizeObserver true
-                :total-count (count (:rows table))
-                :item-content (fn [idx]
-                                (let [[value group] (nth (:rows table) idx)
-                                      add-new-object! (when (fn? add-new-object!)
-                                                        (fn [_]
-                                                          (add-new-object! view-entity table
-                                                                           {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                                      table' (shui/table-option (-> table-map
-                                                                    (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                                    (assoc :data group ; data for this group
-                                                                           )))
-                                      readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                                 (db-property/property-value-content %)
-                                                                 (str %))
-                                      group-by-page? (or (= :block/page group-by-property-ident)
-                                                         (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
-                                  (rum/with-key
-                                    (ui/foldable
-                                     [:div
-                                      (cond
-                                        group-by-page?
-                                        (if value
-                                          (let [c (state/get-component :block/page-cp)]
-                                            (c {:disable-preview? true} value))
-                                          [:div.text-muted-foreground.text-sm
-                                           "Pages"])
+             [:div.flex.flex-col.border-t.pt-2.gap-2
+              (map-indexed
+               (fn [idx [value group]]
+                 (let [add-new-object! (when (fn? add-new-object!)
+                                         (fn [_]
+                                           (add-new-object! view-entity table
+                                                            {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                       table' (shui/table-option (-> table-map
+                                                     (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                     (assoc :data group ; data for this group
+                                                            )))
+                       readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                  (db-property/property-value-content %)
+                                                  (str %))
+                       group-by-page? (or (= :block/page group-by-property-ident)
+                                          (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
+                   (rum/with-key
+                     (ui/foldable
+                      [:div
+                       (cond
+                         group-by-page?
+                         (if value
+                           (let [c (state/get-component :block/page-cp)]
+                             (c {:disable-preview? true} value))
+                           [:div.text-muted-foreground.text-sm
+                            "Pages"])
 
-                                        (some? value)
-                                        (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                                          [:div.flex.flex-row.gap-1.items-center
-                                           (when icon (icon-component/icon icon {:color? true}))
-                                           (readable-property-value value)])
-                                        :else
-                                        (str "No " (:block/title group-by-property)))]
-                                     (let [render (view-cp view-entity (assoc table' :rows group :group-idx idx) option view-opts)]
-                                       (if list-view? [:div.-ml-2 render] render))
-                                     {:title-trigger? false})
-                                    (str "group-" idx))))})])
+                         (some? value)
+                         (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                           [:div.flex.flex-row.gap-1.items-center
+                            (when icon (icon-component/icon icon {:color? true}))
+                            (readable-property-value value)])
+                         :else
+                         (str "No " (:block/title group-by-property)))]
+                      (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                        (if list-view? [:div.-ml-2 render] render))
+                      {:title-trigger? false})
+                     (str (:db/id view-entity) "-group-idx-" idx))))
+               (:rows table))])
            (view-cp view-entity table option view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
