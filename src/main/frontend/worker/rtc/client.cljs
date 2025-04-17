@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
@@ -64,7 +65,10 @@
           (let [{:keys [max-remote-schema-version]}
                 (m/?
                  (c.m/backoff
-                  (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
+                  {:delay-seq
+                   ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
+                   (take 5 (drop 2 c.m/delays))
+                   :reset-flow worker-flows/online-event-flow}
                   (new-task--register-graph-updates get-ws-create-task graph-uuid major-schema-version repo)))]
             (when max-remote-schema-version
               (add-log-fn :rtc.log/higher-remote-schema-version-exists

@@ -659,8 +659,10 @@
                                (if (:logseq.property/classes m)
                                  (update m :logseq.property/classes
                                          (fn [cs]
-                                           (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
-                                                      (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))
+                                           (mapv #(if (db-class/logseq-class? (:db/ident %))
+                                                    %
+                                                    (or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
+                                                        (throw (ex-info (str "No :db/id found for :db/ident " (pr-str %)) {}))))
                                                  cs)))
                                  m))
                              properties-tx)

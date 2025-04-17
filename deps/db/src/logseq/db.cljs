@@ -1,19 +1,19 @@
 (ns logseq.db
-  "Main namespace for public db fns. For DB and file graphs.
-   For shared file graph only fns, use logseq.graph-parser.db"
+  "Main namespace for db fns that handles DB and file graphs. For db graph only
+  fns, use logseq.db.frontend.db and for file graph only fns, use
+  logseq.graph-parser.db"
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
-            [logseq.common.util.namespace :as ns-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -412,11 +412,6 @@
   []
   (common-uuid/gen-uuid))
 
-(defn get-classes-with-property
-  "Get classes which have given property as a class property"
-  [db property-id]
-  (:logseq.property.class/_properties (d/entity db property-id)))
-
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
   [db alias-id]
@@ -492,37 +487,13 @@
                e))))))
 
 (def built-in? entity-util/built-in?)
-
-(defn built-in-class-property?
-  "Whether property a built-in property for the specific class"
-  [class-entity property-entity]
-  (and (built-in? class-entity)
-       (class? class-entity)
-       (built-in? property-entity)
-       (contains? (set (get-in (db-class/built-in-classes (:db/ident class-entity)) [:schema :properties]))
-                  (:db/ident property-entity))))
-
-(defn private-built-in-page?
-  "Private built-in pages should not be navigable or searchable by users. Later it
-   could be useful to use this for the All Pages view"
-  [page]
-  (cond (property? page)
-        (not (public-built-in-property? page))
-        (or (class? page) (internal-page? page))
-        false
-        ;; Default to true for closed value and future internal types.
-        ;; Other types like whiteboard are not considered because they aren't built-in
-        :else
-        true))
+(def get-classes-with-property db-db/get-classes-with-property)
+(def built-in-class-property? db-db/built-in-class-property?)
+(def private-built-in-page? db-db/private-built-in-page?)
 
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
-
-(defn build-favorite-tx
-  "Builds tx for a favorite block in favorite page"
-  [favorite-uuid]
-  {:block/link [:block/uuid favorite-uuid]
-   :block/title ""})
+(def build-favorite-tx db-db/build-favorite-tx)
 
 (defn get-key-value
   [db key-ident]
@@ -544,86 +515,19 @@
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
-(defn get-all-properties
-  [db]
-  (->> (d/datoms db :avet :block/tags :logseq.class/Property)
-       (map (fn [d]
-              (d/entity db (:e d))))))
-
-(defn get-page-parents
-  [node & {:keys [node-class?]}]
-  (when-let [parent (:logseq.property/parent node)]
-    (loop [current-parent parent
-           parents' []]
-      (if (and
-           current-parent
-           (if node-class? (class? current-parent) true)
-           (not (contains? parents' current-parent)))
-        (recur (:logseq.property/parent current-parent)
-               (conj parents' current-parent))
-        (vec (reverse parents'))))))
-
-(defn get-title-with-parents
-  [entity]
-  (if (or (entity-util/class? entity) (entity-util/internal-page? entity))
-    (let [parents' (->> (get-page-parents entity)
-                        (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                        vec)]
-      (string/join
-       ns-util/parent-char
-       (map :block/title (conj (vec parents') entity))))
-    (:block/title entity)))
-
-(defn get-classes-parents
-  [tags]
-  (let [tags' (filter class? tags)
-        result (mapcat #(get-page-parents % {:node-class? true}) tags')]
-    (set result)))
-
-(defn class-instance?
-  "Whether `object` is an instance of `class`"
-  [class object]
-  (let [tags (:block/tags object)
-        tags-ids (set (map :db/id tags))]
-    (or
-     (contains? tags-ids (:db/id class))
-     (let [class-parent-ids (set (map :db/id (get-classes-parents tags)))]
-       (contains? (set/union class-parent-ids tags-ids) (:db/id class))))))
-
-(defn inline-tag?
-  [block-raw-title tag]
-  (assert (string? block-raw-title) "block-raw-title should be a string")
-  (string/includes? block-raw-title (str "#" (page-ref/->page-ref (:block/uuid tag)))))
-
-(defonce node-display-type-classes
-  #{:logseq.class/Code-block :logseq.class/Math-block :logseq.class/Quote-block})
-
-(defn get-class-ident-by-display-type
-  [display-type]
-  (case display-type
-    :code :logseq.class/Code-block
-    :math :logseq.class/Math-block
-    :quote :logseq.class/Quote-block
-    nil))
-
-(defn get-display-type-by-class-ident
-  [class-ident]
-  (case class-ident
-    :logseq.class/Code-block :code
-    :logseq.class/Math-block :math
-    :logseq.class/Quote-block :quote
-    nil))
+(def get-all-properties db-db/get-all-properties)
+(def get-page-parents db-db/get-page-parents)
+(def get-classes-parents db-db/get-classes-parents)
+(def get-title-with-parents db-db/get-title-with-parents)
+(def class-instance? db-db/class-instance?)
+(def inline-tag? db-db/inline-tag?)
+(def node-display-type-classes db-db/node-display-type-classes)
+(def get-class-ident-by-display-type db-db/get-class-ident-by-display-type)
+(def get-display-type-by-class-ident db-db/get-display-type-by-class-ident)
 
 (def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
 
 (def get-latest-journals sqlite-common-db/get-latest-journals)
-
-(defn get-all-namespace-relation
-  [db]
-  (d/q '[:find ?page ?parent
-         :where
-         [?page :block/namespace ?parent]]
-       db))
 
 (defn get-pages-relation
   [db with-journal?]

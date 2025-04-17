@@ -36,7 +36,11 @@
                        :auth/access-token nil
                        :auth/refresh-token nil
 
-                       :rtc/downloading-graph? false}))
+                       :rtc/downloading-graph? false
+
+                       ;; thread atoms, these atoms' value are syncing from ui-thread
+                       :thread-atom/online-event (atom nil)
+                       }))
 
 (defonce *rtc-ws-url (atom nil))
 

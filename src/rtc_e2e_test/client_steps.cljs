@@ -44,7 +44,7 @@
        (is (nil? r)))
      (m/?
       (c.m/backoff
-       (take 4 c.m/delays)
+       {}
        (m/sp
          (let [conn (helper/get-downloaded-test-conn)
                page1 (d/pull @conn '[*] [:block/uuid const/page1-uuid])
@@ -72,7 +72,7 @@
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
-    (take 4 c.m/delays)
+    {}
     (m/sp
       (let [conn (helper/get-downloaded-test-conn)
             page (d/pull @conn '[*] [:block/uuid const/page2-uuid])]
@@ -107,7 +107,7 @@
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
-    (take 4 c.m/delays)
+    {}
     (m/sp
       (let [conn (helper/get-downloaded-test-conn)
             block1 (d/pull @conn
@@ -231,7 +231,7 @@ client2:
        (m/? (helper/new-task--client2-sync-barrier-1->2 "step6"))
        (m/?
         (c.m/backoff
-         (take 4 c.m/delays)
+         {}
          (m/sp
            (let [page (d/pull @conn '[*] [:block/uuid const/step6-page-uuid])
                  page-blocks (when-let [page-id (:db/id page)]

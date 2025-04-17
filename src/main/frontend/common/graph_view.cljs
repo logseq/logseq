@@ -79,7 +79,7 @@
   (let [dark? (= "dark" theme)
         relation (ldb/get-pages-relation db journal?)
         tagged-pages (ldb/get-all-tagged-pages db)
-        namespaces (ldb/get-all-namespace-relation db)
+        namespaces (gp-db/get-all-namespace-relation db)
         tags (set (map second tagged-pages))
         full-pages (ldb/get-all-pages db)
         db-based? (entity-plus/db-based-graph? db)
@@ -178,7 +178,7 @@
         tags (set (remove #(= page-id %) tags))
         ref-pages (get-page-referenced-pages db page-id)
         mentioned-pages (get-pages-that-mentioned-page db page-id show-journal)
-        namespaces (ldb/get-all-namespace-relation db)
+        namespaces (gp-db/get-all-namespace-relation db)
         links (concat
                namespaces
                (map (fn [ref-page]
@@ -216,7 +216,7 @@
                                  (if (ldb/page? b) b (:block/page b))))
                           (remove (fn [node] (= (:db/id block) (:db/id node))))
                           (common-util/distinct-by :db/id))
-          namespaces (ldb/get-all-namespace-relation db)
+          namespaces (gp-db/get-all-namespace-relation db)
           links (->> (concat
                       namespaces
                       (map (fn [p] [(:db/id block) (:db/id p)]) ref-blocks))
