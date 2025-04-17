@@ -93,7 +93,7 @@
        #js {:key (subs value (dec (count value)))}
        nil))))
 
-(deftest ^:focus keyup-handler-test
+(deftest keyup-handler-test
   (testing "Command autocompletion"
     ;; default last matching command is ""
     (keyup-handler {:value "/z"
