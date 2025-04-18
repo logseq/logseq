@@ -21,7 +21,7 @@
 
 ;;; record channel-listener here, to able to remove old listener before we addEventListener new one
 (defonce *common-channel-listener (atom nil))
-;;(defonce *client-channel-listener (atom nil))
+(defonce *client-channel-listener (atom nil))
 
 (defonce *requests-in-flight (atom {}))
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
@@ -95,6 +95,8 @@
      (.close channel))
    (reset! *common-channel nil)
    (reset! *client-channel nil)
+   (reset! *common-channel-listener nil)
+   (reset! *client-channel-listener nil)
    (reset! *requests-in-flight {})))
 
 (defn- get-on-request-listener
@@ -110,6 +112,35 @@
                   (resolve-fn result)))))]
     listener))
 
+(defn- on-response-handler
+  [event]
+  (let [{:keys [id type error result]} (bean/->clj (.-data event))]
+    (when (identical? "response" type)
+      (when-let [{:keys [resolve-fn reject-fn]} (get @*requests-in-flight id)]
+        (if error
+          (do (log/error :error-process-request error)
+              (reject-fn error))
+          (resolve-fn result))))))
+
+(defn- create-on-request-handler
+  [client-channel target]
+  (fn [event]
+    (let [{:keys [type method args id]} (bean/->clj (.-data event))]
+      (when (identical? "request" type)
+        (p/let [[result error]
+                (-> (p/then (apply-target-f! target method args)
+                            (fn [res] [res nil]))
+                    (p/catch
+                     (fn [e] [nil (if (instance? js/Error e)
+                                    (bean/->clj e)
+                                    e)])))]
+          (.postMessage client-channel (bean/->js
+                                        {:id id
+                                         :type "response"
+                                         :result result
+                                         :error error
+                                         :method-key (first args)})))))))
+
 (defn- ensure-common-channel
   [service-name]
   (or @*common-channel
@@ -123,6 +154,13 @@
     (.removeEventListener common-channel "message" old-listener))
   (reset! *common-channel-listener listener-fn)
   (.addEventListener common-channel "message" listener-fn))
+
+(defn- listen-client-channel
+  [client-channel listener-fn]
+  (when-let [old-listener @*client-channel-listener]
+    (.removeEventListener client-channel "message" old-listener))
+  (reset! *client-channel-listener listener-fn)
+  (.addEventListener client-channel "message" listener-fn))
 
 (defn- slave-registered-handler
   [service-name slave-client-id event *register-finish-promise?]
@@ -193,23 +231,7 @@
                                        (fn [_]
                                                            ;; The client has gone. Clean up
                                          (.close client-channel)))
-
-           (.addEventListener client-channel "message"
-                              (fn [event]
-                                (let [{:keys [type method args id]} (bean/->clj (.-data event))]
-                                  (when (not= type "response")
-                                    (p/let [[result error] (p/catch
-                                                            (p/then (apply-target-f! target method args)
-                                                                    (fn [res] [res nil]))
-                                                            (fn [e] [nil (if (instance? js/Error e)
-                                                                           (bean/->clj e)
-                                                                           e)]))]
-                                      (.postMessage client-channel (bean/->js
-                                                                    {:id id
-                                                                     :type "response"
-                                                                     :result result
-                                                                     :error error
-                                                                     :method-key (first args)})))))))
+           (listen-client-channel client-channel (create-on-request-handler client-channel target))
            (.postMessage common-channel (bean/->js {:type "slave-registered"
                                                     :slave-client-id slave-client-id
                                                     :master-client-id master-client-id
