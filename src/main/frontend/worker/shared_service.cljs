@@ -24,7 +24,7 @@
 (defonce *client-channel-listener (atom nil))
 
 (defonce *current-request-id (volatile! 0))
-(defonce *requests-in-flight (volatile! (sorted-map)))
+(defonce *requests-in-flight (volatile! (sorted-map))) ;sort by request-id
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
 (defonce *client-id (atom nil))
 (defonce *master-client-lock (atom nil))
@@ -101,29 +101,32 @@
   "Check if the current client is the master (otherwise, it is a slave)"
   [service-name on-become-master on-become-slave]
   (p/let [client-id (ensure-client-id)]
-    (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
-                                (fn [lock]
-                                  (p/let [^js locks (js/navigator.locks.query)
-                                          locked? (some #(when (and (= (.-name %) service-name)
-                                                                    (= (.-clientId %) client-id))
-                                                           true)
-                                                        (.-held locks))]
-                                    (cond
-                                      (and locked? lock) ;become master
-                                      (p/do!
-                                       (reset! *master-client? true)
-                                       (on-become-master)
-                                       (reset! *master-client-lock (p/deferred))
-                                        ;; Keep lock until context destroyed
-                                       @*master-client-lock)
+    (do
+      ;; don't wait this locks.request
+      (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
+                                  (fn [lock]
+                                    (p/let [^js locks (js/navigator.locks.query)
+                                            locked? (some #(when (and (= (.-name %) service-name)
+                                                                      (= (.-clientId %) client-id))
+                                                             true)
+                                                          (.-held locks))]
+                                      (cond
+                                        (and locked? lock) ;become master
+                                        (p/do!
+                                         (reset! *master-client? true)
+                                         (on-become-master)
+                                         (reset! *master-client-lock (p/deferred))
+                                          ;; Keep lock until context destroyed
+                                         @*master-client-lock)
 
-                                      (and locked? (nil? lock)) ;already locked by this client, do nothing
-                                      (assert (true? @*master-client?))
+                                        (and locked? (nil? lock)) ;already locked by this client, do nothing
+                                        (assert (true? @*master-client?))
 
-                                      (not locked?) ;become slave
-                                      (p/do!
-                                       (reset! *master-client? false)
-                                       (on-become-slave))))))))
+                                        (not locked?) ;become slave
+                                        (p/do!
+                                         (reset! *master-client? false)
+                                         (on-become-slave))))))
+      nil)))
 
 (defn- clear-old-service!
   []
