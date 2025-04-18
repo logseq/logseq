@@ -5,14 +5,14 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-;; TODO:
-
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
 
 (log/set-level 'frontend.worker.shared-service :debug)
 
 (defonce *master-client? (atom false))
+
+(defonce *master-re-check-trigger (atom nil))
 
 ;;; common-channel - Communication related to master-client election.
 ;;; client-channel - For API request-response data communication.
@@ -188,7 +188,7 @@
                                       (fn [_lock]
                                         ;; The master has gone, elect the new master
                                         (log/debug "master has gone" nil)
-                                        (reset! *master-client? :re-check)))))
+                                        (reset! *master-re-check-trigger :re-check)))))
       (p/resolve! @*register-finish-promise?))))
 
 (defn- <re-requests-in-flight-on-slave!
@@ -289,7 +289,7 @@
           common-channel (ensure-common-channel service-name)
           client-id (ensure-client-id)
           check-master-slave-fn!
-          (fn [_re-elect?]
+          (fn []
             (check-master-or-slave-client!
              service-name
              #(on-become-master
@@ -297,14 +297,14 @@
                on-become-master-handler (:ready status))
              #(on-become-slave
                client-id service-name common-channel (:ready status))))]
-    (check-master-slave-fn! false)
+    (check-master-slave-fn!)
 
-    (add-watch *master-client? :check-master
+    (add-watch *master-re-check-trigger :check-master
                (fn [_ _ _ new-value]
                  (when (= new-value :re-check)
                    (p/do!
-                    (p/delay 100)
-                    (check-master-slave-fn! true)))))
+                    (p/delay 100)     ; why need delay here?
+                    (check-master-slave-fn!)))))
 
     {:proxy (js/Proxy. target
                        #js {:get (fn [target method]

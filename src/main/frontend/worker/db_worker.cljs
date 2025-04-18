@@ -873,9 +873,9 @@
                                   (let [[_graph service] @*service
                                         method-k (keyword (first args))]
                                     (cond
-                                      (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
-                                          (nil? service)
-                                          @shared-service/*master-client?)
+                                      (or @shared-service/*master-client?
+                                          (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
+                                          (nil? service))
                                       (apply f args)
 
                                       :else
