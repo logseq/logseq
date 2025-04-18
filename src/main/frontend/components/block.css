@@ -1008,10 +1008,12 @@ html.is-mac {
   height: 18px;
 }
 
+.ls-small-icon svg {
+    width: 12px;
+    height: 12px;
+}
 .ls-type-warning svg {
   color: var(--rx-gray-09);
-  width: 12px;
-  height: 12px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
