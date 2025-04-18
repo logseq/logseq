@@ -1,7 +1,6 @@
 (ns frontend.handler.file-based.events
   "Events that are only for file graphs"
   (:require [clojure.core.async :as async]
-            [clojure.core.async.interop :refer [p->c]]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.components.diff :as diff]
@@ -14,7 +13,6 @@
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.events :as events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
@@ -28,7 +26,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
-            [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.modules.shortcut.core :as st]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -164,37 +161,6 @@
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
 
-(defn- enable-beta-features!
-  []
-  (when-not (false? (state/enable-sync?)) ; user turns it off
-    (file-sync-handler/set-sync-enabled! true)))
-
-(defmethod events/handle :user/fetch-info-and-graphs [[_]]
-  (state/set-state! [:ui/loading? :login] false)
-  (async/go
-    (let [result (async/<! (sync/<user-info sync/remoteapi))]
-      (cond
-        (instance? ExceptionInfo result)
-        nil
-        (map? result)
-        (do
-          (state/set-user-info! result)
-          (when-let [uid (user-handler/user-uuid)]
-            (sentry-event/set-user! uid))
-          (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
-            (when (and (= status :welcome) (user-handler/logged-in?))
-              (enable-beta-features!)
-              (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (async/<! (file-sync-handler/load-session-graphs))
-              (p/let [repos (repo-handler/refresh-repos!)]
-                (when-let [repo (state/get-current-repo)]
-                  (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/<sync-start)))))
-            (file-sync/maybe-onboarding-show status)))))))
-
 (defmethod events/handle :graph/pull-down-remote-graph [[_ graph dir-name]]
   (if (mobile-util/native-ios?)
     (when-let [graph-name (or dir-name (:GraphName graph))]
@@ -233,15 +199,6 @@
   (shui/dialog-open!
    (file-sync/pick-page-histories-panel graph-uuid page-name)
    {:id :page-histories :label "modal-page-histories"}))
-
-(defmethod events/handle :file-sync/onboarding-tip [[_ type opts]]
-  (let [type (keyword type)]
-    (when-not (config/db-based-graph? (state/get-current-repo))
-      (shui/dialog-open!
-       (file-sync/make-onboarding-panel type)
-       (merge {:close-btn? false
-               :center? true
-               :close-backdrop? (not= type :welcome)} opts)))))
 
 (defmethod events/handle :file-sync/maybe-onboarding-show [[_ type]]
   (file-sync/maybe-onboarding-show type))
