@@ -2977,28 +2977,10 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   (rum/local false ::hover?)
-  {:init (fn [state]
-           (let [block (second (:rum/args state))
-                 config (first (:rum/args state))
-                 current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
-                 embed-self? (and (:embed? config)
-                                  (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
-                                   (= (str (:id config)) (str (:block/uuid block))))
-                 *refs-count (atom nil)]
-             (when-let [id (:db/id block)]
-               (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
-                 (reset! *refs-count count)))
-             (assoc state
-                    ::hide-block-refs? (atom default-hide?)
-                    ::refs-count *refs-count)))}
-  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
+  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs?]}]
   (let [format (if (config/db-based-graph? (state/get-current-repo))
                  :markdown
                  (or (:block/format block) :markdown))
-        *hide-block-refs? (get state ::hide-block-refs?)
-        *refs-count (get state ::refs-count)
-        hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (state/get-component :editor/box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
@@ -3009,9 +2991,6 @@
         named? (some? (:block/name block))
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
-        refs-count (if (seq (:block/_refs block))
-                     (count (remove :logseq.property/view-for (:block/_refs block)))
-                     (rum/react *refs-count))
         table? (:table? config)
         raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
@@ -3076,14 +3055,7 @@
         (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
                       (:property? config))
           (when (and db-based? (seq (:block/tags block)))
-            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]]
-
-      (when (and (not (or (:table? config) (:property? config)))
-                 (not hide-block-refs?)
-                 (> refs-count 0)
-                 (not (:page-title? config)))
-        (when-let [refs-cp (state/get-component :block/linked-references)]
-          (refs-cp uuid)))]]))
+            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]]]]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
@@ -3432,10 +3404,30 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner-aux < rum/reactive db-mixins/query
   {:init (fn [state]
-           (let [*ref (atom nil)]
-             (assoc state ::ref *ref)))}
+           (let [*ref (atom nil)
+                 [_container-state _repo config block] (:rum/args state)
+                 current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
+                 embed-self? (and (:embed? config)
+                                  (= (:block/uuid block) (:block/uuid (:block config))))
+                 default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+                                   (= (str (:id config)) (str (:block/uuid block))))
+                 *refs-count (atom nil)]
+             (when-not (:view? config)
+               (when-let [id (:db/id block)]
+                 (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) id)]
+                   (reset! *refs-count count))))
+             (assoc state
+                    ::ref *ref
+                    ::hide-block-refs? (atom default-hide?)
+                    ::refs-count *refs-count)))}
   [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [*ref (::ref state)
+        *hide-block-refs? (get state ::hide-block-refs?)
+        *refs-count (get state ::refs-count)
+        hide-block-refs? (rum/react *hide-block-refs?)
+        refs-count (if (seq (:block/_refs block))
+                     (count (remove :logseq.property/view-for (:block/_refs block)))
+                     (rum/react *refs-count))
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
                   (assoc config* :original-block original-block)
@@ -3613,6 +3605,8 @@
                                         {:edit-input-id edit-input-id
                                          :block-id block-id
                                          :edit? editing?
+                                         :refs-count refs-count
+                                         :*hide-block-refs? *hide-block-refs?
                                          :hide-block-refs-count? hide-block-refs-count?}))])]
 
          (when (and db-based? (not collapsed?) (not (or table? property?)))
@@ -3629,6 +3623,14 @@
                 (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
+
+     (when (and (not (or (:table? config) (:property? config)))
+                (not hide-block-refs?)
+                (> refs-count 0)
+                (not (:page-title? config)))
+       (when-let [refs-cp (state/get-component :block/linked-references)]
+         [:div.px-4.py-2.border.rounded.my-2.shadow-xs {:style {:margin-left 42}}
+          (refs-cp block {})]))
 
      (when (and db-based? (not collapsed?) (not (or table? property?))
                 (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
