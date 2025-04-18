@@ -15,6 +15,7 @@
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
+            [logseq.common.path :as path]
             [promesa.core :as p]))
 
 ;;; *opml-state*
@@ -462,13 +463,13 @@
   [repo]
   (p/let [files (common/<get-file-contents repo "opml")]
     (when (seq files)
-      (let [repo (-> repo
-                     (string/replace config/db-version-prefix "")
-                     (string/replace config/local-db-prefix ""))
+      (let [repo' (if (config/db-based-graph? repo)
+                    (string/replace repo config/db-version-prefix "")
+                    (path/basename repo))
             files (->> (export-files-as-opml files nil)
                        (clojure.core/remove nil?))
-            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+            zip-file-name (str repo' "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo')]
           (when-let [anchor (gdom/getElement "export-as-opml")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
