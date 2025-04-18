@@ -185,7 +185,7 @@
 
 .property-value-inner {
   .select-item {
-    @apply flex items-center shrink;
+    @apply flex items-center shrink whitespace-nowrap;
   }
 
   &[data-type] {

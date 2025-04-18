@@ -66,7 +66,6 @@
      (let [*open? (::open? state)
            page-entity (model/get-page page-name-or-uuid)
            page (model/sub-block (:db/id page-entity))
-           block-uuid (:block/uuid page-entity)
            refs-count (count (:block/_refs page))]
        (when (> refs-count 0)
          (shui/popover
@@ -81,7 +80,7 @@
            {:on-open-auto-focus #(.preventDefault %)}
            (shui/popover-arrow {:class-name "popper-arrow"})
            [:div {:class classname}
-            (reference/block-linked-references block-uuid)])))))))
+            (reference/references page {})])))))))
 
 ;; This is not accurate yet
 (defn- get-page-human-update-time
