@@ -43,7 +43,7 @@
       [reload])
 
     (ionic/ion-content
-      [:div.pt-10.px-6
+      [:div.pt-6.px-6
        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
        [:h2.py-1.text-lg (fstate/get-current-repo)]
 

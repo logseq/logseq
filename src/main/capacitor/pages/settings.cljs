@@ -9,14 +9,17 @@
     (ionic/ion-page
       (ionic/ion-header
         (ionic/ion-toolbar
-          [:span {:slot "start"}
-           (ionic/ion-button {:fill "clear"
-                              :on-click #(.pop nav)}
-             (ionic/tabler-icon "arrow-left" {:size 26}))]
-          [:span {:slot "end"}
-           (ionic/ion-button {:fill "clear"}
-             (ionic/tabler-icon "share" {:size 26}))]
-          (ionic/ion-title {:class "pl-0"} "Settings")))
+          (ionic/ion-buttons {:slot "start"}
+            (ionic/ion-button {:fill "clear"
+                               :on-click #(.pop nav)}
+              (ionic/tabler-icon "arrow-left" {:size 26})))
+
+          (ionic/ion-buttons {:slot "end"}
+            (ionic/ion-button {:fill "clear"
+                               :on-click #(.pop nav)}
+              (ionic/tabler-icon "share" {:size 26})))
+
+          (ionic/ion-title "Settings")))
 
       (ionic/ion-content {:class "ion-padding"}
         (ionic/ion-refresher {:slot "fixed"
