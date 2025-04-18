@@ -90,6 +90,12 @@
         }
       }
 
+      &-inner[data-type=checkbox] {
+        .data-\[state\=checked\]\:bg-primary[data-state="checked"] {
+          background-color: hsl(var(--primary));
+        }
+      }
+
       &-inner[data-type=date] {
         .jtrigger-id {
           @apply top-[4px];
@@ -192,7 +198,7 @@
     @apply flex items-center;
   }
 
-  &[data-type="datetime"] {
+  &[data-type=datetime] {
     @apply whitespace-nowrap;
   }
 }
