@@ -732,13 +732,8 @@ Some bindings in this fn:
 
 (def db-block-attrs
   "Block attributes for db graph queries"
-  ;; '*' needed as we need to pull user properties and don't know their names in advance
-  (if util/node-test?
-    '[*
-      {:block/page [:db/id :block/name :block/title :block/journal-day]}
-      {:block/_parent ...}]
-    ;; db graphs needs :db/id only for query view
-    [:db/id]))
+  ;; only needs :db/id for query/view
+  [:db/id])
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '/query' or '{{query }}'"
