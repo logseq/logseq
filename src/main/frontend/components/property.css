@@ -271,10 +271,12 @@ a.control-link {
   }
 }
 
-.property-value-container {
+.ls-block.property-value-container {
   @apply flex-1 shrink-0;
   min-width: 100px;
   min-height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {

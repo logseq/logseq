@@ -3585,7 +3585,7 @@
         (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-left-menu config block))
 
-        [:div.flex.flex-col.w-full.overflow-hidden
+        [:div.flex.flex-col.w-full
          [:div.block-main-content.flex.flex-row.gap-2
           (when-let [actions-cp (:page-title-actions-cp config)]
             (actions-cp block))

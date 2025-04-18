@@ -2679,38 +2679,55 @@
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
+(defn- active-jtrigger?
+  []
+  (some-> js/document.activeElement (dom/has-class? "jtrigger")))
+
 (defn move-cross-boundary-up-down
   [direction move-opts]
-  (when-let [input (or (:input move-opts) (state/get-input))]
-    (let [repo (state/get-current-repo)
-          f (case direction
-              :up util/get-prev-block-non-collapsed
-              :down util/get-next-block-non-collapsed)
-          current-block (util/rec-get-node input "ls-block")
-          sibling-block (f current-block {:up-down? true})
-          {:block/keys [uuid title format]} (state/get-edit-block)
-          format (or format :markdown)]
-      (if sibling-block
-        (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-          (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
+  (let [input (or (:input move-opts) (state/get-input))
+        active-element js/document.activeElement
+        input-or-active-element (or input active-element)]
+    (when input-or-active-element
+      (let [repo (state/get-current-repo)
+            f (case direction
+                :up util/get-prev-block-non-collapsed
+                :down util/get-next-block-non-collapsed)
+            current-block (util/rec-get-node input-or-active-element "ls-block")
+            sibling-block (f current-block {:up-down? true})
+            {:block/keys [uuid title format]} (state/get-edit-block)
+            format (or format :markdown)
+            sibling-block (or (when (some-> sibling-block (dom/has-class? "property-value-container"))
+                                (first (dom/by-class sibling-block "ls-block")))
+                              sibling-block)
+            property-value-container? (some-> sibling-block (dom/has-class? "property-value-container"))]
+        (if sibling-block
+          (let [sibling-block-id (dom/attr sibling-block "blockid")
+                container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
                 value (state/get-edit-content)]
             (p/do!
              (when (and
+                    uuid
                     (not (state/block-component-editing?))
                     (not= (clean-content! repo format title)
                           (string/trim value)))
                (save-block! repo uuid value))
 
-             (let [new-uuid (cljs.core/uuid sibling-block-id)
-                   block (db/entity [:block/uuid new-uuid])]
-               (edit-block! block
-                            (or (:pos move-opts)
-                                [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
-                            {:container-id container-id
-                             :direction direction})))))
-        (case direction
-          :up (cursor/move-cursor-to input 0)
-          :down (cursor/move-cursor-to-end input))))))
+             (if property-value-container?
+               (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
+                 (state/clear-edit!)
+                 (.focus trigger))
+               (let [new-uuid (cljs.core/uuid sibling-block-id)
+                     block (db/entity [:block/uuid new-uuid])]
+                 (edit-block! block
+                              (or (:pos move-opts)
+                                  (when input [direction (util/get-line-pos (.-value input) (util/get-selection-start input))])
+                                  0)
+                              {:container-id container-id
+                               :direction direction})))))
+          (case direction
+            :up (cursor/move-cursor-to input 0)
+            :down (cursor/move-cursor-to-end input)))))))
 
 (defn keydown-up-down-handler
   [direction {:keys [_pos] :as move-opts}]
@@ -2720,13 +2737,17 @@
         up? (= direction :up)
         down? (= direction :down)]
     (cond
+      (active-jtrigger?)
+      (move-cross-boundary-up-down direction move-opts)
+
       (not= selected-start selected-end)
       (if up?
         (cursor/move-cursor-to input selected-start)
         (cursor/move-cursor-to input selected-end))
 
-      (or (and up? (cursor/textarea-cursor-first-row? input))
-          (and down? (cursor/textarea-cursor-last-row? input)))
+      (and input
+           (or (and up? (cursor/textarea-cursor-first-row? input))
+               (and down? (cursor/textarea-cursor-last-row? input))))
       (move-cross-boundary-up-down direction move-opts)
 
       :else
@@ -3402,8 +3423,9 @@
                (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
+
       (cond
-        (state/editing?)
+        (or (state/editing?) (active-jtrigger?))
         (keydown-up-down-handler direction {})
 
         (state/selection?)
