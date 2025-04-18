@@ -1559,7 +1559,6 @@
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
-        hover? true
         db-based? (config/db-based-graph? (state/get-current-repo))
         references? (contains? #{:linked-references :unlinked-references} view-feature-type)
         opacity (cond
