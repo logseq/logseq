@@ -732,10 +732,7 @@ Some bindings in this fn:
 
 (def db-block-attrs
   "Block attributes for db graph queries"
-  ;; '*' needed as we need to pull user properties and don't know their names in advance
-  '[*
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
-    {:block/_parent ...}])
+  '[:db/id])
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '/query' or '{{query }}'"
