@@ -117,7 +117,10 @@ const common = {
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js'
-      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js')))
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
+      () => gulp.src([
+        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor')))
     )(...params)
   },
 

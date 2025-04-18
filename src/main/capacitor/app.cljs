@@ -5,6 +5,7 @@
             [promesa.core :as p]
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
+            [frontend.state :as fstate]
             [capacitor.pages.settings :as settings]))
 
 (rum/defc app-sidebar []
@@ -47,6 +48,7 @@
        (ionic/ion-content
          [:div.pt-10.px-8
           [:h1.text-3xl.font-mono.font-bold.py-2 "Suggested"]
+          [:h2 (fstate/get-current-repo)]
           [:p.flex.py-4.justify-center.bg-gray-03.flex-col.gap-6
            (ionic/ion-button {:on-click #(js/alert "hello click me!")
                               :size "large"}
