@@ -19,6 +19,7 @@
 (defonce ion-back-button (shui-util/react->rum (.-IonBackButton ionic-react) false))
 (defonce ion-buttons (shui-util/react->rum (.-IonButtons ionic-react) true))
 (defonce ion-toolbar (shui-util/react->rum (.-IonToolbar ionic-react) true))
+(defonce ion-loading (shui-util/react->rum (.-IonLoading ionic-react) true))
 (defonce ion-title (shui-util/react->rum (.-IonTitle ionic-react) true))
 (defonce ion-button (shui-util/react->rum (.-IonButton ionic-react) true))
 (defonce ion-alert (shui-util/react->rum (.-IonAlert ionic-react) true))

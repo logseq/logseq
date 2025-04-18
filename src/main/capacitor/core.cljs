@@ -1,11 +1,11 @@
 (ns capacitor.core
   (:require ["react-dom/client" :as rdc]
             [capacitor.app :as app]
-            [capacitor.handler :as handler]))
+            [capacitor.bootstrap :as bootstrap]))
 
 (defonce ^js root (rdc/createRoot (.getElementById js/document "root")))
 
-(defn ^:export start!
+(defn ^:export render!
   []
   (.render root (app/main)))
 
@@ -14,7 +14,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[capacitor-new] init!")
-  (handler/start! start!))
+  (bootstrap/start! render!))
 
 (defn ^:export stop! []
   ;; stop is called before any code is reloaded

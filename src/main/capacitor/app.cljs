@@ -1,11 +1,15 @@
 (ns capacitor.app
   (:require ["@capacitor/app" :refer [App]]
             ["@capacitor/status-bar" :refer [StatusBar Style]]
+            [frontend.db.react :as react]
+            [frontend.util :as util]
             [rum.core :as rum]
             [promesa.core :as p]
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
+            [capacitor.handler :as handler]
             [frontend.state :as fstate]
+            [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
 
 (rum/defc app-sidebar []
@@ -18,20 +22,80 @@
       [:div.p-4
        [:strong "hello, logseq?"]])))
 
+(defn- sub-journals
+  []
+  (-> (react/q (fstate/get-current-repo)
+        [:frontend.worker.react/journals]
+        {:async-query-fn (fn []
+                           (p/let [{:keys [data]} (handler/<load-view-data nil {:journals? true})]
+                             (remove nil? data)))}
+        nil)
+    util/react))
+
 (rum/defc home []
-  (let [[open? set-open!] (rum/use-state false)
-        [selected-src set-selected-src] (rum/use-state nil)]
+  (let [[all-pages set-all-pages!] (rum/use-state [])
+        [reload set-reload!] (rum/use-state 0)]
 
     (rum/use-effect!
       (fn []
-        (js/setTimeout
-          (fn []
-            (.setStyle StatusBar #js {:style (.-Light Style)})
-            (.setBackgroundColor StatusBar #js {:color "#ffffff"}))
-          200)
+        (set-all-pages! (handler/get-all-pages))
         #())
-      [])
+      [reload])
 
+    (ionic/ion-content
+      [:div.pt-10.px-6
+       [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
+       [:h2.py-1.text-lg (fstate/get-current-repo)]
+
+       [:div.py-6.flex.justify-center.w-full]
+
+       [:div.flex.justify-between.items-center
+        [:h1.text-3xl.font-mono.font-bold.py-2
+         "All pages"
+         [:small.text-xs.pl-2.opacity-50 (count all-pages)]]
+
+        (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
+          [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])]
+       [:ul.mb-24.pt-2
+        (for [page all-pages]
+          (let [ident (some-> (:block/tags page) first :db/ident)]
+            [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
+             {:on-click #(js/alert (:block/title page))}
+             (case ident
+               :logseq.class/Property (ionic/tabler-icon "letter-t")
+               :logseq.class/Page (ionic/tabler-icon "file")
+               :logseq.class/Journal (ionic/tabler-icon "calendar")
+               (ionic/tabler-icon "hash"))
+             [:span.pl-1 (:block/title page)]
+             [:code.opacity-30.scale-75 (.toLocaleDateString (js/Date. (:block/created-at page)))]]))]]
+
+      ;; tabbar
+      ;(ionic/ion-tab-bar {:color "light"
+      ;                    :class "w-full fixed bottom-4"}
+      ;  (ionic/ion-tab-button {:tab "tab1"
+      ;                         :selected true
+      ;                         :on-click #(js/alert "home")}
+      ;    (ionic/tabler-icon "home" {:size 22}) "Home")
+      ;  (ionic/ion-tab-button {:tab "tab0"
+      ;                         :selected false}
+      ;    (ionic/tabler-icon "circle-plus" {:size 24}) "Capture New")
+      ;  (ionic/ion-tab-button {:tab "tab2"}
+      ;    (ionic/tabler-icon "settings" {:size 22}) "Settings"))
+      )
+    ))
+
+(rum/defc root <
+  rum/reactive
+  {:did-mount
+   (fn [s]
+     (js/setTimeout
+       (fn []
+         (.setStyle StatusBar #js {:style (.-Light Style)})
+         (.setBackgroundColor StatusBar #js {:color "#ffffff"}))
+       300)
+     s)}
+  []
+  (let [db-restoring? (fstate/sub :db/restoring?)]
     [:<>
      (app-sidebar)
 
@@ -41,72 +105,22 @@
          (ionic/ion-toolbar
            (ionic/ion-buttons {:slot "start"}
              (ionic/ion-menu-button)
-             (ionic/ion-button {:class "opacity-90"} (ionic/tabler-icon "search" {:size 22 :stroke 2}))
-             )
-           [:a.px-2 {:slot "end"}
-            (ionic/tabler-icon "help" {:size 24 :class "opacity-70"})]))
-       (ionic/ion-content
-         [:div.pt-10.px-8
-          [:h1.text-3xl.font-mono.font-bold.py-2 "Suggested"]
-          [:h2 (fstate/get-current-repo)]
-          [:p.flex.py-4.justify-center.bg-gray-03.flex-col.gap-6
-           (ionic/ion-button {:on-click #(js/alert "hello click me!")
-                              :size "large"}
-             "Default primary")
-           (ionic/ion-button {:color "warning"
-                              :size "large"
-                              :fill "outline"
-                              :on-click #(set-open! true)} "Primary Button")
-           (ionic/ion-button {:color "success"
-                              :size "large"
-                              :on-click
-                              (fn []
-                                (-> ionic/ionic-camera
-                                  (.getPhoto
-                                    #js {:source "PHOTOS"
-                                         :resultType (.-DataUrl ionic/ionic-camera-result-type)})
-                                  (p/then #(set-selected-src (.-dataUrl %)))))}
-             [:span.pl-2 {:slot "end"} (ionic/tabler-icon "cloud-upload" {:size 22})]
-             [:strong "获取图片"]
-             (ionic/ion-badge {:color "danger"} "99+"))
+             (ionic/ion-button {:class "opacity-90"} (ionic/tabler-icon "search" {:size 22 :stroke 2})))
 
-           [:<>
-            (ionic/ion-datetime-button {:datetime "datetime"})
-            (ionic/ion-modal
-              {:keepContentsMounted true}
-              (ionic/ion-datetime {:id "datetime"}))]]
-
-          [:div.p-4.flex.justify-center
-           (ionic/ion-nav-link
-             {:routerDirection "forward"
-              :component settings/page}
-             (ionic/ion-button {:size "large"} "Go to settings page")
-             )]
-
-          ;; selected image
-          (when selected-src
-            [:p.p-3.flex.items-center.justify-center
-             [:img {:src selected-src :width "70%"}]])
-
-          ;; alert
-          (ionic/ion-alert {:is-open open?
-                            :onDidDismiss #(set-open! false)
-                            :buttons ["Action"]
-                            :message "hello alert?"})]
-
-         ;; tabbar
-         ;(ionic/ion-tab-bar {:color "light"
-         ;                    :class "w-full fixed bottom-4"}
-         ;  (ionic/ion-tab-button {:tab "tab1"
-         ;                         :selected true
-         ;                         :on-click #(js/alert "home")}
-         ;    (ionic/tabler-icon "home" {:size 22}) "Home")
-         ;  (ionic/ion-tab-button {:tab "tab0"
-         ;                         :selected false}
-         ;    (ionic/tabler-icon "circle-plus" {:size 24}) "Capture New")
-         ;  (ionic/ion-tab-button {:tab "tab2"}
-         ;    (ionic/tabler-icon "settings" {:size 22}) "Settings"))
-         ))]))
+           (ionic/ion-button
+             {:slot "end"
+              :fill "clear"}
+             (ionic/ion-nav-link
+               {:routerDirection "forward"
+                :class "w-full"
+                :component settings/page}
+               (ionic/tabler-icon "help" {:size 24 :class "opacity-70"})))))
+       ;; main content
+       (if db-restoring?
+         (ionic/ion-content
+           [:strong.flex.justify-center.items-center.py-24
+            (ionic/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
+         (home)))]))
 
 (rum/defc main []
   (let [nav-ref (rum/use-ref nil)
@@ -126,6 +140,7 @@
         (set-nav-root! (rum/deref nav-ref))
         #())
       [(rum/deref nav-ref)])
+
     [:> (.-IonApp ionic/ionic-react)
-     (ionic/ion-nav {:ref nav-ref :root home
+     (ionic/ion-nav {:ref nav-ref :root root
                      :animated true :swipeGesture false})]))
