@@ -1,28 +1,28 @@
 (ns frontend.handler.file-sync
   "Provides util handler fns for file sync"
   (:require ["path" :as node-path]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs.core.async :as async :refer [go <!]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.notification :as notification]
-            [frontend.state :as state]
             [frontend.handler.user :as user]
-            [frontend.fs :as fs]
             [frontend.pubsub :as pubsub]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
+            [frontend.state :as state]
             [frontend.storage :as storage]
+            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]))
 
 (def *beta-unavailable? (volatile! false))
 
 (def refresh-file-sync-component (atom false))
-
 
 (defn get-current-graph-uuid []
   (state/get-current-file-sync-graph-uuid))
@@ -100,10 +100,12 @@
 (defn load-session-graphs
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
-    (go (state/set-state! [:file-sync/remote-graphs :loading] true)
+    (go
+      (when-not util/web-platform?
+        (state/set-state! [:file-sync/remote-graphs :loading] true)
         (let [graphs-or-exp (<! (<list-graphs))]
           (when-not (instance? ExceptionInfo graphs-or-exp)
-            (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs-or-exp}))))))
+            (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs-or-exp})))))))
 
 (defn reset-session-graphs
   []
@@ -180,7 +182,6 @@
                                                     (:create-time %))
                                                >))]
           all-version-list)))))
-
 
 (defn init-remote-graph
   [local-graph-dir graph]
