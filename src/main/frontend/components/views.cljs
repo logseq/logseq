@@ -1492,8 +1492,8 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count?]} hover?]
-  [:div.views.flex.flex-row.items-center.flex-wrap.gap-2
+  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? references? opacity]}]
+  [:div.views
    (for [view* views]
      (let [view (db/sub-block (:db/id view*))
            current-view? (= (:db/id current-view) (:db/id view))]
@@ -1529,11 +1529,12 @@
                        (do
                          (set-view-entity! view)
                          (set-data! nil))))}
-        (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                               :logseq.property.view/type.table)]
-          (when-let [icon (:logseq.property/icon (db/entity display-type))]
-            (icon-component/icon icon {:color? true
-                                       :size 15})))
+        (when-not references?
+          (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                                 :logseq.property.view/type.table)]
+            (when-let [icon (:logseq.property/icon (db/entity display-type))]
+              (icon-component/icon icon {:color? true
+                                         :size 15}))))
         (let [title (:block/title view)]
           (if (= title "")
             "New view"
@@ -1546,8 +1547,7 @@
     {:variant :text
      :size :sm
      :title "Add new view"
-     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 "
-                 (if hover? "opacity-100" "opacity-75"))
+     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
      :on-click (fn []
                  (p/let [view (create-view! view-parent view-feature-type)]
                    (set-views! (concat views [view]))))}
@@ -1559,8 +1559,13 @@
    {:keys [view-feature-type title-key additional-actions]
     :as option}]
   (let [[hover? set-hover?] (hooks/use-state nil)
-        db-based? (config/db-based-graph? (state/get-current-repo))]
-    [:div.flex.flex-1.flex-wrap.items-center.justify-between.gap-1
+        db-based? (config/db-based-graph? (state/get-current-repo))
+        references? (contains? #{:linked-references :unlinked-references} view-feature-type)
+        opacity (cond
+                  (and references? (not hover?)) "opacity-0"
+                  hover? "opacity-100"
+                  :else "opacity-75")]
+    [:div.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
      {:on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      [:div.flex.flex-row.items-center.gap-2
@@ -1569,7 +1574,10 @@
           [:div.font-medium.opacity-50.text-sm
            (t (or title-key :views.table/default-title)
               (count (:rows table)))]
-          (views-tab view-parent view-entity option hover?))
+          (views-tab view-parent view-entity (assoc option
+                                                    :hover? hover?
+                                                    :opacity opacity
+                                                    :references? references?)))
         [:div.font-medium.text-sm
          [:span
           (case view-feature-type
@@ -1579,7 +1587,7 @@
             "Nodes")]
          [:span.ml-1 (count (:rows table))]])]
      [:div.view-actions.flex.items-center.gap-1.transition-opacity.ease-in.duration-300
-      {:class (if hover? "opacity-100" "opacity-75")}
+      {:class opacity}
 
       (when (seq additional-actions)
         [:<> (for [action additional-actions]
