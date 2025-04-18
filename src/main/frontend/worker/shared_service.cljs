@@ -2,19 +2,26 @@
   "This allows multiple workers to share some resources (e.g. db access)"
   (:require [cljs-bean.core :as bean]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 ;; TODO:
 ;; - client-channel close before re-creating new one
+;; - There is a problem of duplicate event listener registrations.
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
 
 (defonce *master-client? (atom false))
 ;;; common-channel - Communication related to master-client election.
+;;                   FIXME: but 'sync-db-changes' events are tranferred on this channel
 ;;; client-channel - For API request-response data communication.
 (defonce *common-channel (atom nil))
 (defonce *client-channel (atom nil))
+
+;;; record channel-listener here, to able to remove old listener before we addEventListener new one
+(defonce *common-channel-listener (atom nil))
+;;(defonce *client-channel-listener (atom nil))
 
 (defonce *requests-in-flight (atom {}))
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
@@ -110,70 +117,81 @@
         (reset! *common-channel channel)
         channel)))
 
+(defn- listen-common-channel
+  [common-channel listener-fn]
+  (when-let [old-listener @*common-channel-listener]
+    (.removeEventListener common-channel "message" old-listener))
+  (reset! *common-channel-listener listener-fn)
+  (.addEventListener common-channel "message" listener-fn))
+
+(defn- slave-registered-handler
+  [service-name slave-client-id event *register-finish-promise?]
+  (let [slave-client-id* (:slave-client-id event)]
+    (when (= slave-client-id slave-client-id*)
+      (js/navigator.locks.request service-name #js {:mode "exclusive"}
+                                  (fn [_lock]
+                                    ;; The master has gone, elect the new master
+                                    (prn :debug "master has gone")
+                                    (reset! *master-client? :re-check)))
+      (p/resolve! @*register-finish-promise?))))
+
 (defn- on-become-slave
-  [slave-client-id service-name common-channel status-ready-deferred-p]
+  [slave-client-id service-name common-channel status-ready-promise]
   (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name)))
-  (let [register
-        (fn register []
-          (p/create
-           (fn [resolve-fn _]
-             (letfn [(listener [event]
-                       (let [{:keys [_master-client-id type]
-                              slave-client-id* :slave-client-id} (bean/->clj (.-data event))]
-                         (when (and (= slave-client-id* slave-client-id) (= type "slave-registered"))
-                           (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                                       (fn [_lock]
-                                                         ;; The master has gone, elect the new master
-                                                         (prn :debug "master has gone")
-                                                         (reset! *master-client? :re-check)))
-                           (.removeEventListener common-channel "message" listener)
-                           (resolve-fn nil))))]
-               (.addEventListener common-channel "message" listener)
-               (.postMessage common-channel #js {:type "slave-register" :slave-client-id slave-client-id})))))]
-    (.addEventListener common-channel "message"
-                       (fn [event]
-                         (let [{:keys [type data]} (bean/->clj (.-data event))]
-                           (case type
-                             "master-changed"
-                             (p/do!
-                              (js/console.log "master-client change detected. Re-registering...")
-                              (register)
-                              (when (seq @*requests-in-flight)
-                                (js/console.log "Requests were in flight when master changed. Requeuing...")
-                                (p/all (map
-                                        (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                                          (let [listener (get-on-request-listener id resolve-fn reject-fn)]
-                                            (when-let [channel @*client-channel]
-                                              (.addEventListener channel "message" listener)
-                                              (.postMessage channel (bean/->js {:id id
-                                                                                :type "request"
-                                                                                :method method
-                                                                                :args args})))))
-                                        @*requests-in-flight))))
+  (let [*register-finish-promise? (atom nil)
+        <register #(do (.postMessage common-channel #js {:type "slave-register"
+                                                         :slave-client-id slave-client-id})
+                       (reset! *register-finish-promise? (p/deferred))
+                       @*register-finish-promise?)]
+    (listen-common-channel
+     common-channel
+     (fn [event]
+       (let [{:keys [type data] :as event*} (bean/->clj (.-data event))]
+         (case type
+           "master-changed"
+           (p/do!
+            (js/console.log "master-client change detected. Re-registering...")
+            (<register)
+            (when (seq @*requests-in-flight)
+              (js/console.log "Requests were in flight when master changed. Requeuing...")
+              (p/all (map
+                      (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+                        (let [listener (get-on-request-listener id resolve-fn reject-fn)]
+                          (when-let [channel @*client-channel]
+                            (.addEventListener channel "message" listener)
+                            (.postMessage channel (bean/->js {:id id
+                                                              :type "request"
+                                                              :method method
+                                                              :args args})))))
+                      @*requests-in-flight))))
+           "slave-registered"
+           (slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
 
-                             "sync-db-changes"
-                             (.postMessage js/self data)
+           "sync-db-changes"
+           (.postMessage js/self data)
 
-                             nil))))
+           "slave-register"
+           (log/info :ignored-event event*)))))
     (->
      (p/do!
-      (register)
-      (p/resolve! status-ready-deferred-p))
-     (p/catch (fn [error]
-                (js/console.error error))))))
+      (<register)
+      (p/resolve! status-ready-promise))
+     (p/catch (fn [e]
+                (js/console.error e)
+                (p/rejected e))))))
 
 (defn- on-become-master
   [master-client-id service-name common-channel target on-become-master-handler status-ready-deferred-p]
   (prn :debug :become-master master-client-id :service service-name)
-  (.addEventListener
-   common-channel "message"
+  (listen-common-channel
+   common-channel
    (fn [event]
      (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
        (when (= type "slave-register")
          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
            (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
                                        (fn [_]
-                                         ;; The client has gone. Clean up
+                                                           ;; The client has gone. Clean up
                                          (.close client-channel)))
 
            (.addEventListener client-channel "message"
