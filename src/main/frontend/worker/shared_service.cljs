@@ -6,7 +6,6 @@
             [promesa.core :as p]))
 
 ;; TODO:
-;; - *requests-in-flight - use vector instead of map
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
@@ -16,7 +15,6 @@
 (defonce *master-client? (atom false))
 
 ;;; common-channel - Communication related to master-client election.
-;;                   FIXME: but 'sync-db-changes' events are tranferred on this channel
 ;;; client-channel - For API request-response data communication.
 (defonce *common-channel (atom nil))
 (defonce *client-channel (atom nil))
@@ -25,10 +23,15 @@
 (defonce *common-channel-listener (atom nil))
 (defonce *client-channel-listener (atom nil))
 
-(defonce *requests-in-flight (atom {}))
+(defonce *current-request-id (volatile! 0))
+(defonce *requests-in-flight (volatile! (sorted-map)))
 ;;; The unique identity of the context where `js/navigator.locks.request` is called
 (defonce *client-id (atom nil))
 (defonce *master-client-lock (atom nil))
+
+(defn- next-request-id
+  []
+  (vswap! *current-request-id inc))
 
 (defn- release-master-client-lock!
   []
@@ -135,13 +138,14 @@
    (reset! *client-channel nil)
    (reset! *common-channel-listener nil)
    (reset! *client-channel-listener nil)
-   (reset! *requests-in-flight {})))
+   (vreset! *requests-in-flight (sorted-map))))
 
 (defn- on-response-handler
   [event]
   (let [{:keys [id type error result]} (bean/->clj (.-data event))]
     (when (identical? "response" type)
       (when-let [{:keys [resolve-fn reject-fn]} (get @*requests-in-flight id)]
+        (vswap! *requests-in-flight dissoc id)
         (if error
           (do (log/error :error-process-request error)
               (reject-fn error))
@@ -212,7 +216,7 @@
                     (log/error "Error processing request" e)
                     (reject-fn e)))
          (p/finally (fn []
-                      (swap! *requests-in-flight dissoc id)))))))))
+                      (vswap! *requests-in-flight dissoc id)))))))))
 
 (defn- on-become-slave
   [slave-client-id service-name common-channel status-ready-promise]
@@ -313,14 +317,14 @@
                                            (apply-target-f! target method args)
                                            (p/create
                                             (fn [resolve-fn reject-fn]
-                                              (let [id (random-id)
+                                              (let [request-id (next-request-id)
                                                     client-channel (ensure-client-channel client-id service-name)]
-                                                (swap! *requests-in-flight assoc id {:method method
-                                                                                     :args args
-                                                                                     :resolve-fn resolve-fn
-                                                                                     :reject-fn reject-fn})
+                                                (vswap! *requests-in-flight assoc request-id {:method method
+                                                                                              :args args
+                                                                                              :resolve-fn resolve-fn
+                                                                                              :reject-fn reject-fn})
                                                 (.postMessage client-channel (bean/->js
-                                                                              {:id id
+                                                                              {:id request-id
                                                                                :type "request"
                                                                                :method method
                                                                                :args args}))))))))))})
