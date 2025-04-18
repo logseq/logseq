@@ -850,7 +850,7 @@
   (when-let [prev-graph (first @*service)]
     (close-db! prev-graph))
   (when (and graph (not= graph (first @*service)))
-    (p/let [service (shared-service/create-service graph
+    (p/let [service (shared-service/<create-service graph
                                                    (bean/->js fns)
                                                    #(on-become-master graph))]
       (assert (p/promise? (get-in service [:status :ready])))
@@ -868,20 +868,22 @@
   []
   (let [proxy-object (->>
                       fns
-                      (map (fn [[k f]]
-                             [k (fn [& args]
-                                  (let [[_graph service] @*service
-                                        method-k (keyword (first args))]
-                                    (cond
-                                      (or @shared-service/*master-client?
-                                          (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
-                                          (nil? service))
-                                      (apply f args)
+                      (map
+                       (fn [[k f]]
+                         [k
+                          (fn [& args]
+                            (let [[_graph service] @*service
+                                  method-k (keyword (first args))]
+                              (cond
+                                (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
+                                    (nil? service))
+                                ;; only proceed down this branch before shared-service is initialized
+                                (apply f args)
 
-                                      :else
-                                      ;; ensure service is ready
-                                      (p/let [_ready-value (get-in service [:status :ready])]
-                                        (js-invoke (:proxy service) k args)))))]))
+                                :else
+                                ;; ensure service is ready
+                                (p/let [_ready-value (get-in service [:status :ready])]
+                                  (js-invoke (:proxy service) k args)))))]))
                       (into {})
                       bean/->js)]
     (glogi-console/install!)

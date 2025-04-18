@@ -46,7 +46,12 @@
   []
   (str (random-uuid)))
 
-(defn- get-client-id
+(defn- do-not-wait
+  [promise]
+  promise
+  nil)
+
+(defn- <get-client-id
   []
   (let [id (random-id)]
     (p/let [client-id (js/navigator.locks.request id #js {:mode "exclusive"}
@@ -56,17 +61,18 @@
                                                            (some #(when (= (.-name %) id) %))
                                                            .-clientId))))]
       (assert (some? client-id))
-      (do ;; don't wait this promise
-        (js/navigator.locks.request client-id #js {:mode "exclusive"}
-                                    (fn [_] (p/deferred)))
-        nil)
+      (do-not-wait
+       (js/navigator.locks.request client-id #js {:mode "exclusive"}
+                                   ;; never release it
+                                   (fn [_] (p/deferred))))
       (log/debug :client-id client-id)
       client-id)))
 
-(defn- ensure-client-id
+(defn- <ensure-client-id
   []
   (or @*client-id
-      (reset! *client-id (get-client-id))))
+      (p/let [client-id (<get-client-id)]
+        (reset! *client-id client-id))))
 
 (defn- ensure-common-channel
   [service-name]
@@ -92,56 +98,55 @@
   (reset! *client-channel-listener listener-fn)
   (.addEventListener client-channel "message" listener-fn))
 
-(defn- apply-target-f!
+(defn- <apply-target-f!
   [target method args]
-  (when-let [f (gobj/get target method)]
+  (let [f (gobj/get target method)]
+    (assert (some? f) {:method method})
     (apply f args)))
 
-(defn- check-master-or-slave-client!
+(defn- <check-master-or-slave-client!
   "Check if the current client is the master (otherwise, it is a slave)"
-  [service-name on-become-master on-become-slave]
-  (p/let [client-id (ensure-client-id)]
-    (do
-      ;; don't wait this locks.request
-      (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
-                                  (fn [lock]
-                                    (p/let [^js locks (js/navigator.locks.query)
-                                            locked? (some #(when (and (= (.-name %) service-name)
-                                                                      (= (.-clientId %) client-id))
-                                                             true)
-                                                          (.-held locks))]
-                                      (cond
-                                        (and locked? lock) ;become master
-                                        (p/do!
-                                         (reset! *master-client? true)
-                                         (on-become-master)
-                                         (reset! *master-client-lock (p/deferred))
-                                          ;; Keep lock until context destroyed
-                                         @*master-client-lock)
+  [service-name <on-become-master <on-become-slave]
+  (p/let [client-id (<ensure-client-id)]
+    (do-not-wait
+     (js/navigator.locks.request
+      service-name #js {:mode "exclusive", :ifAvailable true}
+      (fn [lock]
+        (p/let [^js locks (js/navigator.locks.query)
+                locked? (some #(when (and (= (.-name %) service-name)
+                                          (= (.-clientId %) client-id))
+                                 true)
+                              (.-held locks))]
+          (cond
+            (and locked? lock) ;become master
+            (p/do!
+             (reset! *master-client? true)
+             (<on-become-master)
+             (reset! *master-client-lock (p/deferred))
+              ;; Keep lock until context destroyed
+             @*master-client-lock)
 
-                                        (and locked? (nil? lock)) ;already locked by this client, do nothing
-                                        (assert (true? @*master-client?))
+            (and locked? (nil? lock)) ;already locked by this client, do nothing
+            (assert (true? @*master-client?))
 
-                                        (not locked?) ;become slave
-                                        (p/do!
-                                         (reset! *master-client? false)
-                                         (on-become-slave))))))
-      nil)))
+            (not locked?) ;become slave
+            (p/do!
+             (reset! *master-client? false)
+             (<on-become-slave)))))))))
 
 (defn- clear-old-service!
   []
-  (p/do!
-   (release-master-client-lock!)
-   (reset! *master-client? false)
-   (when-let [^js channel @*common-channel]
-     (.close channel))
-   (when-let [^js channel @*client-channel]
-     (.close channel))
-   (reset! *common-channel nil)
-   (reset! *client-channel nil)
-   (reset! *common-channel-listener nil)
-   (reset! *client-channel-listener nil)
-   (vreset! *requests-in-flight (sorted-map))))
+  (release-master-client-lock!)
+  (reset! *master-client? false)
+  (when-let [^js channel @*common-channel]
+    (.close channel))
+  (when-let [^js channel @*client-channel]
+    (.close channel))
+  (reset! *common-channel nil)
+  (reset! *client-channel nil)
+  (reset! *common-channel-listener nil)
+  (reset! *client-channel-listener nil)
+  (vreset! *requests-in-flight (sorted-map)))
 
 (defn- on-response-handler
   [event]
@@ -160,7 +165,7 @@
     (let [{:keys [type method args id]} (bean/->clj (.-data event))]
       (when (identical? "request" type)
         (p/let [[result error]
-                (-> (p/then (apply-target-f! target method args)
+                (-> (p/then (<apply-target-f! target method args)
                             (fn [res] [res nil]))
                     (p/catch
                      (fn [e] [nil (if (instance? js/Error e)
@@ -173,7 +178,7 @@
                                          :error error
                                          :method-key (first args)})))))))
 
-(defn- slave-registered-handler
+(defn- <slave-registered-handler
   [service-name slave-client-id event *register-finish-promise?]
   (let [slave-client-id* (:slave-client-id event)]
     (when (= slave-client-id slave-client-id*)
@@ -184,12 +189,13 @@
                             (= slave-client-id (.-clientId l))))
                (.-pending locks))]
         (when-not already-watching?     ;dont watch multiple times
-          (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                      (fn [_lock]
-                                        ;; The master has gone, elect the new master
-                                        (log/debug "master has gone" nil)
-                                        (reset! *master-re-check-trigger :re-check)))))
-      (p/resolve! @*register-finish-promise?))))
+          (do-not-wait
+           (js/navigator.locks.request service-name #js {:mode "exclusive"}
+                                       (fn [_lock]
+                                         ;; The master has gone, elect the new master
+                                         (log/debug "master has gone" nil)
+                                         (reset! *master-re-check-trigger :re-check)))))
+        (p/resolve! @*register-finish-promise?)))))
 
 (defn- <re-requests-in-flight-on-slave!
   [client-channel]
@@ -213,7 +219,7 @@
      (p/run!
       (fn [[id {:keys [method args resolve-fn reject-fn]}]]
         (->
-         (p/let [result (apply-target-f! target method args)]
+         (p/let [result (<apply-target-f! target method args)]
            (resolve-fn result))
          (p/catch (fn [e]
                     (log/error "Error processing request" e)
@@ -221,7 +227,7 @@
          (p/finally (fn []
                       (vswap! *requests-in-flight dissoc id)))))))))
 
-(defn- on-become-slave
+(defn- <on-become-slave
   [slave-client-id service-name common-channel status-ready-promise]
   (let [client-channel (ensure-client-channel slave-client-id service-name)
         *register-finish-promise? (atom nil)
@@ -241,7 +247,7 @@
             (<register)
             (<re-requests-in-flight-on-slave! client-channel))
            "slave-registered"
-           (slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
+           (<slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
 
            "sync-db-changes"
            (.postMessage js/self data)
@@ -256,7 +262,7 @@
                 (log/error :on-become-slave e)
                 (p/rejected e))))))
 
-(defn- on-become-master
+(defn- <on-become-master
   [master-client-id service-name common-channel target on-become-master-handler status-ready-deferred-p]
   (log/debug :become-master master-client-id :service service-name)
   (listen-common-channel
@@ -265,10 +271,11 @@
      (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
        (when (= type "slave-register")
          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
-           (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
-                                       (fn [_]
-                                         (log/debug :slave-has-gone slave-client-id)
-                                         (.close client-channel)))
+           (do-not-wait
+            (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
+                                        (fn [_]
+                                          (log/debug :slave-has-gone slave-client-id)
+                                          (.close client-channel))))
            (listen-client-channel client-channel (create-on-request-handler client-channel target))
            (.postMessage common-channel (bean/->js {:type "slave-registered"
                                                     :slave-client-id slave-client-id
@@ -282,55 +289,49 @@
    (<re-requests-in-flight-on-master! target)
    (p/resolve! status-ready-deferred-p)))
 
-(defn create-service
+(defn <create-service
   [service-name target on-become-master-handler]
-  (p/let [_ (clear-old-service!)
-          status {:ready (p/deferred)}
+  (clear-old-service!)
+  (p/let [status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)
-          client-id (ensure-client-id)
-          check-master-slave-fn!
+          client-id (<ensure-client-id)
+          <check-master-slave-fn!
           (fn []
-            (check-master-or-slave-client!
+            (<check-master-or-slave-client!
              service-name
-             #(on-become-master
+             #(<on-become-master
                client-id service-name common-channel target
                on-become-master-handler (:ready status))
-             #(on-become-slave
+             #(<on-become-slave
                client-id service-name common-channel (:ready status))))]
-    (check-master-slave-fn!)
+    (<check-master-slave-fn!)
 
     (add-watch *master-re-check-trigger :check-master
                (fn [_ _ _ new-value]
                  (when (= new-value :re-check)
                    (p/do!
-                    (p/delay 100)     ; why need delay here?
-                    (check-master-slave-fn!)))))
+                    (p/delay 100)      ; why need delay here?
+                    (<check-master-slave-fn!)))))
 
     {:proxy (js/Proxy. target
                        #js {:get (fn [target method]
-                                   (cond
-                                     (#{:then :catch :finally} (keyword method))
-                                     ;; Return nil for these methods to allow promise chaining to work correctly
-                                     nil
-
-                                     :else
-                                     (fn [args]
-                                       (let [master-client? @*master-client?]
-                                         (if master-client?
-                                           (apply-target-f! target method args)
-                                           (p/create
-                                            (fn [resolve-fn reject-fn]
-                                              (let [request-id (next-request-id)
-                                                    client-channel (ensure-client-channel client-id service-name)]
-                                                (vswap! *requests-in-flight assoc request-id {:method method
-                                                                                              :args args
-                                                                                              :resolve-fn resolve-fn
-                                                                                              :reject-fn reject-fn})
-                                                (.postMessage client-channel (bean/->js
-                                                                              {:id request-id
-                                                                               :type "request"
-                                                                               :method method
-                                                                               :args args}))))))))))})
+                                   (assert (identical? "remoteInvoke" method) method)
+                                   (fn [args]
+                                     (if @*master-client?
+                                       (<apply-target-f! target method args)
+                                       (let [request-id (next-request-id)
+                                             client-channel (ensure-client-channel client-id service-name)]
+                                         (p/create
+                                          (fn [resolve-fn reject-fn]
+                                            (vswap! *requests-in-flight assoc request-id {:method method
+                                                                                          :args args
+                                                                                          :resolve-fn resolve-fn
+                                                                                          :reject-fn reject-fn})
+                                            (.postMessage client-channel (bean/->js
+                                                                          {:id request-id
+                                                                           :type "request"
+                                                                           :method method
+                                                                           :args args}))))))))})
      :status status}))
 
 (defn broadcast-to-clients!
