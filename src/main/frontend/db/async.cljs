@@ -120,6 +120,7 @@
     (cond
       (and (:block.temp/fully-loaded? e) ; children may not be fully loaded
            (not children-only?)
+           (not children?)
            (not nested-children?)
            (not (some #{:block.temp/refs-count} properties)))
       (p/promise e)

@@ -1,3 +1,7 @@
+.views {
+    @apply flex flex-row items-center flex-nowrap gap-2 overflow-hidden;
+}
+
 .ls-view-order-setting {
     button.order-button {
         width: 107px;
