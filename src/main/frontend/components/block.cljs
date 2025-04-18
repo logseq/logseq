@@ -2367,7 +2367,7 @@
       :on-mouse-out #(set-hover? false)}
      [:span.w-full
       (cond
-        (not blank?)
+        (or (not blank?) (not query?))
         (text-block-title config block)
         advanced-query?
         [:span.opacity-75.hover:opacity-100 "Untitled query"]
