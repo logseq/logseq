@@ -765,8 +765,7 @@ Some bindings in this fn:
                                      :query-string query-string
                                      :rules rules}
                                     (merge
-                                     {:use-cache? false
-                                      :transform-fn transform-fn}
+                                     {:transform-fn transform-fn}
                                      query-opts))))))))
 
 (defn custom-query
