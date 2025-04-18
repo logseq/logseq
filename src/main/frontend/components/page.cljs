@@ -1020,13 +1020,14 @@
               [:div.flex.flex-col.mb-2
                [:p {:title "Link Strength"}
                 "Link Strength"]
-               (ui/tippy {:html [:div.pr-3 link-strength]}
-                         (ui/slider (/ link-strength 1)
-                                    {:min 1    ;;0.05
-                                     :max 20   ;;1
-                                     :on-change #(let [value (int %)]
-                                                   (reset! *link-strength (* value))
-                                                   (set-forcesetting! :link-strength (* value)))}))]
+               (ui/tooltip
+                 (ui/slider (/ link-strength 1)
+                   {:min 1    ;;0.05
+                    :max 20   ;;1
+                    :on-change #(let [value (int %)]
+                                  (reset! *link-strength (* value))
+                                  (set-forcesetting! :link-strength (* value)))})
+                 [:div link-strength])]
 
               [:a.opacity-70.opacity-100 {:on-click (fn []
                                                       (swap! *graph-forcereset? not)
