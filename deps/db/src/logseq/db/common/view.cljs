@@ -299,24 +299,12 @@
 
 (defn- get-linked-references
   [db id]
-  (let [db-based? (ldb/db-based-graph? db)
-        entity (d/entity db id)
+  (let [entity (d/entity db id)
         ids (set (cons id (ldb/get-block-alias db id)))
         refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)
         page-filters (get-filters db entity)
         full-ref-blocks (->> refs
-                             (remove (fn [block]
-                                       (if db-based?
-                                         (or
-                                          (= (:db/id block) id)
-                                          (= id (:db/id (:block/page block)))
-                                          (ldb/hidden? (:block/page block))
-                                          (ldb/hidden? block)
-                                          (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
-                                          (some? (get block (:db/ident entity))))
-                                         (or
-                                          (= (:db/id block) id)
-                                          (= id (:db/id (:block/page block)))))))
+                             (remove (fn [block] (ldb/hidden-ref? db block id)))
                              (common-util/distinct-by :db/id))
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
