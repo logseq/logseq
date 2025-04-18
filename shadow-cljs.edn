@@ -104,7 +104,7 @@
                   ;;   For electron devs, assets are located in ./js(via relative path).
                   ;; :dev      {:asset-path "./js"}
                   :devtools {:before-load capacitor.core/stop!          ;; before live-reloading any code call this function
-                             :after-load capacitor.core/start!          ;; after live-reloading finishes call this function
+                             :after-load capacitor.core/render!          ;; after live-reloading finishes call this function
                              :watch-path "/static/capacitor"
                              :preloads [devtools.preload
                                         shadow.remote.runtime.cljs.browser]}}
