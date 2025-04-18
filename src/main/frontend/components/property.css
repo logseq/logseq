@@ -46,7 +46,7 @@
     @apply flex flex-row flex-wrap space-x-1;
 
     .jtrigger {
-      @apply relative;
+      @apply relative focus-visible:outline-none focus-visible:bg-gray-02 focus-visible:rounded;
 
       &-id {
         @apply absolute left-[-22px] top-[2px] rounded-full leading-none
