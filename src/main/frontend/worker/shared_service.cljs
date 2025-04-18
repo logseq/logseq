@@ -11,7 +11,10 @@
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
 
+(log/set-level 'frontend.worker.shared-service :debug)
+
 (defonce *master-client? (atom false))
+
 ;;; common-channel - Communication related to master-client election.
 ;;                   FIXME: but 'sync-db-changes' events are tranferred on this channel
 ;;; client-channel - For API request-response data communication.
@@ -40,7 +43,8 @@
   []
   (str (random-uuid)))
 
-(defn- get-client-id []
+(defn- get-client-id
+  []
   (let [id (random-id)]
     (p/let [client-id (js/navigator.locks.request id #js {:mode "exclusive"}
                                                   (fn [_]
@@ -49,12 +53,17 @@
                                                            (some #(when (= (.-name %) id) %))
                                                            .-clientId))))]
       (assert (some? client-id))
-      (reset! *client-id client-id)
       (do ;; don't wait this promise
         (js/navigator.locks.request client-id #js {:mode "exclusive"}
                                     (fn [_] (p/deferred)))
         nil)
+      (log/debug :client-id client-id)
       client-id)))
+
+(defn- ensure-client-id
+  []
+  (or @*client-id
+      (reset! *client-id (get-client-id))))
 
 (defn- ensure-common-channel
   [service-name]
@@ -88,21 +97,27 @@
 (defn- check-master-or-slave-client!
   "Check if the current client is the master (otherwise, it is a slave)"
   [service-name on-become-master on-become-slave]
-  (p/let [client-id (or @*client-id (get-client-id))]
+  (p/let [client-id (ensure-client-id)]
     (js/navigator.locks.request service-name #js {:mode "exclusive", :ifAvailable true}
-                                (fn [_lock]
+                                (fn [lock]
                                   (p/let [^js locks (js/navigator.locks.query)
                                           locked? (some #(when (and (= (.-name %) service-name)
                                                                     (= (.-clientId %) client-id))
                                                            true)
                                                         (.-held locks))]
-                                    (if locked?
+                                    (cond
+                                      (and locked? lock) ;become master
                                       (p/do!
                                        (reset! *master-client? true)
                                        (on-become-master)
                                        (reset! *master-client-lock (p/deferred))
-                                       ;; Keep lock until context destroyed
+                                        ;; Keep lock until context destroyed
                                        @*master-client-lock)
+
+                                      (and locked? (nil? lock)) ;already locked by this client, do nothing
+                                      (assert (true? @*master-client?))
+
+                                      (not locked?) ;become slave
                                       (p/do!
                                        (reset! *master-client? false)
                                        (on-become-slave))))))))
@@ -155,12 +170,49 @@
   [service-name slave-client-id event *register-finish-promise?]
   (let [slave-client-id* (:slave-client-id event)]
     (when (= slave-client-id slave-client-id*)
-      (js/navigator.locks.request service-name #js {:mode "exclusive"}
-                                  (fn [_lock]
-                                    ;; The master has gone, elect the new master
-                                    (prn :debug "master has gone")
-                                    (reset! *master-client? :re-check)))
+      (p/let [^js locks (js/navigator.locks.query)
+              already-watching?
+              (some
+               (fn [l] (and (= service-name (.-name l))
+                            (= slave-client-id (.-clientId l))))
+               (.-pending locks))]
+        (when-not already-watching?     ;dont watch multiple times
+          (js/navigator.locks.request service-name #js {:mode "exclusive"}
+                                      (fn [_lock]
+                                        ;; The master has gone, elect the new master
+                                        (log/debug "master has gone" nil)
+                                        (reset! *master-client? :re-check)))))
       (p/resolve! @*register-finish-promise?))))
+
+(defn- <re-requests-in-flight-on-slave!
+  [client-channel]
+  (when (seq @*requests-in-flight)
+    (log/debug "Requests were in flight when master changed. Requeuing..." (count @*requests-in-flight))
+    (->>
+     @*requests-in-flight
+     (p/run!
+      (fn [[id {:keys [method args _resolve-fn _reject-fn]}]]
+        (.postMessage client-channel (bean/->js {:id id
+                                                 :type "request"
+                                                 :method method
+                                                 :args args})))))))
+
+(defn- <re-requests-in-flight-on-master!
+  [target]
+  (when (seq @*requests-in-flight)
+    (log/debug "Requests were in flight when tab became master. Requeuing..." (count @*requests-in-flight))
+    (->>
+     @*requests-in-flight
+     (p/run!
+      (fn [[id {:keys [method args resolve-fn reject-fn]}]]
+        (->
+         (p/let [result (apply-target-f! target method args)]
+           (resolve-fn result))
+         (p/catch (fn [e]
+                    (log/error "Error processing request" e)
+                    (reject-fn e)))
+         (p/finally (fn []
+                      (swap! *requests-in-flight dissoc id)))))))))
 
 (defn- on-become-slave
   [slave-client-id service-name common-channel status-ready-promise]
@@ -178,17 +230,9 @@
          (case type
            "master-changed"
            (p/do!
-            (js/console.log "master-client change detected. Re-registering...")
+            (log/debug "master-client change detected. Re-registering..." nil)
             (<register)
-            (when (seq @*requests-in-flight)
-              (log/info "Requests were in flight when master changed. Requeuing..." (count @*requests-in-flight))
-              (p/loop [requests @*requests-in-flight]
-                (when-let [[id {:keys [method args _resolve-fn _reject-fn]}] (first requests)]
-                  (.postMessage client-channel (bean/->js {:id id
-                                                           :type "request"
-                                                           :method method
-                                                           :args args}))
-                  (p/recur (rest requests))))))
+            (<re-requests-in-flight-on-slave! client-channel))
            "slave-registered"
            (slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
 
@@ -196,18 +240,18 @@
            (.postMessage js/self data)
 
            "slave-register"
-           (log/info :ignored-event event*)))))
+           (log/debug :ignored-event event*)))))
     (->
      (p/do!
       (<register)
       (p/resolve! status-ready-promise))
      (p/catch (fn [e]
-                (js/console.error e)
+                (log/error :on-become-slave e)
                 (p/rejected e))))))
 
 (defn- on-become-master
   [master-client-id service-name common-channel target on-become-master-handler status-ready-deferred-p]
-  (prn :debug :become-master master-client-id :service service-name)
+  (log/debug :become-master master-client-id :service service-name)
   (listen-common-channel
    common-channel
    (fn [event]
@@ -216,7 +260,7 @@
          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
            (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
                                        (fn [_]
-                                                           ;; The client has gone. Clean up
+                                         (log/debug :slave-has-gone slave-client-id)
                                          (.close client-channel)))
            (listen-client-channel client-channel (create-on-request-handler client-channel target))
            (.postMessage common-channel (bean/->js {:type "slave-registered"
@@ -228,19 +272,7 @@
                                     :serviceName service-name})
   (p/do!
    (on-become-master-handler service-name)
-   (when (seq @*requests-in-flight)
-     (js/console.log "Requests were in flight when tab became master. Requeuing...")
-     (p/all (map
-             (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-               (->
-                (p/let [result (apply-target-f! target method args)]
-                  (resolve-fn result))
-                (p/catch (fn [e]
-                           (js/console.error "Error processing request" e)
-                           (reject-fn e)))
-                (p/finally (fn []
-                             (swap! *requests-in-flight dissoc id)))))
-             @*requests-in-flight)))
+   (<re-requests-in-flight-on-master! target)
    (p/resolve! status-ready-deferred-p)))
 
 (defn create-service
@@ -248,7 +280,7 @@
   (p/let [_ (clear-old-service!)
           status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)
-          client-id (or @*client-id (get-client-id))
+          client-id (ensure-client-id)
           check-master-slave-fn!
           (fn [_re-elect?]
             (check-master-or-slave-client!
