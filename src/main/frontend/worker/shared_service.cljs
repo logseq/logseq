@@ -6,8 +6,7 @@
             [promesa.core :as p]))
 
 ;; TODO:
-;; - client-channel close before re-creating new one
-;; - There is a problem of duplicate event listener registrations.
+;; - *requests-in-flight - use vector instead of map
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
 ;; Related thread: https://github.com/rhashimoto/wa-sqlite/discussions/81
@@ -57,6 +56,30 @@
         nil)
       client-id)))
 
+(defn- ensure-common-channel
+  [service-name]
+  (or @*common-channel
+      (reset! *common-channel (js/BroadcastChannel. (str "shared-service-common-channel-" service-name)))))
+
+(defn- ensure-client-channel
+  [slave-client-id service-name]
+  (or @*client-channel
+      (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name)))))
+
+(defn- listen-common-channel
+  [common-channel listener-fn]
+  (when-let [old-listener @*common-channel-listener]
+    (.removeEventListener common-channel "message" old-listener))
+  (reset! *common-channel-listener listener-fn)
+  (.addEventListener common-channel "message" listener-fn))
+
+(defn- listen-client-channel
+  [client-channel listener-fn]
+  (when-let [old-listener @*client-channel-listener]
+    (.removeEventListener client-channel "message" old-listener))
+  (reset! *client-channel-listener listener-fn)
+  (.addEventListener client-channel "message" listener-fn))
+
 (defn- apply-target-f!
   [target method args]
   (when-let [f (gobj/get target method)]
@@ -99,19 +122,6 @@
    (reset! *client-channel-listener nil)
    (reset! *requests-in-flight {})))
 
-(defn- get-on-request-listener
-  [id' resolve-fn reject-fn]
-  (letfn [(listener [event]
-            (let [{:keys [id type error result]} (bean/->clj (.-data event))]
-              (when (and (= id id') (not= type "request"))
-                (swap! *requests-in-flight dissoc id')
-                (.removeEventListener @*client-channel "message" listener)
-                (if error
-                  (do (js/console.error "Error processing request" error)
-                      (reject-fn error))
-                  (resolve-fn result)))))]
-    listener))
-
 (defn- on-response-handler
   [event]
   (let [{:keys [id type error result]} (bean/->clj (.-data event))]
@@ -141,27 +151,6 @@
                                          :error error
                                          :method-key (first args)})))))))
 
-(defn- ensure-common-channel
-  [service-name]
-  (or @*common-channel
-      (let [channel (js/BroadcastChannel. (str "shared-service-common-channel-" service-name))]
-        (reset! *common-channel channel)
-        channel)))
-
-(defn- listen-common-channel
-  [common-channel listener-fn]
-  (when-let [old-listener @*common-channel-listener]
-    (.removeEventListener common-channel "message" old-listener))
-  (reset! *common-channel-listener listener-fn)
-  (.addEventListener common-channel "message" listener-fn))
-
-(defn- listen-client-channel
-  [client-channel listener-fn]
-  (when-let [old-listener @*client-channel-listener]
-    (.removeEventListener client-channel "message" old-listener))
-  (reset! *client-channel-listener listener-fn)
-  (.addEventListener client-channel "message" listener-fn))
-
 (defn- slave-registered-handler
   [service-name slave-client-id event *register-finish-promise?]
   (let [slave-client-id* (:slave-client-id event)]
@@ -175,12 +164,13 @@
 
 (defn- on-become-slave
   [slave-client-id service-name common-channel status-ready-promise]
-  (reset! *client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name)))
-  (let [*register-finish-promise? (atom nil)
+  (let [client-channel (ensure-client-channel slave-client-id service-name)
+        *register-finish-promise? (atom nil)
         <register #(do (.postMessage common-channel #js {:type "slave-register"
                                                          :slave-client-id slave-client-id})
                        (reset! *register-finish-promise? (p/deferred))
                        @*register-finish-promise?)]
+    (listen-client-channel client-channel on-response-handler)
     (listen-common-channel
      common-channel
      (fn [event]
@@ -191,17 +181,14 @@
             (js/console.log "master-client change detected. Re-registering...")
             (<register)
             (when (seq @*requests-in-flight)
-              (js/console.log "Requests were in flight when master changed. Requeuing...")
-              (p/all (map
-                      (fn [[id {:keys [method args resolve-fn reject-fn]}]]
-                        (let [listener (get-on-request-listener id resolve-fn reject-fn)]
-                          (when-let [channel @*client-channel]
-                            (.addEventListener channel "message" listener)
-                            (.postMessage channel (bean/->js {:id id
-                                                              :type "request"
-                                                              :method method
-                                                              :args args})))))
-                      @*requests-in-flight))))
+              (log/info "Requests were in flight when master changed. Requeuing..." (count @*requests-in-flight))
+              (p/loop [requests @*requests-in-flight]
+                (when-let [[id {:keys [method args _resolve-fn _reject-fn]}] (first requests)]
+                  (.postMessage client-channel (bean/->js {:id id
+                                                           :type "request"
+                                                           :method method
+                                                           :args args}))
+                  (p/recur (rest requests))))))
            "slave-registered"
            (slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
 
@@ -295,19 +282,16 @@
                                            (p/create
                                             (fn [resolve-fn reject-fn]
                                               (let [id (random-id)
-                                                    listener (get-on-request-listener id resolve-fn reject-fn)
-                                                    channel @*client-channel]
-                                                (when channel
-                                                  (.addEventListener channel "message" listener)
-                                                  (.postMessage channel (bean/->js
-                                                                         {:id id
-                                                                          :type "request"
-                                                                          :method method
-                                                                          :args args})))
+                                                    client-channel (ensure-client-channel client-id service-name)]
                                                 (swap! *requests-in-flight assoc id {:method method
                                                                                      :args args
                                                                                      :resolve-fn resolve-fn
-                                                                                     :reject-fn reject-fn})))))))))})
+                                                                                     :reject-fn reject-fn})
+                                                (.postMessage client-channel (bean/->js
+                                                                              {:id id
+                                                                               :type "request"
+                                                                               :method method
+                                                                               :args args}))))))))))})
      :status status}))
 
 (defn broadcast-to-clients!
