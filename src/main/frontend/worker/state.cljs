@@ -28,6 +28,7 @@
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
+                       ;; TODO: refactor: Update the following 5 values using :thread-api/update-thread-atom
                        ;; FIXME: this name :config is too general
                        :config {}
                        :git/current-repo nil
