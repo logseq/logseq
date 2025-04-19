@@ -345,7 +345,7 @@
               (when namespace?
                 (let [namespace' (first (common-util/split-last "/" original-page-name))]
                   (when-not (string/blank? namespace')
-                    {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace')}})))
+                    {:block/namespace {:block/name (string/trim (common-util/page-name-sanity-lc namespace'))}})))
               (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
                 (let [current-ms (common-util/time-ms)]
                   {:block/created-at current-ms

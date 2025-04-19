@@ -362,8 +362,7 @@
                           (exclude-ids (:db/id e))
                           (or (ldb/hidden-or-internal-tag? e)
                               (entity-util/property? e)
-                              (entity-util/built-in? e)
-                              (nil? (:block/title e))))
+                              (entity-util/built-in? e)))
                 (cond-> e
                   refs-count?
                   (assoc :block.temp/refs-count (count (:block/_refs e)))))))
