@@ -829,10 +829,10 @@
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
         created-at-filter (or (rum/react *created-at-filter) (:created-at-filter settings))
-        link-dist (if (nil? link-dist') link-dist link-dist')
-        charge-strength (if (nil? charge-strength') charge-strength charge-strength')
-        charge-range (if (nil? charge-range') charge-range charge-range')
-        link-strength (if (nil? link-strength') link-strength link-strength')
+        link-dist (if (nil? link-dist) link-dist' link-dist)
+        charge-strength (if (nil? charge-strength) charge-strength' charge-strength)
+        charge-range (if (nil? charge-range) charge-range' charge-range)
+        link-strength (if (nil? link-strength) link-strength' link-strength)
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
