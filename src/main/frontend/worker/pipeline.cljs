@@ -285,9 +285,7 @@
         (or from-disk? new-graph?)
         (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
               path-refs (distinct (compute-block-path-refs-tx tx-report blocks))
-              tx-report' (if (seq path-refs)
-                           (ldb/transact! conn path-refs {:pipeline-replace? true})
-                           tx-report)
+              tx-report' (ldb/transact! conn path-refs {:pipeline-replace? true})
               full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
                                      :tx-meta (:tx-meta tx-report)
