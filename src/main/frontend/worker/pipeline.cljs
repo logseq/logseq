@@ -253,13 +253,7 @@
                                     (when (:block/uuid (d/entity db-after db-id))
                                       {:db/id db-id
                                        :block/tx-id tx-id}))) updated-blocks))))
-          tx-report' (if (seq replace-tx)
-                       (ldb/transact! conn replace-tx {:pipeline-replace? true})
-                       (do
-                         (when-not (or (exists? js/process)
-                                       (::skip-store-conn tx-meta false))
-                           (d/store @conn))
-                         tx-report*))
+          tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true})
           _ (validate-db! repo conn tx-report* tx-meta context)
           full-tx-data (concat (:tx-data tx-report*)
                                (:tx-data refs-tx-report)
@@ -287,14 +281,9 @@
         (or from-disk? new-graph?)
         (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
               path-refs (distinct (compute-block-path-refs-tx tx-report blocks))
-              tx-report' (or
-                          (when (seq path-refs)
-                            (ldb/transact! conn path-refs {:pipeline-replace? true}))
-                          (do
-                            (when-not (or (exists? js/process)
-                                          (::skip-store-conn tx-meta false))
-                              (d/store @conn))
-                            tx-report))
+              tx-report' (if (seq path-refs)
+                           (ldb/transact! conn path-refs {:pipeline-replace? true})
+                           tx-report)
               full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
                                      :tx-meta (:tx-meta tx-report)
