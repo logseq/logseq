@@ -2365,8 +2365,11 @@
         query (:logseq.property/query block)
         advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))
         show-query? (and *show-query? @*show-query?)]
-    [:div.flex.flex-row.w-full
-     {:on-mouse-over #(set-hover? true)
+    [:div
+     {:class (if (and query? blank?)
+               "inline-flex"
+               "inline")
+      :on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      (cond
        (and query? (and blank? (or advanced-query? show-query?)))
@@ -2374,7 +2377,7 @@
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
-       (text-block-title config block))
+       [:div.inline (text-block-title config block)])
      (when query?
        (ui/tooltip
         (shui/button
@@ -3427,7 +3430,6 @@
         *hide-block-refs? (get state ::hide-block-refs?)
         *show-query? (get state ::show-query?)
         show-query? (rum/react *show-query?)
-        _ (prn :debug :show-query? show-query?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         refs-count (if (seq (:block/_refs block))
