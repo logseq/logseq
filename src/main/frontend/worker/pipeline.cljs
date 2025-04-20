@@ -213,7 +213,8 @@
     (let [tx-before-refs (compute-extra-tx-data repo tx-report)
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
-                                                                        :outliner-op :pre-hook-invoke})]
+                                                                        :outliner-op :pre-hook-invoke
+                                                                        :skip-store? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
@@ -236,7 +237,8 @@
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn block-refs {:pipeline-replace? true}))
+                           (ldb/transact! conn block-refs {:pipeline-replace? true
+                                                           :skip-store? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
                         ;; block path refs
