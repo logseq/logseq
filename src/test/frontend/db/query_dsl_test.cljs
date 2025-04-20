@@ -18,6 +18,12 @@
 ;; Test helpers
 ;; ============
 
+(def db-block-attrs
+  ;; '*' needed as we need to pull user properties and don't know their names in advance
+  '[*
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
+
 (def dsl-query*
   "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
   result of build query. This is useful for documenting examples and debugging.
@@ -48,10 +54,13 @@
                                     :query (apply list 'has-property (rest (:query m)))}
                                    :else
                                    m)]
-                          m'))]
+                          m'))
+                      query-dsl/db-block-attrs db-block-attrs]
           (apply query-dsl/query args))))
     :else
-    query-dsl/query))
+    (fn dsl-query-star [& args]
+      (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+        (apply query-dsl/query args)))))
 
 (defn- ->smart-query
   "Updates to file version if js/process.env.DB_GRAPH is not set"
@@ -70,7 +79,8 @@
 (defn- custom-query
   [query]
   (db/clear-query-state!)
-  (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
+  (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+                      (query-dsl/custom-query test-helper/test-db query {}))]
     (map first (deref result))))
 
 ;; Tests
