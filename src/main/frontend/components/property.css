@@ -41,12 +41,16 @@
   margin-top: 2px;
 }
 
+.property-value-container .jtrigger {
+  @apply focus-visible:outline-none focus-visible:bg-gray-02 focus-visible:rounded;
+}
+
 .ls-properties-area {
   .property-pair {
     @apply flex flex-row flex-wrap space-x-1;
 
     .jtrigger {
-      @apply relative focus-visible:outline-none focus-visible:bg-gray-02 focus-visible:rounded;
+      @apply relative;
 
       &-id {
         @apply absolute left-[-22px] top-[2px] rounded-full leading-none

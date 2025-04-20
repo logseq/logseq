@@ -455,6 +455,13 @@
         (overdue date content)
         content))))
 
+(defn- delete-block-property!
+  [block property]
+  (editor-handler/move-cross-boundary-up-down :up {})
+  (property-handler/remove-block-property! (state/get-current-repo)
+                                           (:db/id block)
+                                           (:db/ident property)))
+
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
   (let [content-fn (fn [{:keys [id]}] (calendar-inner id
@@ -480,13 +487,19 @@
          {:class "jtrigger h-6 empty-btn"
           :variant :text
           :size :sm
-          :on-click open-popup!}
+          :on-click open-popup!
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (delete-block-property! block property)))}
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
          {:tabIndex 0
           :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
-          :on-click open-popup!}
+          :on-click open-popup!
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (delete-block-property! block property)))}
          [:div.flex.flex-row.gap-1.items-center
           (when repeated-task?
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
@@ -1090,7 +1103,10 @@
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-click show!}
+          :on-click show!
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (delete-block-property! block property)))}
          (if (string/blank? value)
            (property-empty-text-value property opts)
            (value-render)))))))
@@ -1108,6 +1124,10 @@
      {:id (or dom-id (random-uuid))
       :tabIndex 0
       :class (str class " " (when-not text-ref-type? "jtrigger"))
+      :on-key-down (fn [e]
+                     (when-not text-ref-type?
+                       (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                         (delete-block-property! block property))))
       :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
@@ -1177,7 +1197,9 @@
                              :on-checked-change add-property!
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property!)))})])
+                                              (add-property!))
+                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                                              (delete-block-property! block property)))})])
           ;; :others
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))
@@ -1231,6 +1253,8 @@
                            (" " "Enter")
                            (do (some-> (rum/deref *el) (.click))
                                (util/stop e))
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
