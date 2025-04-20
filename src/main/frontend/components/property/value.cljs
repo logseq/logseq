@@ -464,7 +464,8 @@
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
-  (let [content-fn (fn [{:keys [id]}] (calendar-inner id
+  (let [*el (rum/use-ref nil)
+        content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
                                                        :property property
                                                        :on-change on-change
@@ -494,12 +495,18 @@
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-         {:tabIndex 0
+         {:ref *el
+          :tabIndex 0
           :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
           :on-click open-popup!
           :on-key-down (fn [e]
-                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                           (delete-block-property! block property)))}
+                         (case (util/ekey e)
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           nil))}
          [:div.flex.flex-row.gap-1.items-center
           (when repeated-task?
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
@@ -1079,12 +1086,18 @@
                            (select block property select-opts' opts)
 
                            (:node :class :property :page :date)
-                           (property-value-select-node block property select-opts' opts))])]
+                           (property-value-select-node block property select-opts' opts))])
+        trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
+        show-popup! (fn [target]
+                      (shui/popup-show! target popup-content
+                                        {:align "start"
+                                         :as-dropdown? true
+                                         :auto-focus? true
+                                         :trigger-id trigger-id}))]
     (if editing?
       (popup-content nil)
-      (let [trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
-            show! (fn [e]
-                    (let [target (.-target e)]
+      (let [show! (fn [e]
+                    (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
                                     (util/meta-key? e)
@@ -1092,12 +1105,7 @@
                                     (when-let [node (.closest target "a")]
                                       (not (or (d/has-class? node "page-ref")
                                                (d/has-class? node "tag")))))
-
-                        (shui/popup-show! target popup-content
-                                          {:align "start"
-                                           :as-dropdown? true
-                                           :auto-focus? true
-                                           :trigger-id trigger-id}))))]
+                        (show-popup! target))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
          {:ref *el
@@ -1105,8 +1113,13 @@
           :tabIndex 0
           :on-click show!
           :on-key-down (fn [e]
-                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
-                           (delete-block-property! block property)))}
+                         (case (util/ekey e)
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           nil))}
          (if (string/blank? value)
            (property-empty-text-value property opts)
            (value-render)))))))
