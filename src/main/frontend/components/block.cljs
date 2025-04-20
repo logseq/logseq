@@ -767,7 +767,7 @@
                                      s (if (and tag? (not (:hide-tag-symbol? config))) (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
-                                   (block-title config page-entity))))]
+                                   (block-title config page-entity {}))))]
           page-component))]]))
 
 (rum/defc popup-preview-impl
@@ -1262,7 +1262,8 @@
     (if (and block (:block/title block))
       (let [content-cp (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                       block nil (:block/uuid block)
-                                      (:slide? config))
+                                      (:slide? config)
+                                      nil)
             display-type (:logseq.property.node/display-type block)]
         (if (and display-type (not (contains? #{:quote :math} display-type)))
           content-cp
@@ -2356,15 +2357,57 @@
               "Practice")
              [:div "Practice cards"])])))))))
 
+(rum/defc block-title-aux
+  [config block {:keys [query? *show-query?]}]
+  (let [[hover? set-hover?] (rum/use-state false)
+        blank? (string/blank? (:block/title block))
+        opacity (if hover? "opacity-100" "opacity-0")
+        query (:logseq.property/query block)
+        advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))
+        show-query? (and *show-query? @*show-query?)]
+    [:div
+     {:class (if (and query? blank?)
+               "inline-flex"
+               "inline")
+      :on-mouse-over #(set-hover? true)
+      :on-mouse-out #(set-hover? false)}
+     (cond
+       (and query? (and blank? (or advanced-query? show-query?)))
+       [:span.opacity-75.hover:opacity-100 "Untitled query"]
+       (and query? blank?)
+       (query-builder-component/builder query {})
+       :else
+       [:div.inline (text-block-title config block)])
+     (when query?
+       (ui/tooltip
+        (shui/button
+         {:size :sm
+          :variant :ghost
+          :class (str "ls-small-icon text-muted-foreground ml-2 w-6 h-6 transition-opacity ease-in duration-300 " opacity)
+          :on-pointer-down (fn [e]
+                             (util/stop e)
+                             (when *show-query? (swap! *show-query? not)))}
+         (ui/icon "settings"))
+        [:div.opacity-75 (if show-query?
+                           "Hide query"
+                           "Set query")]))
+     (when-let [property (:logseq.property/created-from-property block)]
+       (when-let [message (when (= :url (:logseq.property/type property))
+                            (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
+         (ui/tooltip
+          (shui/button
+           {:size :sm
+            :variant :ghost
+            :class "ls-type-warning ls-small-icon px-1 !py-0 h-4 ml-1"}
+           (ui/icon "alert-triangle"))
+          [:div.opacity-75 message])))]))
+
 (rum/defc block-title < rum/reactive db-mixins/query
-  [config block]
-  (let [collapsed? (:collapsed? config)
-        block' (db/entity (:db/id block))
+  [config block {:keys [*show-query?]}]
+  (let [block' (db/entity (:db/id block))
         node-display-type (:logseq.property.node/display-type block')
         db (db/get-db)
-        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')
-        query (:logseq.property/query block')
-        advanced-query? (and query? (= :code node-display-type))]
+        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
@@ -2384,32 +2427,12 @@
       (= :math node-display-type)
       (latex/latex (:block/title block) true false)
 
-      (and query?
-           collapsed?
-           (not advanced-query?)
-           (string/blank? (:block/title block'))
-           (seq (:block/title query)))
-      (query-builder-component/builder query {})
-
       (seq (:logseq.property/_query block'))
       (query-builder-component/builder block' {})
 
-      (and query? (string/blank? (:block/title block')))
-      [:span.opacity-50 "Set query title"]
-
       :else
-      [:span.w-full
-       (text-block-title config block)
-       (when-let [property (:logseq.property/created-from-property block)]
-         (when-let [message (when (= :url (:logseq.property/type property))
-                              (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
-           (ui/tooltip
-            (shui/button
-             {:size :sm
-              :variant :ghost
-              :class "ls-type-warning px-1 !py-0 h-4 ml-1"}
-             (ui/icon "alert-triangle"))
-            [:div.opacity-75 message])))])))
+      (block-title-aux config block {:query? query?
+                                     :*show-query? *show-query?}))))
 
 (rum/defc span-comma
   []
@@ -2829,7 +2852,7 @@
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid] :as block} edit-input-id block-id slide? *show-query?]
   (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? (state/get-current-repo))
         scheduled (when-not db-based? (:block/scheduled block))
@@ -2908,7 +2931,7 @@
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
-          (block-title config block)])
+          (block-title config block {:*show-query? *show-query?})])
 
        (if db-based?
          (task-spent-time-cp block)
@@ -2977,7 +3000,7 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   (rum/local false ::hover?)
-  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs?]}]
+  [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
   (let [format (if (config/db-based-graph? (state/get-current-repo))
                  :markdown
                  (or (:block/format block) :markdown))
@@ -3025,7 +3048,7 @@
                                           (editor-handler/unhighlight-blocks!)
                                           (state/set-editing! edit-input-id content block "" {:db (db/get-db)
                                                                                               :container-id (:container-id config)}))}})
-           (block-content config block edit-input-id block-id slide?))
+           (block-content config block edit-input-id block-id slide? *show-query?))
 
           (when (and (not hide-block-refs-count?)
                      (not named?))
@@ -3383,25 +3406,6 @@
       [block* result]
       [nil result])))
 
-(rum/defc query-property-cp < rum/reactive db-mixins/query
-  [block config collapsed?]
-  (let [block (db/entity (:db/id block))
-        db (db/get-db)
-        query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block)]
-    (when (and query? (not collapsed?))
-      (let [query-id (:db/id (:logseq.property/query block))
-            query (some-> query-id db/sub-block)
-            advanced-query? (= :code (:logseq.property.node/display-type query))]
-        (cond
-          (and advanced-query? (not collapsed?))
-          [:div.flex.flex-1.my-1 {:style {:margin-left 42}}
-           (src-cp (assoc config :code-block query)
-                   {:language "clojure"})]
-
-          (and (not advanced-query?) (not collapsed?))
-          [:div.my-1 {:style {:margin-left 42}}
-           (block-container (assoc config :property? true) query)])))))
-
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*ref (atom nil)
@@ -3419,10 +3423,13 @@
              (assoc state
                     ::ref *ref
                     ::hide-block-refs? (atom default-hide?)
+                    ::show-query? (atom false)
                     ::refs-count *refs-count)))}
   [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [*ref (::ref state)
         *hide-block-refs? (get state ::hide-block-refs?)
+        *show-query? (get state ::show-query?)
+        show-query? (rum/react *show-query?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         refs-count (if (seq (:block/_refs block))
@@ -3607,7 +3614,8 @@
                                          :edit? editing?
                                          :refs-count refs-count
                                          :*hide-block-refs? *hide-block-refs?
-                                         :hide-block-refs-count? hide-block-refs-count?}))])]
+                                         :hide-block-refs-count? hide-block-refs-count?
+                                         :*show-query? *show-query?}))])]
 
          (when (and db-based? (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]
@@ -3615,14 +3623,22 @@
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
-     (when-not (:table? config)
-       (query-property-cp block config collapsed?))
-
      (when (and db-based?
                 (or sidebar? (not collapsed?))
                 (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
+
+     (when (and db-based? show-query? (not (:table? config)))
+       (let [query? (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block)
+             query (:logseq.property/query block)
+             advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))]
+         [:div.ml-6.my-1
+          (if advanced-query?
+            (src-cp (assoc config :code-block query) {:language "clojure"})
+            [:div
+             [:div.opacity-75.ml-5.text-sm.mb-1 "Set query:"]
+             (block-container config query)])]))
 
      (when (and (not (or (:table? config) (:property? config)))
                 (not hide-block-refs?)

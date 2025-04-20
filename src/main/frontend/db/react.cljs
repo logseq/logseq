@@ -198,7 +198,8 @@
            (when (or query query-fn)
              (try
                (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
-                 (when-not custom?
+                 (if custom?
+                   (async/put! (state/get-reactive-custom-queries-chan) [f query])
                    (f)))
                (catch :default e
                  (js/console.error e)

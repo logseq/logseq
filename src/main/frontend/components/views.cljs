@@ -1793,8 +1793,12 @@
                          (c.m/run-task*
                           (m/sp
                             (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
-                              (if (and query? (not (or sorting filters)) (string/blank? input))
+                              (cond
+                                (and query? (empty? query-entity-ids))
+                                (set-data! nil)
+                                (and query? (not (or sorting filters)) (string/blank? input))
                                 (set-data! query-entity-ids)
+                                :else
                                 (when (or (not query?) need-query?)
                                   (try
                                     (let [{:keys [data ref-pages-count]}
