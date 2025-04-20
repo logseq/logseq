@@ -7,6 +7,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -23,19 +24,37 @@
       (js/console.log "Storage will not be cleared unless from explicit user action")
       (js/console.warn "OPFS storage may be cleared by the browser under storage pressure."))))
 
+(defn- get-worker-state-context
+  [state]
+  (let [config (:config state)]
+    {:state (select-keys state [:git/current-repo config])
+     :context {:dev? config/dev?
+               :node-test? util/node-test?
+               :validate-db-options (:dev/validate-db-options config)
+               :importing? (:graph/importing state)
+               :date-formatter (or
+                                (:journal/page-title-format config)
+                                (state/get-date-formatter))
+               :journal-file-name-format (or (:journal/file-name-format config)
+                                             (state/get-journal-file-name-format)
+                                             date/default-journal-filename-formatter)
+               :export-bullet-indentation (or
+                                           (:export/bullet-indentation config)
+                                           (state/get-export-bullet-indentation))
+               :preferred-format (state/get-preferred-format)
+               :journals-directory (config/get-journals-directory)
+               :whiteboards-directory (config/get-whiteboards-directory)
+               :pages-directory (config/get-pages-directory)}}))
+
 (defn- sync-app-state!
   []
   (add-watch state/state
              :sync-worker-state
              (fn [_ _ prev current]
-               (let [new-state (cond-> {}
-                                 (not= (:git/current-repo prev)
-                                       (:git/current-repo current))
-                                 (assoc :git/current-repo (:git/current-repo current))
-                                 (not= (:config prev) (:config current))
-                                 (assoc :config (:config current)))]
-                 (when (seq new-state)
-                   (state/<invoke-db-worker :thread-api/sync-app-state new-state))))))
+               (let [state1 (get-worker-state-context prev)
+                     state2 (get-worker-state-context current)]
+                 (when (not= state1 state2)
+                   (state/<invoke-db-worker :thread-api/sync-app-state state2))))))
 
 (defn get-route-data
   [route-match]
@@ -60,23 +79,6 @@
                                               (state/get-current-repo)
                                               {:old-state old-state :new-state new-state})))))))
 
-(defn transact!
-  [repo tx-data tx-meta]
-  (let [;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
-        context {:dev? config/dev?
-                 :node-test? util/node-test?
-                 :validate-db-options (:dev/validate-db-options (state/get-config))
-                 :importing? (:graph/importing @state/state)
-                 :date-formatter (state/get-date-formatter)
-                 :journal-file-name-format (or (state/get-journal-file-name-format)
-                                               date/default-journal-filename-formatter)
-                 :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)
-                 :journals-directory (config/get-journals-directory)
-                 :whiteboards-directory (config/get-whiteboards-directory)
-                 :pages-directory (config/get-pages-directory)}]
-    (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
-
 (defn start-db-worker!
   []
   (when-not util/node-test?
@@ -99,17 +101,14 @@
       (reset! state/*db-worker wrapped-worker)
       (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (state/<invoke-db-worker :thread-api/sync-app-state
-                                             {:git/current-repo (state/get-current-repo)
-                                              :config (:config @state/state)})
+                  _ (state/<invoke-db-worker :thread-api/sync-app-state (get-worker-state-context @state/state))
                   _ (sync-app-state!)
                   _ (sync-ui-state!)
-                  _ (ask-persist-permission!)
-                  _ (state/pub-event! [:graph/sync-context])]
+                  _ (ask-persist-permission!)]
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (db-transact/transact transact!
+               (db-transact/transact db/transact!
                                      (if (string? repo) repo (state/get-current-repo))
                                      tx-data
                                      tx-meta)))

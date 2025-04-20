@@ -34,7 +34,6 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.entity-plus :as entity-plus]
@@ -551,59 +550,10 @@
       (->> (ldb/get-block-parents @conn block-id {:depth (or depth 3)})
            (map (fn [b] (d/pull @conn '[*] (:db/id b))))))))
 
-(def-thread-api :thread-api/set-context
-  [context]
-  (when context (worker-state/update-context! context))
-  nil)
-
-(def-thread-api :thread-api/transact
-  [repo tx-data tx-meta context]
-  (when repo (worker-state/set-db-latest-tx-time! repo))
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (try
-      (let [tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
-                       (map (fn [m]
-                              (if (and (map? m) (nil? (:block/order m)))
-                                (assoc m :block/order (db-order/gen-key nil))
-                                m)) tx-data)
-                       tx-data)
-            _ (when context (worker-state/set-context! context))
-            tx-meta' (cond-> tx-meta
-                       (and (not (:whiteboard/transact? tx-meta))
-                            (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
-                       (assoc :skip-store? true)
-
-                       true
-                       (dissoc :insert-blocks?))]
-        (when-not (and (:create-today-journal? tx-meta)
-                       (:today-journal-name tx-meta)
-                       (seq tx-data')
-                       (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
-
-           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
-
-          (worker-util/profile "Worker db transact"
-                               (ldb/transact! conn tx-data' tx-meta')))
-        nil)
-      (catch :default e
-        (prn :debug :error)
-        (js/console.error e)
-        (prn :debug :tx-data @conn tx-data)))))
-
 (def-thread-api :thread-api/get-initial-data
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (sqlite-common-db/get-initial-data @conn)))
-
-(def-thread-api :thread-api/get-page-refs-count
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (sqlite-common-db/get-page->refs-count @conn)))
-
-(def-thread-api :thread-api/close-db
-  [repo]
-  (close-db! repo)
-  nil)
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -710,8 +660,9 @@
   nil)
 
 (def-thread-api :thread-api/sync-app-state
-  [new-state]
-  (worker-state/set-new-state! new-state)
+  [{:keys [state context]}]
+  (when state (worker-state/set-new-state! state))
+  (when context (worker-state/update-context! context))
   nil)
 
 (def-thread-api :thread-api/sync-ui-state

@@ -255,6 +255,8 @@
                                     (when (:block/uuid (d/entity db-after db-id))
                                       {:db/id db-id
                                        :block/tx-id tx-id}))) updated-blocks))))
+          ;; Notice: ldb/transact! needs to be executed even if `replace-tx` is empty,
+          ;; to ensure that the underlying db storage is persisted
           tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true})
           _ (validate-db! repo conn tx-report* tx-meta context)
           full-tx-data (concat (:tx-data tx-report*)
