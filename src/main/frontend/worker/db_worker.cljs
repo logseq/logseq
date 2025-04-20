@@ -11,6 +11,7 @@
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.cache :as common.cache]
             [frontend.common.graph-view :as graph-view]
+            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db.fix :as db-fix]
@@ -22,7 +23,7 @@
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.core]
+            [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -43,6 +44,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defonce *sqlite worker-state/*sqlite)
@@ -839,11 +841,13 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
-(defn on-become-master
+(defn- on-become-master
   [repo]
-  (p/do!
-   (init-sqlite-module!)
-   (start-db! repo {})))
+  (js/Promise.
+   (m/sp
+     (c.m/<? (init-sqlite-module!))
+     (c.m/<? (start-db! repo {}))
+     (m/? (rtc.core/new-task--rtc-start true)))))
 
 (defn- init-service!
   [graph]
@@ -851,8 +855,8 @@
     (close-db! prev-graph))
   (when (and graph (not= graph (first @*service)))
     (p/let [service (shared-service/<create-service graph
-                                                   (bean/->js fns)
-                                                   #(on-become-master graph))]
+                                                    (bean/->js fns)
+                                                    #(on-become-master graph))]
       (assert (p/promise? (get-in service [:status :ready])))
       (reset! *service [graph service])
       service)))
@@ -860,8 +864,8 @@
 (def-thread-api :thread-api/init-shared-service
   [graph]
   (p/do!
-    (init-service! graph)
-    nil))
+   (init-service! graph)
+   nil))
 
 (defn init
   "web worker entry"

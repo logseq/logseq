@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 ;; Idea and code copied from https://github.com/Matt-TOTW/shared-service/blob/master/src/sharedService.ts
@@ -335,6 +336,9 @@
      :status status}))
 
 (defn broadcast-to-clients!
-  [payload]
-  (when-let [channel @*common-channel]
-    (.postMessage channel payload)))
+  [type' data]
+  (let [transit-payload (ldb/write-transit-str [type' data])]
+    (.postMessage js/self transit-payload)
+    (when-let [common-channel @*common-channel]
+      (.postMessage common-channel #js {:type (str type')
+                                        :data transit-payload}))))
