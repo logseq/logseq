@@ -385,3 +385,11 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
         (tc/to-long (f now (t/years 1)))
         nil)
       (tc/to-long (tc/to-date value)))))
+
+(defn keyword->string
+  [x]
+  (if (keyword? x)
+    (if-let [nn (namespace x)]
+      (str nn "/" (name x))
+      (name x))
+    x))
