@@ -13,6 +13,7 @@
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
@@ -395,7 +396,7 @@
                          :persist-op? false} (worker-state/get-context))
           (transact-remote-schema-version! repo)
           (transact-block-refs! repo))))
-      (worker-util/post-message :add-repo {:repo repo}))))
+      (shared-service/broadcast-to-clients! :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
@@ -412,12 +413,13 @@
                                                  :graph-uuid graph-uuid
                                                  :schema-version (str schema-version)})))
 
-(defn new-task--download-info-list
-  [get-ws-create-task graph-uuid schema-version]
-  (m/join :download-info-list
-          (ws-util/send&recv get-ws-create-task {:action "download-info-list"
-                                                 :graph-uuid graph-uuid
-                                                 :schema-version (str schema-version)})))
+(comment
+  (defn new-task--download-info-list
+    [get-ws-create-task graph-uuid schema-version]
+    (m/join :download-info-list
+            (ws-util/send&recv get-ws-create-task {:action "download-info-list"
+                                                   :graph-uuid graph-uuid
+                                                   :schema-version (str schema-version)}))))
 
 (defn new-task--wait-download-info-ready
   [get-ws-create-task download-info-uuid graph-uuid schema-version timeout-ms]

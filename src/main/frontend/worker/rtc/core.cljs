@@ -17,6 +17,7 @@
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
@@ -635,7 +636,7 @@
   (c.m/run-background-task
    ::subscribe-state
    (m/reduce
-    (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+    (fn [_ v] (shared-service/broadcast-to-clients! :rtc-sync-state v))
     create-get-state-flow)))
 
 (comment

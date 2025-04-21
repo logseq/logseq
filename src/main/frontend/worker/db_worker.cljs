@@ -688,7 +688,7 @@
               {:keys [type payload]} (when (map? data) data)]
           (case type
             :notification
-            (worker-util/post-message type [(:message payload) (:type payload)])
+            (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
             (throw e)))))))
 
 (def-thread-api :thread-api/file-writes-finished?
@@ -849,6 +849,16 @@
      (c.m/<? (start-db! repo {}))
      (m/? (rtc.core/new-task--rtc-start true)))))
 
+(def broadcast-data-types
+  (set (map
+        common-util/keyword->string
+        [:sync-db-changes
+         :notification
+         :log
+         :add-repo
+         :rtc-log
+         :rtc-sync-state])))
+
 (defn- init-service!
   [graph]
   (when-let [prev-graph (first @*service)]
@@ -857,7 +867,7 @@
     (p/let [service (shared-service/<create-service graph
                                                     (bean/->js fns)
                                                     #(on-become-master graph)
-                                                    #{"sync-db-changes"})]
+                                                    broadcast-data-types)]
       (assert (p/promise? (get-in service [:status :ready])))
       (reset! *service [graph service])
       service)))
