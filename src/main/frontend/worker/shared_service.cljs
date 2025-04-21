@@ -3,6 +3,7 @@
   (:require [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -342,10 +343,8 @@
 (defn broadcast-to-clients!
   [type' data]
   (let [transit-payload (ldb/write-transit-str [type' data])]
-    (.postMessage js/self transit-payload)
+    (when (exists? js/self) (.postMessage js/self transit-payload))
     (when-let [common-channel @*common-channel]
-      (let [str-type' (if-let [ns (namespace type')]
-                        (str ns "/" (name type'))
-                        (name type'))]
+      (let [str-type' (common-util/keyword->string type')]
         (.postMessage common-channel #js {:type str-type'
                                           :data transit-payload})))))
