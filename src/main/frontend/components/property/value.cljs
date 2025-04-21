@@ -702,7 +702,10 @@
                           result)))
 
         options (map (fn [node]
-                       (let [id (or (:value node) (:db/id node))
+                       (let [node (if (:value node)
+                                    (assoc (:value node) :block/title (:label node))
+                                    node)
+                             id (:db/id node)
                              [header label] (if (integer? id)
                                               (let [node-title (if (seq (:logseq.property/classes property))
                                                                  (:block/title node)
@@ -719,7 +722,7 @@
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
-                                              [nil (or (:label node) (:block/title node))])]
+                                              [nil (:block/title node)])]
                          (assoc node
                                 :header header
                                 :label-value (:block/title node)
@@ -787,7 +790,11 @@
 (rum/defc property-value-select-node < rum/static
   [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [[result set-result!] (rum/use-state nil)
+  (let [[initial-choices set-initial-choices!] (rum/use-state nil)
+        [result set-result!] (rum/use-state nil)
+        set-result-and-initial-choices! (fn [value]
+                                          (set-initial-choices! value)
+                                          (set-result! value))
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -803,7 +810,8 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   (set-result! nil)
+                                   initial-choices
+                                   ;; TODO rank initial choices higher
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
                                      (set-result! result)))))
@@ -824,7 +832,7 @@
          (p/let [result (db-async/<get-tag-pages repo (:db/id (db/entity :logseq.class/Page)))
                  result' (->> result
                               (remove ldb/built-in?))]
-           (set-result! result'))
+           (set-result-and-initial-choices! result'))
 
          parent-property?
          nil
@@ -832,7 +840,11 @@
          (seq non-root-classes)
          (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
                  result' (distinct (apply concat result))]
-           (set-result! result'))))
+           (set-result-and-initial-choices! result'))
+
+         :else
+         (p/let [result (db-async/<get-property-values (:db/ident property))]
+           (set-result-and-initial-choices! result))))
      [])
 
     (select-node property opts' result)))
