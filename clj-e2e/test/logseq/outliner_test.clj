@@ -3,13 +3,16 @@
    [clojure.test :refer [deftest testing is use-fixtures run-tests]]
    [garden.selectors :as s]
    [wally.main :as w]
+   [wally.repl :as repl]
    [wally.selectors :as ws]))
 
 (defn open-page
   [f & {:keys [headless]
         :or {headless false}}]
-  (w/with-page-open (w/make-page {:headless headless
-                                  :persistent false})
+  (w/with-page
+   ;; w/with-page-open
+    (w/make-page {:headless headless
+                  :persistent false})
     (f)))
 
 (use-fixtures :once open-page)
@@ -57,7 +60,16 @@
   (new-block {:current-text "first block"
               :next-text "second block"})
   (exit-edit)
-  (is (= 3 (w/count* (w/-query ".ls-block")))))
+  (is (= 3 (w/count* (w/-query ".ls-block"))))
+  ;; Pause to use the repl, e.g. example in the comment below
+  (repl/pause))
 
 (comment
-  (run-tests 'logseq.outliner-test))
+
+  (do (repl/resume)
+      (future (run-tests 'logseq.outliner-test)))
+
+  (repl/with-page
+    ;; into edit mode
+    (w/keyboard-press "Enter")
+    (new-block {:next-text "third block"})))
