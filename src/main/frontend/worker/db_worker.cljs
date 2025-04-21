@@ -856,7 +856,8 @@
   (when (and graph (not= graph (first @*service)))
     (p/let [service (shared-service/<create-service graph
                                                     (bean/->js fns)
-                                                    #(on-become-master graph))]
+                                                    #(on-become-master graph)
+                                                    #{"sync-db-changes"})]
       (assert (p/promise? (get-in service [:status :ready])))
       (reset! *service [graph service])
       service)))
