@@ -9,8 +9,7 @@
 (defn open-page
   [f & {:keys [headless]
         :or {headless false}}]
-  (w/with-page
-   ;; w/with-page-open
+  (w/with-page-open
     (w/make-page {:headless headless
                   :persistent false})
     (f)))
@@ -71,5 +70,9 @@
 
   (repl/with-page
     ;; into edit mode
-    (w/keyboard-press "Enter")
-    (new-block {:next-text "third block"})))
+    (new-block {:next-text "third block"}))
+
+  ;; FIXME: properly close browser/playwright/page
+  (repl/with-page
+    (let [page (w/get-page)]
+      (.close page))))
