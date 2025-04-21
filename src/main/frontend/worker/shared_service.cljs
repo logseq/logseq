@@ -229,7 +229,7 @@
                       (vswap! *requests-in-flight dissoc id)))))))))
 
 (defn- <on-become-slave
-  [slave-client-id service-name common-channel status-ready-promise]
+  [slave-client-id service-name common-channel broadcast-data-types status-ready-promise]
   (let [client-channel (ensure-client-channel slave-client-id service-name)
         *register-finish-promise? (atom nil)
         <register #(do (.postMessage common-channel #js {:type "slave-register"
@@ -241,20 +241,21 @@
      common-channel
      (fn [event]
        (let [{:keys [type data] :as event*} (bean/->clj (.-data event))]
-         (case type
-           "master-changed"
-           (p/do!
-            (log/debug "master-client change detected. Re-registering..." nil)
-            (<register)
-            (<re-requests-in-flight-on-slave! client-channel))
-           "slave-registered"
-           (<slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
-
-           "sync-db-changes"
+         (if (contains? broadcast-data-types type)
            (.postMessage js/self data)
+           (case type
+             "master-changed"
+             (p/do!
+              (log/debug "master-client change detected. Re-registering..." nil)
+              (<register)
+              (<re-requests-in-flight-on-slave! client-channel))
+             "slave-registered"
+             (<slave-registered-handler service-name slave-client-id event* *register-finish-promise?)
 
-           "slave-register"
-           (log/debug :ignored-event event*)))))
+             "slave-register"
+             (log/debug :ignored-event event*)
+
+             (log/error :unknown-event event*))))))
     (->
      (p/do!
       (<register)
@@ -291,9 +292,12 @@
    (p/resolve! status-ready-deferred-p)))
 
 (defn <create-service
-  [service-name target on-become-master-handler]
+  "broadcast-data-types - For data matching these types,
+                          forward the data broadcast from the master client directly to the UI thread."
+  [service-name target on-become-master-handler broadcast-data-types]
   (clear-old-service!)
-  (p/let [status {:ready (p/deferred)}
+  (p/let [broadcast-data-types (set broadcast-data-types)
+          status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)
           client-id (<ensure-client-id)
           <check-master-slave-fn!
@@ -304,7 +308,7 @@
                client-id service-name common-channel target
                on-become-master-handler (:ready status))
              #(<on-become-slave
-               client-id service-name common-channel (:ready status))))]
+               client-id service-name common-channel broadcast-data-types (:ready status))))]
     (<check-master-slave-fn!)
 
     (add-watch *master-re-check-trigger :check-master
@@ -340,5 +344,8 @@
   (let [transit-payload (ldb/write-transit-str [type' data])]
     (.postMessage js/self transit-payload)
     (when-let [common-channel @*common-channel]
-      (.postMessage common-channel #js {:type (str type')
-                                        :data transit-payload}))))
+      (let [str-type' (if-let [ns (namespace type')]
+                        (str ns "/" (name type'))
+                        (name type'))]
+        (.postMessage common-channel #js {:type str-type'
+                                          :data transit-payload})))))
