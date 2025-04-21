@@ -41,6 +41,10 @@
   margin-top: 2px;
 }
 
+.property-value-container .jtrigger {
+  @apply focus-visible:outline-none focus-visible:bg-gray-02 focus-visible:rounded;
+}
+
 .ls-properties-area {
   .property-pair {
     @apply flex flex-row flex-wrap space-x-1;
@@ -87,6 +91,12 @@
       &-inner[data-type=checkbox] {
         .jtrigger-id {
           @apply left-[-44px] top-[-2px];
+        }
+      }
+
+      &-inner[data-type=checkbox] {
+        .data-\[state\=checked\]\:bg-primary[data-state="checked"] {
+          background-color: hsl(var(--primary));
         }
       }
 
@@ -192,7 +202,7 @@
     @apply flex items-center;
   }
 
-  &[data-type="datetime"] {
+  &[data-type=datetime] {
     @apply whitespace-nowrap;
   }
 }
@@ -271,10 +281,12 @@ a.control-link {
   }
 }
 
-.property-value-container {
+.ls-block.property-value-container {
   @apply flex-1 shrink-0;
   min-width: 100px;
   min-height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {

@@ -146,7 +146,7 @@
                                               (util/stop-propagation e)))} label)))))
      (when show-type-change-hints?
        (ui/tooltip (svg/info)
-         [:span "Changing the property type clears some property configurations."]))]))
+                   [:span "Changing the property type clears some property configurations."]))]))
 
 (rum/defc property-select
   [exclude-properties select-opts]
@@ -505,7 +505,7 @@
          (let [class-properties? (= (:db/ident property) :logseq.property.class/properties)
                property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
-           [:div.property-value-container.flex.flex-row.gap-1.items-center
+           [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-center
             (cond-> {}
               class-properties? (assoc :class (if (:logseq.property.class/properties block)
                                                 "ml-2 -mt-1"
