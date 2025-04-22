@@ -5,6 +5,7 @@
             [frontend.date :as date]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.db.utils :as db-util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
