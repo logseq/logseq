@@ -6,7 +6,8 @@
             [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.tree :as otree]))
+            [logseq.outliner.tree :as otree]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defn- safe-keywordize
   [block]
@@ -45,12 +46,18 @@
                 (assoc page' :block/children children))))))
 
 (defn get-all-page->content
-  [repo db]
-  (->> (d/datoms db :avet :block/name)
-       (map (fn [d]
-              (let [e (d/entity db (:e d))]
+  [repo db options]
+  (let [filter-fn (if (ldb/db-based-graph? db)
+                    (fn [ent]
+                      (or (not (:logseq.property/built-in? ent))
+                          (contains? sqlite-create-graph/built-in-pages-names (:block/title ent))))
+                    (constantly true))]
+    (->> (d/datoms db :avet :block/name)
+         (map #(d/entity db (:e %)))
+         (filter filter-fn)
+         (map (fn [e]
                 [(:block/title e)
-                 (common-file/block->content repo db (:block/uuid e) {} {})])))))
+                 (common-file/block->content repo db (:block/uuid e) {} options)])))))
 
 (defn get-debug-datoms
   [conn ^Object db]
