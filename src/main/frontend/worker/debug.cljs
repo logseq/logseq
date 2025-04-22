@@ -1,6 +1,7 @@
 (ns frontend.worker.debug
   "For debug usage"
   (:require [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [datascript.core :as d]))
 
 (defn get-conn

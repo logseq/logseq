@@ -5,6 +5,7 @@
             [logseq.db :as ldb]
             [frontend.db :as db]
             [datascript.core :as d]
+            [frontend.handler.page :as page-handler]
             [promesa.core :as p]))
 
 (defmulti handle first)

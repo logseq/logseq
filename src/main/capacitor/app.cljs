@@ -8,6 +8,7 @@
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
             [capacitor.handler :as handler]
+            [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
@@ -26,11 +27,19 @@
   []
   (-> (react/q (fstate/get-current-repo)
         [:frontend.worker.react/journals]
-        {:async-query-fn (fn []
-                           (p/let [{:keys [data]} (handler/<load-view-data nil {:journals? true})]
-                             (remove nil? data)))}
+        {:async-query-fn
+         (fn []
+           (p/let [{:keys [data]} (handler/<load-view-data nil {:journals? true})]
+             (remove nil? data)))}
         nil)
     util/react))
+
+(rum/defc journals-list < rum/reactive db-mixins/query
+  []
+  (let [journals (sub-journals)]
+
+    [:pre
+     (prn-str journals)]))
 
 (rum/defc home []
   (let [[all-pages set-all-pages!] (rum/use-state [])
@@ -47,9 +56,11 @@
        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
        [:h2.py-1.text-lg (fstate/get-current-repo)]
 
-       [:div.py-6.flex.justify-center.w-full]
+       [:h1.text-3xl.font-mono.font-bold.py-2.mt-4 "Journals"]
+       [:ul.pt-2
+        (journals-list)]
 
-       [:div.flex.justify-between.items-center
+       [:div.flex.justify-between.items-center.pt-4
         [:h1.text-3xl.font-mono.font-bold.py-2
          "All pages"
          [:small.text-xs.pl-2.opacity-50 (count all-pages)]]
@@ -60,7 +71,7 @@
         (for [page all-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
             [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
-             {:on-click #(js/alert (:block/title page))}
+             {:on-click #(js/alert (pr-str page))}
              (case ident
                :logseq.class/Property (ionic/tabler-icon "letter-t")
                :logseq.class/Page (ionic/tabler-icon "file")
