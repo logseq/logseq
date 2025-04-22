@@ -228,7 +228,6 @@
                   (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
                   blocks)
         block-path-refs-tx (distinct (compute-block-path-refs-tx tx-report blocks'))
-        path-refs-tx-report (when (seq block-path-refs-tx)
-                              (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true}))]
+        path-refs-tx-report (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true})]
     {:refs-tx-report refs-tx-report
      :path-refs-tx-export path-refs-tx-report}))

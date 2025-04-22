@@ -68,6 +68,7 @@
       (d/listen! conn ::listen-db-changes!
                  (fn listen-db-changes!-inner
                    [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
+                   (worker-state/set-db-latest-tx-time! repo)
                    (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
                          pipeline-replace? (:pipeline-replace? tx-meta)
                          in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]

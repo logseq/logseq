@@ -163,21 +163,6 @@
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
-(defmethod handle :graph/sync-context []
-  (let [context {:dev? config/dev?
-                 :node-test? util/node-test?
-                 :validate-db-options (:dev/validate-db-options (state/get-config))
-                 :importing? (:graph/importing @state/state)
-                 :date-formatter (state/get-date-formatter)
-                 :journal-file-name-format (or (state/get-journal-file-name-format)
-                                               date/default-journal-filename-formatter)
-                 :export-bullet-indentation (state/get-export-bullet-indentation)
-                 :preferred-format (state/get-preferred-format)
-                 :journals-directory (config/get-journals-directory)
-                 :whiteboards-directory (config/get-whiteboards-directory)
-                 :pages-directory (config/get-pages-directory)}]
-    (state/<invoke-db-worker :thread-api/set-context context)))
-
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
 ;; FIXME: config may not be loaded when the graph is ready.
@@ -191,8 +176,7 @@
         (state/pub-event! [:graph/dir-gone dir]))))
   (let [db-based? (config/db-based-graph? repo)]
     (p/do!
-     (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+      ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
      (when (mobile-util/native-ios?)
        (js/setTimeout #(mobile/mobile-postinit) 1000))
     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
