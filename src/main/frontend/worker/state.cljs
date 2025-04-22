@@ -28,7 +28,6 @@
 (defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
-                       ;; TODO: refactor: Update the following 5 values using :thread-api/update-thread-atom
                        ;; FIXME: this name :config is too general
                        :config {}
                        :git/current-repo nil
@@ -124,13 +123,6 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
-
-(defn set-auth-tokens!
-  [id-token access-token refresh-token]
-  (swap! *state assoc
-         :auth/id-token id-token
-         :auth/access-token access-token
-         :auth/refresh-token refresh-token))
 
 (defn get-id-token
   []
