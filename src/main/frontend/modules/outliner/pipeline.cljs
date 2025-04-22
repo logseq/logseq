@@ -1,13 +1,24 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.db :as db]
+  (:require [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.db.react :as react]
-            [frontend.state :as state]
-            [datascript.core :as d]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.util :as util]
             [frontend.fs :as fs]
-            [logseq.common.path :as path]
-            [frontend.config :as config]))
+            [frontend.handler.ui :as ui-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.common.path :as path]))
+
+(defn- update-editing-block-title-if-changed!
+  [tx-data]
+  (when-let [editing-block (state/get-edit-block)]
+    (let [editing-title (state/get-edit-content)]
+      (when-let [new-title (some (fn [d] (when (and (= (:e d) (:db/id editing-block))
+                                                    (= (:a d) :block/title)
+                                                    (not= editing-title (:v d))
+                                                    (:added d))
+                                           (:v d))) tx-data)]
+        (state/set-edit-content! new-title)))))
 
 (defn invoke-hooks
   [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
@@ -54,6 +65,8 @@
                                 (concat update-blocks-fully-loaded tx-data))
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
+
+            (update-editing-block-title-if-changed! tx-data)
 
             (when (seq deleted-assets)
               (doseq [asset deleted-assets]
