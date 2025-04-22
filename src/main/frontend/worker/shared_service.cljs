@@ -18,8 +18,12 @@
 
 ;;; common-channel - Communication related to master-client election.
 ;;; client-channel - For API request-response data communication.
+;;; master-slave-channels - Registered slave channels for master, all the slave
+;;;                         channels need to be closed to not receive further
+;;;                         messages when the master has been changed to slave.
 (defonce *common-channel (atom nil))
 (defonce *client-channel (atom nil))
+(defonce *master-slave-channels (atom #{}))
 
 ;;; record channel-listener here, to able to remove old listener before we addEventListener new one
 (defonce *common-channel-listener (atom nil))
@@ -140,12 +144,13 @@
   []
   (release-master-client-lock!)
   (reset! *master-client? false)
-  (when-let [^js channel @*common-channel]
-    (.close channel))
-  (when-let [^js channel @*client-channel]
-    (.close channel))
+  (let [channels (into @*master-slave-channels [@*common-channel @*client-channel])]
+    (doseq [^js channel channels]
+      (when channel
+        (.close channel))))
   (reset! *common-channel nil)
   (reset! *client-channel nil)
+  (reset! *master-slave-channels #{})
   (reset! *common-channel-listener nil)
   (reset! *client-channel-listener nil)
   (vreset! *requests-in-flight (sorted-map))
@@ -275,6 +280,7 @@
      (let [{:keys [slave-client-id type]} (bean/->clj (.-data event))]
        (when (= type "slave-register")
          (let [client-channel (js/BroadcastChannel. (get-broadcast-channel-name slave-client-id service-name))]
+           (swap! *master-slave-channels conj client-channel)
            (do-not-wait
             (js/navigator.locks.request slave-client-id #js {:mode "exclusive"}
                                         (fn [_]

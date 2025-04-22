@@ -868,12 +868,6 @@
       (reset! *service [graph service])
       service)))
 
-(def-thread-api :thread-api/init-shared-service
-  [graph]
-  (p/do!
-   (<init-service! graph)
-   nil))
-
 (defn init
   "web worker entry"
   []
@@ -887,16 +881,15 @@
                                   method-k (keyword (first args))
                                   method-args (ldb/read-transit-str (last args))]
                               (cond
-                                (and (= :thread-api/create-or-open-db method-k)
-                                     (:create-graph? (second method-args)))
+                                (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
-                                ;; creating a new database requires re-initializing the service.
+                                ;; creating a new database or switching to another one requires re-initializing the service.
                                 (p/let [service (<init-service! (first method-args))]
                                   ;; wait for service ready
                                   (get-in service [:status :ready])
                                   (js-invoke (:proxy service) k args))
 
-                                (or (contains? #{:thread-api/init-shared-service :thread-api/sync-app-state} method-k)
+                                (or (contains? #{:thread-api/sync-app-state} method-k)
                                     (nil? service))
                                 ;; only proceed down this branch before shared-service is initialized
                                 (apply f args)
