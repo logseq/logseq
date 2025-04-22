@@ -286,8 +286,6 @@
                                :editor-cursors editor-cursors
                                :block-content block-content}))]
               (when (seq reversed-tx-data)
-                (when-not util/node-test?
-                  (prn :debug :reversed-tx-data reversed-tx-data))
                 (if util/node-test?
                   (do
                     (ldb/transact! conn reversed-tx-data tx-meta')
