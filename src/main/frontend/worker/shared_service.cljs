@@ -328,6 +328,7 @@
                                        (cond
                                          new-graph?
                                          (do
+                                           (clear-old-service!)
                                            (reset! *master-client? true)
                                            (<apply-target-f! target method args))
 
