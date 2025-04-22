@@ -2365,7 +2365,7 @@
         query (:logseq.property/query block)
         advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))
         show-query? (and *show-query? @*show-query?)]
-    [:div
+    [:div.w-full
      {:class (if (and query? blank?)
                "inline-flex"
                "inline")
@@ -2799,7 +2799,9 @@
               [:div.flex.flex-row.items-center
                (property-component/property-key-cp block property opts)
                [:div.select-none ":"]]
-              (pv/property-value block property opts)]))]
+              [:div.ls-block.property-value-container
+               {:style {:min-height 20}}
+               (pv/property-value block property opts)]]))]
         [:div.positioned-properties.flex.flex-row.gap-1.select-none.h-6.self-start
          {:class (name position)}
          (for [pid properties]
@@ -3592,7 +3594,7 @@
         (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-left-menu config block))
 
-        [:div.flex.flex-col.w-full.overflow-hidden
+        [:div.flex.flex-col.w-full
          [:div.block-main-content.flex.flex-row.gap-2
           (when-let [actions-cp (:page-title-actions-cp config)]
             (actions-cp block))

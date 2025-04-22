@@ -455,9 +455,17 @@
         (overdue date content)
         content))))
 
+(defn- delete-block-property!
+  [block property]
+  (editor-handler/move-cross-boundary-up-down :up {})
+  (property-handler/remove-block-property! (state/get-current-repo)
+                                           (:db/id block)
+                                           (:db/ident property)))
+
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
-  (let [content-fn (fn [{:keys [id]}] (calendar-inner id
+  (let [*el (rum/use-ref nil)
+        content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
                                                        :property property
                                                        :on-change on-change
@@ -480,13 +488,25 @@
          {:class "jtrigger h-6 empty-btn"
           :variant :text
           :size :sm
-          :on-click open-popup!}
+          :on-click open-popup!
+          :on-key-down (fn [e]
+                         (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                           (delete-block-property! block property)))}
          (ui/icon "calendar-plus" {:size 16}))
         (shui/trigger-as
          :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-         {:tabIndex 0
+         {:ref *el
+          :tabIndex 0
           :class "jtrigger min-h-[24px]"                     ; FIXME: min-h-6 not works
-          :on-click open-popup!}
+          :on-click open-popup!
+          :on-key-down (fn [e]
+                         (case (util/ekey e)
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           nil))}
          [:div.flex.flex-row.gap-1.items-center
           (when repeated-task?
             (ui/icon "repeat" {:size 14 :class "opacity-40"}))
@@ -702,7 +722,10 @@
                           result)))
 
         options (map (fn [node]
-                       (let [id (or (:value node) (:db/id node))
+                       (let [node (if (:value node)
+                                    (assoc (:value node) :block/title (:label node))
+                                    node)
+                             id (:db/id node)
                              [header label] (if (integer? id)
                                               (let [node-title (if (seq (:logseq.property/classes property))
                                                                  (:block/title node)
@@ -719,7 +742,7 @@
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
-                                              [nil (or (:label node) (:block/title node))])]
+                                              [nil (:block/title node)])]
                          (assoc node
                                 :header header
                                 :label-value (:block/title node)
@@ -787,7 +810,11 @@
 (rum/defc property-value-select-node < rum/static
   [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [[result set-result!] (rum/use-state nil)
+  (let [[initial-choices set-initial-choices!] (rum/use-state nil)
+        [result set-result!] (rum/use-state nil)
+        set-result-and-initial-choices! (fn [value]
+                                          (set-initial-choices! value)
+                                          (set-result! value))
         input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
@@ -803,7 +830,8 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   (set-result! nil)
+                                   initial-choices
+                                   ;; TODO rank initial choices higher
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
                                      (set-result! result)))))
@@ -824,7 +852,7 @@
          (p/let [result (db-async/<get-tag-pages repo (:db/id (db/entity :logseq.class/Page)))
                  result' (->> result
                               (remove ldb/built-in?))]
-           (set-result! result'))
+           (set-result-and-initial-choices! result'))
 
          parent-property?
          nil
@@ -832,7 +860,11 @@
          (seq non-root-classes)
          (p/let [result (p/all (map (fn [class] (db-async/<get-tag-objects repo (:db/id class))) non-root-classes))
                  result' (distinct (apply concat result))]
-           (set-result! result'))))
+           (set-result-and-initial-choices! result'))
+
+         :else
+         (p/let [result (db-async/<get-property-values (:db/ident property))]
+           (set-result-and-initial-choices! result))))
      [])
 
     (select-node property opts' result)))
@@ -1066,12 +1098,18 @@
                            (select block property select-opts' opts)
 
                            (:node :class :property :page :date)
-                           (property-value-select-node block property select-opts' opts))])]
+                           (property-value-select-node block property select-opts' opts))])
+        trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
+        show-popup! (fn [target]
+                      (shui/popup-show! target popup-content
+                                        {:align "start"
+                                         :as-dropdown? true
+                                         :auto-focus? true
+                                         :trigger-id trigger-id}))]
     (if editing?
       (popup-content nil)
-      (let [trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
-            show! (fn [e]
-                    (let [target (.-target e)]
+      (let [show! (fn [e]
+                    (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
                                     (util/meta-key? e)
@@ -1079,18 +1117,21 @@
                                     (when-let [node (.closest target "a")]
                                       (not (or (d/has-class? node "page-ref")
                                                (d/has-class? node "tag")))))
-
-                        (shui/popup-show! target popup-content
-                                          {:align "start"
-                                           :as-dropdown? true
-                                           :auto-focus? true
-                                           :trigger-id trigger-id}))))]
+                        (show-popup! target))))]
         (shui/trigger-as
          (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-click show!}
+          :on-click show!
+          :on-key-down (fn [e]
+                         (case (util/ekey e)
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           nil))}
          (if (string/blank? value)
            (property-empty-text-value property opts)
            (value-render)))))))
@@ -1108,6 +1149,10 @@
      {:id (or dom-id (random-uuid))
       :tabIndex 0
       :class (str class " " (when-not text-ref-type? "jtrigger"))
+      :on-key-down (fn [e]
+                     (when-not text-ref-type?
+                       (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                         (delete-block-property! block property))))
       :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
@@ -1177,7 +1222,9 @@
                              :on-checked-change add-property!
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property!)))})])
+                                              (add-property!))
+                                            (when (contains? #{"Backspace" "Delete"} (util/ekey e))
+                                              (delete-block-property! block property)))})])
           ;; :others
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))
@@ -1231,6 +1278,8 @@
                            (" " "Enter")
                            (do (some-> (rum/deref *el) (.click))
                                (util/stop e))
+                           ("Backspace" "Delete")
+                           (delete-block-property! block property)
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-1"}
          (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
