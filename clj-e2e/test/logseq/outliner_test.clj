@@ -1,20 +1,11 @@
 (ns logseq.outliner-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.fixtures :as fixtures]
    [logseq.util :as util :refer [press]]
    [wally.main :as w]))
 
-;; TODO: change headless to true on CI
-(defn open-page
-  [f & {:keys [headless]
-        :or {headless false}}]
-  (w/with-page-open
-    (w/make-page {:headless headless
-                  :persistent false})
-    (w/navigate "http://localhost:3001")
-    (f)))
-
-(use-fixtures :once open-page)
+(use-fixtures :once fixtures/open-page)
 
 (deftest create-test-page-and-insert-blocks
   (util/new-page "Test")
@@ -83,26 +74,3 @@
     (util/delete-blocks)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
-
-(comment
-
-  (require '[wally.repl :as repl])
-  (require '[clojure.test :refer [run-tests run-test]])
-
-  ;; You can put `(repl/pause)` in any test to pause the tests,
-  ;; this allows us to continue experimenting with the current page.
-  (repl/pause)
-
-  ;; To resume the tests, close the page/context/browser
-  (repl/resume)
-
-  ;; Run all the tests in specific ns with `future` to not block repl
-  (future (run-tests 'logseq.outliner-test))
-
-  ;; Run specific test
-  (future (run-test delete-test))
-
-  ;; after the test has been paused, you can do anything with the current page like this
-  (repl/with-page
-    ;; do anything
-    ))

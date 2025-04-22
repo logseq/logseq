@@ -1,4 +1,5 @@
 (ns logseq.util
+  (:refer-clojure :exclude [type])
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
             [wally.main :as w]
@@ -21,8 +22,14 @@
       editor)))
 
 (defn input
+  "Notice this will replace the existing input value with `text`"
   [text]
   (w/fill "*:focus" text))
+
+(defn type
+  [text]
+  (let [input-node (w/-query "*:focus")]
+    (.type input-node text)))
 
 (defn search
   [text]
@@ -74,10 +81,16 @@
       (press "Backspace"))
     (is (> c (blocks-count)))))
 
+(defn get-text
+  [locator]
+  (if (string? locator)
+    (.textContent (w/-query locator))
+    (.textContent locator)))
+
 (defn get-edit-content
   []
   (when-let [editor (get-editor)]
-    (.textContent editor)))
+    (get-text editor)))
 
 ;; TODO: support tree
 (defn new-blocks
@@ -116,7 +129,6 @@
 
 (defn open-last-block
   []
-  (press "Escape")
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
 (defn repeat-keyboard
