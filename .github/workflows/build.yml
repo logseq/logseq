@@ -14,13 +14,13 @@ env:
   CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:
   typos:
     name: Spell Check with Typos
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout Actions Repository
         uses: actions/checkout@v3
@@ -32,7 +32,7 @@ jobs:
   test:
     strategy:
       matrix:
-        operating-system: [ubuntu-latest]
+        operating-system: [ubuntu-22.04]
 
     runs-on: ${{ matrix.operating-system }}
 
@@ -83,7 +83,7 @@ jobs:
           node static/tests.js
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -117,7 +117,7 @@ jobs:
         run: bb lang:validate-translations
 
   e2e-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
@@ -209,7 +209,7 @@ jobs:
 
       - name: Save test artifacts
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: e2e-test-report
           path: e2e-dump/*

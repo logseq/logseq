@@ -48,12 +48,12 @@ on:
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
-  NODE_VERSION: '18'
+  NODE_VERSION: '20'
   JAVA_VERSION: '11'
 
 jobs:
   compile-cljs:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Check build options
         if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta') && github.event.inputs.git-ref != 'master' }}
@@ -166,14 +166,14 @@ jobs:
           SENTRY_PROJECT: logseq
 
       - name: Cache Static File
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: static
           path: static
 
   e2e-test:
     name: E2E Test Shard ${{ matrix.shard }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         shard: [1, 2, 3]
@@ -223,7 +223,7 @@ jobs:
           RELEASE: true # skip dev only test
 
   build-linux-x64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
@@ -263,13 +263,13 @@ jobs:
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-linux-x64-builds
           path: builds
 
   build-linux-arm64:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
@@ -317,7 +317,7 @@ jobs:
           mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-linux-arm64-builds
           path: builds
@@ -369,7 +369,7 @@ jobs:
           mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
       - name: Upload Artifact for Code Signing
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-win64-unsigned-builds
           path: builds
@@ -383,14 +383,14 @@ jobs:
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-win64-builds
           path: builds
 
   build-macos-x64:
     needs: [ compile-cljs ]
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - name: Download The Static Asset
@@ -459,14 +459,14 @@ jobs:
           mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-darwin-x64-builds
           path: builds
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Download The Static Asset
@@ -536,7 +536,7 @@ jobs:
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-darwin-arm64-builds
           path: builds
@@ -568,12 +568,12 @@ jobs:
       - name: Sign Windows Executable
         run: |
           ls -lah ./builds
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.digicert.com ./builds/*.exe
+          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds/*.exe
         env:
           PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: logseq-win64-signed-builds
           path: builds
@@ -581,7 +581,7 @@ jobs:
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v3
@@ -661,7 +661,7 @@ jobs:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v3

@@ -159,7 +159,8 @@
          (catch :default e
            (logger/error (str e ": " db-name))
            (try
-             (fs/unlinkSync db-full-path)
+             (when (fs/existsSync db-full-path)
+               (fs/unlinkSync db-full-path))
              (catch :default e
                (logger/error "cannot unlink search db:" e)
                (utils/send-to-renderer "notification"
