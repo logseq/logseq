@@ -286,7 +286,6 @@
 (defn get-recent-updated-pages
   [db]
   (->> (d/datoms db :avet :block/updated-at)
-       vec
        rseq
        (keep (fn [datom]
                (let [e (d/entity db (:e datom))]
