@@ -661,6 +661,29 @@
            [:db/add (:e view-datom) :logseq.property.view/group-by-property block-page-prop-id])
          list-views)))
 
+(defn- cardinality-one-multiple-values
+  [conn _search-db]
+  (let [db @conn
+        attrs (keep (fn [[k v]]
+                      (when (and (keyword? k)
+                                 (not= :db.cardinality/many (:db/cardinality v))
+                                 (not= :db.cardinality/many (:db/cardinality (d/entity db k)))
+                                 (or (get db-schema/schema k)
+                                     (ldb/property? (d/entity db k))))
+                        k)) (:schema db))
+        block-ids (map :e (d/datoms db :avet :block/uuid))]
+    (->>
+     (mapcat
+      (fn [id]
+        (mapcat (fn [attr]
+                  (let [datoms (d/datoms db :eavt id attr)]
+                    (when (> (count datoms) 1)
+                      (map (fn [datom]
+                             [:db/retract (:e datom) (:a datom) (:v datom)])
+                           (butlast datoms))))) attrs))
+      block-ids)
+     (remove nil?))))
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -769,7 +792,8 @@
    ["64.3" {:properties [:logseq.property/used-template :logseq.property/template-applied-to]
             :classes [:logseq.class/Template]}]
    ["64.4" {:properties [:logseq.property/created-by-ref]}]
-   ["64.5" {:fix add-group-by-property-for-list-views}]])
+   ["64.5" {:fix add-group-by-property-for-list-views}]
+   ["64.6" {:fix cardinality-one-multiple-values}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))
