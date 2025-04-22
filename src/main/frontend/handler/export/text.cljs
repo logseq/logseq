@@ -1,6 +1,5 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
-  (:refer-clojure :exclude [map filter mapcat concat remove newline])
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -545,9 +544,9 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo "md"))]
-    (when (seq files)
-      (let [files (export-files-as-markdown files nil)
+  (p/let [files* (util/profile :get-file-content (common/<get-file-contents repo "md"))]
+    (when (seq files*)
+      (let [files (export-files-as-markdown files* nil)
             repo' (if (config/db-based-graph? repo)
                     (string/replace repo config/db-version-prefix "")
                     (path/basename repo))

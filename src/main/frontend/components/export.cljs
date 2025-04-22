@@ -103,24 +103,22 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-zip! current-repo)}
             (t :export-zip)]])
+
         (when db-based?
           [:div
            [:a.font-medium {:on-click #(db-export-handler/export-repo-as-db-edn! current-repo)}
             (t :export-db-edn)]])
-        (when db-based?
+
+        (when-not (mobile-util/native-platform?)
           [:div
-           [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
-            "Export debug transit file"]
-           [:p.text-sm.opacity-70 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
+           [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
+            (t :export-markdown)]])
 
         (when (util/electron?)
           [:div
            [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
             (t :export-public-pages)]])
-        (when-not (or (mobile-util/native-platform?) db-based?)
-          [:div
-           [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-            (t :export-markdown)]])
+
         (when-not (or (mobile-util/native-platform?) db-based?)
           [:div
            [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
@@ -129,6 +127,11 @@
           [:div
            [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
             (t :export-roam-json)]])
+        (when db-based?
+          [:div
+           [:a.font-medium {:on-click #(export/export-repo-as-debug-transit! current-repo)}
+            "Export debug transit file"]
+           [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
 
         (when (and db-based? util/web-platform? (utils/nfsSupported))
           [:div
