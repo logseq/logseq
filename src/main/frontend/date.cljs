@@ -80,6 +80,14 @@
   []
   (journal-name))
 
+(defn today-forward
+  [d]
+  (journal-name (t/plus (start-of-day (tl/local-now)) (t/days d))))
+
+(defn today-backward
+  [d]
+  (journal-name (t/minus (start-of-day (tl/local-now)) (t/days d))))
+
 (defn tomorrow
   []
   (journal-name (t/plus (start-of-day (tl/local-now)) (t/days 1))))

@@ -1,19 +1,12 @@
 (ns capacitor.bootstrap
-  (:require [cljs-bean.core :as bean]
-            [electron.listener :as el]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
-            [frontend.error :as error]
             [capacitor.events :as events]
-            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.test :as test]
             [frontend.idb :as idb]
             [frontend.persist-db :as persist-db]
             [frontend.persist-db.browser :as db-browser]
@@ -59,10 +52,7 @@
   [render]
 
   (idb/start)
-  ;(get-system-info)
-  ;(set-global-error-notification!)
 
-  ;(user-handler/restore-tokens-from-localstorage)
   (state/set-db-restoring! true)
 
   (render)
