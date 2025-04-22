@@ -17,3 +17,11 @@ html.plt-capacitor.plt-android {
     margin-top: 40px;
   }
 }
+
+ul {
+  @apply !list-disc ml-1 mt-2 list-inside;
+
+  li {
+    @apply pl-0;
+  }
+}

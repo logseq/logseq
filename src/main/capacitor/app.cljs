@@ -8,6 +8,7 @@
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
             [capacitor.handler :as handler]
+            [capacitor.pages.utils :as pages-util]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
             [logseq.db :as ldb]
@@ -71,7 +72,7 @@
         (for [page all-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
             [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
-             {:on-click #(js/alert (pr-str page))}
+             {:on-click #(pages-util/nav-to-block! page)}
              (case ident
                :logseq.class/Property (ionic/tabler-icon "letter-t")
                :logseq.class/Page (ionic/tabler-icon "file")
