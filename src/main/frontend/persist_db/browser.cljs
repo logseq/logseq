@@ -4,6 +4,7 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -15,6 +16,7 @@
             [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn- ask-persist-permission!
@@ -26,17 +28,21 @@
 
 (defn- sync-app-state!
   []
-  (add-watch state/state
-             :sync-worker-state
-             (fn [_ _ prev current]
-               (let [new-state (cond-> {}
-                                 (not= (:git/current-repo prev)
-                                       (:git/current-repo current))
-                                 (assoc :git/current-repo (:git/current-repo current))
-                                 (not= (:config prev) (:config current))
-                                 (assoc :config (:config current)))]
-                 (when (seq new-state)
-                   (state/<invoke-db-worker :thread-api/sync-app-state new-state))))))
+  (let [state-flow
+        (->> (m/watch state/state)
+             (m/eduction
+              (map #(select-keys % [:git/current-repo :config
+                                    :auth/id-token :auth/access-token :auth/refresh-token]))
+              (dedupe)))
+        <init-sync-done? (p/deferred)
+        task (m/reduce
+              (constantly nil)
+              (m/ap
+                (let [m (m/?> (m/relieve state-flow))]
+                  (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m))
+                  (p/resolve! <init-sync-done?))))]
+    (c.m/run-task* task)
+    <init-sync-done?))
 
 (defn get-route-data
   [route-match]
@@ -96,12 +102,9 @@
       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/sync-app-state
-                                             {:git/current-repo (state/get-current-repo)
-                                              :config (:config @state/state)})
+      (-> (p/let [_ (sync-app-state!)
                   _ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (sync-app-state!)
                   _ (sync-ui-state!)
                   _ (ask-persist-permission!)
                   _ (state/pub-event! [:graph/sync-context])]
