@@ -285,13 +285,14 @@
 
 (defn get-recent-updated-pages
   [db]
-  (->> (d/datoms db :avet :block/updated-at)
-       rseq
-       (keep (fn [datom]
-               (let [e (d/entity db (:e datom))]
-                 (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
-                   e))))
-       (take 30)))
+  (some->>
+   (d/datoms db :avet :block/updated-at)
+   rseq
+   (keep (fn [datom]
+           (let [e (d/entity db (:e datom))]
+             (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
+               e))))
+   (take 30)))
 
 (defn get-initial-data
   "Returns current database schema and initial data.
