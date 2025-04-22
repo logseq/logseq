@@ -141,7 +141,7 @@
 (defrecord InBrowser []
   protocol/PersistentDB
   (<new [_this repo opts]
-    (state/<invoke-db-worker :thread-api/create-or-open-db repo opts))
+    (state/<invoke-db-worker :thread-api/create-or-open-db repo (assoc opts :create-graph? true)))
 
   (<list-db [_this]
     (-> (state/<invoke-db-worker :thread-api/list-db)
