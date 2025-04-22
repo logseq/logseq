@@ -148,7 +148,8 @@
   (reset! *client-channel nil)
   (reset! *common-channel-listener nil)
   (reset! *client-channel-listener nil)
-  (vreset! *requests-in-flight (sorted-map)))
+  (vreset! *requests-in-flight (sorted-map))
+  (remove-watch *master-re-check-trigger :check-master))
 
 (defn- on-response-handler
   [event]
@@ -323,32 +324,24 @@
                        #js {:get (fn [target method]
                                    (assert (identical? "remoteInvoke" method) method)
                                    (fn [args]
-                                     (let [new-graph? (when (= "thread-api/create-or-open-db" (first args))
-                                                        (:create-graph? (second (ldb/read-transit-str (last args)))))]
-                                       (cond
-                                         new-graph?
-                                         (do
-                                           (clear-old-service!)
-                                           (reset! *master-client? true)
-                                           (<apply-target-f! target method args))
+                                     (cond
+                                       @*master-client?
+                                       (<apply-target-f! target method args)
 
-                                         @*master-client?
-                                         (<apply-target-f! target method args)
-
-                                         :else
-                                         (let [request-id (next-request-id)
-                                               client-channel (ensure-client-channel client-id service-name)]
-                                           (p/create
-                                            (fn [resolve-fn reject-fn]
-                                              (vswap! *requests-in-flight assoc request-id {:method method
-                                                                                            :args args
-                                                                                            :resolve-fn resolve-fn
-                                                                                            :reject-fn reject-fn})
-                                              (.postMessage client-channel (bean/->js
-                                                                            {:id request-id
-                                                                             :type "request"
-                                                                             :method method
-                                                                             :args args})))))))))})
+                                       :else
+                                       (let [request-id (next-request-id)
+                                             client-channel (ensure-client-channel client-id service-name)]
+                                         (p/create
+                                          (fn [resolve-fn reject-fn]
+                                            (vswap! *requests-in-flight assoc request-id {:method method
+                                                                                          :args args
+                                                                                          :resolve-fn resolve-fn
+                                                                                          :reject-fn reject-fn})
+                                            (.postMessage client-channel (bean/->js
+                                                                          {:id request-id
+                                                                           :type "request"
+                                                                           :method method
+                                                                           :args args}))))))))})
      :status status}))
 
 (defn broadcast-to-clients!
