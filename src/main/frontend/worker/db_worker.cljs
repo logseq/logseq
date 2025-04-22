@@ -857,16 +857,18 @@
 
 (defn- <init-service!
   [graph]
-  (when-let [prev-graph (first @*service)]
-    (close-db! prev-graph))
-  (when (and graph (not= graph (first @*service)))
-    (p/let [service (shared-service/<create-service graph
-                                                    (bean/->js fns)
-                                                    #(on-become-master graph)
-                                                    broadcast-data-types)]
-      (assert (p/promise? (get-in service [:status :ready])))
-      (reset! *service [graph service])
-      service)))
+  (let [[prev-graph service] @*service]
+    (some-> prev-graph close-db!)
+    (when graph
+      (if (= graph prev-graph)
+        service
+        (p/let [service (shared-service/<create-service graph
+                                                        (bean/->js fns)
+                                                        #(on-become-master graph)
+                                                        broadcast-data-types)]
+          (assert (p/promise? (get-in service [:status :ready])))
+          (reset! *service [graph service])
+          service)))))
 
 (defn init
   "web worker entry"
