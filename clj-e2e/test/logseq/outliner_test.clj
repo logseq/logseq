@@ -1,10 +1,14 @@
 (ns logseq.outliner-test
   (:require
+   [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures run-tests run-test]]
    [garden.selectors :as s]
    [wally.main :as w]
    [wally.repl :as repl]
-   [wally.selectors :as ws]))
+   [wally.selectors :as ws])
+  (:import (com.microsoft.playwright.assertions PlaywrightAssertions)))
+
+(def assert-that PlaywrightAssertions/assertThat)
 
 (defn open-page
   [f & {:keys [headless]
@@ -21,11 +25,22 @@
   [ms]
   (.waitForTimeout (w/get-page) ms))
 
+(defn- get-active-element
+  []
+  (w/-query "*:focus"))
+
+(defn- get-editor
+  []
+  (let [klass ".editor-wrapper textarea"
+        editor (w/-query klass)]
+    (when (w/visible? klass)
+      editor)))
+
 (defn- input
   [text]
   (w/fill "*:focus" text))
 
-(def keyboard w/keyboard-press)
+(def press w/keyboard-press)
 
 (defn- new-page
   [title]
@@ -39,23 +54,59 @@
   ;; (keyboard "Enter")
   (wait-timeout 100))
 
-(defn- new-block
-  [& {:keys [current-text next-text]}]
-  (when current-text (input current-text))
-  (keyboard "Enter")
-  (when next-text (input next-text)))
-
-(defn exit-edit
-  []
-  (keyboard "Escape"))
-
 (defn- count-elements
   [q]
   (w/count* (w/-query q)))
 
 (defn- blocks-count
+  "Blocks count including page title"
   []
   (count-elements ".ls-block"))
+
+(defn- page-blocks-count
+  []
+  (count-elements ".ls-page-blocks .ls-block"))
+
+(defn- new-block
+  [title]
+  (press "Enter")
+  (input title))
+
+(defn- save-block
+  [text]
+  (input text))
+
+(defn exit-edit
+  []
+  (press "Escape"))
+
+(defn- delete-blocks
+  []
+  (let [c (blocks-count)]
+    (prn :debug :editor (get-editor))
+    (if (get-editor)
+      (do
+        (exit-edit)
+        (press "Backspace"))
+      (press "Backspace"))
+    (is (> c (blocks-count)))))
+
+(defn- get-edit-content
+  []
+  (when-let [editor (get-editor)]
+    (.textContent editor)))
+
+;; TODO: support tree
+(defn- new-blocks
+  [titles]
+  (let [value (get-edit-content)]
+    (if (string/blank? value)           ; empty block
+      (do
+        (save-block (first titles))
+        (doseq [title (rest titles)]
+          (new-block title)))
+      (doseq [title titles]
+        (new-block title)))))
 
 (defn- bounding-xy
   [locator]
@@ -64,9 +115,9 @@
 
 (defn- indent-outdent
   [indent?]
-  (let [editor (w/-query ".editor-wrapper textarea")
+  (let [editor (get-editor)
         [x1 _] (bounding-xy editor)
-        _ (keyboard (if indent? "Tab" "Shift+Tab"))
+        _ (press (if indent? "Tab" "Shift+Tab"))
         [x2 _] (bounding-xy editor)]
     (if indent?
       (is (< x1 x2))
@@ -82,13 +133,13 @@
 
 (defn- open-last-block
   []
-  (keyboard "Escape")
+  (press "Escape")
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
 (defn- repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (keyboard shortcut)))
+    (press shortcut)))
 
 (defn- get-page-blocks-contents
   []
@@ -98,8 +149,7 @@
   (new-page "Test")
   ;; a page block and a child block
   (is (= 2 (blocks-count)))
-  (new-block {:current-text "first block"
-              :next-text "second block"})
+  (new-blocks ["first block" "second block"])
   (exit-edit)
   (is (= 3 (blocks-count)))
   ;; Pause to use the repl, e.g. example in the comment below
@@ -108,16 +158,15 @@
 
 (deftest indent-and-outdent-test
   (new-page "indent outdent test")
-  (new-block {:current-text "b1"
-              :next-text "b2"})
+  (new-blocks ["b1" "b2"])
   (testing "simple indent and outdent"
     (indent)
     (outdent))
 
   (testing "indent a block with its children"
-    (new-block {:next-text "b3"})
+    (new-block "b3")
     (indent)
-    (keyboard "ArrowUp")
+    (press "ArrowUp")
     (indent)
     (exit-edit)
     (let [[x1 x2 x3] (map (comp first bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
@@ -125,10 +174,9 @@
 
   (testing "unindent a block with its children"
     (open-last-block)
-    (new-block {:next-text "b4"})
-    (new-block {:next-text "b5"})
+    (new-blocks ["b4" "b5"])
     (indent)
-    (keyboard "ArrowUp")
+    (press "ArrowUp")
     (outdent)
     (exit-edit)
     (let [[x2 x3 x4 x5] (map (comp first bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
@@ -136,10 +184,7 @@
 
 (deftest move-up-down-test
   (new-page "up down test")
-  (new-block {:current-text "b1"
-              :next-text "b2"})
-  (doseq [text ["b3" "b4"]]
-    (new-block {:next-text text}))
+  (new-blocks ["b1" "b2" "b3" "b4"])
   (repeat-keyboard 2 "Shift+ArrowUp")
   (let [contents (get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"])))
@@ -150,17 +195,37 @@
   (let [contents (get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
 
+(deftest delete-test
+  (testing "Delete blocks case 1"
+    (new-page "delete test 1")
+    (new-blocks ["b1" "b2" "b3" "b4"])
+    (delete-blocks)                   ; delete b4
+    (repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
+    (delete-blocks)
+    (is (= "b1" (get-edit-content)))
+    (is (= 1 (page-blocks-count))))
+
+  (testing "Delete block with its children"
+    (new-page "delete test 2")
+    (new-blocks ["b1" "b2" "b3" "b4"])
+    (indent)
+    (press "ArrowUp")
+    (indent)
+    (press "ArrowUp")
+    (delete-blocks)
+    (is (= "b1" (get-edit-content)))
+    (is (= 1 (page-blocks-count)))))
+
 (comment
 
   (repl/resume)
 
   (future (run-tests 'logseq.outliner-test))
 
-  (future (run-test move-up-down-test))
+  (future (run-test delete-test))
 
   (repl/with-page
-    ;; into edit mode
-    (new-block {:next-text "third block"}))
+    (new-block "third block"))
 
   (repl/with-page
     ;; do anything
