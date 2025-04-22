@@ -1,14 +1,8 @@
 (ns logseq.outliner-test
   (:require
-   [clojure.string :as string]
-   [clojure.test :refer [deftest testing is use-fixtures run-tests run-test]]
-   [garden.selectors :as s]
-   [wally.main :as w]
-   [wally.repl :as repl]
-   [wally.selectors :as ws])
-  (:import (com.microsoft.playwright.assertions PlaywrightAssertions)))
-
-(def assert-that PlaywrightAssertions/assertThat)
+   [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.util :as util :refer [press]]
+   [wally.main :as w]))
 
 ;; TODO: change headless to true on CI
 (defn open-page
@@ -22,198 +16,78 @@
 
 (use-fixtures :once open-page)
 
-(defn- wait-timeout
-  [ms]
-  (.waitForTimeout (w/get-page) ms))
-
-(defn- get-active-element
-  []
-  (w/-query "*:focus"))
-
-(defn- get-editor
-  []
-  (let [klass ".editor-wrapper textarea"
-        editor (w/-query klass)]
-    (when (w/visible? klass)
-      editor)))
-
-(defn- input
-  [text]
-  (w/fill "*:focus" text))
-
-(defn- search
-  [text]
-  (w/click :#search-button)
-  (w/fill ".cp__cmdk-search-input" text))
-
-(def press w/keyboard-press)
-
-(defn- new-page
-  [title]
-  (search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
-  (w/wait-for ".editor-wrapper textarea"))
-
-(defn- count-elements
-  [q]
-  (w/count* (w/-query q)))
-
-(defn- blocks-count
-  "Blocks count including page title"
-  []
-  (count-elements ".ls-block"))
-
-(defn- page-blocks-count
-  []
-  (count-elements ".ls-page-blocks .ls-block"))
-
-(defn- new-block
-  [title]
-  (press "Enter")
-  (input title))
-
-(defn- save-block
-  [text]
-  (input text))
-
-(defn exit-edit
-  []
-  (press "Escape"))
-
-(defn- delete-blocks
-  "Delete the current block if in editing mode, otherwise, delete all the slected blocks."
-  []
-  (let [c (blocks-count)]
-    (if (get-editor)
-      (do
-        (exit-edit)
-        (press "Backspace"))
-      (press "Backspace"))
-    (is (> c (blocks-count)))))
-
-(defn- get-edit-content
-  []
-  (when-let [editor (get-editor)]
-    (.textContent editor)))
-
-;; TODO: support tree
-(defn- new-blocks
-  [titles]
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
-
-(defn- bounding-xy
-  [locator]
-  (let [box (.boundingBox locator)]
-    [(.-x box) (.-y box)]))
-
-(defn- indent-outdent
-  [indent?]
-  (let [editor (get-editor)
-        [x1 _] (bounding-xy editor)
-        _ (press (if indent? "Tab" "Shift+Tab"))
-        [x2 _] (bounding-xy editor)]
-    (if indent?
-      (is (< x1 x2))
-      (is (> x1 x2)))))
-
-(defn- indent
-  []
-  (indent-outdent true))
-
-(defn- outdent
-  []
-  (indent-outdent false))
-
-(defn- open-last-block
-  []
-  (press "Escape")
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
-
-(defn- repeat-keyboard
-  [n shortcut]
-  (dotimes [_i n]
-    (press shortcut)))
-
-(defn- get-page-blocks-contents
-  []
-  (w/all-text-contents ".ls-page-blocks .ls-block .block-title-wrap"))
-
 (deftest create-test-page-and-insert-blocks
-  (new-page "Test")
+  (util/new-page "Test")
   ;; a page block and a child block
-  (is (= 2 (blocks-count)))
-  (new-blocks ["first block" "second block"])
-  (exit-edit)
-  (is (= 3 (blocks-count))))
+  (is (= 2 (util/blocks-count)))
+  (util/new-blocks ["first block" "second block"])
+  (util/exit-edit)
+  (is (= 3 (util/blocks-count))))
 
 (deftest indent-and-outdent-test
-  (new-page "indent outdent test")
-  (new-blocks ["b1" "b2"])
+  (util/new-page "indent outdent test")
+  (util/new-blocks ["b1" "b2"])
   (testing "simple indent and outdent"
-    (indent)
-    (outdent))
+    (util/indent)
+    (util/outdent))
 
   (testing "indent a block with its children"
-    (new-block "b3")
-    (indent)
+    (util/new-block "b3")
+    (util/indent)
     (press "ArrowUp")
-    (indent)
-    (exit-edit)
-    (let [[x1 x2 x3] (map (comp first bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
+    (util/indent)
+    (util/exit-edit)
+    (let [[x1 x2 x3] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
       (is (< x1 x2 x3))))
 
   (testing "unindent a block with its children"
-    (open-last-block)
-    (new-blocks ["b4" "b5"])
-    (indent)
-    (press "ArrowUp")
-    (outdent)
-    (exit-edit)
-    (let [[x2 x3 x4 x5] (map (comp first bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
+    (util/open-last-block)
+    (util/new-blocks ["b4" "b5"])
+    (util/indent)
+    (util/press "ArrowUp")
+    (util/outdent)
+    (util/exit-edit)
+    (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
 (deftest move-up-down-test
-  (new-page "up down test")
-  (new-blocks ["b1" "b2" "b3" "b4"])
-  (repeat-keyboard 2 "Shift+ArrowUp")
-  (let [contents (get-page-blocks-contents)]
+  (util/new-page "up down test")
+  (util/new-blocks ["b1" "b2" "b3" "b4"])
+  (util/repeat-keyboard 2 "Shift+ArrowUp")
+  (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"])))
-  (repeat-keyboard 2 "ControlOrMeta+Shift+ArrowUp")
-  (let [contents (get-page-blocks-contents)]
+  (util/repeat-keyboard 2 "ControlOrMeta+Shift+ArrowUp")
+  (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b3" "b4" "b1" "b2"])))
-  (repeat-keyboard 2 "ControlOrMeta+Shift+ArrowDown")
-  (let [contents (get-page-blocks-contents)]
+  (util/repeat-keyboard 2 "ControlOrMeta+Shift+ArrowDown")
+  (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
 
 (deftest delete-test
   (testing "Delete blocks case 1"
-    (new-page "delete test 1")
-    (new-blocks ["b1" "b2" "b3" "b4"])
-    (delete-blocks)                   ; delete b4
-    (repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
-    (delete-blocks)
-    (is (= "b1" (get-edit-content)))
-    (is (= 1 (page-blocks-count))))
+    (util/new-page "delete test 1")
+    (util/new-blocks ["b1" "b2" "b3" "b4"])
+    (util/delete-blocks)                   ; delete b4
+    (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
+    (util/delete-blocks)
+    (is (= "b1" (util/get-edit-content)))
+    (is (= 1 (util/page-blocks-count))))
 
   (testing "Delete block with its children"
-    (new-page "delete test 2")
-    (new-blocks ["b1" "b2" "b3" "b4"])
-    (indent)
+    (util/new-page "delete test 2")
+    (util/new-blocks ["b1" "b2" "b3" "b4"])
+    (util/indent)
     (press "ArrowUp")
-    (indent)
+    (util/indent)
     (press "ArrowUp")
-    (delete-blocks)
-    (is (= "b1" (get-edit-content)))
-    (is (= 1 (page-blocks-count)))))
+    (util/delete-blocks)
+    (is (= "b1" (util/get-edit-content)))
+    (is (= 1 (util/page-blocks-count)))))
 
 (comment
+
+  (require '[wally.repl :as repl])
+  (require '[clojure.test :refer [run-tests run-test]])
 
   ;; You can put `(repl/pause)` in any test to pause the tests,
   ;; this allows us to continue experimenting with the current page.
