@@ -6,3 +6,8 @@
   [page-or-block]
   (some-> @state/*nav-root
     (.push #(page-blocks/page page-or-block))))
+
+(defn nav-to-edit-block!
+  [block opts]
+  (some-> @state/*nav-root
+    (.push #(page-blocks/edit-block-modal block opts))))

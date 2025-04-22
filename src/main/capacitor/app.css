@@ -25,3 +25,9 @@ ul {
     @apply pl-0;
   }
 }
+
+ion-textarea {
+  textarea {
+    @apply !p-1 min-h-[120px];
+  }
+}

@@ -126,7 +126,7 @@
                {:routerDirection "forward"
                 :class "w-full"
                 :component settings/page}
-               (ionic/tabler-icon "help" {:size 24 :class "opacity-70"})))))
+               (ionic/tabler-icon "upload" {:size 24 :class "opacity-70"})))))
        ;; main content
        (if db-restoring?
          (ionic/ion-content
