@@ -1038,16 +1038,6 @@ Similar to re-frame subscriptions"
   []
   @(get @state :editor/block))
 
-(defn set-edit-content!
-  ([input-id value] (set-edit-content! input-id value true))
-  ([input-id value set-input-value?]
-   (when input-id
-     (when set-input-value?
-       (when-let [input (gdom/getElement input-id)]
-         (util/set-change-value input value)))
-     (set-state! :editor/content value :path-in-sub-atom
-                 (or (:block/uuid (get-edit-block)) input-id)))))
-
 (defn editing?
   []
   (seq @(:editor/editing? @state)))
@@ -1065,6 +1055,17 @@ Similar to re-frame subscriptions"
               (when (string/starts-with? id "edit-block-")
                 id))))
         (catch :default _e)))))
+
+(defn set-edit-content!
+  ([value] (set-edit-content! (get-edit-input-id) value))
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
+   (when input-id
+     (when set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (set-state! :editor/content value :path-in-sub-atom
+                 (or (:block/uuid (get-edit-block)) input-id)))))
 
 (defn get-input
   []
