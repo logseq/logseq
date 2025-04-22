@@ -151,10 +151,7 @@
   (is (= 2 (blocks-count)))
   (new-blocks ["first block" "second block"])
   (exit-edit)
-  (is (= 3 (blocks-count)))
-  ;; Pause to use the repl, e.g. example in the comment below
-  ;; (repl/pause)
-  )
+  (is (= 3 (blocks-count))))
 
 (deftest indent-and-outdent-test
   (new-page "indent outdent test")
@@ -218,15 +215,20 @@
 
 (comment
 
+  ;; You can put `(repl/pause)` in any test to pause the tests,
+  ;; this allows us to continue experimenting with the current page.
+  (repl/pause)
+
+  ;; To resume the tests, close the page/context/browser
   (repl/resume)
 
+  ;; Run all the tests in specific ns with `future` to not block repl
   (future (run-tests 'logseq.outliner-test))
 
+  ;; Run specific test
   (future (run-test delete-test))
 
-  (repl/with-page
-    (new-block "third block"))
-
+  ;; after the test has been paused, you can do anything with the current page like this
   (repl/with-page
     ;; do anything
     ))
