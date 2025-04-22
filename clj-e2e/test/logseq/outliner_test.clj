@@ -10,6 +10,7 @@
 
 (def assert-that PlaywrightAssertions/assertThat)
 
+;; TODO: change headless to true on CI
 (defn open-page
   [f & {:keys [headless]
         :or {headless false}}]
@@ -40,19 +41,18 @@
   [text]
   (w/fill "*:focus" text))
 
+(defn- search
+  [text]
+  (w/click :#search-button)
+  (w/fill ".cp__cmdk-search-input" text))
+
 (def press w/keyboard-press)
 
 (defn- new-page
   [title]
-  (w/wait-for :#search-button {})
-  (w/click :#search-button)
-  (wait-timeout 100)
-  (input title)
-  (wait-timeout 100)
+  (search title)
   (w/click [(ws/text "Create page") (ws/nth= "0")])
-  ;; FIXME: Enter doesn't work
-  ;; (keyboard "Enter")
-  (wait-timeout 100))
+  (w/wait-for ".editor-wrapper textarea"))
 
 (defn- count-elements
   [q]
@@ -81,9 +81,9 @@
   (press "Escape"))
 
 (defn- delete-blocks
+  "Delete the current block if in editing mode, otherwise, delete all the slected blocks."
   []
   (let [c (blocks-count)]
-    (prn :debug :editor (get-editor))
     (if (get-editor)
       (do
         (exit-edit)
