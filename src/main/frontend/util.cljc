@@ -878,13 +878,16 @@
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
-     ([block {:keys [container up-down?]}]
+     ([block {:keys [container up-down? exclude-property?]}]
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (let [blocks (if up-down?
-                       (skip-same-top-blocks blocks block)
-                       blocks)]
+        (let [blocks (cond->>
+                      (if up-down?
+                        (skip-same-top-blocks blocks block)
+                        blocks)
+                       exclude-property?
+                       (remove (fn [node] (d/has-class? node "property-value-container"))))]
           (when-let [index (.indexOf blocks block)]
             (let [idx (dec index)]
               (when (>= idx 0)
@@ -902,11 +905,14 @@
 
 #?(:cljs
    (defn get-next-block-non-collapsed
-     [block {:keys [up-down?]}]
+     [block {:keys [up-down? exclude-property?]}]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (let [blocks (if up-down?
-                      (skip-same-top-blocks blocks block)
-                      blocks)]
+       (let [blocks (cond->>
+                     (if up-down?
+                       (skip-same-top-blocks blocks block)
+                       blocks)
+                      exclude-property?
+                      (remove (fn [node] (d/has-class? node "property-value-container"))))]
          (when-let [index (.indexOf blocks block)]
            (let [idx (inc index)]
              (when (>= (count blocks) idx)

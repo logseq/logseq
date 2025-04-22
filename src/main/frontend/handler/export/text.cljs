@@ -11,6 +11,7 @@
               simple-asts->string space]]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
+            [logseq.common.path :as path]
             [logseq.db :as ldb]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [malli.core :as m]
@@ -547,11 +548,11 @@
   (p/let [files (util/profile :get-file-content (common/<get-file-contents repo "md"))]
     (when (seq files)
       (let [files (export-files-as-markdown files nil)
-            repo (-> repo
-                     (string/replace config/db-version-prefix "")
-                     (string/replace config/local-db-prefix ""))
-            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+            repo' (if (config/db-based-graph? repo)
+                    (string/replace repo config/db-version-prefix "")
+                    (path/basename repo))
+            zip-file-name (str repo' "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo')]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
