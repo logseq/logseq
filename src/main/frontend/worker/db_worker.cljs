@@ -880,13 +880,13 @@
                          [k
                           (fn [& args]
                             (let [[_graph service] @*service
-                                  method-k (keyword (first args))
-                                  method-args (ldb/read-transit-str (last args))]
+                                  method-k (keyword (first args))]
                               (cond
                                 (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
-                                (p/let [service (<init-service! (first method-args))]
+                                (p/let [method-args (ldb/read-transit-str (last args))
+                                        service (<init-service! (first method-args))]
                                   ;; wait for service ready
                                   (get-in service [:status :ready])
                                   (js-invoke (:proxy service) k args))
