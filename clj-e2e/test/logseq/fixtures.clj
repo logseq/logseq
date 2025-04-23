@@ -8,5 +8,5 @@
   (w/with-page-open
     (w/make-page {:headless headless
                   :persistent false})
-    (w/navigate "http://localhost:3001")
+    (w/navigate "http://localhost:3002")
     (f)))
