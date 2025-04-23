@@ -1,4 +1,4 @@
-(ns logseq.util
+(ns logseq.e2e.util
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]

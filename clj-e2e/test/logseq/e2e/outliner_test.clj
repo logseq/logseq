@@ -1,8 +1,8 @@
-(ns logseq.outliner-test
+(ns logseq.e2e.outliner-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
-   [logseq.fixtures :as fixtures]
-   [logseq.util :as util :refer [press]]
+   [logseq.e2e.fixtures :as fixtures]
+   [logseq.e2e.util :as util :refer [press]]
    [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
