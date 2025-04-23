@@ -2,11 +2,11 @@ name: Clojure E2E
 
 on:
   push:
-    branches: [test/db-e2e]
+    branches: ["feat/db"]
     paths:
       - 'clj-e2e/**'
   pull_request:
-    branches: [test/db-e2e]
+    branches: ["feat/db"]
     paths:
       - 'clj-e2e/**'
 
