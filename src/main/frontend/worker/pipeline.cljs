@@ -255,7 +255,9 @@
                                     (when (:block/uuid (d/entity db-after db-id))
                                       {:db/id db-id
                                        :block/tx-id tx-id}))) updated-blocks))))
-          tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true})
+          tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true
+                                                     ;; Ensure db persisted
+                                                     :db-persist? true})
           _ (validate-db! repo conn tx-report* tx-meta context)
           full-tx-data (concat (:tx-data tx-report*)
                                (:tx-data refs-tx-report)
@@ -263,7 +265,9 @@
           final-tx-report (assoc tx-report'
                                  :tx-data full-tx-data
                                  :tx-meta tx-meta
-                                 :db-before (:db-before tx-report))
+                                 :db-before (:db-before tx-report)
+                                 :db-after (or (:db-after tx-report')
+                                               (:db-after tx-report)))
           affected-query-keys (when-not (:importing? context)
                                 (worker-react/get-affected-queries-keys final-tx-report))]
       {:tx-report final-tx-report
