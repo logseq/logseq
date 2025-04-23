@@ -327,7 +327,7 @@
   [repo {:keys [tx-data tx-meta db-after db-before]}]
   (let [{:keys [outliner-op]} tx-meta]
     (when (and
-           (or util/node-test? (= (:client-id tx-meta) (:client-id @state/state)))
+           (= (:client-id tx-meta) (:client-id @state/state))
            outliner-op
            (not (false? (:gen-undo-ops? tx-meta)))
            (not (:create-today-journal? tx-meta)))

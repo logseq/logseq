@@ -157,6 +157,7 @@
              frontend.util.text text-util
              frontend.util.thingatpt thingatpt
              frontend.util.url url-util
+             frontend.worker.shared-service shared-service
              frontend.worker.handler.page worker-page
              frontend.worker.pipeline worker-pipeline
              frontend.worker.state worker-state
