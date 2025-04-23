@@ -47,10 +47,10 @@
   (util/repeat-keyboard 2 "Shift+ArrowUp")
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"])))
-  (util/repeat-keyboard 2 "ControlOrMeta+Shift+ArrowUp")
+  (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowUp"))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b3" "b4" "b1" "b2"])))
-  (util/repeat-keyboard 2 "ControlOrMeta+Shift+ArrowDown")
+  (util/repeat-keyboard 2 (str (if util/mac? "Meta" "Alt") "+Shift+ArrowDown"))
   (let [contents (util/get-page-blocks-contents)]
     (is (= contents ["b1" "b2" "b3" "b4"]))))
 

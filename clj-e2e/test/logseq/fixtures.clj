@@ -1,6 +1,8 @@
 (ns logseq.fixtures
   (:require [wally.main :as w]))
 
+;; TODO: save trace
+;; TODO: parallel support
 (defn open-page
   [f & {:keys [headless]
         :or {headless true}}]

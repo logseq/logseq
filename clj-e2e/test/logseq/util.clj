@@ -143,3 +143,7 @@
 (defn get-page-blocks-contents
   []
   (w/all-text-contents ".ls-page-blocks .ls-block .block-title-wrap"))
+
+(def mac? (= "Mac OS X" (System/getProperty "os.name")))
+
+(def mod-key (if mac? "Meta" "Control"))
