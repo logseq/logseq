@@ -503,7 +503,7 @@
 
 (defn new-task--get-debug-state
   []
-  (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
+  (c.m/snapshot-of-flow create-get-state-flow))
 
 (defn new-task--upload-graph
   [token repo remote-graph-name]
