@@ -8,7 +8,7 @@
 (use-fixtures :once fixtures/open-page)
 
 (deftest create-test-page-and-insert-blocks
-  (util/new-page "Test")
+  (util/new-page "p1")
   ;; a page block and a child block
   (is (= 2 (util/blocks-count)))
   (util/new-blocks ["first block" "second block"])
@@ -16,7 +16,7 @@
   (is (= 3 (util/blocks-count))))
 
 (deftest indent-and-outdent-test
-  (util/new-page "indent outdent test")
+  (util/new-page "p2")
   (util/new-blocks ["b1" "b2"])
   (testing "simple indent and outdent"
     (util/indent)
@@ -42,7 +42,7 @@
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
 (deftest move-up-down-test
-  (util/new-page "up down test")
+  (util/new-page "p3")
   (util/new-blocks ["b1" "b2" "b3" "b4"])
   (util/repeat-keyboard 2 "Shift+ArrowUp")
   (let [contents (util/get-page-blocks-contents)]
@@ -56,7 +56,7 @@
 
 (deftest delete-test
   (testing "Delete blocks case 1"
-    (util/new-page "delete test 1")
+    (util/new-page "p4")
     (util/new-blocks ["b1" "b2" "b3" "b4"])
     (util/delete-blocks)                   ; delete b4
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
@@ -65,7 +65,7 @@
     (is (= 1 (util/page-blocks-count))))
 
   (testing "Delete block with its children"
-    (util/new-page "delete test 2")
+    (util/new-page "p5")
     (util/new-blocks ["b1" "b2" "b3" "b4"])
     (util/indent)
     (press "ArrowUp")

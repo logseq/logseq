@@ -6,6 +6,8 @@
             [wally.selectors :as ws])
   (:import (com.microsoft.playwright.assertions PlaywrightAssertions)))
 
+(def assert-that PlaywrightAssertions/assertThat)
+
 (defn wait-timeout
   [ms]
   (.waitForTimeout (w/get-page) ms))
@@ -21,6 +23,10 @@
     (when (w/visible? klass)
       editor)))
 
+(defn get-edit-block-container
+  []
+  (first (w/query ".ls-block" {:has (w/-query ".editor-wrapper textarea")})))
+
 (defn input
   "Notice this will replace the existing input value with `text`"
   [text]
@@ -31,15 +37,17 @@
   (let [input-node (w/-query "*:focus")]
     (.type input-node text)))
 
+(def press w/keyboard-press)
+
 (defn search
   [text]
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
-(def press w/keyboard-press)
-
 (defn new-page
   [title]
+  ;; Question: what's the best way to close all the popups?
+  ;; close popup, exit editing
   (search title)
   (w/click [(ws/text "Create page") (ws/nth= "0")])
   (w/wait-for ".editor-wrapper textarea"))
@@ -73,13 +81,9 @@
 (defn delete-blocks
   "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
   []
-  (let [c (blocks-count)]
-    (if (get-editor)
-      (do
-        (exit-edit)
-        (press "Backspace"))
-      (press "Backspace"))
-    (is (> c (blocks-count)))))
+  (let [editor (get-editor)]
+    (when editor (exit-edit))
+    (press "Backspace")))
 
 (defn get-text
   [locator]
@@ -139,5 +143,3 @@
 (defn get-page-blocks-contents
   []
   (w/all-text-contents ".ls-page-blocks .ls-block .block-title-wrap"))
-
-(def assert-that PlaywrightAssertions/assertThat)
