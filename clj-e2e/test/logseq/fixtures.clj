@@ -7,6 +7,7 @@
   (w/with-page-open
     (w/make-page {:headless headless
                   :persistent false
+                  :slow-mo 100
                   ;; Set `slow-mo` lower to find more flaky tests
                   ;; :slow-mo 30
                   })
