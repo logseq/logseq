@@ -555,7 +555,7 @@
     [:div.page-tabs
      (shui/tabs
       {:defaultValue default-tab
-       :class (str "w-full")}
+       :class "w-full"}
       (when (or both? property?)
         [:div.flex.flex-row.gap-1.items-center
          (shui/tabs-list
