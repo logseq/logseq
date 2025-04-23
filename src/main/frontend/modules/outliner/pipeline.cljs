@@ -14,12 +14,13 @@
   [tx-data]
   (when-let [editing-block (state/get-edit-block)]
     (let [editing-title (state/get-edit-content)]
-      (when-let [new-title (some (fn [d] (when (and (= (:e d) (:db/id editing-block))
-                                                    (= (:a d) :block/title)
-                                                    (not= (string/trim editing-title) (string/trim (:v d)))
-                                                    (:added d))
-                                           (:v d))) tx-data)]
-        (state/set-edit-content! new-title)))))
+      (when-let [d (some (fn [d] (when (and (= (:e d) (:db/id editing-block))
+                                            (= (:a d) :block/title)
+                                            (not= (string/trim editing-title) (string/trim (:v d)))
+                                            (:added d))
+                                   d)) tx-data)]
+        (when-let [new-title (:block/title (db/entity (:e d)))]
+          (state/set-edit-content! new-title))))))
 
 (defn invoke-hooks
   [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
@@ -67,7 +68,8 @@
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
-            (update-editing-block-title-if-changed! tx-data)
+            (when-not (= (:client-id tx-meta) (:client-id @state/state))
+              (update-editing-block-title-if-changed! tx-data))
 
             (when (seq deleted-assets)
               (doseq [asset deleted-assets]
