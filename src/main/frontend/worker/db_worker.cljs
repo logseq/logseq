@@ -11,6 +11,7 @@
             [datascript.storage :refer [IStorage] :as storage]
             [frontend.common.cache :as common.cache]
             [frontend.common.graph-view :as graph-view]
+            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db.fix :as db-fix]
@@ -22,12 +23,11 @@
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.core]
+            [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.search :as search]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.thread-atom]
-            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
@@ -44,6 +44,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [me.tonsky.persistent-sorted-set :as set :refer [BTSet]]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defonce *sqlite worker-state/*sqlite)
@@ -449,24 +450,36 @@
   [repo]
   (worker-state/get-sqlite-conn repo :search))
 
-(def-thread-api :thread-api/get-version
-  []
-  (when-let [sqlite @*sqlite]
-    (.-version sqlite)))
+(comment
+  (def-thread-api :thread-api/get-version
+    []
+    (when-let [sqlite @*sqlite]
+      (.-version sqlite))))
 
 (def-thread-api :thread-api/init
   [rtc-ws-url]
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+;; [graph service]
+(defonce *service (atom []))
+(defonce fns {"remoteInvoke" thread-api/remote-function})
+(declare <init-service!)
+
+(defn- start-db!
+  [repo {:keys [close-other-db?]
+         :or {close-other-db? true}
+         :as opts}]
+  (p/do!
+   (when close-other-db?
+     (close-other-dbs! repo))
+   (when @shared-service/*master-client?
+     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+   nil))
+
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
-  (let [{:keys [close-other-db?] :or {close-other-db? true} :as opts} opts]
-    (p/do!
-     (when close-other-db?
-       (close-other-dbs! repo))
-     (create-or-open-db! repo (dissoc opts :close-other-db?))
-     nil)))
+  (start-db! repo opts))
 
 (def-thread-api :thread-api/q
   [repo inputs]
@@ -595,16 +608,6 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (sqlite-common-db/get-initial-data @conn)))
 
-(def-thread-api :thread-api/get-page-refs-count
-  [repo]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (sqlite-common-db/get-page->refs-count @conn)))
-
-(def-thread-api :thread-api/close-db
-  [repo]
-  (close-db! repo)
-  nil)
-
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
   (reset-db! repo db-transit)
@@ -685,7 +688,7 @@
               {:keys [type payload]} (when (map? data) data)]
           (case type
             :notification
-            (worker-util/post-message type [(:message payload) (:type payload)])
+            (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
             (throw e)))))))
 
 (def-thread-api :thread-api/file-writes-finished?
@@ -714,11 +717,6 @@
   (worker-state/set-new-state! new-state)
   nil)
 
-(def-thread-api :thread-api/sync-ui-state
-  [repo state]
-  (undo-redo/record-ui-state! repo (ldb/write-transit-str state))
-  nil)
-
 (def-thread-api :thread-api/export-get-debug-datoms
   [repo]
   (when-let [db (worker-state/get-sqlite-conn repo)]
@@ -734,21 +732,6 @@
   [repo options]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (worker-export/get-all-page->content repo @conn options)))
-
-(def-thread-api :thread-api/undo
-  [repo _page-block-uuid-str]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (undo-redo/undo repo conn)))
-
-(def-thread-api :thread-api/redo
-  [repo _page-block-uuid-str]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (undo-redo/redo repo conn)))
-
-(def-thread-api :thread-api/record-editor-info
-  [repo _page-block-uuid-str editor-info]
-  (undo-redo/record-editor-info! repo editor-info)
-  nil)
 
 (def-thread-api :thread-api/validate-db
   [repo]
@@ -804,11 +787,6 @@
   [repo]
   (get-all-page-titles-with-cache repo))
 
-(def-thread-api :thread-api/update-auth-tokens
-  [id-token access-token refresh-token]
-  (worker-state/set-auth-tokens! id-token access-token refresh-token)
-  nil)
-
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -858,25 +836,88 @@
              (file/write-files! conn col (worker-state/get-context)))
            (js/console.error (str "DB is not found for " repo))))))))
 
+(defn- on-become-master
+  [repo]
+  (js/Promise.
+   (m/sp
+     (c.m/<? (init-sqlite-module!))
+     (c.m/<? (start-db! repo {}))
+     (assert (some? (worker-state/get-datascript-conn repo)))
+     (m/? (rtc.core/new-task--rtc-start true)))))
+
+(def broadcast-data-types
+  (set (map
+        common-util/keyword->string
+        [:sync-db-changes
+         :notification
+         :log
+         :add-repo
+         :rtc-log
+         :rtc-sync-state])))
+
+(defn- <init-service!
+  [graph]
+  (let [[prev-graph service] @*service]
+    (some-> prev-graph close-db!)
+    (when graph
+      (if (= graph prev-graph)
+        service
+        (p/let [service (shared-service/<create-service graph
+                                                        (bean/->js fns)
+                                                        #(on-become-master graph)
+                                                        broadcast-data-types)]
+          (assert (p/promise? (get-in service [:status :ready])))
+          (reset! *service [graph service])
+          service)))))
+
 (defn init
   "web worker entry"
   []
-  (glogi-console/install!)
-  (check-worker-scope!)
-  (outliner-register-op-handlers!)
-  (<ratelimit-file-writes!)
-  (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
-  (Comlink/expose #js{"remoteInvoke" thread-api/remote-function})
-  (let [^js wrapped-main-thread* (Comlink/wrap js/self)
-        wrapped-main-thread (fn [qkw direct-pass-args? & args]
-                              (-> (.remoteInvoke wrapped-main-thread*
-                                                 (str (namespace qkw) "/" (name qkw))
-                                                 direct-pass-args?
-                                                 (if direct-pass-args?
-                                                   (into-array args)
-                                                   (ldb/write-transit-str args)))
-                                  (p/chain ldb/read-transit-str)))]
-    (reset! worker-state/*main-thread wrapped-main-thread)))
+  (let [proxy-object (->>
+                      fns
+                      (map
+                       (fn [[k f]]
+                         [k
+                          (fn [& args]
+                            (let [[_graph service] @*service
+                                  method-k (keyword (first args))]
+                              (cond
+                                (= :thread-api/create-or-open-db method-k)
+                                ;; because shared-service operates at the graph level,
+                                ;; creating a new database or switching to another one requires re-initializing the service.
+                                (p/let [method-args (ldb/read-transit-str (last args))
+                                        service (<init-service! (first method-args))]
+                                  ;; wait for service ready
+                                  (get-in service [:status :ready])
+                                  (js-invoke (:proxy service) k args))
+
+                                (or (contains? #{:thread-api/sync-app-state} method-k)
+                                    (nil? service))
+                                ;; only proceed down this branch before shared-service is initialized
+                                (apply f args)
+
+                                :else
+                                ;; ensure service is ready
+                                (p/let [_ready-value (get-in service [:status :ready])]
+                                  (js-invoke (:proxy service) k args)))))]))
+                      (into {})
+                      bean/->js)]
+    (glogi-console/install!)
+    (check-worker-scope!)
+    (outliner-register-op-handlers!)
+    (<ratelimit-file-writes!)
+    (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
+    (Comlink/expose proxy-object)
+    (let [^js wrapped-main-thread* (Comlink/wrap js/self)
+          wrapped-main-thread (fn [qkw direct-pass-args? & args]
+                                (-> (.remoteInvoke wrapped-main-thread*
+                                                   (str (namespace qkw) "/" (name qkw))
+                                                   direct-pass-args?
+                                                   (if direct-pass-args?
+                                                     (into-array args)
+                                                     (ldb/write-transit-str args)))
+                                    (p/chain ldb/read-transit-str)))]
+      (reset! worker-state/*main-thread wrapped-main-thread))))
 
 (comment
   (defn <remove-all-files!

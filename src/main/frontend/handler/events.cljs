@@ -142,8 +142,7 @@
       (graph-switch-on-persisted graph opts))))
 
 (defmethod handle :graph/open-new-window [[_ev target-repo]]
-  (p/let [current-repo (state/get-current-repo)]
-    (ui-handler/open-new-window-or-tab! current-repo target-repo)))
+  (ui-handler/open-new-window-or-tab! target-repo))
 
 (defmethod handle :graph/migrated [[_ _repo]]
   (js/alert "Graph migrated."))

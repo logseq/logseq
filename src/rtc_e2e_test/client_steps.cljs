@@ -35,12 +35,12 @@
   client2: start rtc, wait page1, remote->client2"
   {:client1
    (m/sp
-     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+     (let [r (m/? (rtc-core/new-task--rtc-start false))]
        (is (nil? r))
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (m/sp
-     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+     (let [r (m/? (rtc-core/new-task--rtc-start false))]
        (is (nil? r)))
      (m/?
       (c.m/backoff
@@ -162,7 +162,7 @@
        (m/? (helper/new-task--client1-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
-       (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
+       (is (nil? (m/? (rtc-core/new-task--rtc-start false))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (m/? (helper/new-task--client1-sync-barrier-2->1 "step5"))
        (let [message (m/? (helper/new-task--wait-message-from-other-client
@@ -189,7 +189,7 @@
        (m/? (helper/new-task--client2-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn (const/tx-data-map :move-blocks-concurrently-client2))
-       (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
+       (is (nil? (m/? (rtc-core/new-task--rtc-start false))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (m/? (helper/new-task--client2-sync-barrier-2->1 "step5"))
        (m/? (helper/new-task--send-message-to-other-client
@@ -222,7 +222,7 @@ client2:
        (m/? (helper/new-task--client1-sync-barrier-1->2 "step6"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
-       (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+       (let [r (m/? (rtc-core/new-task--rtc-start false))]
          (is (nil? r))
          (m/? (helper/new-task--wait-all-client-ops-sent)))))
    :client2

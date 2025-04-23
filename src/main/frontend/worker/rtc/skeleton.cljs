@@ -3,7 +3,7 @@
   (:require [clojure.data :as data]
             [datascript.core :as d]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker.shared-service :as shared-service]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
@@ -37,19 +37,19 @@
               client-builtin-db-idents (set (get-builtin-db-idents db))
               client-schema-version (ldb/get-graph-schema-version db)]
           (when-not (zero? (db-schema/compare-schema-version client-schema-version server-schema-version))
-            (worker-util/post-message :notification
-                                      [[:div
-                                        [:p (str :client-schema-version client-schema-version)]
-                                        [:p (str :server-schema-version server-schema-version)]]
-                                       :error]))
+            (shared-service/broadcast-to-clients! :notification
+                                                  [[:div
+                                                    [:p (str :client-schema-version client-schema-version)]
+                                                    [:p (str :server-schema-version server-schema-version)]]
+                                                   :error]))
           (let [[client-only server-only _]
                 (data/diff client-builtin-db-idents server-builtin-db-idents)]
             (when (or (seq client-only) (seq server-only))
-              (worker-util/post-message :notification
-                                        [(cond-> [:div]
-                                           (seq client-only)
-                                           (conj [:p (str :client-only-db-idents client-only)])
-                                           (seq server-only)
-                                           (conj [:p (str :server-only-db-idents server-only)]))
-                                         :error])))
+              (shared-service/broadcast-to-clients! :notification
+                                                    [(cond-> [:div]
+                                                       (seq client-only)
+                                                       (conj [:p (str :client-only-db-idents client-only)])
+                                                       (seq server-only)
+                                                       (conj [:p (str :server-only-db-idents server-only)]))
+                                                     :error])))
           r)))))

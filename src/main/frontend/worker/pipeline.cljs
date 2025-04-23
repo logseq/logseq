@@ -5,6 +5,7 @@
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.defkeywords :refer [defkeywords]]
@@ -106,8 +107,8 @@
                    true
                    (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
-        (worker-util/post-message :notification
-                                  [["Invalid DB!"] :error]))))
+        (shared-service/broadcast-to-clients! :notification
+                                              [["Invalid DB!"] :error]))))
 
   ;; Ensure :block/order is unique for any block that has :block/parent
   (when (or (:dev? context) (exists? js/process))

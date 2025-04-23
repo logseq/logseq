@@ -4,6 +4,7 @@
    This interface uses clj data format as input."
   (:require ["comlink" :as Comlink]
             [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -12,8 +13,10 @@
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
             [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [logseq.db :as ldb]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn- ask-persist-permission!
@@ -25,17 +28,21 @@
 
 (defn- sync-app-state!
   []
-  (add-watch state/state
-             :sync-worker-state
-             (fn [_ _ prev current]
-               (let [new-state (cond-> {}
-                                 (not= (:git/current-repo prev)
-                                       (:git/current-repo current))
-                                 (assoc :git/current-repo (:git/current-repo current))
-                                 (not= (:config prev) (:config current))
-                                 (assoc :config (:config current)))]
-                 (when (seq new-state)
-                   (state/<invoke-db-worker :thread-api/sync-app-state new-state))))))
+  (let [state-flow
+        (->> (m/watch state/state)
+             (m/eduction
+              (map #(select-keys % [:git/current-repo :config
+                                    :auth/id-token :auth/access-token :auth/refresh-token]))
+              (dedupe)))
+        <init-sync-done? (p/deferred)
+        task (m/reduce
+              (constantly nil)
+              (m/ap
+                (let [m (m/?> (m/relieve state-flow))]
+                  (c.m/<? (state/<invoke-db-worker :thread-api/sync-app-state m))
+                  (p/resolve! <init-sync-done?))))]
+    (c.m/run-task* task)
+    <init-sync-done?))
 
 (defn get-route-data
   [route-match]
@@ -56,9 +63,7 @@
                        old-state (f prev)
                        new-state (f current)]
                    (when (not= new-state old-state)
-                     (state/<invoke-db-worker :thread-api/sync-ui-state
-                                              (state/get-current-repo)
-                                              {:old-state old-state :new-state new-state})))))))
+                     (undo-redo/record-ui-state! (state/get-current-repo) (ldb/write-transit-str {:old-state old-state :new-state new-state}))))))))
 
 (defn transact!
   [repo tx-data tx-meta]
@@ -97,12 +102,9 @@
       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*db-worker wrapped-worker)
-      (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
+      (-> (p/let [_ (sync-app-state!)
+                  _ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                   _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
-                  _ (state/<invoke-db-worker :thread-api/sync-app-state
-                                             {:git/current-repo (state/get-current-repo)
-                                              :config (:config @state/state)})
-                  _ (sync-app-state!)
                   _ (sync-ui-state!)
                   _ (ask-persist-permission!)
                   _ (state/pub-event! [:graph/sync-context])]
@@ -112,12 +114,11 @@
                (db-transact/transact transact!
                                      (if (string? repo) repo (state/get-current-repo))
                                      tx-data
-                                     tx-meta)))
+                                     (assoc tx-meta :client-id (:client-id @state/state)))))
             (db-transact/listen-for-requests))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
-                     (js/console.error error)
-                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
+                     (js/console.error error)))))))
 
 (defn <export-db!
   [repo data]
@@ -133,11 +134,7 @@
 
 (defn- sqlite-error-handler
   [error]
-  (if (= "NoModificationAllowedError"  (.-name error))
-    (do
-      (js/console.error error)
-      (state/pub-event! [:show/multiple-tabs-error-dialog]))
-    (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
+  (notification/show! [:div (str "SQLiteDB error: " error)] :error))
 
 (defrecord InBrowser []
   protocol/PersistentDB
