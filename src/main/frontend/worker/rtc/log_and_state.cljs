@@ -1,7 +1,7 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
   (:require [frontend.common.missionary :as c.m]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker.shared-service :as shared-service]
             [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [malli.core :as ma]
@@ -86,9 +86,10 @@
   (swap! *graph-uuid->remote-t assoc (ensure-uuid graph-uuid) remote-t))
 
 ;;; subscribe-logs, push to frontend
+;;; TODO: refactor by using c.m/run-background-task
 (defn- subscribe-logs
   []
   (remove-watch *rtc-log :subscribe-logs)
   (add-watch *rtc-log :subscribe-logs
-             (fn [_ _ _ n] (when n (worker-util/post-message :rtc-log n)))))
+             (fn [_ _ _ n] (when n (shared-service/broadcast-to-clients! :rtc-log n)))))
 (subscribe-logs)

@@ -184,12 +184,7 @@
         template (conj template
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
-                                   :click (fn []
-                                            ;; FIXME: Open a different graph for now
-                                            ;; (p/let [graph-name (get-graph-name (state/get-graph-path))
-                                            ;;         _ (handler/broadcast-persist-graph! graph-name)]
-                                            ;;   (handler/open-new-window!))
-                                            )
+                                   :click (fn [] (handler/open-new-window! nil))
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux

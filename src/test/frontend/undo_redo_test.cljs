@@ -1,4 +1,4 @@
-(ns frontend.worker.undo-redo-test
+(ns frontend.undo-redo-test
   (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.db :as db]
@@ -6,12 +6,17 @@
             [frontend.state :as state]
             [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.db-listener :as worker-db-listener]
-            [frontend.worker.undo-redo :as undo-redo]))
+            [frontend.undo-redo :as undo-redo]
+            [frontend.worker.db-listener :as worker-db-listener]))
 
 ;; TODO: random property ops test
 
 (def test-db test-helper/test-db)
+
+(defmethod worker-db-listener/listen-db-changes :gen-undo-ops
+  [_ {:keys [repo]} tx-report]
+  (undo-redo/gen-undo-ops! repo
+                           (assoc-in tx-report [:tx-meta :client-id] (:client-id @state/state))))
 
 (defn listen-db-fixture
   [f]
@@ -19,7 +24,6 @@
     (assert (some? test-db-conn))
     (worker-db-listener/listen-db-changes! test-db test-db-conn
                                            {:handler-keys [:gen-undo-ops]})
-
     (f)
     (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))
 
@@ -36,18 +40,18 @@
   listen-db-fixture)
 
 (defn- undo-all!
-  [conn]
+  []
   (loop [i 0]
-    (let [r (undo-redo/undo test-db conn)]
-      (if (not= :frontend.worker.undo-redo/empty-undo-stack r)
+    (let [r (undo-redo/undo test-db)]
+      (if (not= :frontend.undo-redo/empty-undo-stack r)
         (recur (inc i))
         (prn :undo-count i)))))
 
 (defn- redo-all!
-  [conn]
+  []
   (loop [i 0]
-    (let [r (undo-redo/redo test-db conn)]
-      (if (not= :frontend.worker.undo-redo/empty-redo-stack r)
+    (let [r (undo-redo/redo test-db)]
+      (if (not= :frontend.undo-redo/empty-redo-stack r)
         (recur (inc i))
         (prn :redo-count i)))))
 
@@ -64,10 +68,10 @@
             _ (outliner-test/run-random-mixed-ops! *random-blocks)
             db-after @conn]
 
-        (undo-all! conn)
+        (undo-all!)
 
         (is (= (get-datoms @conn) #{}))
 
-        (redo-all! conn)
+        (redo-all!)
 
         (is (= (get-datoms @conn) (get-datoms db-after)))))))
