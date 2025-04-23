@@ -71,7 +71,7 @@
   (press "Escape"))
 
 (defn delete-blocks
-  "Delete the current block if in editing mode, otherwise, delete all the slected blocks."
+  "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
   []
   (let [c (blocks-count)]
     (if (get-editor)

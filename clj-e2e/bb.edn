@@ -12,13 +12,9 @@
 
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
-  yarn-build (shell {:dir ".."} "yarn gulp:build")
-  yarn-release (shell {:dir ".."} "clojure -M:cljs release app electron --config-merge \"{:closure-defines {frontend.config/DEV-RELEASE true}}\" --debug")
-
   test {:task (do
                 (clojure "-T:build test")
-                (System/exit 0))
-        :depends [yarn-build yarn-release]}
+                (System/exit 0))}
 
   -dev {:depends [serve prn test]}
 

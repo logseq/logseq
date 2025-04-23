@@ -1,10 +1,9 @@
 (ns logseq.fixtures
   (:require [wally.main :as w]))
 
-;; TODO: change headless to true on CI
 (defn open-page
   [f & {:keys [headless]
-        :or {headless false}}]
+        :or {headless true}}]
   (w/with-page-open
     (w/make-page {:headless headless
                   :persistent false})
