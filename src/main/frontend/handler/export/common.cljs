@@ -195,12 +195,13 @@
   (state/<invoke-db-worker :thread-api/export-get-debug-datoms repo))
 
 (defn <get-all-page->content
-  [repo]
-  (state/<invoke-db-worker :thread-api/export-get-all-page->content repo))
+  [repo options]
+  (state/<invoke-db-worker :thread-api/export-get-all-page->content repo options))
 
 (defn <get-file-contents
   [repo suffix]
-  (p/let [page->content (<get-all-page->content repo)]
+  (p/let [page->content (<get-all-page->content repo
+                                                {:export-bullet-indentation (state/get-export-bullet-indentation)})]
     (clojure.core/map (fn [[page-title content]]
                         {:path (str page-title "." suffix)
                          :content content
