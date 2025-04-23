@@ -703,22 +703,26 @@
                     (remove #(= :logseq.property/empty-placeholder (:db/ident %))
                             (if (every? entity-map? v) v [v])))
                   (remove (fn [node]
-                            (or (= (:db/id block) (:db/id node))
-                             ;; A page's alias can't be itself
-                                (and alias? (= (or (:db/id (:block/page block))
-                                                   (:db/id block))
-                                               (:db/id node)))
-                                (cond
-                                  (= property-type :class)
-                                  (ldb/private-tags (:db/ident node))
+                            (let [node' (if (:value node)
+                                          (assoc (:value node) :block/title (:label node))
+                                          node)
+                                  node (or (some-> (:db/id node') db/entity) node)]
+                              (or (= (:db/id block) (:db/id node))
+                                  ;; A page's alias can't be itself
+                                  (and alias? (= (or (:db/id (:block/page block))
+                                                     (:db/id block))
+                                                 (:db/id node)))
+                                  (cond
+                                    (= property-type :class)
+                                    (ldb/private-tags (:db/ident node))
 
-                                  (and property-type (not= property-type :node))
-                                  (if (= property-type :page)
-                                    (not (db/page? node))
-                                    (not (contains? (ldb/get-entity-types node) property-type)))
+                                    (and property-type (not= property-type :node))
+                                    (if (= property-type :page)
+                                      (not (db/page? node))
+                                      (not (contains? (ldb/get-entity-types node) property-type)))
 
-                                  :else
-                                  false)))
+                                    :else
+                                    false))))
                           result)))
 
         options (map (fn [node]
@@ -1071,7 +1075,8 @@
                      :tag? tag?
                      :property-position property-position
                      :meta-click? other-position?
-                     :table-view? table-view?} value)
+                     :table-view? table-view?
+                     :ignore-alias? (= :block/alias (:db/ident property))} value)
            (:db/id value)))
 
        (contains? #{:node :class :property :page} type)
