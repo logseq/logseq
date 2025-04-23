@@ -1,5 +1,6 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
@@ -15,7 +16,7 @@
     (let [editing-title (state/get-edit-content)]
       (when-let [new-title (some (fn [d] (when (and (= (:e d) (:db/id editing-block))
                                                     (= (:a d) :block/title)
-                                                    (not= editing-title (:v d))
+                                                    (not= (string/trim editing-title) (string/trim (:v d)))
                                                     (:added d))
                                            (:v d))) tx-data)]
         (state/set-edit-content! new-title)))))
