@@ -52,6 +52,13 @@
        (reset! *input input)
        (when (fn? on-input) (on-input input)))
      [(hooks/use-debounced-value input 100)])
+
+    (hooks/use-effect!
+     (fn []
+       (when (= "" @*input)
+         (set-input! "")))
+     [(hooks/use-debounced-value @*input 100)])
+
     [:div.input-wrap
      {:style {:margin-bottom "-2px"}}
      [:input.cp__select-input.w-full
@@ -65,6 +72,7 @@
                                (set-input! v)))}
              input-opts)]]))
 
+;; TODO: rewrite using hooks
 (rum/defcs ^:large-vars/cleanup-todo select
   "Provides a select dropdown powered by a fuzzy search. Takes the following options:
    * :items - Vec of things to select from. Assumes a vec of maps with :value key by default. Required option
@@ -83,8 +91,8 @@
   (rum/local "" ::input)
   (rum/local nil ::toggle)
   {:init (fn [state]
-           (assoc state ::selected-choices
-                  (atom (set (:selected-choices (first (:rum/args state)))))))
+           (let [choices (:selected-choices (first (:rum/args state)))]
+             (assoc state ::selected-choices (atom (set choices)))))
    :will-remount (fn [_old-state new-state]
                    (let [choices (set (:selected-choices (first (:rum/args new-state))))]
                      (when (not= choices @(::selected-choices new-state))
@@ -113,9 +121,7 @@
         *selected-choices (::selected-choices state)
         selected-choices (rum/react *selected-choices)
         full-choices (cond->>
-                      (->> (concat (map (fn [v] {:value v}) selected-choices) items)
-                           (util/distinct-by-last-wins :value)
-                           (remove nil?))
+                      (remove nil? items)
                        (seq @input)
                        (remove :clear?))
         search-result' (->>
@@ -126,7 +132,7 @@
         exact-transform-fn (if new-case-sensitive? identity string/lower-case)
         exact-match? (contains? (set (map (comp exact-transform-fn str extract-fn) search-result'))
                                 (exact-transform-fn @input))
-        search-result' (if multiple-choices?
+        search-result' (if (and multiple-choices? (not (string/blank? @input)))
                          (sort-by (fn [item]
                                     (not (contains? selected-choices (:value item))))
                                   search-result')
