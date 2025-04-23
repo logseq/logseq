@@ -17,6 +17,7 @@
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
@@ -337,7 +338,7 @@
                                   :repo repo})))
 
 ;;; ================ API ================
-(defn new-task--rtc-start
+(defn- new-task--rtc-start*
   [repo token]
   (m/sp
     ;; ensure device metadata existing first
@@ -345,7 +346,7 @@
     (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
-        (do (log/info :e r) (r.ex/->map r))
+        r
         (let [{:keys [rtc-state-flow *rtc-auto-push? *rtc-remote-profile? rtc-loop-task *online-users onstarted-task]}
               (create-rtc-loop graph-uuid schema-version repo conn date-formatter token)
               *last-stop-exception (atom nil)
@@ -355,8 +356,8 @@
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)))
               start-ex (m/? onstarted-task)]
-          (if-let [start-ex (:ex-data start-ex)]
-            (do (log/info :start-ex start-ex) (r.ex/->map start-ex))
+          (if (instance? ExceptionInfo start-ex)
+            start-ex
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
                                             :local-graph-schema-version schema-version
@@ -370,6 +371,29 @@
                                             :canceler canceler
                                             :*last-stop-exception *last-stop-exception})
                 nil)))))))
+
+(declare rtc-stop)
+(defn new-task--rtc-start
+  [stop-before-start?]
+  (m/sp
+    (let [repo (worker-state/get-current-repo)
+          token (worker-state/get-id-token)
+          conn (worker-state/get-datascript-conn repo)]
+      (when (and repo token conn)
+        (when stop-before-start? (rtc-stop))
+        (let [ex (m/? (new-task--rtc-start* repo token))]
+          (when-let [ex-data* (ex-data ex)]
+            (case (:type ex-data*)
+              (:rtc.exception/not-rtc-graph
+               :rtc.exception/major-schema-version-mismatched
+               :rtc.exception/lock-failed)
+              (log/info :rtc-start-failed ex)
+
+              :rtc.exception/not-found-db-conn
+              (log/error :rtc-start-failed ex)
+
+              (log/error :BUG-unknown-error ex))
+            (r.ex/->map ex)))))))
 
 (defn rtc-stop
   []
@@ -520,10 +544,11 @@
   (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid schema-version)))
 
-(defn new-task--download-info-list
-  [token graph-uuid schema-version]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid schema-version)))
+(comment
+  (defn new-task--download-info-list
+    [token graph-uuid schema-version]
+    (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+      (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid schema-version))))
 
 (defn new-task--wait-download-info-ready
   [token download-info-uuid graph-uuid schema-version timeout-ms]
@@ -534,8 +559,8 @@
 (def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
 
 (def-thread-api :thread-api/rtc-start
-  [repo token]
-  (new-task--rtc-start repo token))
+  [stop-before-start?]
+  (new-task--rtc-start stop-before-start?))
 
 (def-thread-api :thread-api/rtc-stop
   []
@@ -595,9 +620,10 @@
   [graph-uuid graph-name s3-url]
   (new-task--download-graph-from-s3 graph-uuid graph-name s3-url))
 
-(def-thread-api :thread-api/rtc-download-info-list
-  [token graph-uuid schema-version]
-  (new-task--download-info-list token graph-uuid schema-version))
+(comment
+  (def-thread-api :thread-api/rtc-download-info-list
+    [token graph-uuid schema-version]
+    (new-task--download-info-list token graph-uuid schema-version)))
 
 (def-thread-api :thread-api/rtc-add-migration-client-ops
   [repo server-schema-version]
@@ -611,7 +637,7 @@
   (c.m/run-background-task
    ::subscribe-state
    (m/reduce
-    (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+    (fn [_ v] (shared-service/broadcast-to-clients! :rtc-sync-state v))
     create-get-state-flow)))
 
 (comment

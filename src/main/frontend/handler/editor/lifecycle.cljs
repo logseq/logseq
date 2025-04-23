@@ -3,6 +3,7 @@
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [frontend.util :as util]
             [goog.dom :as gdom]))
 
@@ -33,8 +34,7 @@
       (let [page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
             repo (state/get-current-repo)]
         (when page-id
-          (state/<invoke-db-worker :thread-api/record-editor-info repo (str page-id) (state/get-editor-info)))))
-
+          (undo-redo/record-editor-info! repo (state/get-editor-info)))))
     (state/set-state! :editor/op nil))
   state)
 

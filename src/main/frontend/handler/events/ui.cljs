@@ -42,8 +42,7 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [rum.core :as rum]))
+            [promesa.core :as p]))
 
 (defmethod events/handle :class/configure [[_ page]]
   (shui/dialog-open!
@@ -302,25 +301,6 @@
 
 (defmethod events/handle :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
-
-(rum/defc multi-tabs-dialog
-  []
-  (let [word (if (util/electron?) "window" "tab")]
-    [:div.flex.p-4.flex-col.gap-4.h-64
-     [:span.warning.text-lg
-      (util/format "Logseq doesn't support multiple %ss access to the same graph yet, please close this %s or switch to another graph."
-                   word word)]
-     [:div.text-lg
-      [:p "Switch to another repo: "]
-      [:div.border.rounded.bg-gray-01.overflow-hidden.w-60
-       (repo/repos-dropdown {:on-click (fn [e]
-                                         (util/stop e)
-                                         (state/set-state! :error/multiple-tabs-access-opfs? false)
-                                         (shui/dialog-close!))})]]]))
-
-(defmethod events/handle :show/multiple-tabs-error-dialog [_]
-  (state/set-state! :error/multiple-tabs-access-opfs? true)
-  (shui/dialog-open! multi-tabs-dialog))
 
 (defmethod events/handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
