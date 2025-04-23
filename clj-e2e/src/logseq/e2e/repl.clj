@@ -1,7 +1,7 @@
-(ns logseq.repl
+(ns logseq.e2e.repl
   "fns used on repl"
   (:require [clojure.test :refer [run-tests run-test]]
-            [logseq.util :as util]
+            [logseq.e2e.util :as util]
             [wally.main :as w]
             [wally.repl :as repl]))
 
@@ -23,11 +23,11 @@
   (repl/resume)
 
   ;; Run all the tests in specific ns with `future` to not block repl
-  (future (run-tests 'logseq.editor-test))
-  (future (run-tests 'logseq.outliner-test))
+  (future (run-tests 'logseq.e2e.editor-test))
+  (future (run-tests 'logseq.e2e.outliner-test))
 
   ;; Run specific test
-  (future (run-test logseq.editor-test/commands-test))
+  (future (run-test logseq.e2e.editor-test/commands-test))
 
   ;; after the test has been paused, you can do anything with the current page like this
   (repl/with-page
