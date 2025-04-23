@@ -9,6 +9,7 @@
             [capacitor.state :as state]
             [capacitor.handler :as handler]
             [capacitor.pages.utils :as pages-util]
+            [capacitor.components.ui :as ui]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
             [logseq.db :as ldb]
@@ -28,7 +29,7 @@
   []
   (-> (react/q (fstate/get-current-repo)
         [:frontend.worker.react/journals]
-        {:async-query-fn
+        {:query-fn
          (fn []
            (p/let [{:keys [data]} (handler/<load-view-data nil {:journals? true})]
              (remove nil? data)))}
@@ -72,7 +73,7 @@
         (for [page all-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
             [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
-             {:on-click #(pages-util/nav-to-block! page)}
+             {:on-click #(pages-util/nav-to-block! page {:reload-pages! (fn [] (set-reload! (inc reload)))})}
              (case ident
                :logseq.class/Property (ionic/tabler-icon "letter-t")
                :logseq.class/Page (ionic/tabler-icon "file")
@@ -154,5 +155,9 @@
       [(rum/deref nav-ref)])
 
     [:> (.-IonApp ionic/ionic-react)
-     (ionic/ion-nav {:ref nav-ref :root root
-                     :animated true :swipeGesture false})]))
+     [:<>
+      (ionic/ion-nav {:ref nav-ref :root root
+                      :animated true :swipeGesture false})
+
+      (ui/install-notifications)
+      ]]))
