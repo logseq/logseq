@@ -19,5 +19,5 @@
 (defn ui-db []
   (db-conn/get-db))
 
-(defn get-all-pages []
+(defn local-all-pages []
   (some->> (ui-db) (ldb/get-all-pages) (sort-by :block/created-at) (reverse)))
