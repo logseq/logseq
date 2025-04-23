@@ -6,11 +6,7 @@
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         }
  :aliases
- {:run-m {:main-opts ["-m" "logseq.e2e"]}
-  :run-x {:ns-default logseq.e2e
-          :exec-fn greet
-          :exec-args {:name "Clojure"}}
-  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+ {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
           :ns-default build}
   :serve {:deps {org.babashka/http-server {:mvn/version "0.1.13"}}
           :main-opts ["-m" "babashka.http-server"]

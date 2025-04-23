@@ -1,4 +1,4 @@
-(ns logseq.fixtures
+(ns logseq.e2e.fixtures
   (:require [wally.main :as w]))
 
 ;; TODO: save trace
