@@ -7,6 +7,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.db.utils :as db-util]
+            [frontend.handler.notification :as notification]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 

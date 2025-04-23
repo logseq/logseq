@@ -31,3 +31,20 @@ ion-textarea {
     @apply !p-1 min-h-[120px];
   }
 }
+
+.ui__notifications {
+  @apply fixed top-8 pointer-events-none w-full;
+
+  z-index: 9999;
+
+  &-content {
+    @apply inset-0 flex items-end justify-center px-4 py-2
+    pointer-events-none sm:px-6 sm:py-2 sm:items-start sm:justify-end;
+  }
+
+  .notification-area {
+    @apply border;
+
+    background-color: var(--ion-color-light-tint);
+  }
+}
