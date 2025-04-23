@@ -998,6 +998,16 @@
 
 (defn- build-invalid-tx [entity eid]
   (cond
+    (:block/schema entity)
+    [[:db/retract eid :block/schema]]
+
+    (and (nil? (:block/uuid entity))
+         (or (:block/title entity)
+             (:logseq.property.asset/size entity)
+             (:logseq.property.asset/type entity)
+             (:logseq.property.asset/checksum entity)))
+    [[:db/retractEntity eid]]
+
     (and (:db/ident entity) (= "logseq.property.attribute" (namespace (:db/ident entity))))
     [[:db/retractEntity (:db/id entity)]]
 
