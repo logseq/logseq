@@ -73,6 +73,7 @@
       :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
+      ;; NOTE: prefer to use flows/network-online-event-flow
       :network/online?         true
       :indexeddb/support?      true
       :me                      nil
@@ -1638,7 +1639,11 @@ Similar to re-frame subscriptions"
 
 (defn set-online!
   [value]
-  (set-state! :network/online? value))
+  (set-state! :network/online? value)
+  ;; to avoid watch whole big state atom,
+  ;; there's an atom flows/*network-online?,
+  ;; then we can use flows/network-online-event-flow
+  (reset! flows/*network-online? value))
 
 (defn get-plugins-slash-commands
   []

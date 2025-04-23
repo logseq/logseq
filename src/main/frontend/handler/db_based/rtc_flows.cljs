@@ -98,7 +98,7 @@ conditions:
     (let [visibility (m/?< flows/document-visibility-state-flow)]
       (try
         (if (= "visible" visibility)
-          (let [rtc-lock (:rtc-lock (m/? (m/reduce {} nil (m/eduction (take 1) rtc-state-flow))))]
+          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
             (if (not rtc-lock)
               :document-visible&rtc-not-running
               (m/amb)))
@@ -106,20 +106,41 @@ conditions:
         (catch Cancelled _
           (m/amb))))))
 
+(def ^:private network-online&rtc-not-running-flow
+  (m/ap
+    (let [online? (m/?< flows/network-online-event-flow)]
+      (try
+        (if online?
+          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
+            (if (not rtc-lock)
+              :network-online&rtc-not-running
+              (m/amb)))
+          (m/amb))
+        (catch Cancelled _
+          (m/amb))))))
+
 (def trigger-start-rtc-flow
   (->>
-   [(m/eduction
+   [;; login-user changed
+    (m/eduction
      (keep (fn [user] (when (:email user) [:login])))
      flows/current-login-user-flow)
+    ;; repo changed
     (m/eduction
      (keep (fn [repo] (when repo [:graph-switch repo])))
      flows/current-repo-flow)
+    ;; trigger-rtc by somewhere else
     (m/eduction
      (keep (fn [repo] (when repo [:trigger-rtc repo])))
      (m/watch *rtc-start-trigger))
+    ;; document visibilitychange->true
     (m/eduction
      (map vector)
-     document-visible&rtc-not-running-flow)]
+     document-visible&rtc-not-running-flow)
+    ;; network online->true
+    (m/eduction
+     (map vector)
+     network-online&rtc-not-running-flow)]
    (apply c.m/mix)
    (m/eduction (filter (fn [_] (some? (state/get-auth-id-token)))))
    (c.m/debounce 200)))

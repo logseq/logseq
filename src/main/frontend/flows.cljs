@@ -19,6 +19,8 @@
 (def ^:private current-login-user-validator (ma/validator current-login-user-schema))
 (def *current-login-user (atom nil :validator current-login-user-validator))
 
+(def *network-online? (atom nil))
+
 ;; Public Flows
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -42,3 +44,7 @@
             (fn dtor [] (.removeEventListener ^js js/document "visibilitychange" callback-fn)))))
        (m/eduction (dedupe))
        (m/relieve)))
+
+(def network-online-event-flow
+  (->> (m/watch *network-online?)
+       (m/eduction (filter true?))))
