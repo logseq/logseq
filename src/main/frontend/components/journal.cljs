@@ -21,9 +21,9 @@
   []
   (-> (react/q (state/get-current-repo)
                [:frontend.worker.react/journals]
-               {:async-query-fn (fn []
-                                  (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
-                                    (remove nil? data)))}
+               {:query-fn (fn [_]
+                            (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
+                              (remove nil? data)))}
                nil)
       util/react))
 
