@@ -2,7 +2,8 @@
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
         io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
                                     :sha "bbe2a0085c27a7aa7e76f10360ca5ca477bd8a08"}
-        io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}}
+        ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
+        }
  :aliases
  {:run-m {:main-opts ["-m" "logseq.e2e"]}
   :run-x {:ns-default logseq.e2e
@@ -10,6 +11,9 @@
           :exec-args {:name "Clojure"}}
   :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
           :ns-default build}
+  :serve {:deps {org.babashka/http-server {:mvn/version "0.1.13"}}
+          :main-opts ["-m" "babashka.http-server"]
+          :exec-fn babashka.http-server/exec}
   :test {:extra-paths ["test"]
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       io.github.cognitect-labs/test-runner
