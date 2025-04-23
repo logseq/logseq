@@ -12,6 +12,7 @@
             [capacitor.components.ui :as ui]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
+            [frontend.db.utils :as db-util]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
 
@@ -39,19 +40,34 @@
 (rum/defc journals-list < rum/reactive db-mixins/query
   []
   (let [journals (sub-journals)]
-
-    [:pre
-     (prn-str journals)]))
+    [:ul
+     (for [journal-id journals]
+       (let [journal (db-util/entity journal-id)]
+         [::li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
+          {:on-click #(pages-util/nav-to-block! journal {:reload-pages! (fn [] ())})}
+          (ionic/tabler-icon "calendar")
+          [:span.pl-1 (:block/title journal)]]))]))
 
 (rum/defc home []
   (let [[all-pages set-all-pages!] (rum/use-state [])
-        [reload set-reload!] (rum/use-state 0)]
+        [reload set-reload!] (rum/use-state 0)
+        [filtered-pages set-filtered-pages!] (rum/use-state [])]
 
     (rum/use-effect!
       (fn []
-        (set-all-pages! (handler/get-all-pages))
+        (set-all-pages! (handler/local-all-pages))
         #())
       [reload])
+
+    (rum/use-effect!
+      (fn []
+        (let [pages (filterv (fn [page]
+                               (let [ident (some-> (:block/tags page) first :db/ident)]
+                                 (not (contains? #{:logseq.class/Journal :logseq.class/Property} ident))))
+                      all-pages)]
+          (set-filtered-pages! pages))
+        #())
+      [all-pages])
 
     (ionic/ion-content
       [:div.pt-6.px-6
@@ -59,18 +75,17 @@
        [:h2.py-1.text-lg (fstate/get-current-repo)]
 
        [:h1.text-3xl.font-mono.font-bold.py-2.mt-4 "Journals"]
-       [:ul.pt-2
-        (journals-list)]
+       (journals-list)
 
        [:div.flex.justify-between.items-center.pt-4
         [:h1.text-3xl.font-mono.font-bold.py-2
          "All pages"
-         [:small.text-xs.pl-2.opacity-50 (count all-pages)]]
+         [:small.text-xs.pl-2.opacity-50 (count filtered-pages)]]
 
         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
           [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])]
        [:ul.mb-24.pt-2
-        (for [page all-pages]
+        (for [page filtered-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
             [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
              {:on-click #(pages-util/nav-to-block! page {:reload-pages! (fn [] (set-reload! (inc reload)))})}
