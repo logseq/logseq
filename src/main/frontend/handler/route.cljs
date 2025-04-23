@@ -74,7 +74,7 @@
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
+  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard? ignore-alias?]
                :or {click-from-recent? false}
                :as opts}]
    (when (or (uuid? page-name)
@@ -85,7 +85,7 @@
                 (or (ldb/hidden? page)
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! "Cannot go to an internal page." :warning)
-         (if-let [source (db/get-alias-source-page (state/get-current-repo) (:db/id page))]
+         (if-let [source (and (not ignore-alias?) (db/get-alias-source-page (state/get-current-repo) (:db/id page)))]
            (redirect-to-page! (:block/uuid source) opts)
            (do
            ;; Always skip onboarding when loading an existing whiteboard
