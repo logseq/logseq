@@ -6,11 +6,17 @@ on:
     paths:
       - 'clj-e2e/**'
       - '.github/workflows/clj-e2e.yml'
+      - src/**
+      - deps/**
+      - packages/**
   pull_request:
     branches: ["feat/db"]
     paths:
       - 'clj-e2e/**'
       - '.github/workflows/clj-e2e.yml'
+      - src/**
+      - deps/**
+      - packages/**
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
