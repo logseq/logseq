@@ -613,7 +613,8 @@
 (defn open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
-    (let [page (or (first (:block/_alias page-entity)) page-entity)]
+    (let [ignore-alias? (:ignore-alias? config)
+          page (or (and (not ignore-alias?) (first (:block/_alias page-entity))) page-entity)]
       (cond
         (gobj/get e "shiftKey")
         (when page
@@ -635,8 +636,9 @@
         ((:on-pointer-down config) e)
 
         :else
-        (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
-            (apply [(or (:block/uuid page) (:block/name page))])))))
+        (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
+          (f (or (:block/uuid page) (:block/name page))
+             {:ignore-alias? ignore-alias?})))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
