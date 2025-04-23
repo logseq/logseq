@@ -5,6 +5,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as fstate]
             [capacitor.ionic :as ionic]))
 
@@ -32,18 +33,30 @@
       (ionic/ion-header
         (ionic/ion-toolbar
           (ionic/ion-buttons {:slot "end"}
-            (ionic/ion-button {:on-click #(close!)} "Cancel"))
-
+            (when (not (nil? (:db/id block)))
+              (ionic/ion-button {:fill "clear"
+                                 :class "opacity-80 text-red-500"
+                                 :on-click (fn []
+                                             (-> (editor-handler/delete-block-aux! block)
+                                               (p/then (fn []
+                                                         (close!)
+                                                         (reload-page!)))))}
+                (ionic/tabler-icon "trash" {:size 26}))))
           (ionic/ion-title (or title "Untitled"))))
 
       (ionic/ion-content {:class "ion-padding"}
         [:div.py-2
          (ionic/ion-textarea {:placeholder "block content"
                               :ref *input
+                              :class "bg-gray-100"
                               :auto-grow true
                               :autofocus true
                               :value (:block/title block)})]
-        [:div.flex.py-2
+        [:div.flex.py-2.justify-between
+         (ionic/ion-button
+           {:on-click #(close!)
+            :fill "clear"}
+           "Cancel")
          (ionic/ion-button
            {:on-click (fn []
                         (let [new? (nil? (:db/id block))
@@ -59,14 +72,14 @@
                               (p/then (fn []
                                         (close!)
                                         (reload-page!)))))))
-            :class "w-full"} "Save")]))))
+            :class ""} "Save")]))))
 
 (defn nav-to-edit-block!
   [block opts]
   (some-> @state/*nav-root
     (.push #(edit-block-modal block opts))))
 
-(rum/defc page [block]
+(rum/defc page [block {:keys [reload-pages!]}]
   (let [[^js nav] (state/use-nav-root)
         [page set-page!] (rum/use-state (db-utils/entity (:db/id block)))
         title (or (:block/title block) (:block.temp/cached-title block))
@@ -97,7 +110,13 @@
               (ionic/tabler-icon "refresh" {:size 26}))
             (ionic/ion-button {:fill "clear"
                                :class "opacity-80 text-red-500"
-                               :on-click #(.pop nav)}
+                               :on-click (fn []
+                                           (page-handler/<delete! (:block/uuid block)
+                                             (fn []
+                                               (.pop nav)
+                                               (reload-pages!))
+                                             {:error-handler (fn [^js e]
+                                                               (js/console.error e))}))}
               (ionic/tabler-icon "trash" {:size 26})))
 
           (ionic/ion-title title)))
