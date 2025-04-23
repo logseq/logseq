@@ -111,9 +111,7 @@
        (shui/button
         {:variant :outline
          :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"
-         :on-click (fn []
-                     (let [token (state/get-auth-id-token)]
-                       (state/<invoke-db-worker :thread-api/rtc-start (state/get-current-repo) token)))}
+         :on-click (fn [] (state/<invoke-db-worker :thread-api/rtc-start false))}
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex

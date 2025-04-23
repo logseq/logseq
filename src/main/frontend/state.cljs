@@ -33,6 +33,7 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *editor-info (atom nil))
 
 (defn- <invoke-db-worker*
   [qkw direct-pass-args? args-list]
@@ -61,7 +62,8 @@
                          (when graph (ipc/ipc "setCurrentGraph" graph))
                          graph)]
     (atom
-     {:route-match                           nil
+     {:client-id                             (str (random-uuid))
+      :route-match                           nil
       :today                                 nil
       :system/events                         (async/chan 1000)
       :file/unlinked-dirs                    #{}
@@ -73,6 +75,7 @@
       :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
+      ;; NOTE: prefer to use flows/network-online-event-flow
       :network/online?         true
       :indexeddb/support?      true
       :me                      nil
@@ -1036,16 +1039,6 @@ Similar to re-frame subscriptions"
   []
   @(get @state :editor/block))
 
-(defn set-edit-content!
-  ([input-id value] (set-edit-content! input-id value true))
-  ([input-id value set-input-value?]
-   (when input-id
-     (when set-input-value?
-       (when-let [input (gdom/getElement input-id)]
-         (util/set-change-value input value)))
-     (set-state! :editor/content value :path-in-sub-atom
-                 (or (:block/uuid (get-edit-block)) input-id)))))
-
 (defn editing?
   []
   (seq @(:editor/editing? @state)))
@@ -1063,6 +1056,17 @@ Similar to re-frame subscriptions"
               (when (string/starts-with? id "edit-block-")
                 id))))
         (catch :default _e)))))
+
+(defn set-edit-content!
+  ([value] (set-edit-content! (get-edit-input-id) value))
+  ([input-id value] (set-edit-content! input-id value true))
+  ([input-id value set-input-value?]
+   (when input-id
+     (when set-input-value?
+       (when-let [input (gdom/getElement input-id)]
+         (util/set-change-value input value)))
+     (set-state! :editor/content value :path-in-sub-atom
+                 (or (:block/uuid (get-edit-block)) input-id)))))
 
 (defn get-input
   []
@@ -1638,7 +1642,11 @@ Similar to re-frame subscriptions"
 
 (defn set-online!
   [value]
-  (set-state! :network/online? value))
+  (set-state! :network/online? value)
+  ;; to avoid watch whole big state atom,
+  ;; there's an atom flows/*network-online?,
+  ;; then we can use flows/network-online-event-flow
+  (reset! flows/*network-online? value))
 
 (defn get-plugins-slash-commands
   []
