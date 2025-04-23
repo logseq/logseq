@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.state :as state]
+            [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.ui :as shui]
@@ -45,33 +46,38 @@
                   (remove #(contains? #{:logseq.property.asset/checksum} (:id %)) columns*)
                   :else
                   columns*)
-        columns (if (= (:db/ident class) :logseq.class/Asset)
+        db-ident (:db/ident class)
+        asset? (= db-ident :logseq.class/Asset)
+        columns (if asset?
                   ;; Insert in front of tag's properties
                   (let [[before-cols after-cols] (split-with #(not (db-property/logseq-property? (:id %))) columns)]
                     (concat before-cols [(build-asset-file-column config)] after-cols))
-                  columns)]
+                  columns)
+        add-new-object! (when (or asset? (not (ldb/private-tags (:db/ident class))))
+                          (fn [_view table {:keys [properties]}]
+                            (let [set-data! (get-in table [:data-fns :set-data!])
+                                  full-data (:full-data table)]
+                              (if (= :logseq.class/Asset (:db/ident class))
+                                (shui/dialog-open!
+                                 (fn []
+                                   [:div.flex.flex-col.gap-2
+                                    [:div.font-medium "Add assets"]
+                                    (filepicker/picker
+                                     {:on-change (fn [_e files]
+                                                   (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
+                                                     (shui/dialog-close!)
+                                                     (when (seq entities)
+                                                       (set-data! (concat full-data (map :db/id entities))))))})]))
+                                (p/let [block (add-new-class-object! class properties)]
+                                  (when (:db/id block)
+                                    (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
+                                    (set-data! (conj (vec full-data) (:db/id block)))))))))]
 
     (views/view {:config config
                  :view-parent class
                  :view-feature-type :class-objects
                  :columns columns
-                 :add-new-object! (fn [_view table {:keys [properties]}]
-                                    (let [set-data! (get-in table [:data-fns :set-data!])
-                                          full-data (:full-data table)]
-                                      (if (= :logseq.class/Asset (:db/ident class))
-                                        (shui/dialog-open!
-                                         (fn []
-                                           [:div.flex.flex-col.gap-2
-                                            [:div.font-medium "Add assets"]
-                                            (filepicker/picker
-                                             {:on-change (fn [_e files]
-                                                           (p/let [entities (editor-handler/upload-asset! nil files :markdown editor-handler/*asset-uploading? true)]
-                                                             (shui/dialog-close!)
-                                                             (when (seq entities)
-                                                               (set-data! (concat full-data (map :db/id entities))))))})]))
-                                        (p/let [block (add-new-class-object! class properties)]
-                                          (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
-                                          (set-data! (conj (vec full-data) (:db/id block)))))))
+                 :add-new-object! add-new-object!
                  :show-add-property? true
                  :show-items-count? true
                  :add-property! (fn []
@@ -114,8 +120,9 @@
                                     (p/let [set-data! (get-in table [:data-fns :set-data!])
                                             full-data (:full-data table)
                                             block (add-new-property-object! property properties)]
-                                      (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
-                                      (set-data! (conj (vec full-data) (:db/id block)))))
+                                      (when (:db/id block)
+                                        (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
+                                        (set-data! (conj (vec full-data) (:db/id block))))))
                  ;; TODO: Add support for adding column
                  :show-add-property? false})))
 

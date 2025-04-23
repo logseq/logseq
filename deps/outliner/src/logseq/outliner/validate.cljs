@@ -1,14 +1,14 @@
 (ns logseq.outliner.validate
   "Reusable DB graph validations for outliner level and above. Most validations
   throw errors so the user action stops immediately to display a notification"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.common.date :as common-date]
             [logseq.common.util.namespace :as ns-util]
-            [clojure.set :as set]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -164,10 +164,10 @@
     (when (and (:logseq.property/built-in? tag-ent)
                (not (ldb/class? tag-ent)))
       (throw (ex-info (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
-                    {:type :notification
-                     :payload {:message (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
-                               :type :error}
-                     :property-value v})))))
+                      {:type :notification
+                       :payload {:message (str "Can't set tag with built-in page that isn't a tag " (pr-str (:block/title tag-ent)))
+                                 :type :error}
+                       :property-value v})))))
 
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v]
