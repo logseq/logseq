@@ -15,7 +15,8 @@
 
 (defmethod worker-db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [repo]} tx-report]
-  (undo-redo/gen-undo-ops! repo tx-report))
+  (undo-redo/gen-undo-ops! repo
+                           (assoc-in tx-report [:tx-meta :client-id] (:client-id @state/state))))
 
 (defn listen-db-fixture
   [f]
