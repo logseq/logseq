@@ -118,8 +118,7 @@
             (db-transact/listen-for-requests))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
-                     (js/console.error error)
-                     (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
+                     (js/console.error error)))))))
 
 (defn <export-db!
   [repo data]
@@ -135,11 +134,7 @@
 
 (defn- sqlite-error-handler
   [error]
-  (if (= "NoModificationAllowedError"  (.-name error))
-    (do
-      (js/console.error error)
-      (state/pub-event! [:show/multiple-tabs-error-dialog]))
-    (notification/show! [:div (str "SQLiteDB error: " error)] :error)))
+  (notification/show! [:div (str "SQLiteDB error: " error)] :error))
 
 (defrecord InBrowser []
   protocol/PersistentDB
