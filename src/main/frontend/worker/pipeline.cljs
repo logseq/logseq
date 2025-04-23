@@ -1,6 +1,7 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
@@ -176,7 +177,7 @@
      :logseq.property.user/email email}))
 
 (defn- add-created-by-ref-hook
-  [db-after tx-data tx-meta]
+  [db-before db-after tx-data tx-meta]
   (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta)))
              (seq tx-data))
     (when-let [decoded-id-token (some-> (worker-state/get-id-token) worker-util/parse-jwt)]
@@ -187,24 +188,34 @@
             add-created-by-tx-data
             (keep
              (fn [datom]
-               (when (and (keyword-identical? :block/uuid (:a datom))
-                          (:added datom))
-                 (let [e (:e datom)
-                       ent (d/entity db-after e)]
-                   (when-not (:logseq.property/created-by-ref ent)
-                     [:db/add e :logseq.property/created-by-ref created-by-id]))))
+               (let [attr (:a datom)
+                     value (:v datom)
+                     e (:e datom)]
+                 (cond
+                   ;; add created-by for new-block
+                   (and (keyword-identical? :block/uuid attr)
+                        (:added datom))
+                   (let [ent (d/entity db-after e)]
+                     (when-not (:logseq.property/created-by-ref ent)
+                       [:db/add e :logseq.property/created-by-ref created-by-id]))
+
+                   ;; update created-by when block change from empty-block-title to non-empty
+                   (and (keyword-identical? :block/title attr)
+                        (not (string/blank? value))
+                        (string/blank? (:block/title (d/entity db-before e))))
+                   [:db/add e :logseq.property/created-by-ref created-by-id])))
              tx-data)]
         (cond->> add-created-by-tx-data
           (nil? created-by-ent) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
   [repo tx-report]
-  (let [{:keys [db-after tx-data tx-meta]} tx-report
+  (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands tx-report))
         insert-templates-tx (insert-tag-templates repo tx-report)
-        created-by-tx (add-created-by-ref-hook db-after tx-data tx-meta)]
+        created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
 
 (defn- invoke-hooks-default
