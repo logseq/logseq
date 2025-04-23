@@ -70,3 +70,4 @@ deps/shui/.clj-kondo
 tx-log*
 clj-e2e/.wally
 clj-e2e/resources
+.dir-locals.el
