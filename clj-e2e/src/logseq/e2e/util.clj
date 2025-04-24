@@ -3,7 +3,8 @@
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
             [wally.main :as w]
-            [wally.selectors :as ws])
+            [wally.selectors :as ws]
+            [logseq.e2e.keyboard :as k])
   (:import [com.microsoft.playwright TimeoutError]
            [com.microsoft.playwright.assertions PlaywrightAssertions]))
 
@@ -38,8 +39,6 @@
   (let [input-node (w/-query "*:focus")]
     (.type input-node text)))
 
-(def press w/keyboard-press)
-
 (defn search
   [text]
   (w/click :#search-button)
@@ -68,7 +67,7 @@
 
 (defn new-block
   [title]
-  (press "Enter")
+  (k/enter)
   (input title))
 
 (defn save-block
@@ -77,14 +76,14 @@
 
 (defn exit-edit
   []
-  (press "Escape"))
+  (k/esc))
 
 (defn delete-blocks
   "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
   []
   (let [editor (get-editor)]
     (when editor (exit-edit))
-    (press "Backspace")))
+    (k/backspace)))
 
 (defn get-text
   [locator]
@@ -118,7 +117,7 @@
   [indent?]
   (let [editor (get-editor)
         [x1 _] (bounding-xy editor)
-        _ (press (if indent? "Tab" "Shift+Tab"))
+        _ (if indent? (k/tab) (k/shift+tab))
         [x2 _] (bounding-xy editor)]
     (if indent?
       (is (< x1 x2))
@@ -139,7 +138,7 @@
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (press shortcut)))
+    (k/press shortcut)))
 
 (defn get-page-blocks-contents
   []
@@ -155,7 +154,7 @@
   (w/click "button[title=\"More\"]")
   (w/click "div:text(\"Login\")")
   (input username)
-  (press "Tab")
+  (k/tab)
   (input password)
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
