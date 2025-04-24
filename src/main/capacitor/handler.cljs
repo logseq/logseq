@@ -24,6 +24,9 @@
 (defn local-all-pages []
   (some->> (local-db) (ldb/get-all-pages) (sort-by :block/created-at) (reverse)))
 
+(defn local-page [name]
+  (ldb/get-page (local-db) name))
+
 (defn sub-journals
   []
   (-> (react/q (fstate/get-current-repo)
