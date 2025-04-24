@@ -5,9 +5,7 @@
 
 (def online-event-flow
   (->> (m/watch (get @worker-state/*state :thread-atom/online-event))
-       (m/eduction
-        (drop-while nil?)
-        (filter true?))))
+       (m/eduction (filter true?))))
 
 (comment
   ((m/reduce (fn [_ x] (prn :xxx x)) online-event-flow) prn prn))
