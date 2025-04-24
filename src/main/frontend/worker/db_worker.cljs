@@ -885,11 +885,13 @@
                                 (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
-                                (p/let [method-args (ldb/read-transit-str (last args))
-                                        service (<init-service! (first method-args))]
-                                  ;; wait for service ready
-                                  (get-in service [:status :ready])
-                                  (js-invoke (:proxy service) k args))
+                                (let [[graph opts] (ldb/read-transit-str (last args))]
+                                  (if (:import-type opts)
+                                    (start-db! graph opts)
+                                    (p/let [service (<init-service! graph)]
+                                      (get-in service [:status :ready])
+                                      ;; wait for service ready
+                                      (js-invoke (:proxy service) k args))))
 
                                 (or (contains? #{:thread-api/sync-app-state} method-k)
                                     (nil? service))
