@@ -15,6 +15,7 @@
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
@@ -126,19 +127,25 @@
       (p/promise e)
 
       :else
-      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                              [{:id id :opts opts}])
-              {:keys [block children]} (first result)]
-        (when-not skip-transact?
-          (let [conn (db/get-db graph false)
-                block-and-children (if block (cons block children) children)
-                affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                tx-data (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)]
-            (when (seq tx-data) (d/transact! conn tx-data))
-            (when-not skip-refresh?
-              (react/refresh-affected-queries! graph affected-keys))))
+      (->
+       (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
+                                               [{:id id :opts opts}])
+               {:keys [block children]} (first result)]
+         (when-not skip-transact?
+           (let [conn (db/get-db graph false)
+                 block-and-children (if block (cons block children) children)
+                 affected-keys [[:frontend.worker.react/block (:db/id block)]]
+                 tx-data (->> (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)
+                              (common-util/fast-remove-nils)
+                              (remove empty?))]
+             (when (seq tx-data) (d/transact! conn tx-data))
+             (when-not skip-refresh?
+               (react/refresh-affected-queries! graph affected-keys))))
 
-        (if children-only? children block)))))
+         (if children-only? children block))
+       (p/catch (fn [error]
+                  (js/console.error error)
+                  (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
 
 (defn <get-blocks
   [graph ids* & {:as opts}]
