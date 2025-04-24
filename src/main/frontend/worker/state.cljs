@@ -1,12 +1,7 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [logseq.common.config :as common-config]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]))
-
-(defkeywords
-  :undo/repo->page-block-uuid->undo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"}
-  :undo/repo->page-block-uuid->redo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"})
 
 (defonce *main-thread (atom nil))
 
@@ -42,14 +37,6 @@
                        :auth/refresh-token nil
 
                        :rtc/downloading-graph? false
-
-                       :undo/repo->page-block-uuid->undo-ops (atom {})
-                       :undo/repo->page-block-uuid->redo-ops (atom {})
-
-                       ;; new implementation
-                       :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})
-
 
                        ;; thread atoms, these atoms' value are syncing from ui-thread
                        :thread-atom/online-event (atom nil)
@@ -136,13 +123,6 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
-
-(defn set-auth-tokens!
-  [id-token access-token refresh-token]
-  (swap! *state assoc
-         :auth/id-token id-token
-         :auth/access-token access-token
-         :auth/refresh-token refresh-token))
 
 (defn get-id-token
   []

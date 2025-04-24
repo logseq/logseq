@@ -27,12 +27,11 @@
 
 (defn- select-some?
   [row-selection rows]
-  (boolean
-   (or
-    (and (seq (:selected-ids row-selection))
-         (some (:selected-ids row-selection) rows))
-    (and (seq (:exclude-ids row-selection))
-         (not= (count rows) (count (:exclude-ids row-selection)))))))
+  (or
+   (and (seq (:selected-ids row-selection))
+        (some (:selected-ids row-selection) rows))
+   (and (seq (:excluded-ids row-selection))
+        (not= (count rows) (count (:excluded-ids row-selection))))))
 
 (defn- select-all?
   [row-selection rows]
@@ -122,7 +121,8 @@
            ;; fns
            :column-visible? (fn [column] (impl/column-visible? column visible-columns))
            :column-toggle-visibility (fn [column v] (set-visible-columns! (assoc visible-columns (impl/column-id column) v)))
-           :selected-all? (or (:selected-all? row-selection)
+           :selected-all? (or (and (:selected-all? row-selection)
+                                   (nil? (seq (:excluded-ids row-selection))))
                               (select-all? row-selection filtered-rows))
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
