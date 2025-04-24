@@ -1,5 +1,7 @@
 (ns capacitor.handler
-  (:require [logseq.db :as ldb]
+  (:require [frontend.db.react :as react]
+            [frontend.util :as util]
+            [logseq.db :as ldb]
             [frontend.db.conn :as db-conn]
             [frontend.state :as fstate]
             [frontend.date :as date]
@@ -16,8 +18,23 @@
   (fstate/<invoke-db-worker :thread-api/get-view-data
     (fstate/get-current-repo) (:db/id view) opts))
 
-(defn ui-db []
+(defn local-db []
   (db-conn/get-db))
 
 (defn local-all-pages []
-  (some->> (ui-db) (ldb/get-all-pages) (sort-by :block/created-at) (reverse)))
+  (some->> (local-db) (ldb/get-all-pages) (sort-by :block/created-at) (reverse)))
+
+(defn sub-journals
+  []
+  (-> (react/q (fstate/get-current-repo)
+        [:frontend.worker.react/journals]
+        {:query-fn
+         (fn []
+           (p/let [{:keys [data]} (<load-view-data nil {:journals? true})]
+             (remove nil? data)))}
+        nil)
+    util/react))
+
+(defn <create-page!
+  [page-name]
+  (page-handler/<create! page-name {:redirect? false}))
