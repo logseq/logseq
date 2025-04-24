@@ -1,6 +1,7 @@
 (ns capacitor.app
   (:require ["@capacitor/app" :refer [App]]
             ["@capacitor/status-bar" :refer [StatusBar Style]]
+            ["./externals.js"]
             [frontend.db.react :as react]
             [frontend.util :as util]
             [rum.core :as rum]
@@ -26,20 +27,9 @@
       [:div.p-4
        [:strong "hello, logseq?"]])))
 
-(defn- sub-journals
-  []
-  (-> (react/q (fstate/get-current-repo)
-        [:frontend.worker.react/journals]
-        {:query-fn
-         (fn []
-           (p/let [{:keys [data]} (handler/<load-view-data nil {:journals? true})]
-             (remove nil? data)))}
-        nil)
-    util/react))
-
 (rum/defc journals-list < rum/reactive db-mixins/query
   []
-  (let [journals (sub-journals)]
+  (let [journals (handler/sub-journals)]
     [:ul
      (for [journal-id journals]
        (let [journal (db-util/entity journal-id)]
@@ -48,9 +38,33 @@
           (ionic/tabler-icon "calendar")
           [:span.pl-1 (:block/title journal)]]))]))
 
+(rum/defc create-page-input
+  [{:keys [close! reload-pages!]}]
+  (ionic/ion-alert
+    {:is-open true
+     :header "Create new page"
+     :onWillDismiss (fn [^js e]
+                      (let [^js detail (.-detail e)]
+                        (when-let [val (and (= "confirm" (.-role detail))
+                                         (aget (.-values (.-data detail)) 0))]
+                          (-> (handler/<create-page! val)
+                            (p/finally reload-pages!)))
+                        (close!)))
+     :onDidPresent (fn [^js e]
+                     (let [^js target (.-target e)]
+                       (when-let [input (.querySelector target "input")]
+                         (js/setTimeout #(.focus input)))))
+     :buttons [#js {:text "Cancel"
+                    :role "cancel"}
+               #js {:text "Confirm"
+                    :role "confirm"}]
+     :inputs [#js {:placeholder "page name"
+                   :auto-focus true}]}))
+
 (rum/defc home []
   (let [[all-pages set-all-pages!] (rum/use-state [])
         [reload set-reload!] (rum/use-state 0)
+        [page-input-open? set-page-input-open?] (rum/use-state false)
         [filtered-pages set-filtered-pages!] (rum/use-state [])]
 
     (rum/use-effect!
@@ -70,6 +84,9 @@
       [all-pages])
 
     (ionic/ion-content
+      (when page-input-open?
+        (create-page-input {:close! #(set-page-input-open? false)
+                            :reload-pages! #(set-reload! (inc reload))}))
       [:div.pt-6.px-6
        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
        [:h2.py-1.text-lg (fstate/get-current-repo)]
@@ -82,8 +99,11 @@
          "All pages"
          [:small.text-xs.pl-2.opacity-50 (count filtered-pages)]]
 
-        (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
-          [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])]
+        [:div.flex.gap-1
+         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-page-input-open? true)}
+           [:span {:slot "icon-only"} (ionic/tabler-icon "plus")])
+         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
+           [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])]]
        [:ul.mb-24.pt-2
         (for [page filtered-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
@@ -153,6 +173,13 @@
 (rum/defc main []
   (let [nav-ref (rum/use-ref nil)
         [_ set-nav-root!] (state/use-nav-root)]
+
+    ;; global
+    (rum/use-effect!
+      (fn []
+        (some-> js/window.externalsjs
+          (.initGlobalListeners)))
+      [])
 
     ;; navigation
     (rum/use-effect!
