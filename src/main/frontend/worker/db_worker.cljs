@@ -174,7 +174,8 @@
       (worker-util/post-message :capture-error
                                 {:error "db-missing-addresses"
                                  :payload {:missing-addresses missing-addresses}})
-      (prn :error :missing-addresses missing-addresses))))
+      (prn :error :missing-addresses missing-addresses))
+    missing-addresses))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -362,11 +363,14 @@
               (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
             (catch :default _e)))
 
-        (find-missing-addresses db)
         ;; (gc-kvs-table! db)
 
         (try
+          (when-let [missing-addresses (seq (find-missing-addresses db))]
+            (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses})))
+
           (db-migrate/migrate conn search-db)
+
           (catch :default _e
             (when db-based?
               (rebuild-db-from-datoms! conn db import-type)
