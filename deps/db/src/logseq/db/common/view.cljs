@@ -94,34 +94,36 @@
   [db {:keys [id asc?] :as sorting} entities partition?]
   (let [property (or (d/entity db id) {:db/ident id})
         get-value-fn (memoize (get-value-for-sort property))
-        sorted-entities (cond
-                          (= id :block.temp/refs-count)
-                          (cond-> (sort-by :block.temp/refs-count entities)
-                            (not asc?)
-                            reverse)
+        sorted-entities (->>
+                         (cond
+                           (= id :block.temp/refs-count)
+                           (cond-> (sort-by :block.temp/refs-count entities)
+                             (not asc?)
+                             reverse)
 
-                          (not (ldb/db-based-graph? db)) ; file graph properties don't support index
-                          (sort (by-sorting
-                                 [{:get-value get-value-fn
-                                   :asc? asc?}]) entities)
+                           (not (ldb/db-based-graph? db)) ; file graph properties don't support index
+                           (sort (by-sorting
+                                  [{:get-value get-value-fn
+                                    :asc? asc?}]) entities)
 
-                          :else
-                          (let [ref-type? (= :db.type/ref (:db/valueType property))]
-                            (if ref-type?
-                              (sort-ref-entities-by-single-property entities sorting get-value-fn)
-                              (let [datoms (cond->
-                                            (->> (d/datoms db :avet id)
-                                                 (common-util/distinct-by :e)
-                                                 vec)
-                                             (not asc?)
-                                             rseq)
-                                    row-ids (set (map :db/id entities))
-                                    id->row (zipmap (map :db/id entities) entities)]
-                                (keep
-                                 (fn [d]
-                                   (when (row-ids (:e d))
-                                     (id->row (:e d))))
-                                 datoms)))))]
+                           :else
+                           (let [ref-type? (= :db.type/ref (:db/valueType property))]
+                             (if ref-type?
+                               (sort-ref-entities-by-single-property entities sorting get-value-fn)
+                               (let [datoms (cond->
+                                             (->> (d/datoms db :avet id)
+                                                  (common-util/distinct-by :e)
+                                                  vec)
+                                              (not asc?)
+                                              rseq)
+                                     row-ids (set (map :db/id entities))
+                                     id->row (zipmap (map :db/id entities) entities)]
+                                 (keep
+                                  (fn [d]
+                                    (when (row-ids (:e d))
+                                      (id->row (:e d))))
+                                  datoms)))))
+                         distinct)]
     (if partition?
       (partition-by get-value-fn sorted-entities)
       sorted-entities)))
@@ -563,6 +565,6 @@
                   (map :db/id result))]
       (cond->
        {:count (count filtered-entities)
-        :data data'}
+        :data (distinct data')}
         (= feat-type :linked-references)
         (assoc :ref-pages-count (:ref-pages-count entities-result))))))
