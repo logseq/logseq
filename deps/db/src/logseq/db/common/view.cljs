@@ -341,7 +341,7 @@
            (let [e (d/entity db eid)]
              (when-not (or (some #(= id %) (map :db/id (:block/refs e)))
                            (:block/link e)
-                           (ldb/page? e))
+                           (ldb/built-in? e))
                e)))
          ids)))))
 
