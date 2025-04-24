@@ -4,8 +4,8 @@
             [clojure.test :refer [is]]
             [wally.main :as w]
             [wally.selectors :as ws])
-  (:import [com.microsoft.playwright.assertions PlaywrightAssertions]
-           [com.microsoft.playwright TimeoutError]))
+  (:import [com.microsoft.playwright TimeoutError]
+           [com.microsoft.playwright.assertions PlaywrightAssertions]))
 
 (def assert-that PlaywrightAssertions/assertThat)
 
@@ -42,7 +42,7 @@
 
 (defn cmdk
   [input-text]
-  (press "Meta+k")
+  (press "ControlOrMeta+k")
   (input input-text))
 
 (defn search
@@ -167,7 +167,6 @@
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
 
-
 (defn new-graph
   [graph-name enable-sync?]
   (cmdk "add a db graph")
@@ -181,16 +180,20 @@
   (when enable-sync?
     (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
 
-
 (defn wait-for-remote-graph
   [graph-name]
   (cmdk "all graphs")
   (w/click (w/get-by-label "Go to all graphs"))
-  (dotimes [i 5]
-    (prn :wait-for-remote-graph-try i)
-    (w/click "span:text(\"Refresh\")")
-    (try
-      (w/wait-for (str "span:has-text(\"" graph-name "\")"))
-      (catch TimeoutError e
-        (when (= 4 i)
-          (throw e))))))
+  (let [max-try 5]
+    (loop [i 0]
+      (prn :wait-for-remote-graph-try i)
+      (w/click "span:text(\"Refresh\")")
+      (let [succ?
+            (try
+              (w/wait-for (str "span:has-text(\"" graph-name "\")"))
+              true
+              (catch TimeoutError e
+                (if (= max-try i)
+                  (throw e)
+                  false)))]
+        (when-not succ? (recur (inc i)))))))
