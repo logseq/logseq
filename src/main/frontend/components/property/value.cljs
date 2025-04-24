@@ -27,6 +27,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
@@ -1179,6 +1180,59 @@
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
+(rum/defc single-number-input
+  [block property value-block]
+  (let [[editing? set-editing!] (rum/use-state false)
+        *ref (rum/use-ref nil)
+        *input-ref (rum/use-ref nil)
+        number-value (db-property/property-value-content value-block)
+        [value set-value!] (rum/use-state number-value)
+        set-property-value! (fn [value]
+                              (p/do!
+                               (when (and (not (string/blank? value))
+                                          (not= (string/trim (str number-value))
+                                                (string/trim (str value))))
+                                 (db-property-handler/set-block-property! (:db/id block)
+                                                                          (:db/ident property)
+                                                                          value))
+
+                               (set-editing! false)))]
+    [:div.ls-number.flex.flex-1.jtrigger
+     {:ref *ref
+      :on-click (fn [_]
+                  (set-editing! true))}
+     (if editing?
+       (shui/input
+        {:ref *input-ref
+         :auto-focus true
+         :class "ls-number-input h-6 px-0 py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+         :value value
+         :on-change (fn [e] (set-value! (util/evalue e)))
+         :on-blur (fn [_e] (set-property-value! value))
+         :on-key-down (fn [e]
+                        (let [input (rum/deref *input-ref)
+                              pos (cursor/pos input)
+                              k (util/ekey e)]
+                          (when-not (util/input-text-selected? input)
+                            (case k
+                              ("ArrowUp" "ArrowDown")
+                              (do
+                                (util/stop-propagation e)
+                                (set-editing! false)
+                                (editor-handler/move-cross-boundary-up-down (if (= "ArrowUp" (util/ekey e)) :up :down) {}))
+
+                              "Backspace"
+                              (when (zero? pos)
+                                (p/do!
+                                 (db-property-handler/remove-block-property! (:db/id block) (:db/ident property))
+                                 (editor-handler/move-cross-boundary-up-down :up {:pos :max})))
+
+                              ("Escape" "Enter")
+                              (set-property-value! value)
+
+                              nil))))})
+       number-value)]))
+
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
                                 :as opts}]
@@ -1192,8 +1246,14 @@
         value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
                 value*)]
-    (if (= :logseq.property/icon (:db/ident property))
+    (cond
+      (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
+
+      (and (= type :number) (not editing?))
+      (single-number-input block property value)
+
+      :else
       (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
         (let [classes (outliner-property/get-block-classes (db/get-db) (:db/id block))
