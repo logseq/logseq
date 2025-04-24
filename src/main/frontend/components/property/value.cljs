@@ -610,9 +610,11 @@
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
-        items (sort-by (fn [item]
-                         (or (:block/title item) (:label item)))
-                       items)
+        items (if (:property/closed-values property)
+                items                   ; sorted by order
+                (sort-by (fn [item]
+                           (db-property/property-value-content item))
+                         items))
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
