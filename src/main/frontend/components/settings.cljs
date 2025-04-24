@@ -398,11 +398,11 @@
                            :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
                                    :opacity (if (or none? active?) 1 0)}}])
 
-                         (case color
-                           :none [:p {:style {:max-width "300px"}}
-                                  "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                           :logseq "Logseq classical color"
-                           (str (name color) " color")))])]]
+                        (case color
+                          :none [:p {:style {:max-width "300px"}}
+                                 "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
+                          :logseq "Logseq classical color"
+                          (str (name color) " color")))])]]
 
     [:div
      (row-with-button-action
@@ -432,7 +432,7 @@
     (t :settings-page/custom-date-format)
     (when-not (config/db-based-graph? (state/get-current-repo))
       (ui/tooltip [:span.flex.px-2 (svg/info)]
-        [:span (t :settings-page/custom-date-format-warning)]))]
+                  [:span (t :settings-page/custom-date-format-warning)]))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -482,7 +482,7 @@
   (toggle "preferred_outdenting"
           [(t :settings-page/preferred-outdenting)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-             (outdenting-hint) {:content-props {:side "right"}})]
+                       (outdenting-hint) {:content-props {:side "right"}})]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
@@ -496,7 +496,7 @@
   (toggle "preferred_pasting_file"
           [(t :settings-page/preferred-pasting-file)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-             [:span.block.w-64 (t :settings-page/preferred-pasting-file-hint)])]
+                       [:span.block.w-64 (t :settings-page/preferred-pasting-file-hint)])]
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
@@ -504,7 +504,7 @@
   (toggle "auto_expand_block_refs"
           [(t :settings-page/auto-expand-block-refs)
            (ui/tooltip [:span.flex.px-2 (svg/info)]
-             (auto-expand-hint))]
+                       (auto-expand-hint))]
           auto-expand-block-refs?
           config-handler/toggle-auto-expand-block-refs!))
 
@@ -600,11 +600,11 @@
                   (not instrument-disabled?)))
           [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
-(defn clear-cache-row [t]
-  (row-with-button-action {:left-label   (t :settings-page/clear-cache)
-                           :button-label (t :settings-page/clear)
-                           :on-click     #(state/pub-event! [:graph/clear-cache!])
-                           :-for         "clear_cache"}))
+;; (defn clear-cache-row [t]
+;;   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
+;;                            :button-label (t :settings-page/clear)
+;;                            :on-click     #(state/pub-event! [:graph/clear-cache!])
+;;                            :-for         "clear_cache"}))
 
 (defn version-row [t version]
   (row-with-button-action {:left-label (t :settings-page/current-version)
@@ -823,11 +823,12 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
-     (clear-cache-row t)
+     ;; (clear-cache-row t)
 
-     (ui/admonition
-      :warning
-      [:p (t :settings-page/clear-cache-warning)])]))
+     ;; (ui/admonition
+     ;;  :warning
+     ;;  [:p (t :settings-page/clear-cache-warning)])
+     ]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -855,22 +856,22 @@
    {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
     :action (sync-diff-merge-enabled-switcher enabled?)
     :desc (ui/tooltip [:span.inline-flex.px-1 (svg/info)]
-            [:div
-             [:div (t :settings-page/sync-diff-merge-desc)]
-             [:div (t :settings-page/sync-diff-merge-warn)]])}))
+                      [:div
+                       [:div (t :settings-page/sync-diff-merge-desc)]
+                       [:div (t :settings-page/sync-diff-merge-warn)]])}))
 
 (rum/defc rtc-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
-    (fn []
-      (let [value (not enabled?)]
-        (state/set-rtc-enabled! value)))
-    true))
+             (fn []
+               (let [value (not enabled?)]
+                 (state/set-rtc-enabled! value)))
+             true))
 
 (defn rtc-switcher-row [enabled?]
   (row-with-button-action
-    {:left-label "RTC"
-     :action (rtc-enabled-switcher enabled?)}))
+   {:left-label "RTC"
+    :action (rtc-enabled-switcher enabled?)}))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
