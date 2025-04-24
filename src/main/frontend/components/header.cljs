@@ -331,10 +331,9 @@
   (when (state/sub :ui/toggle-highlight-recent-blocks?)
     (recent-slider-inner)))
 
-(rum/defc ^:large-vars/cleanup-todo header < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
-  (let [_ (state/sub [:user/info :UserGroups])
-        electron-mac? (and util/mac? (util/electron?))
+  (let [electron-mac? (and util/mac? (util/electron?))
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
@@ -357,13 +356,13 @@
      [:div.l.flex.items-center.drag-region
       [left-menu
        (if (mobile-util/native-platform?)
-         ;; back button for mobile
+                 ;; back button for mobile
          (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
               {:title (t :header/go-back) :on-click #(js/window.history.back)}
               (ui/icon "chevron-left" {:size 26})]))
-         ;; search button for non-mobile
+                 ;; search button for non-mobile
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
@@ -421,3 +420,15 @@
       (sidebar/toggle)
 
       (updater-tips-new-version t)]]))
+
+(def ^:private header-related-flow
+  (m/latest
+   (fn [state rtc-running?]
+     {:user-groups (get-in state [:user/info :UserGroups])
+      :rtc-running? rtc-running?})
+   (m/watch state/state) rtc-flows/rtc-running-flow))
+
+(rum/defc header
+  [opts]
+  (let [_m (hooks/use-flow-state header-related-flow)]
+    (header-aux opts)))

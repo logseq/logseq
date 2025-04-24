@@ -3673,7 +3673,7 @@
 
      (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner
+(rum/defc block-container-inner
   [container-state repo config* block opts]
   (let [container-id (:container-id config*)
         block-id (:block/uuid block)
