@@ -14,6 +14,8 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
             [frontend.db.utils :as db-util]
+            [frontend.date :as frontend-date]
+            [goog.date :as gdate]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
 
@@ -37,6 +39,24 @@
           {:on-click #(pages-util/nav-to-block! journal {:reload-pages! (fn [] ())})}
           (ionic/tabler-icon "calendar")
           [:span.pl-1 (:block/title journal)]]))]))
+
+(rum/defc journals-calendar-modal
+  [{:keys [close!]}]
+  (ionic/ion-modal
+    {:is-open true
+     :mode "ios"
+     :onWillDismiss (fn [] (close!))
+     :class "journals-calendar-modal ion-datetime-button-overlay"}
+    (ionic/ion-datetime {:presentation "date"
+                         :onIonChange (fn [^js e]
+                                        (let [val (.-value (.-detail e))]
+                                          (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
+                                                nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                            (if-let [journal (handler/local-page page-name)]
+                                              (nav-to-journal! journal)
+                                              (-> (handler/<create-page! page-name)
+                                                (p/then #(nav-to-journal! (handler/local-page page-name)))))
+                                            (close!))))})))
 
 (rum/defc create-page-input
   [{:keys [close! reload-pages!]}]
@@ -65,6 +85,7 @@
   (let [[all-pages set-all-pages!] (rum/use-state [])
         [reload set-reload!] (rum/use-state 0)
         [page-input-open? set-page-input-open?] (rum/use-state false)
+        [journal-calendar-open? set-journal-calendar-open?] (rum/use-state false)
         [filtered-pages set-filtered-pages!] (rum/use-state [])]
 
     (rum/use-effect!
@@ -91,8 +112,16 @@
        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
        [:h2.py-1.text-lg (fstate/get-current-repo)]
 
-       [:h1.text-3xl.font-mono.font-bold.py-2.mt-4 "Journals"]
+       [:div.flex.justify-between.items-center.mt-4
+        [:h1.text-3xl.font-mono.font-bold.py-2 "Journals"]
+        [:flex.gap-1
+         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-journal-calendar-open? true)}
+           [:span {:slot "icon-only"} (ionic/tabler-icon "calendar" {:size 22})])]]
+
        (journals-list)
+
+       (when journal-calendar-open?
+         (journals-calendar-modal {:close! #(set-journal-calendar-open? false)}))
 
        [:div.flex.justify-between.items-center.pt-4
         [:h1.text-3xl.font-mono.font-bold.py-2
@@ -101,9 +130,10 @@
 
         [:div.flex.gap-1
          (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-page-input-open? true)}
-           [:span {:slot "icon-only"} (ionic/tabler-icon "plus")])
-         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
-           [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])]]
+           [:span {:slot "icon-only"} (ionic/tabler-icon "file-plus" {:size 22})])
+         ;(ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
+         ;  [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])
+         ]]
        [:ul.mb-24.pt-2
         (for [page filtered-pages]
           (let [ident (some-> (:block/tags page) first :db/ident)]
