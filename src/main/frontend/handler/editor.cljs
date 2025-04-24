@@ -3568,10 +3568,11 @@
   [block]
   (let [class-properties (:classes-properties (outliner-property/get-block-classes-properties (db/get-db) (:db/id block)))
         db (db/get-db)
+        attributes (set (remove #{:block/alias} db-property/db-attribute-properties))
         properties (->> (:block.temp/property-keys block)
                         (map (partial entity-plus/entity-memoized db))
                         (concat class-properties)
-                        (remove (fn [e] (db-property/db-attribute-properties (:db/ident e))))
+                        (remove (fn [e] (attributes (:db/ident e))))
                         (remove outliner-property/property-with-other-position?)
                         (remove (fn [e] (:logseq.property/hide? e)))
                         (remove nil?))]
