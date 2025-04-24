@@ -178,7 +178,6 @@
                          :top y
                          :left x}} ""))
        (let [content-props (cond-> (merge content-props {:onEscapeKeyDown handle-key-escape!
-                                                         :disableOutsideScroll false
                                                          :onPointerDownOutside handle-pointer-outside!})
                              (and (not force-popover?)
                                   (not as-dropdown?))
