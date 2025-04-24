@@ -4,7 +4,8 @@
             [clojure.test :refer [is]]
             [wally.main :as w]
             [wally.selectors :as ws])
-  (:import (com.microsoft.playwright.assertions PlaywrightAssertions)))
+  (:import [com.microsoft.playwright.assertions PlaywrightAssertions]
+           [com.microsoft.playwright TimeoutError]))
 
 (def assert-that PlaywrightAssertions/assertThat)
 
@@ -38,6 +39,11 @@
     (.type input-node text)))
 
 (def press w/keyboard-press)
+
+(defn cmdk
+  [input-text]
+  (press "Meta+k")
+  (input input-text))
 
 (defn search
   [text]
@@ -147,3 +153,44 @@
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
 (def mod-key (if mac? "Meta" "Control"))
+
+(defn login-test-account
+  [& {:keys [username password]
+      :or {username "e2etest"
+           password "Logseq-e2e"}}]
+  (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
+  (w/click "button[title=\"More\"]")
+  (w/click "div:text(\"Login\")")
+  (input username)
+  (press "Tab")
+  (input password)
+  (w/click "button[type=\"submit\"]:text(\"Sign in\")")
+  (w/wait-for-not-visible ".cp__user-login"))
+
+
+(defn new-graph
+  [graph-name enable-sync?]
+  (cmdk "add a db graph")
+  (w/click (w/get-by-label "Add a DB graph"))
+  (w/wait-for "h2:text(\"Create a new graph\")")
+  (w/click "input[placeholder=\"your graph name\"]")
+  (input graph-name)
+  (when enable-sync?
+    (w/click "button#rtc-sync"))
+  (w/click "button:text(\"Submit\")")
+  (when enable-sync?
+    (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
+
+
+(defn wait-for-remote-graph
+  [graph-name]
+  (cmdk "all graphs")
+  (w/click (w/get-by-label "Go to all graphs"))
+  (dotimes [i 5]
+    (prn :wait-for-remote-graph-try i)
+    (w/click "span:text(\"Refresh\")")
+    (try
+      (w/wait-for (str "span:has-text(\"" graph-name "\")"))
+      (catch TimeoutError e
+        (when (= 4 i)
+          (throw e))))))
