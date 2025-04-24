@@ -467,13 +467,13 @@
 (def ^:private create-get-state-flow*
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-      (let [{rtc-lock :*rtc-lock
+      (let [{*rtc-lock' :*rtc-lock
              :keys [repo graph-uuid local-graph-schema-version remote-graph-schema-version
                     user-uuid rtc-state-flow *rtc-auto-push? *rtc-remote-profile?
                     *online-users *last-stop-exception]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push? rtc-lock)
+          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock')
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
@@ -493,7 +493,7 @@
                  :last-stop-exception-ex-data (some-> *last-stop-exception deref ex-data)})
               rtc-state-flow
               (m/watch *rtc-auto-push?) (m/watch *rtc-remote-profile?)
-              (m/watch rtc-lock) (m/watch *online-users)
+              (m/watch *rtc-lock') (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
               (rtc-log-and-state/create-local-t-flow graph-uuid)
               (rtc-log-and-state/create-remote-t-flow graph-uuid))))
