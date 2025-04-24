@@ -28,8 +28,8 @@
 (def rtc-state-flow
   (m/watch (:rtc/state @state/state)))
 
-(def rtc-state-stream-flow
-  (m/stream rtc-state-flow))
+(def rtc-running-flow
+  (m/eduction (map :rtc-lock) rtc-state-flow))
 
 (def rtc-online-users-flow
   (c.m/throttle
@@ -40,7 +40,7 @@
                       (:rtc-lock m))
              (:online-users m))))
     (dedupe)
-    rtc-state-stream-flow)))
+    rtc-state-flow)))
 
 (def ^:private network-online-change-flow
   (m/stream
@@ -64,7 +64,7 @@ conditions:
   (->> (m/latest
         (fn [rtc-state _ login-user]
           (assoc rtc-state :login-user login-user))
-        (c.m/continue-flow rtc-state-stream-flow)
+        rtc-state-flow
         (c.m/continue-flow network-online-change-flow)
         flows/current-login-user-flow)
        (m/eduction
