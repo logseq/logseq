@@ -40,11 +40,6 @@
 
 (def press w/keyboard-press)
 
-(defn cmdk
-  [input-text]
-  (press "ControlOrMeta+k")
-  (input input-text))
-
 (defn search
   [text]
   (w/click :#search-button)
@@ -152,8 +147,6 @@
 
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
-(def mod-key (if mac? "Meta" "Control"))
-
 (defn login-test-account
   [& {:keys [username password]
       :or {username "e2etest"
@@ -169,7 +162,7 @@
 
 (defn new-graph
   [graph-name enable-sync?]
-  (cmdk "add a db graph")
+  (search "add a db graph")
   (w/click (w/get-by-label "Add a DB graph"))
   (w/wait-for "h2:text(\"Create a new graph\")")
   (w/click "input[placeholder=\"your graph name\"]")
@@ -182,7 +175,7 @@
 
 (defn wait-for-remote-graph
   [graph-name]
-  (cmdk "all graphs")
+  (search "all graphs")
   (w/click (w/get-by-label "Go to all graphs"))
   (let [max-try 5]
     (loop [i 0]
