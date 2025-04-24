@@ -62,6 +62,7 @@ This is overview of this repository's most important directories and files.
   - `packags/tldraw/` - Custom fork of tldraw which powers whiteboards
 - `scripts` - Dev scripts
 - `e2e-tests/` - end to end frontend tests
+- `clj-e2e/` - end to end clj frontend tests
 - `android/` -  Android app
 - `ios/` - iOS app
 

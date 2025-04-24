@@ -1,6 +1,5 @@
 (ns frontend.components.repo
   (:require [clojure.string :as string]
-            [electron.ipc :as ipc]
             [frontend.common.async-util :as async-util]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -203,12 +202,6 @@
                          (repo-handler/refresh-repos!))))]]
          (repos-inner remote-graphs)])]]))
 
-(defn- check-multiple-windows?
-  [state]
-  (when (util/electron?)
-    (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-      (reset! (::electron-multiple-windows? state) multiple-windows?))))
-
 (defn- repos-dropdown-links [repos current-repo downloading-graph-id & {:as opts}]
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
@@ -361,50 +354,6 @@
                    [:span.flex.items-center.gap-1.w-full
                     icon [:div title]]))))))]
      (repos-footer multiple-windows? db-based?)]))
-
-(rum/defcs repos-dropdown < rum/reactive
-  (rum/local false ::electron-multiple-windows?)
-  [state & {:as opts}]
-  (let [current-repo (state/sub :git/current-repo)
-        login? (boolean (state/sub :auth/id-token))]
-    (let [repos (state/sub [:me :repos])
-          remotes (state/sub [:file-sync/remote-graphs :graphs])
-          rtc-graphs (state/sub :rtc/graphs)
-          db-based? (config/db-based-graph? current-repo)
-          repos (sort-repos-with-metadata-local repos)
-          repos (distinct
-                 (if (and (or (seq remotes) (seq rtc-graphs)) login?)
-                   (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))]
-      (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-            repo-name (when current-repo (db/get-repo-name current-repo))
-            short-repo-name (if current-repo
-                              (db/get-short-repo-name repo-name)
-                              "Select a Graph")]
-        (shui/trigger-as :a
-                         {:tab-index 0
-                          :class "item cp__repos-select-trigger"
-                          :on-pointer-down
-                          (fn [^js e]
-                            (check-multiple-windows? state)
-                            (some-> (.-target e)
-                                    (.closest "a.item")
-                                    (shui/popup-show!
-                                     (fn [{:keys [id]}] (repos-dropdown-content (assoc opts :contentid id)))
-                                     {:as-dropdown? true
-                                      :auto-focus? false
-                                      :align "start"
-                                      :content-props {:class "repos-list"
-                                                      :data-mode (when db-based? "db")}})))
-                          :title repo-name}      ;; show full path on hover
-                         [:div.flex.relative.graph-icon.rounded
-                          (shui/tabler-icon "database" {:size 15})]
-
-                         [:div.repo-switch.pr-2.whitespace-nowrap
-                          [:span.repo-name.font-medium
-                           [:span.repo-text.overflow-hidden.text-ellipsis
-                            (if (config/demo-graph? short-repo-name) "Demo" short-repo-name)]
-                           (when remote? [:span.pl-1 (ui/icon "cloud")])]
-                          [:span.dropdown-caret]])))))
 
 (rum/defcs graphs-selector < rum/reactive
   [_state]

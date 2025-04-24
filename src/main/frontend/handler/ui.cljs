@@ -254,12 +254,11 @@
 
 (defn open-new-window-or-tab!
   "Open a new Electron window."
-  [repo target-repo]
-  (when-not (= repo target-repo)        ; TODO: remove this once we support multi-tabs OPFS access
-    (when target-repo
-      (if (util/electron?)
-        (ipc/ipc "openNewWindow" target-repo)
-        (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))
+  [target-repo]
+  (when target-repo
+    (if (util/electron?)
+      (ipc/ipc "openNewWindow" target-repo)
+      (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank"))))
 
 (defn toggle-show-empty-hidden-properties!
   []
