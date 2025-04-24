@@ -31,7 +31,6 @@
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -356,14 +355,6 @@
                 initial-data (sqlite-create-graph/build-db-initial-data config
                                                                         (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
-
-        (when-not db-based?
-          (try
-            (when-not (ldb/page-exists? @conn common-config/views-page-name #{:logseq.class/Page})
-              (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
-            (catch :default _e)))
-
-        ;; (gc-kvs-table! db)
 
         (try
           (when-let [missing-addresses (seq (find-missing-addresses db))]
