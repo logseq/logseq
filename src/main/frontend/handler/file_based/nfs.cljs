@@ -89,7 +89,7 @@
 (defn ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir re-index?]}]
+  ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir]}]
    (let [electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
          nfs? (and (not electron?)
@@ -128,7 +128,7 @@
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (p/do! (persist-db/<new repo {:op (if re-index? :re-index :add-file-graph)})
+                              (p/do! (persist-db/<new repo {})
                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))
