@@ -134,8 +134,7 @@
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (let [timeout (js/setTimeout #(detach-modal! id) 128)]
-           #(js/clearTimeout timeout))))
+         (detach-modal! id)))
      [open?])
 
     (dialog
