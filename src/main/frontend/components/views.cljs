@@ -1224,8 +1224,7 @@
         db-id (cond (map? item) (:db/id item)
                     (number? item) item
                     :else nil)
-        block (some-> db-id db/entity)
-        [item set-item!] (hooks/use-state (when (:block.temp/fully-loaded? block) block))
+        [item set-item!] (hooks/use-state nil)
         opts (if list-view?
                {:skip-refresh? true
                 :children? false}
@@ -1826,6 +1825,7 @@
         (hooks/use-debounced-value input 300)
         sorting-filters
         (:db/id (:logseq.property.view/group-by-property view-entity))
+        (:db/id (:logseq.property.view/type view-entity))
         ;; page filters
         (:logseq.property.linked-references/includes view-parent)
         (:logseq.property.linked-references/excludes view-parent)

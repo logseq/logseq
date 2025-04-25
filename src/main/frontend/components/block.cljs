@@ -507,14 +507,7 @@
             (file-based-asset-loader @src
                                      #(resizable-image config title @src metadata full_text true)))
 
-          (and db-based? (contains? (common-config/text-formats) ext) (:asset-block config))
-          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
-            [:a.asset-ref.is-plaintext
-             {:href @src
-              :download file-name}
-             file-name])
-
-          (contains? (common-config/text-formats) ext)
+          (and (not db-based?) (contains? (common-config/text-formats) ext))
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})
                                       :on-click (fn [_event]
                                                   (p/let [result (fs/read-file repo-dir path)]
@@ -534,9 +527,16 @@
              title
              [:span [:span.opacity-70 "[[📚"] title [:span.opacity-70 "]]"]])]
 
+          db-based?
+          (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
+            [:a.asset-ref.is-plaintext
+             {:href @src
+              :download file-name}
+             file-name])
+
           :else
-          [:a.asset-ref.is-doc {:href @src
-                                :on-click share-fn}
+          [:a.asset-ref {:href @src
+                         :on-click share-fn}
            title])))))
 
 ;; TODO: safe encoding asciis
@@ -926,8 +926,7 @@
                (reset! *result page)
                :else
                (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
-                                                                                             :skip-refresh? true
-                                                                                             :including-property-vals? false})]
+                                                                                             :skip-refresh? true})]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -1003,7 +1002,6 @@
                         (->elem :span (map-inline config title))
                         :else
                         path)]
-
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
@@ -3675,7 +3673,7 @@
 
      (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
 
-(rum/defc ^:large-vars/cleanup-todo block-container-inner
+(rum/defc block-container-inner
   [container-state repo config* block opts]
   (let [container-id (:container-id config*)
         block-id (:block/uuid block)

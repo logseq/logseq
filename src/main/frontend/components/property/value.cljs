@@ -610,6 +610,11 @@
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
+        items (if (:property/closed-values property)
+                items                   ; sorted by order
+                (sort-by (fn [item]
+                           (db-property/property-value-content item))
+                         items))
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
@@ -655,10 +660,9 @@
 
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
-   {:keys [block multiple-choices? dropdown? input-opts on-input] :as opts}
+   {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice!] :as opts}
    result]
-  (let [[refresh-count set-refresh-count!] (rum/use-state 0)
-        repo (state/get-current-repo)
+  (let [repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
@@ -772,8 +776,9 @@
                                               (str "Set " (:block/title property)))
                  :show-new-when-not-exact-match? (if (or (and parent-property? (contains? (set children-pages) (:db/id block)))
                                                          ;; Don't allow creating private tags
-                                                         (seq (set/intersection (set (map :db/ident classes'))
-                                                                                ldb/private-tags)))
+                                                         (and (= :block/tags (:db/ident property))
+                                                              (seq (set/intersection (set (map :db/ident classes'))
+                                                                                     ldb/private-tags))))
                                                    false
                                                    true)
                  :extract-chosen-fn :value
@@ -781,18 +786,21 @@
                  :input-opts input-opts
                  :on-input (debounce on-input 50)
                  :on-chosen (fn [chosen selected?]
-                              (p/let [[id new?] (if (integer? chosen)
-                                                  [chosen false]
-                                                  (when-not (string/blank? (string/trim chosen))
-                                                    (p/let [result (<create-page-if-not-exists! block property classes' chosen)]
-                                                      [result true])))
+                              (p/let [id (if (integer? chosen)
+                                           chosen
+                                           (when-not (string/blank? (string/trim chosen))
+                                             (<create-page-if-not-exists! block property classes' chosen)))
                                       _ (when (and (integer? id) (not (entity-util/page? (db/entity id))))
                                           (db-async/<get-block repo id))]
-                                (p/do!
-                                 (if id
+                                (if id
+                                  (p/do!
                                    (add-or-remove-property-value block property id selected? {})
-                                   (log/error :msg "No :db/id found or created for chosen" :chosen chosen))
-                                 (when new? (set-refresh-count! (inc refresh-count))))))})
+                                   (when (fn? add-new-choice!)
+                                     (add-new-choice!
+                                      (let [e (db/entity id)]
+                                        {:value (select-keys e [:db/id :block/uuid])
+                                         :label (:block/title e)}))))
+                                  (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
@@ -834,11 +842,13 @@
                      :input-opts input-opts
                      :on-input (fn [v]
                                  (if (string/blank? v)
-                                   initial-choices
+                                   (set-result! initial-choices)
                                    ;; TODO rank initial choices higher
                                    (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
                                                                                                    :built-in? false})]
-                                     (set-result! result)))))
+                                     (set-result! result))))
+                     :add-new-choice! (fn [new-choice]
+                                        (set-initial-choices! (conj (vec initial-choices) new-choice))))
         repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         class? (= :class (:logseq.property/type property))
@@ -1081,7 +1091,7 @@
 
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
-         (reference {:table-view? table-view?} (:block/uuid value)))
+         (when value (reference {:table-view? table-view?} (:block/uuid value))))
 
        (and (map? value) (some? (db-property/property-value-content value)))
        (let [content (str (db-property/property-value-content value))]
@@ -1338,11 +1348,14 @@
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded
-                                       (= (:db/id (:block/link v)) (:db/id block))))]
-     (if (and (or (and (entity-map? v) (self-value-or-embedded? v))
+                                       (and (:db/id block) (= (:db/id (:block/link v)) (:db/id block)))))]
+     (if (and (or (and (entity-map? v)
+                       (self-value-or-embedded? v))
                   (and (coll? v) (every? entity-map? v)
                        (some self-value-or-embedded? v))
-                  (and (= p-block (:db/id block)) (= p-property (:db/id property))))
+                  (and (:db/id block)
+                       (= p-block (:db/id block))
+                       (= p-property (:db/id property))))
               (not= :logseq.class/Tag (:db/ident block)))
        [:div.flex.flex-row.items-center.gap-1
         [:div.warning "Self reference"]

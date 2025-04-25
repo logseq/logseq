@@ -3,8 +3,10 @@
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
             [wally.main :as w]
-            [wally.selectors :as ws])
-  (:import (com.microsoft.playwright.assertions PlaywrightAssertions)))
+            [wally.selectors :as ws]
+            [logseq.e2e.keyboard :as k])
+  (:import [com.microsoft.playwright TimeoutError]
+           [com.microsoft.playwright.assertions PlaywrightAssertions]))
 
 (def assert-that PlaywrightAssertions/assertThat)
 
@@ -37,8 +39,6 @@
   (let [input-node (w/-query "*:focus")]
     (.type input-node text)))
 
-(def press w/keyboard-press)
-
 (defn search
   [text]
   (w/click :#search-button)
@@ -67,7 +67,7 @@
 
 (defn new-block
   [title]
-  (press "Enter")
+  (k/enter)
   (input title))
 
 (defn save-block
@@ -76,14 +76,14 @@
 
 (defn exit-edit
   []
-  (press "Escape"))
+  (k/esc))
 
 (defn delete-blocks
   "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
   []
   (let [editor (get-editor)]
     (when editor (exit-edit))
-    (press "Backspace")))
+    (k/backspace)))
 
 (defn get-text
   [locator]
@@ -117,7 +117,7 @@
   [indent?]
   (let [editor (get-editor)
         [x1 _] (bounding-xy editor)
-        _ (press (if indent? "Tab" "Shift+Tab"))
+        _ (if indent? (k/tab) (k/shift+tab))
         [x2 _] (bounding-xy editor)]
     (if indent?
       (is (< x1 x2))
@@ -138,7 +138,7 @@
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (press shortcut)))
+    (k/press shortcut)))
 
 (defn get-page-blocks-contents
   []
@@ -146,4 +146,46 @@
 
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
-(def mod-key (if mac? "Meta" "Control"))
+(defn login-test-account
+  [& {:keys [username password]
+      :or {username "e2etest"
+           password "Logseq-e2e"}}]
+  (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
+  (w/click "button[title=\"More\"]")
+  (w/click "div:text(\"Login\")")
+  (input username)
+  (k/tab)
+  (input password)
+  (w/click "button[type=\"submit\"]:text(\"Sign in\")")
+  (w/wait-for-not-visible ".cp__user-login"))
+
+(defn new-graph
+  [graph-name enable-sync?]
+  (search "add a db graph")
+  (w/click (w/get-by-label "Add a DB graph"))
+  (w/wait-for "h2:text(\"Create a new graph\")")
+  (w/click "input[placeholder=\"your graph name\"]")
+  (input graph-name)
+  (when enable-sync?
+    (w/click "button#rtc-sync"))
+  (w/click "button:text(\"Submit\")")
+  (when enable-sync?
+    (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
+
+(defn wait-for-remote-graph
+  [graph-name]
+  (search "all graphs")
+  (w/click (w/get-by-label "Go to all graphs"))
+  (let [max-try 5]
+    (loop [i 0]
+      (prn :wait-for-remote-graph-try i)
+      (w/click "span:text(\"Refresh\")")
+      (let [succ?
+            (try
+              (w/wait-for (str "span:has-text(\"" graph-name "\")"))
+              true
+              (catch TimeoutError e
+                (if (= max-try i)
+                  (throw e)
+                  false)))]
+        (when-not succ? (recur (inc i)))))))
