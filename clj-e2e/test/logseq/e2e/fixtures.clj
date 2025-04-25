@@ -10,9 +10,7 @@
   (w/with-page-open
     (w/make-page {:headless (or headless @config/*headless)
                   :persistent false
-                  :slow-mo 100
-                  ;; Set `slow-mo` lower to find more flaky tests
-                  ;; :slow-mo 30
+                  :slow-mo @config/*slow-mo
                   })
     (w/navigate (str "http://localhost:" (or port @config/*port)))
     (f)))
@@ -26,7 +24,7 @@
   (let [headless (or headless @config/*headless)
         page-opts {:headless headless
                    :persistent false
-                   :slow-mo 100}
+                   :slow-mo @config/*slow-mo}
         p1 (w/make-page page-opts)
         p2 (w/make-page page-opts)
         port' (or port @config/*port)]
@@ -46,9 +44,9 @@
 (defn open-new-context
   "create a new playwright-context in `*pw-ctx*`"
   [f]
-  (let [page-opts {:headless false
+  (let [page-opts {:headless @config/*headless
                    :persistent false
-                   :slow-mo 100}
+                   :slow-mo @config/*slow-mo}
         p @(w/make-page page-opts)
         ctx (.newContext (.browser (.context p)))]
     ;; context for p is no longer needed
