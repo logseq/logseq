@@ -10,10 +10,14 @@
 (use-fixtures :once fixtures/open-new-context)
 
 (deftest multi-tabs-test
-  (testing "create 3 local graphs"
+  (testing "edit on one tab, check all tab's blocks are same"
     (pw-page/open-pages fixtures/*pw-ctx* 3)
-    (let [pages (pw-page/get-pages fixtures/*pw-ctx*)
-          p1 (first pages)]
+    (let [[p1 p2 p3 :as pages] (pw-page/get-pages fixtures/*pw-ctx*)
+          blocks-to-add (map #(str "b" %) (range 10))]
       (is (= 3 (count pages)))
       (w/with-page p1
-        (repl/pause)))))
+        (util/new-blocks blocks-to-add))
+      (w/with-page p2
+        (is (= (util/page-blocks-count) (count blocks-to-add))))
+      (w/with-page p3
+        (is (= (util/page-blocks-count) (count blocks-to-add)))))))
