@@ -881,7 +881,7 @@
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
-                                  (if (:import-type opts)
+                                  (if (or (:import-type opts) (= (:op opts) :add-file-graph))
                                     (start-db! graph opts)
                                     (p/let [service (<init-service! graph)]
                                       (get-in service [:status :ready])
