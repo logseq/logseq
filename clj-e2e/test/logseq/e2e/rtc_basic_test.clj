@@ -4,12 +4,9 @@
    [com.climate.claypoole :as cp]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-2-pages)
-
-;; (use-fixtures :once #(fixtures/open-2-pages % :headless false :port 3001))
 
 (deftest rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))]
@@ -23,7 +20,3 @@
         (util/new-graph graph-name true))
       (w/with-page @*page2
         (util/wait-for-remote-graph graph-name)))))
-
-(comment
-  (def xxx (future (clojure.test/run-tests)))
-  (future-cancel xxx))
