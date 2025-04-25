@@ -466,7 +466,6 @@
 
    :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
                                              :inactive (not (util/electron?))
-                                             :db-graph? true
                                              :binding "mod+s"}
 
    :graph/re-index                          {:fn      (fn []

@@ -376,7 +376,7 @@
                             :path-params {:name link}}))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (persist-db/export-current-graph! {:succ-notification? true}))
+  (persist-db/export-current-graph! {:succ-notification? true :force-save? true}))
 
 (defmethod handle :ui/re-render-root [[_]]
   (ui-handler/re-render-root!))
