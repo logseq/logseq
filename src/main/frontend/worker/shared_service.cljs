@@ -328,26 +328,26 @@
 
     {:proxy (js/Proxy. target
                        #js {:get (fn [target method]
-                                   (assert (identical? "remoteInvoke" method) method)
-                                   (fn [args]
-                                     (cond
-                                       @*master-client?
-                                       (<apply-target-f! target method args)
+                                   (when (= "remoteInvoke" method)
+                                     (fn [args]
+                                       (cond
+                                         @*master-client?
+                                         (<apply-target-f! target method args)
 
-                                       :else
-                                       (let [request-id (next-request-id)
-                                             client-channel (ensure-client-channel client-id service-name)]
-                                         (p/create
-                                          (fn [resolve-fn reject-fn]
-                                            (vswap! *requests-in-flight assoc request-id {:method method
-                                                                                          :args args
-                                                                                          :resolve-fn resolve-fn
-                                                                                          :reject-fn reject-fn})
-                                            (.postMessage client-channel (bean/->js
-                                                                          {:id request-id
-                                                                           :type "request"
-                                                                           :method method
-                                                                           :args args}))))))))})
+                                         :else
+                                         (let [request-id (next-request-id)
+                                               client-channel (ensure-client-channel client-id service-name)]
+                                           (p/create
+                                            (fn [resolve-fn reject-fn]
+                                              (vswap! *requests-in-flight assoc request-id {:method method
+                                                                                            :args args
+                                                                                            :resolve-fn resolve-fn
+                                                                                            :reject-fn reject-fn})
+                                              (.postMessage client-channel (bean/->js
+                                                                            {:id request-id
+                                                                             :type "request"
+                                                                             :method method
+                                                                             :args args})))))))))})
      :status status}))
 
 (defn broadcast-to-clients!
