@@ -51,6 +51,7 @@
         ctx (.newContext (.browser (.context p)))]
     ;; context for p is no longer needed
     (.close (.context p))
+    (w/with-page-open p)              ; use with-page-open to close playwright instance
     (binding [*pw-ctx* ctx]
       (f)
-      (pw-page/close-pw-ctx *pw-ctx*))))
+      (.close (.browser *pw-ctx*)))))

@@ -100,18 +100,6 @@
   (when-let [editor (get-editor)]
     (get-text editor)))
 
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
-
 (defn bounding-xy
   [locator]
   (let [box (.boundingBox locator)]
@@ -137,7 +125,21 @@
 
 (defn open-last-block
   []
+  (k/esc)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+
+;; TODO: support tree
+(defn new-blocks
+  [titles]
+  (open-last-block)
+  (let [value (get-edit-content)]
+    (if (string/blank? value)           ; empty block
+      (do
+        (save-block (first titles))
+        (doseq [title (rest titles)]
+          (new-block title)))
+      (doseq [title titles]
+        (new-block title)))))
 
 (defn repeat-keyboard
   [n shortcut]
