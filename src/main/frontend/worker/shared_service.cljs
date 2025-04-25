@@ -328,7 +328,7 @@
 
     {:proxy (js/Proxy. target
                        #js {:get (fn [target method]
-                                   (when (= "remoteInvoke" method)
+                                   (if (= "remoteInvoke" method)
                                      (fn [args]
                                        (cond
                                          @*master-client?
@@ -347,7 +347,8 @@
                                                                             {:id request-id
                                                                              :type "request"
                                                                              :method method
-                                                                             :args args})))))))))})
+                                                                             :args args})))))))
+                                     (log/error :invalid-invoke-method method)))})
      :status status}))
 
 (defn broadcast-to-clients!
