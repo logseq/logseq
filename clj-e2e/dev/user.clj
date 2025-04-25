@@ -65,5 +65,9 @@
     (w/wait-for (first (util/get-edit-block-container))
                 {:state :detached}))
 
+  (run-tests 'logseq.e2e.editor-test
+             'logseq.e2e.multi-tabs-test
+             'logseq.e2e.outliner-test
+             'logseq.e2e.rtc-basic-test)
   ;;
   )
