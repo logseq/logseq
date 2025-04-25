@@ -18,4 +18,5 @@
 
   -dev {:depends [serve prn test]}
 
-  dev {:task (run '-dev {:parallel true})}}}
+  dev {:doc "serve and test"
+       :task (run '-dev {:parallel true})}}}

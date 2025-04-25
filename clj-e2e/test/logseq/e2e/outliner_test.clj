@@ -2,7 +2,8 @@
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.fixtures :as fixtures]
-   [logseq.e2e.util :as util :refer [press]]
+   [logseq.e2e.keyboard :as k]
+   [logseq.e2e.util :as util]
    [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
@@ -25,7 +26,7 @@
   (testing "indent a block with its children"
     (util/new-block "b3")
     (util/indent)
-    (press "ArrowUp")
+    (k/arrow-up)
     (util/indent)
     (util/exit-edit)
     (let [[x1 x2 x3] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
@@ -35,7 +36,7 @@
     (util/open-last-block)
     (util/new-blocks ["b4" "b5"])
     (util/indent)
-    (util/press "ArrowUp")
+    (k/arrow-up)
     (util/outdent)
     (util/exit-edit)
     (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
@@ -68,9 +69,9 @@
     (util/new-page "p5")
     (util/new-blocks ["b1" "b2" "b3" "b4"])
     (util/indent)
-    (press "ArrowUp")
+    (k/arrow-up)
     (util/indent)
-    (press "ArrowUp")
+    (k/arrow-up)
     (util/delete-blocks)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))

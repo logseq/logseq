@@ -3,7 +3,8 @@
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.fixtures :as fixtures]
-   [logseq.e2e.util :as util :refer [press]]
+   [logseq.e2e.keyboard :as k]
+   [logseq.e2e.util :as util]
    [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
@@ -15,7 +16,7 @@
     (util/type " /")
     (w/wait-for ".ui__popover-content")
     (is (some? (w/find-one-by-text "span" "Node reference")))
-    (press "Backspace")
+    (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content"))
 
   (testing "Node reference"
@@ -23,9 +24,9 @@
       (util/new-block "/")
       (util/type "Node eferen")
       (w/wait-for ".ui__popover-content")
-      (press "Enter")
+      (k/enter)
       (util/type "Another page")
-      (press "Enter")
+      (k/enter)
       (is (= "[[Another page]]" (util/get-edit-content)))
       (util/exit-edit)
       (is (= "Another page" (util/get-text "a.page-ref"))))
@@ -33,10 +34,10 @@
       (util/new-block "/")
       (util/type "Node eferen")
       (w/wait-for ".ui__popover-content")
-      (press "Enter")
+      (k/enter)
       (util/type "b1")
       (util/wait-timeout 300)
-      (press "Enter")
+      (k/enter)
       (is (string/includes? (util/get-edit-content) "[["))
       (util/exit-edit)
       (is (= "b1" (util/get-text ".block-ref"))))))

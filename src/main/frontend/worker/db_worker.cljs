@@ -31,7 +31,6 @@
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -174,7 +173,8 @@
       (worker-util/post-message :capture-error
                                 {:error "db-missing-addresses"
                                  :payload {:missing-addresses missing-addresses}})
-      (prn :error :missing-addresses missing-addresses))))
+      (prn :error :missing-addresses missing-addresses))
+    missing-addresses))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -356,17 +356,12 @@
                                                                         (when import-type {:import-type import-type}))]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (when-not db-based?
-          (try
-            (when-not (ldb/page-exists? @conn common-config/views-page-name #{:logseq.class/Page})
-              (ldb/transact! conn (sqlite-create-graph/build-initial-views)))
-            (catch :default _e)))
-
-        (find-missing-addresses db)
-        ;; (gc-kvs-table! db)
-
         (try
+          (when-let [missing-addresses (seq (find-missing-addresses db))]
+            (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses})))
+
           (db-migrate/migrate conn search-db)
+
           (catch :default _e
             (when db-based?
               (rebuild-db-from-datoms! conn db import-type)
@@ -885,11 +880,13 @@
                                 (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
-                                (p/let [method-args (ldb/read-transit-str (last args))
-                                        service (<init-service! (first method-args))]
-                                  ;; wait for service ready
-                                  (get-in service [:status :ready])
-                                  (js-invoke (:proxy service) k args))
+                                (let [[graph opts] (ldb/read-transit-str (last args))]
+                                  (if (:import-type opts)
+                                    (start-db! graph opts)
+                                    (p/let [service (<init-service! graph)]
+                                      (get-in service [:status :ready])
+                                      ;; wait for service ready
+                                      (js-invoke (:proxy service) k args))))
 
                                 (or (contains? #{:thread-api/sync-app-state} method-k)
                                     (nil? service))
