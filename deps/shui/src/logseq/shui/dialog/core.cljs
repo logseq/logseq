@@ -160,9 +160,9 @@
           auto-width? (assoc :data-auto-width true)
           (false? close-btn?) (assoc :data-close-btn false))
 
-         ;; nested title component is required for radix dialog content
-         (dialog-title {:class (when (empty? title) "hidden")} title)
-         (when description (dialog-description description))
+        ;; nested title component is required for radix dialog content
+        (dialog-title {:class (when (nil? title) "hidden")} title)
+        (when description (dialog-description description))
 
         (when content
           [:div.ui__dialog-main-content content])
