@@ -1,0 +1,3 @@
+{:linters
+ {:unresolved-var {:exclude [wally.main/click
+                             wally.main/fill]}}}

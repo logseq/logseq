@@ -40,7 +40,7 @@
             highlighted-text (string/replace normal-text query-re "<:hlmarker>$1<:hlmarker>")
             segs (string/split highlighted-text #"<:hlmarker>")]
         (if (seq segs)
-          (into [:span]
+          (into [:span {:aria-label text-string}]
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]

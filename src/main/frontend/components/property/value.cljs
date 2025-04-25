@@ -1091,7 +1091,7 @@
 
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
-         (reference {:table-view? table-view?} (:block/uuid value)))
+         (when value (reference {:table-view? table-view?} (:block/uuid value))))
 
        (and (map? value) (some? (db-property/property-value-content value)))
        (let [content (str (db-property/property-value-content value))]
@@ -1348,11 +1348,14 @@
          self-value-or-embedded? (fn [v]
                                    (or (= (:db/id v) (:db/id block))
                                        ;; property value self embedded
-                                       (= (:db/id (:block/link v)) (:db/id block))))]
-     (if (and (or (and (entity-map? v) (self-value-or-embedded? v))
+                                       (and (:db/id block) (= (:db/id (:block/link v)) (:db/id block)))))]
+     (if (and (or (and (entity-map? v)
+                       (self-value-or-embedded? v))
                   (and (coll? v) (every? entity-map? v)
                        (some self-value-or-embedded? v))
-                  (and (= p-block (:db/id block)) (= p-property (:db/id property))))
+                  (and (:db/id block)
+                       (= p-block (:db/id block))
+                       (= p-property (:db/id property))))
               (not= :logseq.class/Tag (:db/ident block)))
        [:div.flex.flex-row.items-center.gap-1
         [:div.warning "Self reference"]
