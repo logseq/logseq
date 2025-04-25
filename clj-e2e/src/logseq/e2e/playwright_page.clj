@@ -1,4 +1,5 @@
 (ns logseq.e2e.playwright-page
+  "operations on playwright pages."
   (:require [logseq.e2e.config :as config]
             [wally.main :as w]))
 
@@ -7,6 +8,7 @@
   (.pages pw-ctx))
 
 (defn open-pages
+  "Pages in same pw-ctx share cookies and storages"
   [pw-ctx n]
   (let [url (str "http://localhost:" @config/*port)]
     (dotimes [_i n]

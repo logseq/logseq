@@ -2,14 +2,11 @@
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [wally.main :as w]
-            [wally.repl :as repl]
             [wally.selectors :as ws])
-  (:import [com.microsoft.playwright TimeoutError]
-           [com.microsoft.playwright.assertions PlaywrightAssertions]))
-
-(def assert-that PlaywrightAssertions/assertThat)
+  (:import [com.microsoft.playwright TimeoutError]))
 
 (defn wait-timeout
   [ms]
@@ -49,6 +46,7 @@
 (defn search
   [text]
   (double-esc)
+  (assert/assert-in-normal-mode?)
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
@@ -131,6 +129,7 @@
 (defn open-last-block
   []
   (double-esc)
+  (assert/assert-in-normal-mode?)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
 ;; TODO: support tree
