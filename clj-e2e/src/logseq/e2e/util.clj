@@ -2,9 +2,10 @@
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
+            [logseq.e2e.keyboard :as k]
             [wally.main :as w]
-            [wally.selectors :as ws]
-            [logseq.e2e.keyboard :as k])
+            [wally.repl :as repl]
+            [wally.selectors :as ws])
   (:import [com.microsoft.playwright TimeoutError]
            [com.microsoft.playwright.assertions PlaywrightAssertions]))
 
@@ -41,6 +42,8 @@
 
 (defn search
   [text]
+  ;; make sure there's no blocks action bar
+  (k/esc)
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
@@ -48,6 +51,7 @@
   [title]
   ;; Question: what's the best way to close all the popups?
   ;; close popup, exit editing
+  ;; (repl/pause)
   (search title)
   (w/click [(ws/text "Create page") (ws/nth= "0")])
   (w/wait-for ".editor-wrapper textarea"))

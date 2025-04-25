@@ -23,8 +23,7 @@
 
 (defn open-2-pages
   "Use `*page1` and `*page2` in `f`"
-  [f & {:keys [headless port]
-        :or {headless true}}]
+  [f & {:keys [headless port]}]
   (let [headless (or headless @*headless)
         page-opts {:headless headless
                    :persistent false
