@@ -1,13 +1,13 @@
 (ns user
   "fns used on repl"
   (:require [clojure.test :refer [run-tests run-test]]
+            [logseq.e2e.config :as config]
             [logseq.e2e.editor-test]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.multi-tabs-test]
             [logseq.e2e.outliner-test]
             [logseq.e2e.rtc-basic-test]
-            [logseq.e2e.multi-tabs-test]
             [logseq.e2e.util :as util]
-            [logseq.e2e.config :as config]
             [wally.main :as w]
             [wally.repl :as repl]))
 
@@ -16,21 +16,32 @@
 ;; show ui
 (reset! config/*headless false)
 
+(def *futures (atom {}))
+
+(defn cancel
+  [test-name]
+  (some-> (get @*futures test-name) future-cancel)
+  (swap! *futures dissoc test-name))
+
 (defn run-editor-test
   []
-  (future (run-tests 'logseq.e2e.editor-test)))
+  (->> (future (run-tests 'logseq.e2e.editor-test))
+       (swap! *futures assoc :editor-test)))
 
 (defn run-outliner-test
   []
-  (future (run-tests 'logseq.e2e.outliner-test)))
+  (->> (future (run-tests 'logseq.e2e.outliner-test))
+       (swap! *futures assoc :outliner-test)))
 
 (defn run-rtc-basic-test
   []
-  (future (run-tests 'logseq.e2e.rtc-basic-test)))
+  (->> (future (run-tests 'logseq.e2e.rtc-basic-test))
+       (swap! *futures assoc :rtc-basic-test)))
 
 (defn run-multi-tabs-test
   []
-  (future (run-tests 'logseq.e2e.multi-tabs-test)))
+  (->> (future (run-tests 'logseq.e2e.multi-tabs-test))
+       (swap! *futures assoc :multi-tabs-test)))
 
 (comment
 
