@@ -235,8 +235,7 @@
                                                 (state/pub-event! [:graph/open-new-window url])
                                                 (cond
                                                   ;; exists locally?
-                                                  (or (:root graph)
-                                                      (and db-only? (not rtc-graph?)))
+                                                  (or (:root graph) (not rtc-graph?))
                                                   (state/pub-event! [:graph/switch url])
 
                                                   (and rtc-graph? remote?)

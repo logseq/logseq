@@ -8,20 +8,20 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [frontend.persist-db :as persist-db]))
+            [promesa.core :as p]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -89,7 +89,7 @@
 (defn ls-dir-files-with-handler!
   "Read files from directory and setup repo (for the first time setup a repo)"
   ([ok-handler] (ls-dir-files-with-handler! ok-handler nil))
-  ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir]}]
+  ([ok-handler {:keys [on-open-dir dir-result-fn picked-root-fn dir re-index?]}]
    (let [electron? (util/electron?)
          mobile-native? (mobile-util/native-platform?)
          nfs? (and (not electron?)
@@ -128,7 +128,7 @@
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (p/do! (persist-db/<new repo {})
+                              (p/do! (persist-db/<new repo {:op (if re-index? :re-index :add-file-graph)})
                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))
@@ -273,7 +273,7 @@
     (when repo
       (p/do!
        (repo-handler/remove-repo! {:url repo} :switch-graph? false)
-       (ls-dir-files-with-path! graph-dir)
+       (ls-dir-files-with-path! graph-dir {:re-index? true})
        (when (fn? ok-handler) (ok-handler))))))
 
 ;; TODO: move to frontend.handler.repo
