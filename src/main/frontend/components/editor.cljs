@@ -354,7 +354,7 @@
         [matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
-                           (set-matched-templates! result)))
+                           (set-matched-templates! (sort-by :block/title result))))
                        [q])
     (ui/auto-complete
      matched-templates

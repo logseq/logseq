@@ -159,8 +159,7 @@
       (assoc :db/id (:db/id entity))))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id {:keys [children? children-only? nested-children? including-property-vals? properties children-props]
-          :or {including-property-vals? true}}]
+  [db id {:keys [children? children-only? nested-children? properties children-props]}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
@@ -205,7 +204,7 @@
                          (entity->map block))
                 block' (cond->
                         (mark-block-fully-loaded block')
-                         including-property-vals?
+                         true
                          (update-vals (fn [v]
                                         (cond
                                           (de/entity? v)
