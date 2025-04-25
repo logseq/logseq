@@ -36,6 +36,7 @@ const DialogContent = React.forwardRef<
     <DialogOverlay {...overlayProps}>
       <DialogPrimitive.Content
         ref={ref}
+        aria-describedby={undefined}
         className={cn(
           'ui__dialog-content',
           'relative grid w-full max-w-2xl lg:max-w-3xl gap-4 border sm:rounded-lg ' +
