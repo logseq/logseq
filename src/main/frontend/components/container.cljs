@@ -708,7 +708,6 @@
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        latest-journals (db/get-latest-journals (state/get-current-repo) 1)
         graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
       (or
@@ -727,20 +726,17 @@
               (:page default-home))
          (route-handler/redirect-to-page! (:page default-home))
 
-         (and config/publishing?
-              (not default-home)
-              (empty? latest-journals))
+         (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+           (and config/publishing?
+                (not default-home)
+                (empty? latest-journals)))
          (route-handler/redirect! {:to :all-pages})
 
          loading-files?
          (ui/loading (t :loading-files))
 
-         (seq latest-journals)
-         (journal/all-journals)
-
-         ;; FIXME: why will this happen?
          :else
-         [:div])])))
+         (journal/all-journals))])))
 
 (defn- hide-context-menu-and-clear-selection
   [e]
