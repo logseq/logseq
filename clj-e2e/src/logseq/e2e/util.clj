@@ -40,10 +40,15 @@
   (let [input-node (w/-query "*:focus")]
     (.type input-node text)))
 
+(defn double-esc
+  "Exits editing mode and ensure there's no action bar"
+  []
+  (k/esc)
+  (k/esc))
+
 (defn search
   [text]
-  ;; make sure there's no blocks action bar
-  (k/esc)
+  (double-esc)
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
@@ -125,7 +130,7 @@
 
 (defn open-last-block
   []
-  (k/esc)
+  (double-esc)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
 ;; TODO: support tree
