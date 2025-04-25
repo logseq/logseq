@@ -1,4 +1,4 @@
-import { Button } from '../@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Meta, StoryObj } from '@storybook/react'
 import { DropdownMenuCheckboxItemProps } from '@radix-ui/react-dropdown-menu'
 
@@ -73,6 +73,7 @@ export const Primary: StoryObj =
         <div className={'p-20'}>
           <DropdownMenuCheckboxes/>
           <Button onClick={() => {
+            // @ts-ignore
             const p = toast({
               title: 'hello',
               description: <Button onClick={() => p.dismiss()}>hello</Button>
