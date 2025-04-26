@@ -8,6 +8,21 @@
             [wally.selectors :as ws])
   (:import [com.microsoft.playwright TimeoutError]))
 
+(defn repeat-until-visible
+  [n q repeat-fn]
+  (when-not (w/visible? q)
+    (loop [i n]
+      (repeat-fn)
+      (let [visible?
+            (try
+              (assert/assert-is-visible q)
+              (catch TimeoutError e
+                (if (zero? i)
+                  (throw e)
+                  false)))]
+        (when-not visible?
+          (recur (dec i)))))))
+
 (defn wait-timeout
   [ms]
   (.waitForTimeout (w/get-page) ms))
@@ -168,34 +183,3 @@
   (input password)
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
-
-(defn new-graph
-  [graph-name enable-sync?]
-  (search "add a db graph")
-  (w/click (w/get-by-label "Add a DB graph"))
-  (w/wait-for "h2:text(\"Create a new graph\")")
-  (w/click "input[placeholder=\"your graph name\"]")
-  (input graph-name)
-  (when enable-sync?
-    (w/click "button#rtc-sync"))
-  (w/click "button:text(\"Submit\")")
-  (when enable-sync?
-    (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
-
-(defn wait-for-remote-graph
-  [graph-name]
-  (search "all graphs")
-  (w/click (w/get-by-label "Go to all graphs"))
-  (let [max-try 5]
-    (loop [i 0]
-      (prn :wait-for-remote-graph-try i)
-      (w/click "span:text(\"Refresh\")")
-      (let [succ?
-            (try
-              (w/wait-for (str "span:has-text(\"" graph-name "\")"))
-              true
-              (catch TimeoutError e
-                (if (= max-try i)
-                  (throw e)
-                  false)))]
-        (when-not succ? (recur (inc i)))))))

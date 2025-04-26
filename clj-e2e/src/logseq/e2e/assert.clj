@@ -6,11 +6,13 @@
 
 (defn assert-is-visible
   [q]
-  (-> (w/-query q) assert-that .isVisible))
+  (-> (w/-query q) assert-that .isVisible)
+  true)
 
 (defn assert-is-hidden
   [q]
-  (-> (w/-query q) assert-that .isHidden))
+  (-> (w/-query q) assert-that .isHidden)
+  true)
 
 (defn assert-in-normal-mode?
   "- not editing mode
@@ -19,4 +21,5 @@
   []
   (assert-is-hidden (w/get-by-label "editing block"))
   (assert-is-hidden ".selection-action-bar")
-  (assert-is-visible "#search-button"))
+  (assert-is-visible "#search-button")
+  true)
