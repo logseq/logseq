@@ -1235,7 +1235,7 @@
                                (.focus (rum/deref *ref)))
 
                               nil))))})
-       number-value)]))
+       value)]))
 
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
