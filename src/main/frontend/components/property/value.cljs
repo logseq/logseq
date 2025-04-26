@@ -1187,7 +1187,8 @@
         *input-ref (rum/use-ref nil)
         number-value (db-property/property-value-content value-block)
         [value set-value!] (rum/use-state number-value)
-        set-property-value! (fn [value]
+        set-property-value! (fn [value & {:keys [exit-editing?]
+                                          :or {exit-editing? true}}]
                               (p/do!
                                (when (and (not (string/blank? value))
                                           (not= (string/trim (str number-value))
@@ -1196,16 +1197,16 @@
                                                                           (:db/ident property)
                                                                           value))
 
-                               (set-editing! false)))]
+                               (when exit-editing?
+                                 (set-editing! false))))]
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
-      :on-click (fn [_]
-                  (set-editing! true))}
+      :on-click #(set-editing! true)}
      (if editing?
        (shui/input
         {:ref *input-ref
          :auto-focus true
-         :class "ls-number-input h-6 px-0 py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+         :class "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
          :value value
          :on-change (fn [e] (set-value! (util/evalue e)))
          :on-blur (fn [_e] (set-property-value! value))
@@ -1219,7 +1220,8 @@
                               (do
                                 (util/stop-propagation e)
                                 (set-editing! false)
-                                (editor-handler/move-cross-boundary-up-down (if (= "ArrowUp" (util/ekey e)) :up :down) {}))
+                                (editor-handler/move-cross-boundary-up-down (if (= "ArrowUp" (util/ekey e)) :up :down) {})
+                                (set-property-value! value {:exit-editing? false}))
 
                               "Backspace"
                               (when (zero? pos)
@@ -1228,7 +1230,9 @@
                                  (editor-handler/move-cross-boundary-up-down :up {:pos :max})))
 
                               ("Escape" "Enter")
-                              (set-property-value! value)
+                              (p/do!
+                               (set-property-value! value)
+                               (.focus (rum/deref *ref)))
 
                               nil))))})
        number-value)]))
