@@ -12,7 +12,7 @@
 
 (deftest rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))]
-    (testing "open 2 app instances"
+    (testing "open 2 app instances, add a rtc graph, check this graph available on other instance"
       (cp/prun!
        2
        #(w/with-page %
@@ -21,4 +21,5 @@
       (w/with-page @*page1
         (graph/new-graph graph-name true))
       (w/with-page @*page2
-        (graph/wait-for-remote-graph graph-name)))))
+        (graph/wait-for-remote-graph graph-name)
+        (graph/remove-remote-graph graph-name)))))
