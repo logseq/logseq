@@ -2964,7 +2964,8 @@
                    (not hidden?))
                  (not (and block-ref? (or (seq ast-title) (seq ast-body))))
                  (not (:slide? config))
-                 (not= block-type :whiteboard-shape))
+                 (not= block-type :whiteboard-shape)
+                 (not (:table-block-title? config)))
         (properties-cp config block))
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
@@ -3060,7 +3061,8 @@
            (block-content config block edit-input-id block-id slide? *show-query?))
 
           (when (and (not hide-block-refs-count?)
-                     (not named?))
+                     (not named?)
+                     (not (:table-block-title? config)))
             [:div.flex.flex-row.items-center
              (when (and (:embed? config)
                         (:embed-parent config))
@@ -3078,16 +3080,17 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       [:div.flex.flex-row.items-center.self-start.gap-1
-        (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
+       (when-not (:table-block-title? config)
+         [:div.flex.flex-row.items-center.self-start.gap-1
+          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
-        (when-not (or (:table? config) (:property? config) (:page-title? config))
-          (block-refs-count block refs-count *hide-block-refs?))
+          (when-not (or (:table? config) (:property? config) (:page-title? config))
+            (block-refs-count block refs-count *hide-block-refs?))
 
-        (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-                      (:property? config))
-          (when (and db-based? (seq (:block/tags block)))
-            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]]]]))
+          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+                        (:property? config))
+            (when (and db-based? (seq (:block/tags block)))
+              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
@@ -3586,7 +3589,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not property?))
+        (when (and (not slide?) (not in-whiteboard?) (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))

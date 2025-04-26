@@ -31,3 +31,8 @@
 .ls-property-key .cp__select-input, .property-select .cp__select-input {
     @apply text-sm;
 }
+
+.ls-number {
+  @apply cursor-text;
+  min-height: 20px;
+}

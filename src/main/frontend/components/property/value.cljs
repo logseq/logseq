@@ -1198,7 +1198,7 @@
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
 (rum/defc single-number-input
-  [block property value-block]
+  [block property value-block table-view?]
   (let [[editing? set-editing!] (rum/use-state false)
         *ref (rum/use-ref nil)
         *input-ref (rum/use-ref nil)
@@ -1223,7 +1223,8 @@
        (shui/input
         {:ref *input-ref
          :auto-focus true
-         :class "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+         :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+                     (when table-view? " text-sm"))
          :value value
          :on-change (fn [e] (set-value! (util/evalue e)))
          :on-blur (fn [_e] (set-property-value! value))
@@ -1272,7 +1273,7 @@
       (icon-row block editing?)
 
       (and (= type :number) (not editing?))
-      (single-number-input block property value)
+      (single-number-input block property value (:table-view? opts))
 
       :else
       (if (and select-type?'
