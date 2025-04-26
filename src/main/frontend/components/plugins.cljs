@@ -202,7 +202,7 @@
 
 (rum/defc remote-readme-display
   [{:keys [repo]} _content]
-  (let [src (str (if (string/includes? js/location.href "logseq")
+  (let [src (str (if (string/includes? js/location.host "logseq")
                    "./static/" "./") "marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
 

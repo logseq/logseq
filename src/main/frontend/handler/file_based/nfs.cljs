@@ -8,20 +8,20 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.idb :as idb]
             [frontend.mobile.util :as mobile-util]
+            [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [frontend.persist-db :as persist-db]))
+            [promesa.core :as p]))
 
 (defn remove-ignore-files
   [files dir-name nfs?]
@@ -273,7 +273,7 @@
     (when repo
       (p/do!
        (repo-handler/remove-repo! {:url repo} :switch-graph? false)
-       (ls-dir-files-with-path! graph-dir)
+       (ls-dir-files-with-path! graph-dir {:re-index? true})
        (when (fn? ok-handler) (ok-handler))))))
 
 ;; TODO: move to frontend.handler.repo

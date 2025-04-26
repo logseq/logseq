@@ -495,12 +495,11 @@
 
 (defmethod handle-action :trigger [_ state _event]
   (let [command (some-> state state->highlighted-item :source-command)
-        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file
-                              :ui/toggle-settings :go/flashcards :misc/import-edn-data}]
+        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data}]
     (when-let [action (:action command)]
-      (action)
       (when-not (contains? dont-close-commands (:id command))
-        (shui/dialog-close! :ls-dialog-cmdk)))))
+        (shui/dialog-close! :ls-dialog-cmdk))
+      (util/schedule #(action) 32))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
