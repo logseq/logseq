@@ -2,6 +2,10 @@
   (:require [logseq.e2e.util :as util]
             [wally.main :as w]))
 
+(defn- refresh-all-remote-graphs
+  []
+  (w/click "span:text(\"Refresh\")"))
+
 (defn new-graph
   [graph-name enable-sync?]
   (util/search "add a db graph")
@@ -20,5 +24,11 @@
   (util/search "go to all graphs")
   (w/click (w/get-by-label "Go to all graphs"))
   (util/repeat-until-visible 5
-                             (format "a[title='logseq/graphs/%s']" graph-name)
-                             #(w/click "span:text(\"Refresh\")")))
+                             (format "div[aria-label='e2e %s']" graph-name)
+                             refresh-all-remote-graphs))
+
+(defn remove-remote-graph
+  [graph-name]
+  (wait-for-remote-graph graph-name)
+  (w/click (format "div[aria-label='e2e %s'] a:has-text(\"Remove (server)\")" graph-name))
+  (w/click "div[role='alertdialog'] button:text('ok')"))

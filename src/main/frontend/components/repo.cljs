@@ -68,7 +68,8 @@
         (sort-repos-with-metadata-local repos)
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
-    [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)}
+    [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
+                                                        :aria-label (str "e2e " GraphName)}
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
