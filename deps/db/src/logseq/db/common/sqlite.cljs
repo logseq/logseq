@@ -262,7 +262,8 @@
   "Favorites page and its blocks"
   [db]
   (let [page-id (get-first-page-by-name db common-config/favorites-page-name)
-        {:keys [block children]} (get-block-and-children db page-id {:children? true})]
+        block (d/entity db page-id)
+        children (:block/_page block)]
     (when block
       (concat (d/datoms db :eavt (:db/id block))
               (->> (keep :block/link children)
