@@ -134,8 +134,7 @@
     (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (let [timeout (js/setTimeout #(detach-modal! id) 128)]
-           #(js/clearTimeout timeout))))
+         (detach-modal! id)))
      [open?])
 
     (dialog
@@ -159,12 +158,14 @@
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
           (false? close-btn?) (assoc :data-close-btn false))
-        (when title
-          (dialog-header
-           (when title (dialog-title title))
-           (when description (dialog-description description))))
+
+        ;; nested title component is required for radix dialog content
+        (dialog-title {:class (when (nil? title) "hidden")} title)
+        (when description (dialog-description description))
+
         (when content
           [:div.ui__dialog-main-content content])
+
         (when footer
           (dialog-footer footer)))))))
 

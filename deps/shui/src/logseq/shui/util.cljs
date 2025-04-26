@@ -27,7 +27,8 @@
   [data & {:keys [html-props]}]
   (let [convert-to-camel (fn [[key value]]
                            (let [k (name key)]
-                             [(if-not (s/starts-with? k "data-")
+                             [(if-not (or (s/starts-with? k "data-")
+                                        (s/starts-with? k "aria-"))
                                 (kebab-case->camel-case k) k) value]))]
     (w/postwalk (fn [x]
                   (if (map? x)
