@@ -747,7 +747,8 @@
                                                                [:div.text-xs.opacity-70
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (:logseq.property/classes property)
+                                                           (when-not (or (:logseq.property/classes property)
+                                                                         (= (:db/ident property) :block/tags))
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
