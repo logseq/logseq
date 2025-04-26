@@ -31,7 +31,7 @@
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-immediate-children get-block-page
   get-custom-css
-  get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
+  get-file get-file-page get-file-page-id file-exists?
   get-files-blocks get-files-full get-journals-length
   get-latest-journals get-page get-case-page get-page-alias-names
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format

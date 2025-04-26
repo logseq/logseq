@@ -2,13 +2,11 @@
   (:refer-clojure :exclude [type])
   (:require [clojure.string :as string]
             [clojure.test :refer [is]]
+            [logseq.e2e.assert :as assert]
+            [logseq.e2e.keyboard :as k]
             [wally.main :as w]
-            [wally.selectors :as ws]
-            [logseq.e2e.keyboard :as k])
-  (:import [com.microsoft.playwright TimeoutError]
-           [com.microsoft.playwright.assertions PlaywrightAssertions]))
-
-(def assert-that PlaywrightAssertions/assertThat)
+            [wally.selectors :as ws])
+  (:import [com.microsoft.playwright TimeoutError]))
 
 (defn wait-timeout
   [ms]
@@ -39,8 +37,16 @@
   (let [input-node (w/-query "*:focus")]
     (.type input-node text)))
 
+(defn double-esc
+  "Exits editing mode and ensure there's no action bar"
+  []
+  (k/esc)
+  (k/esc))
+
 (defn search
   [text]
+  (double-esc)
+  (assert/assert-in-normal-mode?)
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
@@ -48,6 +54,7 @@
   [title]
   ;; Question: what's the best way to close all the popups?
   ;; close popup, exit editing
+  ;; (repl/pause)
   (search title)
   (w/click [(ws/text "Create page") (ws/nth= "0")])
   (w/wait-for ".editor-wrapper textarea"))
@@ -96,18 +103,6 @@
   (when-let [editor (get-editor)]
     (get-text editor)))
 
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
-
 (defn bounding-xy
   [locator]
   (let [box (.boundingBox locator)]
@@ -133,7 +128,22 @@
 
 (defn open-last-block
   []
+  (double-esc)
+  (assert/assert-in-normal-mode?)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+
+;; TODO: support tree
+(defn new-blocks
+  [titles]
+  (open-last-block)
+  (let [value (get-edit-content)]
+    (if (string/blank? value)           ; empty block
+      (do
+        (save-block (first titles))
+        (doseq [title (rest titles)]
+          (new-block title)))
+      (doseq [title titles]
+        (new-block title)))))
 
 (defn repeat-keyboard
   [n shortcut]

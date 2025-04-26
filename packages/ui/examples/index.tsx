@@ -1,5 +1,5 @@
-import 'src/index.css'
-import { setupGlobals } from '../src'
+import '../src/index.css'
+import { setupGlobals } from '../src/ui'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
 

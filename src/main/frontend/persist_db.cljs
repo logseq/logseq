@@ -42,10 +42,10 @@
     (<export-db repo {})))
 
 (defn export-current-graph!
-  [& {:keys [succ-notification?]}]
+  [& {:keys [succ-notification? force-save?]}]
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
-      (when (config/db-based-graph? repo)
+      (when (or (config/db-based-graph? repo) force-save?)
         (println :debug :save-db-to-disk repo)
         (->
          (p/do!

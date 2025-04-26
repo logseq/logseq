@@ -80,6 +80,7 @@ const common = {
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
+        'node_modules/dompurify/dist/purify.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js',

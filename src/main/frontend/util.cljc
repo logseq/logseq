@@ -1248,7 +1248,9 @@
 #?(:cljs
    (defn scroll-editor-cursor
      [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) (mobile?)))
+     (when (and el (or web-platform?
+                       (mobile-util/native-platform?)
+                       (mobile?)))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
@@ -1260,7 +1262,7 @@
              scroll-top'  (.-scrollTop main-node)
 
              current-pos (get-selection-start el)
-             grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
+             grapheme-pos (get-graphemes-pos (.-value el) current-pos)
              mock-text   (some-> (gdom/getElement "mock-text")
                                  gdom/getChildren
                                  array-seq

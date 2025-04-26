@@ -82,13 +82,6 @@
              (conn/get-db repo-url) pred)
         db-utils/seq-flatten)))
 
-(defn get-file-last-modified-at
-  [repo path]
-  (when (and repo path)
-    (when-let [db (conn/get-db repo)]
-      (-> (db-utils/entity db [:file/path path])
-          :file/last-modified-at))))
-
 (defn file-exists?
   [repo path]
   (when (and repo path)
