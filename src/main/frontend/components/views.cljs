@@ -35,7 +35,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]

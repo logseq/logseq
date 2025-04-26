@@ -1061,7 +1061,7 @@
         (inline-text {} :markdown (str value'))))))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? property-position table-view? show-popup! _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
