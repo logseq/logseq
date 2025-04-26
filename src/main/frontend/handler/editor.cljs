@@ -4029,9 +4029,10 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
-     (and (:view? config)
+     (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
-              (some? (:block/_parent block)))))))
+              (some? (:block/_parent block))
+              (:table-block-title? config))))))
 
 (defn batch-set-heading!
   [block-ids heading]
