@@ -1061,7 +1061,7 @@
         (inline-text {} :markdown (str value'))))))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text other-position? property-position table-view? _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? property-position table-view? show-popup! _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
         tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
         inline-text-cp (fn [content]
@@ -1081,14 +1081,31 @@
                 ;; support this case and maybe other complex cases.
                 (not (string/includes? (:block/title value) "[["))))
        (when value
-         (rum/with-key
-           (page-cp {:disable-preview? true
+         (let [opts {:disable-preview? true
                      :tag? tag?
                      :property-position property-position
-                     :meta-click? other-position?
+                     :other-position? other-position?
                      :table-view? table-view?
-                     :ignore-alias? (= :block/alias (:db/ident property))} value)
-           (:db/id value)))
+                     :ignore-alias? (= :block/alias (:db/ident property))
+                     :on-context-menu
+                     (fn [e]
+                       (util/stop e)
+                       (shui/popup-show! (.-target e)
+                                         (fn []
+                                           [:<>
+                                            (shui/dropdown-menu-item
+                                             {:key "open"
+                                              :on-click #(route-handler/redirect-to-page! (:block/uuid value))}
+                                             (str "Open " (:block/title value)))
+
+                                            (shui/dropdown-menu-item
+                                             {:key "open sidebar"
+                                              :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id value) :page)}
+                                             "Open in sidebar")])
+                                         {:as-dropdown? true
+                                          :content-props {:on-click (fn [] (shui/popup-hide!))}
+                                          :align "start"}))}]
+           (rum/with-key (page-cp opts value) (:db/id value))))
 
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
@@ -1342,16 +1359,17 @@
       (select-cp {})
       (let [toggle-fn shui/popup-hide!
             content-fn (fn [{:keys [_id content-props]}]
-                         (select-cp {:content-props content-props}))]
+                         (select-cp {:content-props content-props}))
+            show-popup! (fn [^js e]
+                          (let [target (.-target e)]
+                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                              (shui/popup-show! (rum/deref *el) content-fn
+                                                {:as-dropdown? true :as-content? false
+                                                 :align "start" :auto-focus? true}))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
-          :on-click (fn [^js e]
-                      (let [target (.-target e)]
-                        (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                          (shui/popup-show! (rum/deref *el) content-fn
-                                            {:as-dropdown? true :as-content? false
-                                             :align "start" :auto-focus? true}))))
+          :on-click show-popup!
           :on-key-down (fn [^js e]
                          (case (.-key e)
                            (" " "Enter")
@@ -1365,7 +1383,9 @@
            (if (and (seq items) not-empty-value?)
              (concat
               (->> (for [item items]
-                     (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                     (rum/with-key
+                       (select-item property type item (assoc opts :show-popup! show-popup!))
+                       (or (:block/uuid item) (str item))))
                    (interpose [:span.opacity-50.-ml-1 ","]))
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
