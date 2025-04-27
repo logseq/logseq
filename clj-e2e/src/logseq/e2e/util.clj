@@ -1,7 +1,6 @@
 (ns logseq.e2e.util
   (:refer-clojure :exclude [type])
-  (:require [clojure.string :as string]
-            [clojure.test :refer [is]]
+  (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [wally.main :as w]
@@ -87,25 +86,9 @@
   []
   (count-elements ".ls-page-blocks .ls-block"))
 
-(defn new-block
-  [title]
-  (k/enter)
-  (input title))
-
-(defn save-block
-  [text]
-  (input text))
-
 (defn exit-edit
   []
   (k/esc))
-
-(defn delete-blocks
-  "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
-  []
-  (let [editor (get-editor)]
-    (when editor (exit-edit))
-    (k/backspace)))
 
 (defn get-text
   [locator]
@@ -140,25 +123,6 @@
 (defn outdent
   []
   (indent-outdent false))
-
-(defn open-last-block
-  []
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
-
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (open-last-block)
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
 
 (defn repeat-keyboard
   [n shortcut]

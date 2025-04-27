@@ -69,14 +69,14 @@
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
-                                                        :aria-label (str "e2e " GraphName)}
+                                                        :aria-label (str "e2e " url)}
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
                                (fn []
                                  (when-not (state/sub :rtc/downloading-graph-uuid)
                                    (cond
-                                     root                                         ; exists locally
+                                     root ; exists locally
                                      (state/pub-event! [:graph/switch url])
 
                                      (and db-based? remote?)
