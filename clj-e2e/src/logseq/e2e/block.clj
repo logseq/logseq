@@ -1,0 +1,41 @@
+(ns logseq.e2e.block
+  (:require [logseq.e2e.assert :as assert]
+            [logseq.e2e.keyboard :as k]
+            [logseq.e2e.util :as util]
+            [wally.main :as w]
+            [clojure.string :as string]))
+
+(defn open-last-block
+  []
+  (util/double-esc)
+  (assert/assert-in-normal-mode?)
+  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+
+(defn new-block
+  [title]
+  (k/enter)
+  (util/input title))
+
+(defn save-block
+  [text]
+  (util/input text))
+
+(defn delete-blocks
+  "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
+  []
+  (let [editor (util/get-editor)]
+    (when editor (util/exit-edit))
+    (k/backspace)))
+
+;; TODO: support tree
+(defn new-blocks
+  [titles]
+  (open-last-block)
+  (let [value (util/get-edit-content)]
+    (if (string/blank? value)           ; empty block
+      (do
+        (save-block (first titles))
+        (doseq [title (rest titles)]
+          (new-block title)))
+      (doseq [title titles]
+        (new-block title)))))
