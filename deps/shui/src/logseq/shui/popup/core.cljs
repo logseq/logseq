@@ -71,8 +71,6 @@
             (d/add-class! target "ls-popup-closed")
             (.focus target)))))))
 
-(defonce *last-show-target (atom nil))
-
 (defn show!
   [^js event content & {:keys [id as-mask? as-dropdown? as-content?
                                focus-trigger? align root-props content-props
@@ -100,30 +98,28 @@
                                 (/ width 2)))
                       (- (- bottom height)
                         ;; minus default offset
-                        (if as-mask? 6 0))
+                         (if as-mask? 6 0))
                       width (if as-mask? 1 height)])
                    :else [0 0])]
-    (reset! *last-show-target @*target)
-    (js/setTimeout #(reset! *last-show-target nil) 64)
     (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
     (let [on-before-hide (fn []
                            (some-> on-after-hide (apply nil))
                            (when-let [^js trigger (and (not (false? focus-trigger?))
-                                                    (some-> @*target (.closest "[tabindex='0']")))]
+                                                       (some-> @*target (.closest "[tabindex='0']")))]
                              (js/setTimeout #(.focus trigger) 16)))]
       (upsert-popup!
-        (merge opts
-          {:id id :target (deref *target)
-           :trigger-id trigger-id
-           :open? true :content content :position position
-           :as-dropdown? as-dropdown?
-           :as-content? as-content?
-           :root-props root-props
-           :on-before-hide on-before-hide
-           :on-after-hide on-after-hide
-           :content-props (cond-> content-props
-                            (not (nil? align))
-                            (assoc :align (name align)))})))))
+       (merge opts
+              {:id id :target (deref *target)
+               :trigger-id trigger-id
+               :open? true :content content :position position
+               :as-dropdown? as-dropdown?
+               :as-content? as-content?
+               :root-props root-props
+               :on-before-hide on-before-hide
+               :on-after-hide on-after-hide
+               :content-props (cond-> content-props
+                                (not (nil? align))
+                                (assoc :align (name align)))})))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
