@@ -64,6 +64,11 @@
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
+(defn search-and-click
+  [search-text]
+  (search search-text)
+  (w/click (w/get-by-label search-text)))
+
 (defn new-page
   [title]
   ;; Question: what's the best way to close all the popups?
@@ -147,3 +152,7 @@
   (input password)
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
+
+(defn goto-journals
+  []
+  (search-and-click "Go to journals"))

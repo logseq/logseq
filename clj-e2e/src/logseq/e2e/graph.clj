@@ -9,13 +9,11 @@
 
 (defn goto-all-graphs
   []
-  (util/search "go to all graphs")
-  (w/click (w/get-by-label "Go to all graphs")))
+  (util/search-and-click "Go to all graphs"))
 
 (defn new-graph
   [graph-name enable-sync?]
-  (util/search "add a db graph")
-  (w/click (w/get-by-label "Add a DB graph"))
+  (util/search-and-click "Add a DB graph")
   (w/wait-for "h2:text(\"Create a new graph\")")
   (w/click "input[placeholder=\"your graph name\"]")
   (util/input graph-name)
