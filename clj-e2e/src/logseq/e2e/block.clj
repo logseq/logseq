@@ -1,9 +1,9 @@
 (ns logseq.e2e.block
-  (:require [logseq.e2e.assert :as assert]
+  (:require [clojure.string :as string]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [clojure.string :as string]))
+            [wally.main :as w]))
 
 (defn open-last-block
   []
@@ -39,3 +39,9 @@
           (new-block title)))
       (doseq [title titles]
         (new-block title)))))
+
+(defn assert-blocks-visible
+  "blocks - coll of :block/title"
+  [blocks]
+  (doseq [block blocks]
+    (assert/assert-is-visible (format ".ls-page-blocks .ls-block :text('%s')" block))))
