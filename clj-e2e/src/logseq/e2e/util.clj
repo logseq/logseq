@@ -156,3 +156,8 @@
 (defn goto-journals
   []
   (search-and-click "Go to journals"))
+
+(defn refresh-until-graph-loaded
+  []
+  (w/refresh)
+  (assert/assert-graph-loaded?))
