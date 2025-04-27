@@ -2,6 +2,7 @@
   (:require ["@capacitor/app" :refer [App]]
             ["@capacitor/status-bar" :refer [StatusBar Style]]
             ["./externals.js"]
+            [clojure.string :as string]
             [frontend.db.react :as react]
             [frontend.util :as util]
             [rum.core :as rum]
@@ -15,6 +16,7 @@
             [frontend.state :as fstate]
             [frontend.db.utils :as db-util]
             [frontend.date :as frontend-date]
+            [frontend.handler.repo :as repo-handler]
             [goog.date :as gdate]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
@@ -109,7 +111,17 @@
         (create-page-input {:close! #(set-page-input-open? false)
                             :reload-pages! #(set-reload! (inc reload))}))
       [:div.pt-6.px-6
-       [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
+       [:div.flex.justify-between.items-center
+        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
+
+        (ionic/ion-button {:size "small"
+                           :fill "clear"
+                           :on-click (fn []
+                                       (when-let [db-name (js/prompt "Create new db")]
+                                         (when-not (string/blank? db-name)
+                                           (-> (repo-handler/new-db! db-name)
+                                             (p/then #(set-reload! (inc reload)))))))}
+          [:span {:slot "icon-only"} (ionic/tabler-icon "plus" {:size 22})])]
        [:h2.py-1.text-lg (fstate/get-current-repo)]
 
        [:div.flex.justify-between.items-center.mt-4
