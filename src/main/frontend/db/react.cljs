@@ -90,7 +90,7 @@
         q (if util/node-test?
             (fn [query inputs] (apply d/q query db inputs))
             (fn [query inputs]
-              (let [q-f #(apply db-async-util/<q repo {} (cons query inputs))]
+              (let [q-f #(apply db-async-util/<q repo {:transact-db? false} (cons query inputs))]
                 (if built-in-query?
                   ;; delay built-in-queries to not block journal rendering
                   (p/let [_ (p/delay 100)]
