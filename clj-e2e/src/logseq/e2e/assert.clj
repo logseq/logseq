@@ -27,4 +27,5 @@
 
 (defn assert-graph-loaded?
   []
+  ;; there's some blocks visible now
   (assert-is-visible "span.block-title-wrap"))

@@ -28,34 +28,30 @@
       (is (= 3 (count pages)))
       (add-blocks-and-check-on-other-tabs blocks-to-add p1 [p2 p3])))
 
-  (comment
-    ;; this test is failing, produce err:
-    ;;Error caught by UI!
-    ;;Error: Assert failed: (db/db? db)
-    ;; ...
-    (testing "add new graphs, and do switching graphs on tabs"
-      (let [[p1 p2 p3 :as pages] (pw-page/get-pages fixtures/*pw-ctx*)]
+  (testing "add new graphs and switch graphs + edit + check on tabs"
+    (let [[p1 p2 p3] (pw-page/get-pages fixtures/*pw-ctx*)]
+      (letfn [(switch-to-graph-then-edit-and-check [graph-name]
+                (w/with-page p2
+                  (util/goto-journals)
+                  (assert/assert-in-normal-mode?)
+                  (graph/switch-graph graph-name))
+                (w/with-page p3
+                  (util/goto-journals)
+                  (assert/assert-in-normal-mode?)
+                  (graph/switch-graph graph-name))
+                (w/with-page p1
+                  (util/goto-journals)
+                  (assert/assert-in-normal-mode?)
+                  (graph/switch-graph graph-name))
+                (let [graph-new-blocks (map #(str graph-name "-b1-" %) (range 5))]
+                  (add-blocks-and-check-on-other-tabs graph-new-blocks p1 [p2 p3])))]
         (w/with-page p1
           (graph/new-graph "graph1" false)
           (graph/new-graph "graph2" false)
           (graph/new-graph "graph3" false))
-        (w/with-page p2
-          ;; FIXME: since all-graphs isn't auto-update when other tabs add new graphs, so refresh here
-          (w/refresh)
-          (util/goto-journals)
-          (assert/assert-in-normal-mode?)
-          (graph/switch-graph "graph1"))
-        (w/with-page p3
-          ;; FIXME: since all-graphs isn't auto-update when other tabs add new graphs, so refresh here
-          (w/refresh)
-          (util/goto-journals)
-          (assert/assert-in-normal-mode?)
-          (graph/switch-graph "graph1"))
-        (w/with-page p1
-          (util/goto-journals)
-          (assert/assert-in-normal-mode?)
-          (graph/switch-graph "graph1"))
-        (let [graph1-new-blocks1 (map #(str "graph1-b1-" %) (range 5))
-              graph1-new-blocks2 (map #(str "graph1-b2-" %) (range 5))
-              graph1-new-blocks3 (map #(str "graph1-b3-" %) (range 5))]
-          (add-blocks-and-check-on-other-tabs graph1-new-blocks1 p1 [p2 p3]))))))
+        ;; FIXME: since all-graphs isn't auto-update when other tabs add new graphs, so refresh here
+        (w/with-page p2 (util/refresh-until-graph-loaded))
+        (w/with-page p3 (util/refresh-until-graph-loaded))
+        (switch-to-graph-then-edit-and-check "graph1")
+        (switch-to-graph-then-edit-and-check "graph2")
+        (switch-to-graph-then-edit-and-check "graph3")))))
