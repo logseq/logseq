@@ -41,6 +41,7 @@
               :on-pointer-down (fn [e]
                                  (util/stop e)
                                  (on-copy)
+                                 (state/clear-selection!)
                                  (state/pub-event! [:editor/hide-action-bar])))
        "Copy")
       (when db-graph?
