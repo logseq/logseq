@@ -35,10 +35,6 @@
       @apply whitespace-nowrap;
     }
 
-    :focus {
-        @apply bg-gray-03;
-    }
-
     .table-block-title, .block-head-wrap a {
       @apply text-ellipsis overflow-hidden;
     }

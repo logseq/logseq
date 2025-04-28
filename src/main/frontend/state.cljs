@@ -1230,7 +1230,7 @@ Similar to re-frame subscriptions"
         removed (set/difference selected-ids new-ids)]
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
-      (doseq [node (array-seq (gdom/getElementsByClass (str "id" id)))]
+      (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
         (dom/remove-class! node "selected")))))
 
 (defn set-selection-blocks!

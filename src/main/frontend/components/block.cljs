@@ -3534,8 +3534,7 @@
        :data-is-property (ldb/property? block)
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
-       :class (str "id" uuid " "
-                   (when selected? " selected")
+       :class (str (when selected? "selected")
                    (when pre-block? " pre-block")
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")

@@ -691,6 +691,7 @@
       {:key (str (:db/id row))
        :data-state (when (row-selected? row) "selected")
        :data-id (:db/id row)
+       :blockid (str (:block/uuid row))
        :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
      (when (seq pinned-columns)
        [:div.sticky-columns.flex.flex-row

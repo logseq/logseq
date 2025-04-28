@@ -236,7 +236,7 @@
 
 (defn highlight-block!
   [block-uuid]
-  (let [blocks (array-seq (js/document.getElementsByClassName (str "id" block-uuid)))]
+  (let [blocks (util/get-blocks-by-id block-uuid)]
     (doseq [block blocks]
       (dom/add-class! block "block-highlight"))))
 
@@ -2685,20 +2685,10 @@
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected {:up-down? true
-                                   :exclude-property? true})
-        table-row? (table-row-container? sibling-block)
-        clear-selected-state! (fn []
-                                (doseq [node selected-blocks]
-                                  (dom/remove-class! node "selected")))]
-    (when (and sibling-block (or (dom/attr sibling-block "blockid") table-row?))
+                                   :exclude-property? true})]
+    (when (and sibling-block (dom/attr sibling-block "blockid"))
       (util/scroll-to-block sibling-block)
-      (clear-selected-state!)
-      (if table-row?
-        (do
-          (state/exit-editing-and-set-selected-blocks! [sibling-block])
-          (.focus sibling-block)
-          (dom/add-class! sibling-block "selected"))
-        (state/exit-editing-and-set-selected-blocks! [sibling-block])))))
+      (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- active-jtrigger?
   []
@@ -3916,7 +3906,7 @@
                                              :collapse? true})]
        (->> blocks
             (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
-            (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
+            (mapcat (fn [b] (util/get-blocks-by-id (:block/uuid b))))
             state/exit-editing-and-set-selected-blocks!)))
    (state/set-state! :selection/selected-all? true)))
 
@@ -3931,7 +3921,7 @@
       (do
         (util/stop e)
         (state/exit-editing-and-set-selected-blocks!
-         [(gdom/getElementByClass (str "id" (:block/uuid edit-block)))]))
+         [(util/get-first-block-by-id (:block/uuid edit-block))]))
 
       edit-block
       nil
@@ -3959,7 +3949,8 @@
                   nil
 
                   (and parent (:block/parent parent))
-                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (str "id" (:block/uuid parent)))])
+                  (state/exit-editing-and-set-selected-blocks!
+                   [(util/get-first-block-by-id (:block/uuid parent))])
 
                   (:block/name parent)
                   ;; page block
