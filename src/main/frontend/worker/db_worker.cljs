@@ -31,6 +31,7 @@
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -357,12 +358,14 @@
             (d/transact! conn initial-data {:initial-db? true})))
 
         (try
-          (when-let [missing-addresses (seq (find-missing-addresses db))]
-            (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses})))
+          (when-not import-type
+            (when-let [missing-addresses (seq (find-missing-addresses db))]
+              (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
 
           (db-migrate/migrate conn search-db)
 
           (catch :default _e
+            (log/error "DB migrate failed, retrying")
             (when db-based?
               (rebuild-db-from-datoms! conn db import-type)
               (db-migrate/migrate conn search-db))))
@@ -851,16 +854,17 @@
          :rtc-sync-state])))
 
 (defn- <init-service!
-  [graph]
+  [graph import?]
   (let [[prev-graph service] @*service]
     (some-> prev-graph close-db!)
     (when graph
-      (if (= graph prev-graph)
+      (if (and (= graph prev-graph) service)
         service
         (p/let [service (shared-service/<create-service graph
                                                         (bean/->js fns)
                                                         #(on-become-master graph)
-                                                        broadcast-data-types)]
+                                                        broadcast-data-types
+                                                        {:import? import?})]
           (assert (p/promise? (get-in service [:status :ready])))
           (reset! *service [graph service])
           service)))))
@@ -880,9 +884,8 @@
                                 (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
-                                (let [[graph _opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph)]
-                                    (get-in service [:status :ready])
+                                (let [[graph opts] (ldb/read-transit-str (last args))]
+                                  (p/let [service (<init-service! graph (some? (:import-type opts)))]
                                       ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
