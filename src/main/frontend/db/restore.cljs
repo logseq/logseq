@@ -15,6 +15,7 @@
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
           {:keys [schema initial-data]} (persist-db/<fetch-init-data repo opts)
+          _ (state/set-current-repo! repo)
           ;; Without valid schema app fails hard downstream
           _ (when (nil? schema)
               (throw (ex-info "No valid schema found when reloading db" {:repo repo})))
