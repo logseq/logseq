@@ -2,12 +2,21 @@
   (:require [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as fstate]
-            ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]
             [capacitor.ionic :as ionic]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
+
+(rum/defc safe-page-container
+  [content {:keys [header-content page-props content-props]}]
+  (ionic/ion-page
+    (merge {:class "app-safe-page"} page-props)
+    (some-> header-content (ionic/ion-header))
+    (ionic/ion-content
+      (merge {:class "ion-padding"} content-props)
+      content)))
 
 (rum/defc notification-clear-all
   []
@@ -91,3 +100,14 @@
                             (notification-clear-all))))
             items (if clear-all (cons clear-all notifications) notifications)]
         (doall items)))))
+
+(rum/defc simple-modal
+  [{:keys [close! as-page? modal-props]} children]
+  (let [{:keys [class]} modal-props]
+    (ionic/ion-modal
+      (merge modal-props
+        {:is-open true
+         :onWillDismiss (fn [] (close!))
+         :class (str class (when (not (true? as-page?)) " ion-datetime-button-overlay"))})
+      (if (fn? children)
+        (children) children))))
