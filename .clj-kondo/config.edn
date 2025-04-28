@@ -9,7 +9,7 @@
 
   all-frontend
   {:linters {:discouraged-namespace
-             {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+             {logseq.db.common.sqlite-cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
               logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}}}
 
   ;; false positive with match/match and _
@@ -195,7 +195,7 @@
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
              logseq.db.sqlite.build sqlite-build
-             logseq.db.sqlite.cli sqlite-cli
+             logseq.db.common.sqlite-cli sqlite-cli
              logseq.db.sqlite.create-graph sqlite-create-graph
              logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util

@@ -7,7 +7,7 @@
             [clojure.pprint :as pprint]
             [clojure.string :as string]
             [logseq.common.config :as common-config]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.export :as sqlite-export]
             [nbb.core :as nbb]))
 
