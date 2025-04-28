@@ -11,7 +11,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -349,9 +349,16 @@
   (or (d/restore-conn storage)
       (d/create-conn schema {:storage storage})))
 
+(defonce file-version-prefix "logseq_local_")
+
+(defn local-file-based-graph?
+  [s]
+  (and (string? s)
+       (string/starts-with? s file-version-prefix)))
+
 (defn sanitize-db-name
   [db-name]
-  (if (string/starts-with? db-name sqlite-util/file-version-prefix)
+  (if (string/starts-with? db-name file-version-prefix)
     (-> db-name
         (string/replace ":" "+3A+")
         (string/replace "/" "++"))

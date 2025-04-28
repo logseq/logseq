@@ -25,7 +25,7 @@
              logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
              logseq.db.file-based.entity-util file-entity-util
-             logseq.db.frontend.entity-plus entity-plus
+             logseq.db.common.entity-plus entity-plus
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate

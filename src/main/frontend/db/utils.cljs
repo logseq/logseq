@@ -4,7 +4,7 @@
             [frontend.db.conn :as conn]
             [frontend.state :as state]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [logseq.db.common.entity-plus :as entity-plus]))
 
 ;; transit serialization
 
