@@ -2,7 +2,7 @@
   "Main ns for providing test fns for DB graphs"
   (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.build :as sqlite-build]

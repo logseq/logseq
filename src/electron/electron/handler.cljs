@@ -240,7 +240,7 @@
          (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
          (map (fn [s]
-                (if (string/starts-with? s sqlite-util/file-version-prefix)
+                (if (string/starts-with? s sqlite-common-db/file-version-prefix)
                   s
                   (str sqlite-util/db-version-prefix s)))))))
 

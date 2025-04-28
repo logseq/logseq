@@ -37,7 +37,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -334,7 +334,7 @@
       (db-migrate/migrate-sqlite-db db)
       (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
-      (let [schema (sqlite-util/get-schema repo)
+      (let [schema (ldb/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
