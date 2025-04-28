@@ -71,5 +71,10 @@
              'logseq.e2e.multi-tabs-test
              'logseq.e2e.outliner-test
              'logseq.e2e.rtc-basic-test)
+
+  (do
+    (reset! config/*headless true)
+    (dotimes [i 10]
+      (run-outliner-test)))
   ;;
   )
