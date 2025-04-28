@@ -2,6 +2,7 @@
   (:require [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as fstate]
+            [medley.core :as medley]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]
             [capacitor.ionic :as ionic]))
@@ -101,13 +102,58 @@
             items (if clear-all (cons clear-all notifications) notifications)]
         (doall items)))))
 
+(defonce *modals (atom []))
+(defonce ^:private *id (atom 0))
+(defonce ^:private gen-id #(reset! *id (inc @*id)))
+
 (rum/defc simple-modal
-  [{:keys [close! as-page? modal-props]} children]
+  [{:keys [close! as-page? modal-props]} content]
   (let [{:keys [class]} modal-props]
     (ionic/ion-modal
       (merge modal-props
         {:is-open true
          :onWillDismiss (fn [] (close!))
          :class (str class (when (not (true? as-page?)) " ion-datetime-button-overlay"))})
-      (if (fn? children)
-        (children) children))))
+      (if (fn? content)
+        (content) content))))
+
+(defn get-modal
+  ([] (some-> @*modals last))
+  ([id]
+   (when id
+     (some->> (medley/indexed @*modals)
+       (filter #(= id (:id (second %)))) (first)))))
+
+(defn- upsert-modal!
+  [config]
+  (when-let [id (:id config)]
+    (if-let [[index config'] (get-modal id)]
+      (swap! *modals assoc index (merge config' config))
+      (swap! *modals conj config)) id))
+
+(defn- delete-modal!
+  [id]
+  (when-let [[index _] (get-modal id)]
+    (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
+
+(defn open-modal!
+  [content & {:keys [id type] :as props}]
+  (upsert-modal!
+    (merge props
+      {:id (or id (gen-id))
+       :type (or type :default)                             ;; :alert :confirm :page
+       :as-page? (= type :page)
+       :content content})))
+
+(defn close-modal!
+  ([] (some-> @*modals (last) :id (close-modal!)))
+  ([id] (delete-modal! id)))
+
+(rum/defc install-modals []
+  (let [_ (r/use-atom *modals)]
+    [:<>
+     (for [{:keys [id content] :as props} @*modals
+           :let [close! #(close-modal! id)
+                 props' (assoc props :close! close!)]]
+       (simple-modal props'
+         (if (fn? content) (content props') content)))]))
