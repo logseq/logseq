@@ -31,7 +31,7 @@
             [electron.window :as win]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
 
@@ -240,7 +240,7 @@
          (remove (fn [s] (= s db/unlinked-graphs-dir)))
          (map graph-name->path)
          (map (fn [s]
-                (if (string/starts-with? s sqlite-common-db/file-version-prefix)
+                (if (string/starts-with? s common-sqlite/file-version-prefix)
                   s
                   (str sqlite-util/db-version-prefix s)))))))
 
@@ -294,7 +294,7 @@
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
     (db/unlink-graph! graph)
-    (let [old-transit-path (node-path/join (get-graphs-dir) (str (sqlite-common-db/sanitize-db-name graph) ".transit"))]
+    (let [old-transit-path (node-path/join (get-graphs-dir) (str (common-sqlite/sanitize-db-name graph) ".transit"))]
       (when (fs/existsSync old-transit-path)
         (fs/unlinkSync old-transit-path)))))
 

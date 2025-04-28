@@ -35,8 +35,9 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -329,19 +330,19 @@
                                        :client-ops client-ops-db})
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
-      (sqlite-common-db/create-kvs-table! db)
-      (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
+      (common-sqlite/create-kvs-table! db)
+      (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
       (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (let [schema (ldb/get-schema repo)
-            conn (sqlite-common-db/get-storage-conn storage schema)
+            conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
                 (let [data (map (fn [datom]
                                   [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
                   (d/transact! conn data {:initial-db? true})))
-            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn
+            client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
                                                      client-op/schema-in-db))
             initial-data-exists? (when (nil? datoms)
@@ -492,7 +493,7 @@
                 id)]
       (some->> eid
                (d/pull @conn selector)
-               (sqlite-common-db/with-parent @conn)))))
+               (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
 (def ^:private get-blocks-with-cache
@@ -506,7 +507,7 @@
      (when db
        (mapv (fn [{:keys [id opts]}]
                (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                 (-> (sqlite-common-db/get-block-and-children db id' opts)
+                 (-> (common-initial-data/get-block-and-children db id' opts)
                      (assoc :id id)))) requests)))))
 
 (def-thread-api :thread-api/get-blocks
@@ -604,7 +605,7 @@
 (def-thread-api :thread-api/get-initial-data
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (sqlite-common-db/get-initial-data @conn)))
+    (common-initial-data/get-initial-data @conn)))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]

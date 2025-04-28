@@ -173,10 +173,12 @@
              logseq.common.util.namespace ns-util
              logseq.common.util.page-ref page-ref
              logseq.db ldb
+             logseq.db.common.entity-plus entity-plus
              logseq.db.common.entity-util common-entity-util
+             logseq.db.common.initial-data common-initial-data
              logseq.db.common.order db-order
              logseq.db.common.property-util db-property-util
-             logseq.db.common.sqlite sqlite-common-db
+             logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
              logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
@@ -185,7 +187,6 @@
              logseq.db.frontend.content db-content
              logseq.db.frontend.db db-db
              logseq.db.frontend.db-ident db-ident
-             logseq.db.common.entity-plus entity-plus
              logseq.db.frontend.entity-util entity-util
              logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.property db-property
