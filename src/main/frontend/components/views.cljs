@@ -653,14 +653,32 @@
   [cell-render-f cell-placeholder]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)]
-    [:div.h-full {:ref (.-ref state)}
+    [:div.h-full
+     {:ref (.-ref state)}
      (if in-view?
        (cell-render-f)
        cell-placeholder)]))
 
+(defn- click-cell
+  [node]
+  (when-let [trigger (or (dom/sel1 node ".jtrigger")
+                         (dom/sel1 node ".table-block-title"))]
+    (.click trigger)))
+
+(rum/defc table-cell-container
+  [cell-opts body]
+  (let [*ref (hooks/use-ref nil)]
+    (shui/table-cell
+     (assoc cell-opts
+            :tabIndex 0
+            :ref *ref
+            :on-click (fn [] (click-cell (rum/deref *ref))))
+     body)))
+
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
-  (let [pinned-columns (get-in table [:state :pinned-columns])
+  (let [*ref (hooks/use-ref nil)
+        pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
                            (conj (vec unpinned)
@@ -678,21 +696,55 @@
                                       :select? select?
                                       :add-property? add-property?
                                       :style style}
-                           cell-placeholder (shui/table-cell cell-opts nil)]
+                           cell-placeholder (lazy-table-cell cell-opts nil)]
                        (if (and scrolling? (not (:block/title row)))
                          cell-placeholder
                          (when-let [render (get column :cell)]
                            (lazy-table-cell
-                            (fn [] (shui/table-cell cell-opts (render table row column style)))
+                            (fn []
+                              (table-cell-container
+                               cell-opts (render table row column style)))
                             cell-placeholder)))))]
     (shui/table-row
      (merge
       props
       {:key (str (:db/id row))
+       :tabIndex 0
+       :ref *ref
        :data-state (when (row-selected? row) "selected")
        :data-id (:db/id row)
        :blockid (str (:block/uuid row))
-       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
+       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
+       :on-blur (fn [_e] (dom/remove-class! (rum/deref *ref) "selected"))
+       :on-key-down (fn [e]
+                      (let [container (rum/deref *ref)]
+                        (when (dom/has-class? container "selected")
+                          (case (util/ekey e)
+                            "Enter"
+                            (do
+                              (state/exit-editing-and-set-selected-blocks! [])
+                              (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
+                              (util/stop e))
+                            "ArrowLeft"
+                            (do
+
+                              (when-let [first-cell (->> (dom/sel container ".ls-table-cell")
+                                                         (remove (fn [node]
+                                                                   (some? (dom/sel1 node ".ui__checkbox"))))
+                                                         first)]
+                                (state/clear-selection!)
+                                (dom/remove-class! container "selected")
+                                (dom/add-class! first-cell "selected"))
+                              (util/stop e))
+                            "ArrowRight"
+                            (do
+                              (state/clear-selection!)
+                              (.blur container)
+                              (dom/remove-class! container "selected")
+                              (when-let [last-cell (last (dom/sel container ".ls-table-cell"))]
+                                (.focus last-cell))
+                              (util/stop e))
+                            nil))))})
      (when (seq pinned-columns)
        [:div.sticky-columns.flex.flex-row
         (map #(row-cell-f % {}) pinned-columns)])

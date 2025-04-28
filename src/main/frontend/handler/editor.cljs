@@ -2672,10 +2672,6 @@
       (util/scroll-to-block block)
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
-(defn- table-row-container?
-  [node]
-  (when node (dom/has-class? node "ls-table-row")))
-
 (defn- select-up-down [direction]
   (let [selected-blocks (state/get-selection-blocks)
         selected (case direction

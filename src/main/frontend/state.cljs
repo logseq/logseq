@@ -1201,13 +1201,15 @@ Similar to re-frame subscriptions"
 
 (defn dom-clear-selection!
   []
-  (doseq [node (dom/by-class "ls-block selected")]
+  (doseq [node (dom/by-class "selected")]
     (dom/remove-class! node "selected")))
 
 (defn mark-dom-blocks-as-selected
   [nodes]
   (doseq [node nodes]
-    (dom/add-class! node "selected")))
+    (dom/add-class! node "selected")
+    (when (dom/has-class? node "ls-table-row")
+      (.focus node))))
 
 (defn get-events-chan
   []
@@ -1231,7 +1233,9 @@ Similar to re-frame subscriptions"
     (mark-dom-blocks-as-selected blocks)
     (doseq [id removed]
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (dom/remove-class! node "selected")))))
+        (dom/remove-class! node "selected")
+        (when (dom/has-class? node "ls-table-row")
+          (.blur node))))))
 
 (defn set-selection-blocks!
   ([blocks]
