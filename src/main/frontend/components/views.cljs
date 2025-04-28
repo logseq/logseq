@@ -191,11 +191,18 @@
 (rum/defc block-title
   "Used on table view"
   [block {:keys [create-new-block width]}]
-  (let [inline-title (state/get-component :block/inline-title)
+  (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
+        [focus-timeout set-focus-timeout!] (hooks/use-state nil)
+        inline-title (state/get-component :block/inline-title)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)]
+    (hooks/use-effect!
+     (fn []
+       #(some-> focus-timeout js/clearTimeout))
+     [])
     [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer.items-center
-     {:on-mouse-over #(set-opacity! 100)
+     {:ref *ref
+      :on-mouse-over #(set-opacity! 100)
       :on-mouse-out #(set-opacity! 0)
       :on-click (fn [e]
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))
@@ -232,7 +239,12 @@
                                              "opacity-" opacity)}
                                 (ui/icon "arrow-right"))]))
                           {:id :ls-table-block-editor
-                           :as-mask? true})
+                           :as-mask? true
+                           :on-after-hide (fn []
+                                            (let [node (rum/deref *ref)
+                                                  cell (util/rec-get-node node "ls-table-cell")]
+                                              (state/exit-editing-and-set-selected-blocks! [cell])
+                                              (set-focus-timeout! (js/setTimeout #(.focus cell) 100))))})
                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
        [:div
@@ -671,14 +683,15 @@
   (let [row (util/rec-get-node cell "ls-table-row")
         cells (dom/sel row ".ls-table-cell")
         idx (.indexOf cells cell)
+        rows-container (util/rec-get-node row "ls-table-rows")
+        rows (dom/sel rows-container ".ls-table-row")
+        row-idx (.indexOf rows row)
+        container-left (.-left (.getBoundingClientRect rows-container))
         next-cell (case direction
                     :left (if (> idx 1)               ; don't focus on checkbox
                             (nth cells (dec idx))
                             ;; last cell in the prev row
-                            (let [table (util/rec-get-node row "ls-table")
-                                  rows (dom/sel table ".ls-table-row")
-                                  row-idx (.indexOf rows row)
-                                  prev-row (when (> row-idx 0)
+                            (let [prev-row (when (> row-idx 0)
                                              (nth rows (dec row-idx)))]
                               (when prev-row
                                 (let [cells (dom/sel prev-row ".ls-table-cell")]
@@ -686,34 +699,29 @@
                     :right (if (< idx (dec (count cells)))
                              (nth cells (inc idx))
                              ;; first cell in the next row
-                             (let [table (util/rec-get-node row "ls-table")
-                                   rows (dom/sel table ".ls-table-row")
-                                   row-idx (.indexOf rows row)
-                                   next-row (when (< row-idx (dec (count rows)))
+                             (let [next-row (when (< row-idx (dec (count rows)))
                                               (nth rows (inc row-idx)))]
                                (when next-row
                                  (let [cells (dom/sel next-row ".ls-table-cell")]
                                    (second cells)))))
-                    :up (let [table (util/rec-get-node row "ls-table")
-                              rows (dom/sel table ".ls-table-row")
-                              row-idx (.indexOf rows row)
-                              prev-row (when (> row-idx 0)
+                    :up (let [prev-row (when (> row-idx 0)
                                          (nth rows (dec row-idx)))]
                           (when prev-row
                             (let [cells (dom/sel prev-row ".ls-table-cell")]
                               (nth cells idx))))
-                    :down (let [table (util/rec-get-node row "ls-table")
-                                rows (dom/sel table ".ls-table-row")
-                                row-idx (.indexOf rows row)
-                                next-row (when (< row-idx (dec (count rows)))
+                    :down (let [next-row (when (< row-idx (dec (count rows)))
                                            (nth rows (inc row-idx)))]
                             (when next-row
                               (let [cells (dom/sel next-row ".ls-table-cell")]
                                 (nth cells idx)))))]
     (when next-cell
-      (state/clear-selection!)
-      (dom/add-class! next-cell "selected")
-      (.focus next-cell))))
+      (let [next-cell-left (.-left (.getBoundingClientRect next-cell))]
+        (state/clear-selection!)
+        (dom/add-class! next-cell "selected")
+        (.focus next-cell)
+        (when (< next-cell-left container-left)
+          (.scrollIntoView next-cell #js {:inline "center"
+                                          :block "nearest"}))))))
 
 (rum/defc table-cell-container
   [cell-opts body]
@@ -728,13 +736,22 @@
                              (case (util/ekey e)
                                "Escape"
                                (do
-                                 (dom/remove-class! container "selected")
-                                 (let [row (util/rec-get-node container "ls-table-row")]
-                                   (state/exit-editing-and-set-selected-blocks! [row]))
+                                 (if (util/input? (.-target e))
+                                   (do
+                                     (state/exit-editing-and-set-selected-blocks! [container])
+                                     (.focus container))
+                                   (do
+                                     (dom/remove-class! container "selected")
+                                     (let [row (util/rec-get-node container "ls-table-row")]
+                                       (state/exit-editing-and-set-selected-blocks! [row]))))
                                  (util/stop e))
                                "Enter"
                                (do
-                                 (click-cell container)
+                                 (if (util/input? (.-target e)) ; number
+                                   (do
+                                     (state/exit-editing-and-set-selected-blocks! [container])
+                                     (.focus container))
+                                   (click-cell container))
                                  (util/stop e))
                                "ArrowUp"
                                (navigate-to-cell e container :up)
@@ -787,7 +804,6 @@
        :data-id (:db/id row)
        :blockid (str (:block/uuid row))
        :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
-       :on-blur (fn [_e] (dom/remove-class! (rum/deref *ref) "selected"))
        :on-key-down (fn [e]
                       (let [container (rum/deref *ref)]
                         (when (dom/has-class? container "selected")
@@ -817,6 +833,10 @@
                                 (dom/remove-class! container "selected")
                                 (dom/add-class! cell "selected")
                                 (.focus cell))
+                              (util/stop e))
+                            "Escape"
+                            (do
+                              (state/clear-selection!)
                               (util/stop e))
                             nil))))})
      (when (seq pinned-columns)

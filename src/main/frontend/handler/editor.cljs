@@ -3450,7 +3450,6 @@
                (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
-
       (cond
         (or (state/editing?) (active-jtrigger?))
         (keydown-up-down-handler direction {})
