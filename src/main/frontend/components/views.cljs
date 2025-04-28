@@ -665,6 +665,56 @@
                          (dom/sel1 node ".table-block-title"))]
     (.click trigger)))
 
+(defn navigate-to-cell
+  [e cell direction]
+  (util/stop e)
+  (let [row (util/rec-get-node cell "ls-table-row")
+        cells (dom/sel row ".ls-table-cell")
+        idx (.indexOf cells cell)
+        next-cell (case direction
+                    :left (if (> idx 1)               ; don't focus on checkbox
+                            (nth cells (dec idx))
+                            ;; last cell in the prev row
+                            (let [table (util/rec-get-node row "ls-table")
+                                  rows (dom/sel table ".ls-table-row")
+                                  row-idx (.indexOf rows row)
+                                  prev-row (when (> row-idx 0)
+                                             (nth rows (dec row-idx)))]
+                              (when prev-row
+                                (let [cells (dom/sel prev-row ".ls-table-cell")]
+                                  (last cells)))))
+                    :right (if (< idx (dec (count cells)))
+                             (nth cells (inc idx))
+                             ;; first cell in the next row
+                             (let [table (util/rec-get-node row "ls-table")
+                                   rows (dom/sel table ".ls-table-row")
+                                   row-idx (.indexOf rows row)
+                                   next-row (when (< row-idx (dec (count rows)))
+                                              (nth rows (inc row-idx)))]
+                               (when next-row
+                                 (let [cells (dom/sel next-row ".ls-table-cell")]
+                                   (second cells)))))
+                    :up (let [table (util/rec-get-node row "ls-table")
+                              rows (dom/sel table ".ls-table-row")
+                              row-idx (.indexOf rows row)
+                              prev-row (when (> row-idx 0)
+                                         (nth rows (dec row-idx)))]
+                          (when prev-row
+                            (let [cells (dom/sel prev-row ".ls-table-cell")]
+                              (nth cells idx))))
+                    :down (let [table (util/rec-get-node row "ls-table")
+                                rows (dom/sel table ".ls-table-row")
+                                row-idx (.indexOf rows row)
+                                next-row (when (< row-idx (dec (count rows)))
+                                           (nth rows (inc row-idx)))]
+                            (when next-row
+                              (let [cells (dom/sel next-row ".ls-table-cell")]
+                                (nth cells idx)))))]
+    (when next-cell
+      (state/clear-selection!)
+      (dom/add-class! next-cell "selected")
+      (.focus next-cell))))
+
 (rum/defc table-cell-container
   [cell-opts body]
   (let [*ref (hooks/use-ref nil)]
@@ -687,13 +737,13 @@
                                  (click-cell container)
                                  (util/stop e))
                                "ArrowUp"
-                               nil
+                               (navigate-to-cell e container :up)
                                "ArrowDown"
-                               nil
+                               (navigate-to-cell e container :down)
                                "ArrowLeft"
-                               nil
+                               (navigate-to-cell e container :left)
                                "ArrowRight"
-                               nil
+                               (navigate-to-cell e container :right)
                                nil))))
      body)))
 
@@ -718,7 +768,7 @@
                                       :select? select?
                                       :add-property? add-property?
                                       :style style}
-                           cell-placeholder (lazy-table-cell cell-opts nil)]
+                           cell-placeholder (table-cell-container cell-opts nil)]
                        (if (and scrolling? (not (:block/title row)))
                          cell-placeholder
                          (when-let [render (get column :cell)]
@@ -754,7 +804,6 @@
                                                              (some? (dom/sel1 node ".ui__checkbox"))))
                                                    first)]
                                 (state/clear-selection!)
-                                (dom/remove-class! container "selected")
                                 (dom/add-class! cell "selected")
                                 (.focus cell))
                               (util/stop e))
