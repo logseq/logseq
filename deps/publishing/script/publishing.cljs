@@ -4,7 +4,7 @@
             ["path" :as node-path]
             [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.cli :as gp-cli]
             [logseq.publishing :as publishing]

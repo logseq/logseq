@@ -1,4 +1,4 @@
-(ns ^:node-only logseq.db.sqlite.cli
+(ns ^:node-only logseq.db.common.sqlite-cli
   "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
             ["fs" :as fs]
