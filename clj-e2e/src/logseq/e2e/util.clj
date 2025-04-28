@@ -1,12 +1,26 @@
 (ns logseq.e2e.util
   (:refer-clojure :exclude [type])
-  (:require [clojure.string :as string]
-            [clojure.test :refer [is]]
+  (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [wally.main :as w]
             [wally.selectors :as ws])
   (:import [com.microsoft.playwright TimeoutError]))
+
+(defn repeat-until-visible
+  [n q repeat-fn]
+  (when-not (w/visible? q)
+    (loop [i n]
+      (repeat-fn)
+      (let [visible?
+            (try
+              (assert/assert-is-visible q)
+              (catch TimeoutError e
+                (if (zero? i)
+                  (throw e)
+                  false)))]
+        (when-not visible?
+          (recur (dec i)))))))
 
 (defn wait-timeout
   [ms]
@@ -50,6 +64,11 @@
   (w/click :#search-button)
   (w/fill ".cp__cmdk-search-input" text))
 
+(defn search-and-click
+  [search-text]
+  (search search-text)
+  (w/click (w/get-by-label search-text)))
+
 (defn new-page
   [title]
   ;; Question: what's the best way to close all the popups?
@@ -72,25 +91,9 @@
   []
   (count-elements ".ls-page-blocks .ls-block"))
 
-(defn new-block
-  [title]
-  (k/enter)
-  (input title))
-
-(defn save-block
-  [text]
-  (input text))
-
 (defn exit-edit
   []
   (k/esc))
-
-(defn delete-blocks
-  "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
-  []
-  (let [editor (get-editor)]
-    (when editor (exit-edit))
-    (k/backspace)))
 
 (defn get-text
   [locator]
@@ -126,25 +129,6 @@
   []
   (indent-outdent false))
 
-(defn open-last-block
-  []
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
-
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (open-last-block)
-  (let [value (get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
-
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
@@ -169,33 +153,11 @@
   (w/click "button[type=\"submit\"]:text(\"Sign in\")")
   (w/wait-for-not-visible ".cp__user-login"))
 
-(defn new-graph
-  [graph-name enable-sync?]
-  (search "add a db graph")
-  (w/click (w/get-by-label "Add a DB graph"))
-  (w/wait-for "h2:text(\"Create a new graph\")")
-  (w/click "input[placeholder=\"your graph name\"]")
-  (input graph-name)
-  (when enable-sync?
-    (w/click "button#rtc-sync"))
-  (w/click "button:text(\"Submit\")")
-  (when enable-sync?
-    (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
+(defn goto-journals
+  []
+  (search-and-click "Go to journals"))
 
-(defn wait-for-remote-graph
-  [graph-name]
-  (search "all graphs")
-  (w/click (w/get-by-label "Go to all graphs"))
-  (let [max-try 5]
-    (loop [i 0]
-      (prn :wait-for-remote-graph-try i)
-      (w/click "span:text(\"Refresh\")")
-      (let [succ?
-            (try
-              (w/wait-for (str "span:has-text(\"" graph-name "\")"))
-              true
-              (catch TimeoutError e
-                (if (= max-try i)
-                  (throw e)
-                  false)))]
-        (when-not succ? (recur (inc i)))))))
+(defn refresh-until-graph-loaded
+  []
+  (w/refresh)
+  (assert/assert-graph-loaded?))

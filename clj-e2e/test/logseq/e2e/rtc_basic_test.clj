@@ -3,20 +3,23 @@
    [clojure.test :refer [deftest testing is use-fixtures]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
+   [logseq.e2e.graph :as graph]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-2-pages)
 
 (deftest rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))]
-    (testing "open 2 app instances"
+    (testing "open 2 app instances, add a rtc graph, check this graph available on other instance"
       (cp/prun!
        2
        #(w/with-page %
           (util/login-test-account))
        [@*page1 @*page2])
       (w/with-page @*page1
-        (util/new-graph graph-name true))
+        (graph/new-graph graph-name true))
       (w/with-page @*page2
-        (util/wait-for-remote-graph graph-name)))))
+        (graph/wait-for-remote-graph graph-name)
+        (graph/remove-remote-graph graph-name)))))
