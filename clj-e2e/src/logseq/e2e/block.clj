@@ -11,17 +11,17 @@
   (assert/assert-in-normal-mode?)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
+(defn save-block
+  [text]
+  (w/fill ".editor-wrapper textarea" text))
+
 (defn new-block
   [title]
   (let [editor? (util/get-editor)]
     (when-not editor? (open-last-block))
     (assert/assert-editor-mode)
     (k/enter)
-    (util/input title)))
-
-(defn save-block
-  [text]
-  (util/input text))
+    (save-block title)))
 
 ;; TODO: support tree
 (defn new-blocks
