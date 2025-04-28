@@ -6,7 +6,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.property-util :as db-property-util]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
 

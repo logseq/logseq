@@ -90,7 +90,7 @@
   (let [[_db-sanitized-name db-full-path] (sqlite-common-db/get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)
         ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
-        schema (if (sqlite-util/local-file-based-graph? db-name)
+        schema (if (sqlite-common-db/local-file-based-graph? db-name)
                  file-schema/schema
                  db-schema/schema)]
     (sqlite-common-db/create-kvs-table! db)

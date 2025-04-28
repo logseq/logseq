@@ -12,6 +12,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -232,7 +233,7 @@
                                 :db-after (:db-after result)))
                        tx-report)
           {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
-          _ (when (sqlite-util/local-file-based-graph? repo)
+          _ (when (sqlite-common-db/local-file-based-graph? repo)
               (let [page-ids (distinct (map :db/id pages))]
                 (doseq [page-id page-ids]
                   (when (d/entity @conn page-id)

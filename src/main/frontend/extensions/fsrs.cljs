@@ -18,7 +18,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [open-spaced-repetition.cljc-fsrs.core :as fsrs.core]

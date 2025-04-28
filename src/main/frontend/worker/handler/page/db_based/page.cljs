@@ -9,7 +9,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property.build :as db-property-build]

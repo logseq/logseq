@@ -1,11 +1,11 @@
 (ns frontend.worker.db.fix
   "fix db"
   (:require [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db :as ldb]))
 
 (defn check-and-fix-schema!
   [repo conn]
-  (let [schema (sqlite-util/get-schema repo)
+  (let [schema (ldb/get-schema repo)
         db-schema (:schema @conn)
         diffs (->> (keep (fn [[k v]]
                            (let [schema-v (-> (get db-schema k)

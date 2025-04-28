@@ -1,7 +1,7 @@
 (ns logseq.db.common.property-util
   "Property related util fns. Fns used in both DB and file graphs should go here"
   (:require [datascript.core :as d]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))

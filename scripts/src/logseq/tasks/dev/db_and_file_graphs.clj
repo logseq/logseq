@@ -98,8 +98,7 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  ;; TODO: Lint `(db-based-graph?` when db.frontend.entity-plus is split into separate graph contexts
-  (let [multi-graph-fns ["/db-based-graph\\?"
+  (let [multi-graph-fns ["/db-based-graph\\?" "\\(db-based-graph\\?"
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]

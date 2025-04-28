@@ -10,14 +10,16 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -578,3 +580,10 @@
          :where
          [?page :block/tags ?tag]]
        db))
+
+(defn get-schema
+  "Returns schema for given repo"
+  [repo]
+  (if (db-based-graph? repo)
+    db-schema/schema
+    file-schema/schema))
