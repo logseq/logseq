@@ -161,3 +161,11 @@
   []
   (w/refresh)
   (assert/assert-graph-loaded?))
+
+(defn move-cursor-to-end
+  []
+  (k/press "ControlOrMeta+a" "ArrowRight"))
+
+(defn move-cursor-to-start
+  []
+  (k/press "ControlOrMeta+a" "ArrowLeft"))
