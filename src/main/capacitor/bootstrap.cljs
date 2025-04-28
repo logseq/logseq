@@ -42,12 +42,6 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
-;(defn- get-system-info
-;  []
-;  (when (util/electron?)
-;    (p/let [info (ipc/ipc :system/info)]
-;      (state/set-state! :system/info (bean/->clj info)))))
-
 (defn start!
   [render]
 
@@ -69,6 +63,7 @@
 
   (react/run-custom-queries-when-idle!)
 
+  ;; sentry for the worker messaging
   (events/run!)
 
   (p/do!
@@ -94,7 +89,9 @@
 
     (util/<app-wake-up-from-sleep-loop (atom false))
 
-    (persist-var/load-vars)))
+    ;; DB version not support for the persistent strategy
+    ;; (persist-var/load-vars)
+    ))
 
 (defn stop! []
   (prn "stop!"))
