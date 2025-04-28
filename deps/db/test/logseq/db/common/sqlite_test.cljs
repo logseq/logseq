@@ -7,7 +7,7 @@
             [datascript.core :as d]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.test.helper :as db-test]))
 

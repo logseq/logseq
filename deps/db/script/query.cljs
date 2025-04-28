@@ -11,7 +11,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [nbb.core :as nbb]))
 
 (defn- sh

@@ -4,7 +4,7 @@
             [datascript.core :as d]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.outliner.db-pipeline :as db-pipeline]
             ["fs" :as fs]
             ["path" :as node-path]))
