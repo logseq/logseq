@@ -1,5 +1,6 @@
 (ns capacitor.components.ui
-  (:require [frontend.handler.notification :as notification]
+  (:require [cljs-bean.core :as bean]
+            [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as fstate]
             [medley.core :as medley]
@@ -106,16 +107,32 @@
 (defonce ^:private *id (atom 0))
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
 
-(rum/defc simple-modal
-  [{:keys [close! as-page? modal-props]} content]
-  (let [{:keys [class]} modal-props]
-    (ionic/ion-modal
-      (merge modal-props
-        {:is-open true
-         :onWillDismiss (fn [] (close!))
-         :class (str class (when (not (true? as-page?)) " ion-datetime-button-overlay"))})
-      (if (fn? content)
-        (content) content))))
+(rum/defc x-modal
+  [{:keys [close! as-page? type on-action title buttons inputs modal-props]} content]
+  (let [{:keys [class header]} modal-props]
+    (case type
+      :alert
+      (ionic/ion-alert
+        (merge modal-props
+          {:is-open true
+           :header (or title header)
+           :message content
+           :backdropDismiss false
+           :onWillDismiss (fn [^js e]
+                            (when on-action
+                              (on-action (bean/->clj (.-detail e))))
+                            (close!))
+           :buttons (bean/->js (or buttons (:buttons modal-props)))
+           :inputs (bean/->js (or inputs (:inputs modal-props) []))}))
+
+      ;; default
+      (ionic/ion-modal
+        (merge modal-props
+          {:is-open true
+           :onWillDismiss (fn [] (close!))
+           :class (str class (when (not (true? as-page?)) " ion-datetime-button-overlay"))})
+        (if (fn? content)
+          (content) content)))))
 
 (defn get-modal
   ([] (some-> @*modals last))
@@ -155,5 +172,5 @@
      (for [{:keys [id content] :as props} @*modals
            :let [close! #(close-modal! id)
                  props' (assoc props :close! close!)]]
-       (simple-modal props'
+       (x-modal props'
          (if (fn? content) (content props') content)))]))

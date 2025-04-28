@@ -42,23 +42,6 @@
           (ionic/tabler-icon "calendar")
           [:span.pl-1 (:block/title journal)]]))]))
 
-(rum/defc journals-calendar-modal
-  [{:keys [close!]}]
-  (ui/simple-modal
-    {:close! close!}
-    (fn []
-      (ionic/ion-datetime
-        {:presentation "date"
-         :onIonChange (fn [^js e]
-                        (let [val (.-value (.-detail e))]
-                          (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
-                                nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
-                            (if-let [journal (handler/local-page page-name)]
-                              (nav-to-journal! journal)
-                              (-> (handler/<create-page! page-name)
-                                (p/then #(nav-to-journal! (handler/local-page page-name)))))
-                            (close!))))}))))
-
 (rum/defc create-page-input
   [{:keys [close! reload-pages!]}]
   (ionic/ion-alert
