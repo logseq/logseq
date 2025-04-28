@@ -1,11 +1,11 @@
-(ns logseq.db.common.sqlite-test
+(ns logseq.db.common.initial-data-test
   "This ns is the only one to test against file based datascript connections.
    These are useful integration tests"
   (:require ["fs" :as fs]
             ["path" :as node-path]
             [cljs.test :refer [deftest async use-fixtures is testing]]
             [datascript.core :as d]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -35,8 +35,8 @@
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
-          conn (sqlite-common-db/restore-initial-data initial-data schema)]
+          {:keys [schema initial-data]} (common-initial-data/get-initial-data @conn*)
+          conn (d/conn-from-datoms initial-data schema)]
       (is (= blocks
              (->> @conn
                   (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
@@ -54,7 +54,7 @@
             :blocks [{:block/title "b1"}]}]})
         _ (d/transact! conn* init-tx)
           ;; Simulate getting data from sqlite and restoring it for frontend
-        {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
-        conn (sqlite-common-db/restore-initial-data initial-data schema)]
+        {:keys [schema initial-data]} (common-initial-data/get-initial-data @conn*)
+        conn (d/conn-from-datoms initial-data schema)]
     (is (some? (db-test/find-page-by-title @conn "page1"))
         "Restores recently updated page")))

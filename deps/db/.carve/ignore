@@ -28,3 +28,9 @@ logseq.db.sqlite.export/build-import
 logseq.db.common.view/get-property-values
 ;; API
 logseq.db.common.view/get-view-data
+;; API
+logseq.db.common.initial-data/with-parent
+;; API
+logseq.db.common.initial-data/get-block-and-children
+;; API
+logseq.db.common.initial-data/get-initial-data

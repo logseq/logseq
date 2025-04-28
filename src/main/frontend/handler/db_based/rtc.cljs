@@ -10,7 +10,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -19,7 +19,7 @@
   (p/do!
    (js/Promise. user-handler/task--ensure-id&access-token)
    (let [token (state/get-auth-id-token)
-         repo-name (sqlite-common-db/sanitize-db-name repo)]
+         repo-name (common-sqlite/sanitize-db-name repo)]
      (state/<invoke-db-worker :thread-api/rtc-async-upload-graph repo token repo-name))))
 
 (defn <rtc-delete-graph!
