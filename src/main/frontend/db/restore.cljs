@@ -1,12 +1,12 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-time.core :as t]
+            [datascript.core :as d]
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
             [logseq.db :as ldb]
-            [logseq.db.common.sqlite :as sqlite-common-db]
             [promesa.core :as p]))
 
 (defn restore-graph!
@@ -20,7 +20,7 @@
           _ (when (nil? schema)
               (throw (ex-info "No valid schema found when reloading db" {:repo repo})))
           conn (try
-                 (sqlite-common-db/restore-initial-data initial-data schema)
+                 (d/conn-from-datoms initial-data schema)
                  (catch :default e
                    (prn :error :restore-initial-data-failed
                         (ldb/write-transit-str {:schema schema
