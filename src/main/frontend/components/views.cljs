@@ -243,8 +243,10 @@
                            :on-after-hide (fn []
                                             (let [node (rum/deref *ref)
                                                   cell (util/rec-get-node node "ls-table-cell")]
-                                              (state/exit-editing-and-set-selected-blocks! [cell])
-                                              (set-focus-timeout! (js/setTimeout #(.focus cell) 100))))})
+                                              (p/do!
+                                               (editor-handler/save-current-block!)
+                                               (state/exit-editing-and-set-selected-blocks! [cell])
+                                               (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
        [:div
@@ -810,8 +812,8 @@
                           (case (util/ekey e)
                             "Enter"
                             (do
-                              (state/exit-editing-and-set-selected-blocks! [])
                               (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
+                              (state/clear-selection!)
                               (util/stop e))
                             "ArrowLeft"
                             (do
