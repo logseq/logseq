@@ -34,10 +34,10 @@
             [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as sqlite-common-db]
             [logseq.db.common.view :as db-view]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -858,7 +858,7 @@
   (let [[prev-graph service] @*service]
     (some-> prev-graph close-db!)
     (when graph
-      (if (and (= graph prev-graph) service)
+      (if (= graph prev-graph)
         service
         (p/let [service (shared-service/<create-service graph
                                                         (bean/->js fns)
@@ -886,7 +886,8 @@
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
                                   (p/let [service (<init-service! graph (some? (:import-type opts)))]
-                                      ;; wait for service ready
+                                    (get-in service [:status :ready])
+                                    ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
                                 (or (contains? #{:thread-api/sync-app-state} method-k)
