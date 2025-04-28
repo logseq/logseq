@@ -1435,6 +1435,7 @@
     (when (seq rows)
       (ui/virtualized-list
        {:ref #(reset! *scroller-ref %)
+        :increase-viewport-by {:top 300 :bottom 300}
         :custom-scroll-parent (if sidebar?
                                 (first (dom/by-class "sidebar-item-list"))
                                 (gdom/getElement "main-content-container"))
