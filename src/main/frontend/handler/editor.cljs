@@ -2672,6 +2672,10 @@
       (util/scroll-to-block block)
       (state/exit-editing-and-set-selected-blocks! [block]))))
 
+(defn- table-row-container?
+  [node]
+  (when node (dom/has-class? node "ls-table-row")))
+
 (defn- select-up-down [direction]
   (let [selected-blocks (state/get-selection-blocks)
         selected (case direction
@@ -2681,10 +2685,20 @@
             :up util/get-prev-block-non-collapsed
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected {:up-down? true
-                                   :exclude-property? true})]
-    (when (and sibling-block (dom/attr sibling-block "blockid"))
+                                   :exclude-property? true})
+        table-row? (table-row-container? sibling-block)
+        clear-selected-state! (fn []
+                                (doseq [node selected-blocks]
+                                  (dom/remove-class! node "selected")))]
+    (when (and sibling-block (or (dom/attr sibling-block "blockid") table-row?))
       (util/scroll-to-block sibling-block)
-      (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
+      (clear-selected-state!)
+      (if table-row?
+        (do
+          (state/exit-editing-and-set-selected-blocks! [sibling-block])
+          (.focus sibling-block)
+          (dom/add-class! sibling-block "selected"))
+        (state/exit-editing-and-set-selected-blocks! [sibling-block])))))
 
 (defn- active-jtrigger?
   []

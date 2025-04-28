@@ -211,36 +211,36 @@
                         :else
                         (p/do!
                          (shui/popup-show!
-                           (.closest (.-target e) ".ls-table-cell")
-                           (fn []
-                             (let [width (-> (max 160 width)
-                                           (- 18))]
-                               [:div.ls-table-block.flex.flex-row.items-start
-                                {:style {:width width :max-width width :margin-right "6px"}
-                                 :on-click util/stop-propagation}
-                                (block-container {:popup? true
-                                                  :view? true
-                                                  :table-block-title? true} block)
-                                (shui/button
-                                  {:variant :ghost
-                                   :title "Open node"
-                                   :on-click (fn [e]
-                                               (util/stop-propagation e)
-                                               (shui/popup-hide!)
-                                               (redirect!))
-                                   :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                                            "opacity-" opacity)}
-                                  (ui/icon "arrow-right"))]))
-                           {:id :ls-table-block-editor
-                            :as-mask? true})
-                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
+                          (.closest (.-target e) ".ls-table-cell")
+                          (fn []
+                            (let [width (-> (max 160 width)
+                                            (- 18))]
+                              [:div.ls-table-block.flex.flex-row.items-start
+                               {:style {:width width :max-width width :margin-right "6px"}
+                                :on-click util/stop-propagation}
+                               (block-container {:popup? true
+                                                 :view? true
+                                                 :table-block-title? true} block)
+                               (shui/button
+                                {:variant :ghost
+                                 :title "Open node"
+                                 :on-click (fn [e]
+                                             (util/stop-propagation e)
+                                             (shui/popup-hide!)
+                                             (redirect!))
+                                 :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                                             "opacity-" opacity)}
+                                (ui/icon "arrow-right"))]))
+                          {:id :ls-table-block-editor
+                           :as-mask? true})
+                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
        [:div
         (inline-title
-          (some->> (:block/title block)
-            string/trim
-            string/split-lines
-            first))]
+         (some->> (:block/title block)
+                  string/trim
+                  string/split-lines
+                  first))]
        [:div])
 
      [:div.absolute.right-0.p-1
@@ -249,11 +249,11 @@
                    (add-to-sidebar!))}
       [:div.flex.items-center
        (shui/button
-         {:variant :ghost
-          :title "Open in sidebar"
-          :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                   "opacity-" opacity)}
-         (ui/icon "layout-sidebar-right"))]]]))
+        {:variant :ghost
+         :title "Open in sidebar"
+         :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                     "opacity-" opacity)}
+        (ui/icon "layout-sidebar-right"))]]]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -263,30 +263,30 @@
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
         properties' (->>
-                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
-                        properties
-                        (conj properties (db/entity :block/tags)))
-                      (remove nil?))]
+                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                       properties
+                       (conj properties (db/entity :block/tags)))
+                     (remove nil?))]
     (->> (concat
-           [{:id :select
-             :name "Select"
-             :header (fn [table _column] (header-checkbox table))
-             :cell (fn [table row column]
-                     (row-checkbox table row column))
-             :column-list? false
-             :resizable? false}
-            (when with-id?
-              {:id :id
-               :name "ID"
-               :header (fn [_table _column] (header-index))
-               :cell (fn [table row _column]
-                       (inc (.indexOf (:rows table) (:db/id row))))
-               :resizable? false})
-            (when with-object-name?
-              {:id :block/title
-               :name "Name"
-               :type :string
-               :header header-cp
+          [{:id :select
+            :name "Select"
+            :header (fn [table _column] (header-checkbox table))
+            :cell (fn [table row column]
+                    (row-checkbox table row column))
+            :column-list? false
+            :resizable? false}
+           (when with-id?
+             {:id :id
+              :name "ID"
+              :header (fn [_table _column] (header-index))
+              :cell (fn [table row _column]
+                      (inc (.indexOf (:rows table) (:db/id row))))
+              :resizable? false})
+           (when with-object-name?
+             {:id :block/title
+              :name "Name"
+              :type :string
+              :header header-cp
               :cell (fn [_table row _column style]
                       (block-title row {:property-ident :block/title
                                         :sidebar? (:sidebar? config)
@@ -690,6 +690,7 @@
       props
       {:key (str (:db/id row))
        :data-state (when (row-selected? row) "selected")
+       :data-id (:db/id row)
        :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
      (when (seq pinned-columns)
        [:div.sticky-columns.flex.flex-row
