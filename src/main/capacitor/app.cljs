@@ -86,7 +86,6 @@
   (let [[all-pages set-all-pages!] (rum/use-state [])
         [reload set-reload!] (rum/use-state 0)
         [page-input-open? set-page-input-open?] (rum/use-state false)
-        [journal-calendar-open? set-journal-calendar-open?] (rum/use-state false)
         [filtered-pages set-filtered-pages!] (rum/use-state [])]
 
     (rum/use-effect!
@@ -126,13 +125,28 @@
        [:div.flex.justify-between.items-center.mt-4
         [:h1.text-3xl.font-mono.font-bold.py-2 "Journals"]
         [:flex.gap-1
-         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-journal-calendar-open? true)}
+         (ionic/ion-button
+           {:size "small" :fill "clear"
+            :on-click (fn []
+                        (ui/open-modal!
+                          (fn [{:keys [close!]}]
+                            (ionic/ion-datetime
+                              {:presentation "date"
+                               :onIonChange (fn [^js e]
+                                              (let [val (.-value (.-detail e))]
+                                                (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
+                                                      nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                  (if-let [journal (handler/local-page page-name)]
+                                                    (nav-to-journal! journal)
+                                                    (-> (handler/<create-page! page-name)
+                                                      (p/then #(nav-to-journal! (handler/local-page page-name)))))
+                                                  (close!))))}))))}
            [:span {:slot "icon-only"} (ionic/tabler-icon "calendar" {:size 22})])]]
 
        (journals-list)
 
-       (when journal-calendar-open?
-         (journals-calendar-modal {:close! #(set-journal-calendar-open? false)}))
+       ;(when journal-calendar-open?
+       ;  (journals-calendar-modal {:close! #(set-journal-calendar-open? false)}))
 
        [:div.flex.justify-between.items-center.pt-4
         [:h1.text-3xl.font-mono.font-bold.py-2
@@ -243,4 +257,4 @@
                       :animated true :swipeGesture false})
 
       (ui/install-notifications)
-      ]]))
+      (ui/install-modals)]]))
