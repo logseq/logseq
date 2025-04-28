@@ -2768,9 +2768,10 @@
       (move-cross-boundary-up-down direction move-opts)
 
       :else
-      (if up?
-        (cursor/move-cursor-up input)
-        (cursor/move-cursor-down input)))))
+      (when input
+        (if up?
+          (cursor/move-cursor-up input)
+          (cursor/move-cursor-down input))))))
 
 (defn move-to-block-when-cross-boundary
   [direction {:keys [block]}]

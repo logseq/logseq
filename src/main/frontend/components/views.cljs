@@ -672,7 +672,29 @@
      (assoc cell-opts
             :tabIndex 0
             :ref *ref
-            :on-click (fn [] (click-cell (rum/deref *ref))))
+            :on-click (fn [] (click-cell (rum/deref *ref)))
+            :on-key-down (fn [e]
+                           (let [container (rum/deref *ref)]
+                             (case (util/ekey e)
+                               "Escape"
+                               (do
+                                 (dom/remove-class! container "selected")
+                                 (let [row (util/rec-get-node container "ls-table-row")]
+                                   (state/exit-editing-and-set-selected-blocks! [row]))
+                                 (util/stop e))
+                               "Enter"
+                               (do
+                                 (click-cell container)
+                                 (util/stop e))
+                               "ArrowUp"
+                               nil
+                               "ArrowDown"
+                               nil
+                               "ArrowLeft"
+                               nil
+                               "ArrowRight"
+                               nil
+                               nil))))
      body)))
 
 (rum/defc table-row-inner < rum/static
@@ -727,22 +749,25 @@
                               (util/stop e))
                             "ArrowLeft"
                             (do
-
-                              (when-let [first-cell (->> (dom/sel container ".ls-table-cell")
-                                                         (remove (fn [node]
-                                                                   (some? (dom/sel1 node ".ui__checkbox"))))
-                                                         first)]
+                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                   (remove (fn [node]
+                                                             (some? (dom/sel1 node ".ui__checkbox"))))
+                                                   first)]
                                 (state/clear-selection!)
                                 (dom/remove-class! container "selected")
-                                (dom/add-class! first-cell "selected"))
+                                (dom/add-class! cell "selected")
+                                (.focus cell))
                               (util/stop e))
                             "ArrowRight"
                             (do
-                              (state/clear-selection!)
-                              (.blur container)
-                              (dom/remove-class! container "selected")
-                              (when-let [last-cell (last (dom/sel container ".ls-table-cell"))]
-                                (.focus last-cell))
+                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                   (remove (fn [node]
+                                                             (some? (dom/sel1 node ".ui__checkbox"))))
+                                                   last)]
+                                (state/clear-selection!)
+                                (dom/remove-class! container "selected")
+                                (dom/add-class! cell "selected")
+                                (.focus cell))
                               (util/stop e))
                             nil))))})
      (when (seq pinned-columns)
