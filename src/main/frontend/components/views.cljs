@@ -35,7 +35,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
@@ -191,36 +190,70 @@
 
 (rum/defc block-title
   "Used on table view"
-  [block {:keys [create-new-block property-ident width sidebar?]}]
-  (let [inline-title (state/get-component :block/inline-title)]
-    [:div.table-block-title.flex.items-center.w-full.h-full.cursor-pointer.items-center
-     {:on-click (fn [e]
-                  (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
+  [block {:keys [create-new-block width]}]
+  (let [inline-title (state/get-component :block/inline-title)
+        [opacity set-opacity!] (hooks/use-state 0)
+        add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)]
+    [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer.items-center
+     {:on-mouse-over #(set-opacity! 100)
+      :on-mouse-out #(set-opacity! 0)
+      :on-click (fn [e]
+                  (p/let [block (or block (and (fn? create-new-block) (create-new-block)))
+                          redirect! #(some-> (:block/uuid block) route-handler/redirect-to-page!)]
                     (when block
                       (cond
-                        (and (= property-ident :block/title) sidebar?)
-                        (route-handler/redirect-to-page! (:block/uuid block))
-                        (= property-ident :block/title)
-                        (let [selection-type (some-> (js/window.getSelection)
-                                                     (gobj/get "type"))]
-                          (when-not (= selection-type "Range")
-                            (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)))
+                        (util/meta-key? e)
+                        (redirect!)
+
+                        (.-shiftKey e)
+                        (add-to-sidebar!)
+
                         :else
                         (p/do!
                          (shui/popup-show!
-                          (.-target e)
-                          (fn []
-                            [:div {:style {:min-width (max 160 width)}}
-                             (block-container {:popup? true} block)])
-                          {:align :start})
-                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
+                           (.closest (.-target e) ".ls-table-cell")
+                           (fn []
+                             (let [width (-> (max 160 width)
+                                           (- 18))]
+                               [:div.ls-table-block.flex.flex-row.items-start
+                                {:style {:width width :max-width width :margin-right "6px"}
+                                 :on-click util/stop-propagation}
+                                (block-container {:popup? true
+                                                  :view? true
+                                                  :table-block-title? true} block)
+                                (shui/button
+                                  {:variant :ghost
+                                   :title "Open node"
+                                   :on-click (fn [e]
+                                               (util/stop-propagation e)
+                                               (shui/popup-hide!)
+                                               (redirect!))
+                                   :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                                            "opacity-" opacity)}
+                                  (ui/icon "arrow-right"))]))
+                           {:id :ls-table-block-editor
+                            :as-mask? true})
+                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
-       [:div (inline-title
-              (some->> (:block/title block)
-                       string/trim
-                       string/split-lines
-                       first))]
-       [:div])]))
+       [:div
+        (inline-title
+          (some->> (:block/title block)
+            string/trim
+            string/split-lines
+            first))]
+       [:div])
+
+     [:div.absolute.right-0.p-1
+      {:on-click (fn [e]
+                   (util/stop-propagation e)
+                   (add-to-sidebar!))}
+      [:div.flex.items-center
+       (shui/button
+         {:variant :ghost
+          :title "Open in sidebar"
+          :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                   "opacity-" opacity)}
+         (ui/icon "layout-sidebar-right"))]]]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -230,32 +263,34 @@
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
         properties' (->>
-                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
-                       properties
-                       (conj properties (db/entity :block/tags)))
-                     (remove nil?))]
+                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                        properties
+                        (conj properties (db/entity :block/tags)))
+                      (remove nil?))]
     (->> (concat
-          [{:id :select
-            :name "Select"
-            :header (fn [table _column] (header-checkbox table))
-            :cell (fn [table row column]
-                    (row-checkbox table row column))
-            :column-list? false
-            :resizable? false}
-           (when with-id?
-             {:id :id
-              :name "ID"
-              :header (fn [_table _column] (header-index))
-              :cell (fn [table row _column]
-                      (inc (.indexOf (:rows table) (:db/id row))))
-              :resizable? false})
-           (when with-object-name?
-             {:id :block/title
-              :name "Name"
-              :type :string
-              :header header-cp
-              :cell (fn [_table row _column]
-                      (block-title row {:property-ident :block/title :sidebar? (:sidebar? config)}))
+           [{:id :select
+             :name "Select"
+             :header (fn [table _column] (header-checkbox table))
+             :cell (fn [table row column]
+                     (row-checkbox table row column))
+             :column-list? false
+             :resizable? false}
+            (when with-id?
+              {:id :id
+               :name "ID"
+               :header (fn [_table _column] (header-index))
+               :cell (fn [table row _column]
+                       (inc (.indexOf (:rows table) (:db/id row))))
+               :resizable? false})
+            (when with-object-name?
+              {:id :block/title
+               :name "Name"
+               :type :string
+               :header header-cp
+              :cell (fn [_table row _column style]
+                      (block-title row {:property-ident :block/title
+                                        :sidebar? (:sidebar? config)
+                                        :width (:width style)}))
               :disable-hide? true})]
           (keep
            (fn [property]

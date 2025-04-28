@@ -739,7 +739,7 @@
          (journal/all-journals))])))
 
 (defn- hide-context-menu-and-clear-selection
-  [e]
+  [e & {:keys [esc?]}]
   (state/hide-custom-context-menu!)
   (when-not (or (gobj/get e "shiftKey")
                 (util/meta-key? e)
@@ -748,7 +748,9 @@
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))
-    (editor-handler/clear-selection!)))
+    (if (and esc? (editor-handler/popup-exists? :selection-action-bar))
+      (state/pub-event! [:editor/hide-action-bar])
+      (editor-handler/clear-selection!))))
 
 (rum/defc render-custom-context-menu
   [links position]
@@ -944,7 +946,7 @@
                                    util/node-test?
                                    (state/editing?))))
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection e)))
+                          (hide-context-menu-and-clear-selection e {:esc? true})))
                       (state/set-ui-last-key-code! (.-key e))))
      (mixins/listen state js/window "keyup"
                     (fn [_e]

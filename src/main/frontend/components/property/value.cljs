@@ -27,6 +27,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
@@ -746,7 +747,8 @@
                                                                [:div.text-xs.opacity-70
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (:logseq.property/classes property)
+                                                           (when-not (or (:logseq.property/classes property)
+                                                                         (= (:db/ident property) :block/tags))
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
@@ -1080,14 +1082,31 @@
                 ;; support this case and maybe other complex cases.
                 (not (string/includes? (:block/title value) "[["))))
        (when value
-         (rum/with-key
-           (page-cp {:disable-preview? true
+         (let [opts {:disable-preview? true
                      :tag? tag?
                      :property-position property-position
-                     :meta-click? other-position?
+                     :other-position? other-position?
                      :table-view? table-view?
-                     :ignore-alias? (= :block/alias (:db/ident property))} value)
-           (:db/id value)))
+                     :ignore-alias? (= :block/alias (:db/ident property))
+                     :on-context-menu
+                     (fn [e]
+                       (util/stop e)
+                       (shui/popup-show! (.-target e)
+                                         (fn []
+                                           [:<>
+                                            (shui/dropdown-menu-item
+                                             {:key "open"
+                                              :on-click #(route-handler/redirect-to-page! (:block/uuid value))}
+                                             (str "Open " (:block/title value)))
+
+                                            (shui/dropdown-menu-item
+                                             {:key "open sidebar"
+                                              :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id value) :page)}
+                                             "Open in sidebar")])
+                                         {:as-dropdown? true
+                                          :content-props {:on-click (fn [] (shui/popup-hide!))}
+                                          :align "start"}))}]
+           (rum/with-key (page-cp opts value) (:db/id value))))
 
        (contains? #{:node :class :property :page} type)
        (when-let [reference (state/get-component :block/reference)]
@@ -1179,6 +1198,64 @@
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
+(rum/defc single-number-input
+  [block property value-block table-view?]
+  (let [[editing? set-editing!] (rum/use-state false)
+        *ref (rum/use-ref nil)
+        *input-ref (rum/use-ref nil)
+        number-value (db-property/property-value-content value-block)
+        [value set-value!] (rum/use-state number-value)
+        set-property-value! (fn [value & {:keys [exit-editing?]
+                                          :or {exit-editing? true}}]
+                              (p/do!
+                               (when (and (not (string/blank? value))
+                                          (not= (string/trim (str number-value))
+                                                (string/trim (str value))))
+                                 (db-property-handler/set-block-property! (:db/id block)
+                                                                          (:db/ident property)
+                                                                          value))
+
+                               (when exit-editing?
+                                 (set-editing! false))))]
+    [:div.ls-number.flex.flex-1.jtrigger
+     {:ref *ref
+      :on-click #(set-editing! true)}
+     (if editing?
+       (shui/input
+        {:ref *input-ref
+         :auto-focus true
+         :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+                     (when table-view? " text-sm"))
+         :value value
+         :on-change (fn [e] (set-value! (util/evalue e)))
+         :on-blur (fn [_e] (set-property-value! value))
+         :on-key-down (fn [e]
+                        (let [input (rum/deref *input-ref)
+                              pos (cursor/pos input)
+                              k (util/ekey e)]
+                          (when-not (util/input-text-selected? input)
+                            (case k
+                              ("ArrowUp" "ArrowDown")
+                              (do
+                                (util/stop-propagation e)
+                                (set-editing! false)
+                                (editor-handler/move-cross-boundary-up-down (if (= "ArrowUp" (util/ekey e)) :up :down) {})
+                                (set-property-value! value {:exit-editing? false}))
+
+                              "Backspace"
+                              (when (zero? pos)
+                                (p/do!
+                                 (db-property-handler/remove-block-property! (:db/id block) (:db/ident property))
+                                 (editor-handler/move-cross-boundary-up-down :up {:pos :max})))
+
+                              ("Escape" "Enter")
+                              (p/do!
+                               (set-property-value! value)
+                               (.focus (rum/deref *ref)))
+
+                              nil))))})
+       value)]))
+
 (rum/defcs property-scalar-value-aux < rum/static rum/reactive
   [state block property value* {:keys [editing? on-chosen]
                                 :as opts}]
@@ -1192,8 +1269,14 @@
         value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
                 value*)]
-    (if (= :logseq.property/icon (:db/ident property))
+    (cond
+      (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
+
+      (and (= type :number) (not editing?))
+      (single-number-input block property value (:table-view? opts))
+
+      :else
       (if (and select-type?'
                (not (and (not closed-values?) (= type :date))))
         (let [classes (outliner-property/get-block-classes (db/get-db) (:db/id block))
@@ -1278,16 +1361,17 @@
       (select-cp {})
       (let [toggle-fn shui/popup-hide!
             content-fn (fn [{:keys [_id content-props]}]
-                         (select-cp {:content-props content-props}))]
+                         (select-cp {:content-props content-props}))
+            show-popup! (fn [^js e]
+                          (let [target (.-target e)]
+                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                              (shui/popup-show! (rum/deref *el) content-fn
+                                                {:as-dropdown? true :as-content? false
+                                                 :align "start" :auto-focus? true}))))]
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
-          :on-click (fn [^js e]
-                      (let [target (.-target e)]
-                        (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                          (shui/popup-show! (rum/deref *el) content-fn
-                                            {:as-dropdown? true :as-content? false
-                                             :align "start" :auto-focus? true}))))
+          :on-click show-popup!
           :on-key-down (fn [^js e]
                          (case (.-key e)
                            (" " "Enter")
@@ -1301,7 +1385,9 @@
            (if (and (seq items) not-empty-value?)
              (concat
               (->> (for [item items]
-                     (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                     (rum/with-key
+                       (select-item property type item (assoc opts :show-popup! show-popup!))
+                       (or (:block/uuid item) (str item))))
                    (interpose [:span.opacity-50.-ml-1 ","]))
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))

@@ -655,7 +655,8 @@
 
    All page-names are sanitized except page-name-in-block"
   [state
-   {:keys [contents-page? whiteboard-page? html-export? meta-click? show-unique-title? stop-click-event?]
+   {:keys [contents-page? whiteboard-page? html-export? other-position? show-unique-title? stop-click-event?
+           on-context-menu]
     :or {stop-click-event? true}
     :as config}
    page-entity children label]
@@ -669,44 +670,50 @@
         untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
         show-icon? (:show-icon? config)]
     [:a.relative
-     {:tabIndex "0"
-      :class (cond->
-              (if tag? "tag" "page-ref")
-               (:property? config) (str " page-property-key block-property")
-               untitled? (str " opacity-50"))
-      :data-ref page-name
-      :draggable true
-      :on-drag-start (fn [e]
-                       (editor-handler/block->data-transfer! page-name e true))
-      :on-mouse-over #(reset! *hover? true)
-      :on-mouse-leave #(reset! *hover? false)
-      :on-click (fn [e]
-                  (when stop-click-event? (util/stop e)))
-      :on-pointer-down (fn [^js e]
-                         (cond
-                           (and meta-click? (util/meta-key? e))
-                           (reset! *mouse-down? true)
+     (cond->
+      {:tabIndex "0"
+       :class (cond->
+               (if tag? "tag" "page-ref")
+                (:property? config) (str " page-property-key block-property")
+                untitled? (str " opacity-50"))
+       :data-ref page-name
+       :draggable true
+       :on-drag-start (fn [e]
+                        (editor-handler/block->data-transfer! page-name e true))
+       :on-mouse-over #(reset! *hover? true)
+       :on-mouse-leave #(reset! *hover? false)
+       :on-click (fn [e]
+                   (when stop-click-event? (util/stop e)))
+       :on-pointer-down (fn [^js e]
+                          (cond
+                            (and on-context-menu (= 2 (.-button e)))
+                            nil
 
-                           (and meta-click? (not (util/shift-key? e)))
-                           (some-> (.-target e) (.closest ".jtrigger") (.click))
+                            (and other-position? (util/meta-key? e))
+                            (reset! *mouse-down? true)
 
-                           breadcrumb?
-                           (.preventDefault e)
+                            (and other-position? (not (util/shift-key? e)))
+                            (some-> (.-target e) (.closest ".jtrigger") (.click))
 
-                           :else
-                           (do
-                             (.preventDefault e)
-                             (reset! *mouse-down? true))))
-      :on-pointer-up (fn [e]
-                       (when @*mouse-down?
-                         (state/clear-edit!)
-                         (when-not (or (:disable-click? config)
-                                       (:disable-redirect? config))
-                           (open-page-ref config page-entity e page-name contents-page?))
-                         (reset! *mouse-down? false)))
-      :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
-                           (state/clear-edit!)
-                           (open-page-ref config page-entity e page-name contents-page?)))}
+                            breadcrumb?
+                            (.preventDefault e)
+
+                            :else
+                            (do
+                              (.preventDefault e)
+                              (reset! *mouse-down? true))))
+       :on-pointer-up (fn [e]
+                        (when @*mouse-down?
+                          (state/clear-edit!)
+                          (when-not (or (:disable-click? config)
+                                        (:disable-redirect? config))
+                            (open-page-ref config page-entity e page-name contents-page?))
+                          (reset! *mouse-down? false)))
+       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
+                            (state/clear-edit!)
+                            (open-page-ref config page-entity e page-name contents-page?)))}
+       on-context-menu
+       (assoc :on-context-menu on-context-menu))
      (when (and show-icon? (not tag?))
        (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
@@ -2701,7 +2708,7 @@
                               (shui/dropdown-menu-item
                                {:key "Open tag in sidebar"
                                 :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
-                               "Open tag in sidebar"
+                               "Open in sidebar"
                                (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
                               (shui/dropdown-menu-item
                                {:key "Remove tag"
@@ -2957,7 +2964,8 @@
                    (not hidden?))
                  (not (and block-ref? (or (seq ast-title) (seq ast-body))))
                  (not (:slide? config))
-                 (not= block-type :whiteboard-shape))
+                 (not= block-type :whiteboard-shape)
+                 (not (:table-block-title? config)))
         (properties-cp config block))
 
       (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
@@ -3053,7 +3061,8 @@
            (block-content config block edit-input-id block-id slide? *show-query?))
 
           (when (and (not hide-block-refs-count?)
-                     (not named?))
+                     (not named?)
+                     (not (:table-block-title? config)))
             [:div.flex.flex-row.items-center
              (when (and (:embed? config)
                         (:embed-parent config))
@@ -3071,16 +3080,17 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       [:div.flex.flex-row.items-center.self-start.gap-1
-        (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
+       (when-not (:table-block-title? config)
+         [:div.flex.flex-row.items-center.self-start.gap-1
+          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
-        (when-not (or (:table? config) (:property? config) (:page-title? config))
-          (block-refs-count block refs-count *hide-block-refs?))
+          (when-not (or (:table? config) (:property? config) (:page-title? config))
+            (block-refs-count block refs-count *hide-block-refs?))
 
-        (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
-                      (:property? config))
-          (when (and db-based? (seq (:block/tags block)))
-            (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))]]]]))
+          (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
+                        (:property? config))
+            (when (and db-based? (seq (:block/tags block)))
+              (tags-cp (assoc config :block/uuid (:block/uuid block)) block)))])]]]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
@@ -3579,7 +3589,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not property?))
+        (when (and (not slide?) (not in-whiteboard?) (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))

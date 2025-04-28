@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.util :as util]
@@ -12,7 +13,7 @@
 (deftest commands-test
   (testing "/command trigger popup"
     (util/new-page "Test")
-    (util/save-block "b1")
+    (b/save-block "b1")
     (util/type " /")
     (w/wait-for ".ui__popover-content")
     (is (some? (w/find-one-by-text "span" "Node reference")))
@@ -21,7 +22,7 @@
 
   (testing "Node reference"
     (testing "Page reference"
-      (util/new-block "/")
+      (b/new-block "/")
       (util/type "Node eferen")
       (w/wait-for ".ui__popover-content")
       (k/enter)
@@ -31,7 +32,7 @@
       (util/exit-edit)
       (is (= "Another page" (util/get-text "a.page-ref"))))
     (testing "Block reference"
-      (util/new-block "/")
+      (b/new-block "/")
       (util/type "Node eferen")
       (w/wait-for ".ui__popover-content")
       (k/enter)

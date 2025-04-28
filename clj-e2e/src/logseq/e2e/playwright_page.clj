@@ -1,6 +1,7 @@
 (ns logseq.e2e.playwright-page
   "operations on playwright pages."
-  (:require [logseq.e2e.config :as config]
+  (:require [logseq.e2e.assert :as assert]
+            [logseq.e2e.config :as config]
             [wally.main :as w]))
 
 (defn get-pages
@@ -16,7 +17,7 @@
         (.navigate page url)
         ;; wait the demo graph loaded
         (w/with-page page
-          (w/wait-for "span.block-title-wrap"))))))
+          (assert/assert-graph-loaded?))))))
 
 (defn close-pages
   [pages]

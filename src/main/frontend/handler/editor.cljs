@@ -2694,6 +2694,14 @@
   [node]
   (some-> node (dom/has-class? "property-value-container")))
 
+(defn- focus-trigger
+  [_current-block sibling-block]
+  (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
+    (state/clear-edit!)
+    (if (dom/has-class? trigger "ls-number")
+      (.click trigger)
+      (.focus trigger))))
+
 (defn move-cross-boundary-up-down
   [direction move-opts]
   (let [input (or (:input move-opts) (state/get-input))
@@ -2725,9 +2733,7 @@
                (save-block! repo uuid value))
 
              (if property-value-container?
-               (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
-                 (state/clear-edit!)
-                 (.focus trigger))
+               (focus-trigger current-block sibling-block)
                (let [new-uuid (cljs.core/uuid sibling-block-id)
                      block (db/entity [:block/uuid new-uuid])]
                  (edit-block! block
@@ -2793,9 +2799,7 @@
                 block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]
             (edit-block! block pos {:container-id container-id})))
         (when (property-value-node? sibling-block)
-          (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
-            (state/clear-edit!)
-            (.focus trigger)))))))
+          (focus-trigger editing-block sibling-block))))))
 
 (defn keydown-arrow-handler
   [direction]
@@ -4025,9 +4029,10 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
-     (and (:view? config)
+     (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
-              (some? (:block/_parent block)))))))
+              (some? (:block/_parent block))
+              (:table-block-title? config))))))
 
 (defn batch-set-heading!
   [block-ids heading]

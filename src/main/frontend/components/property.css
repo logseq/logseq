@@ -42,7 +42,7 @@
 }
 
 .property-value-container .jtrigger {
-  @apply focus-visible:outline-none focus-visible:bg-gray-02 focus-visible:rounded;
+  @apply focus-visible:outline-none focus-visible:bg-gray-03 focus-visible:rounded;
 }
 
 .ls-properties-area {
