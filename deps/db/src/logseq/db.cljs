@@ -584,6 +584,6 @@
 (defn get-schema
   "Returns schema for given repo"
   [repo]
-  (if (db-based-graph? repo)
+  (if (sqlite-util/db-based-graph? repo)
     db-schema/schema
     file-schema/schema))
