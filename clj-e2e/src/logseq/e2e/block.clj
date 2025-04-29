@@ -17,10 +17,11 @@
 
 (defn new-block
   [title]
-  (let [editor? (util/get-editor)]
-    (when-not editor? (open-last-block))
+  (let [editor (util/get-editor)]
+    (when-not editor (open-last-block))
     (assert/assert-editor-mode)
     (k/enter)
+    (assert/assert-editor-mode)
     (save-block title)))
 
 ;; TODO: support tree
