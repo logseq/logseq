@@ -5,6 +5,7 @@
             [logseq.e2e.commands-test]
             [logseq.e2e.config :as config]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.multi-tabs-test]
             [logseq.e2e.outliner-test]
@@ -74,7 +75,9 @@
 
   (do
     (reset! config/*headless true)
-    (dotimes [i 10]
-      (run-outliner-test)))
+    (reset! config/*slow-mo 100)
+    (dotimes [i 5]
+      (run-multi-tabs-test)))
+
   ;;
   )
