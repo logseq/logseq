@@ -14,6 +14,12 @@ const config: CapacitorConfig = {
     androidScheme: 'http',
   },
   plugins: {
+    StatusBar: {
+      overlaysWebView: true,
+      style: 'Light',
+      backgroundColor: '#ffffffff',
+    },
+
     SplashScreen: {
       launchShowDuration: 500,
       launchAutoHide: false,
@@ -38,15 +44,6 @@ const config: CapacitorConfig = {
       '@logseq/capacitor-file-sync', // AgeEncryption requires static link
     ]
   }
-}
-
-if ("http://192.168.199.216:3001") {
-  Object.assign(config, {
-    server: {
-      url: "http://192.168.199.216:3001",
-      cleartext: true
-    }
-  })
 }
 
 export = config;
