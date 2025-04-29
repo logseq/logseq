@@ -552,8 +552,9 @@
              (or (= id (:db/id (:logseq.property/view-for ref)))
                  (ldb/hidden? (:block/page ref))
                  (ldb/hidden? ref)
-                 (contains? (set (map :db/id (:block/tags ref))) id)
-                 (some? (get ref (:db/ident block))))))
+                 (and db-based? (contains? (set (map :db/id (:block/tags ref))) id))
+                 (some? (get ref (:db/ident block)))
+                 (= id (:db/id ref)))))
           (:block/_refs block)))))))
 
 (def-thread-api :thread-api/get-block-parents
