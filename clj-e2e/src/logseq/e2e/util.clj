@@ -62,12 +62,23 @@
   (double-esc)
   (assert/assert-in-normal-mode?)
   (w/click :#search-button)
+  (w/wait-for ".cp__cmdk-search-input")
   (w/fill ".cp__cmdk-search-input" text))
 
 (defn search-and-click
   [search-text]
   (search search-text)
-  (w/click (w/get-by-label search-text)))
+  (w/click (w/get-by-test-id search-text)))
+
+(defn wait-editor-gone
+  ([]
+   (wait-editor-gone ".editor-wrapper textarea"))
+  ([editor]
+   (w/wait-for-not-visible editor)))
+
+(defn wait-editor-visible
+  []
+  (w/wait-for ".editor-wrapper textarea"))
 
 (defn new-page
   [title]
@@ -76,7 +87,7 @@
   ;; (repl/pause)
   (search title)
   (w/click [(ws/text "Create page") (ws/nth= "0")])
-  (w/wait-for ".editor-wrapper textarea"))
+  (wait-editor-visible))
 
 (defn count-elements
   [q]
