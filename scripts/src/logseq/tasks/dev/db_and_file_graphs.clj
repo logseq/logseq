@@ -61,7 +61,8 @@
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
-  ["deps/graph-parser/src/logseq/graph_parser/db.cljs"
+  ["deps/db/src/logseq/db/file_based"
+   "deps/graph-parser/src/logseq/graph_parser/db.cljs"
    "deps/graph-parser/src/logseq/graph_parser/extract.cljc"
    "deps/graph-parser/src/logseq/graph_parser/property.cljs"
    "deps/graph-parser/src/logseq/graph_parser.cljs"
@@ -98,8 +99,7 @@
 
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
-  ;; TODO: Lint `(db-based-graph?` when db.frontend.entity-plus is split into separate graph contexts
-  (let [multi-graph-fns ["/db-based-graph\\?"
+  (let [multi-graph-fns ["/db-based-graph\\?" "\\(db-based-graph\\?"
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
@@ -120,12 +120,16 @@
                               "block/properties :"
                               ;; anything org mode except for org.babashka or urls like schema.org
                               "[^\\.]org[^\\.]"
+                              "file-based"
                               "#+BEGIN_"
                               "#+END_"
                               "pre-block"]))
         ;; For now use the whole code line. If this is too brittle can make this smaller
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
+                             ;; TODO: Mv these 2 file-based ns out of db files
+                             "(:require [logseq.db.file-based.rules :as file-rules]))"
+                             "[logseq.db.file-based.schema :as file-schema]))"
                              ;; The next 3 are from components.property.value
                              "{:block/name page-title})"
                              "(when-not (db/get-page journal)"
@@ -159,7 +163,7 @@
   (let [db-concepts
         ;; from logseq.db.frontend.schema
         ["closed-value" "class/properties" "classes" "property/parent"
-         "logseq.property" "logseq.class"]
+         "logseq.property" "logseq.class" "db-based"]
         res (grep-many db-concepts file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained db specific concepts:")

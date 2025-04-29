@@ -31,12 +31,14 @@
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -328,19 +330,19 @@
                                        :client-ops client-ops-db})
       (doseq [db' dbs]
         (enable-sqlite-wal-mode! db'))
-      (sqlite-common-db/create-kvs-table! db)
-      (when-not @*publishing? (sqlite-common-db/create-kvs-table! client-ops-db))
+      (common-sqlite/create-kvs-table! db)
+      (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (db-migrate/migrate-sqlite-db db)
       (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
-      (let [schema (sqlite-util/get-schema repo)
-            conn (sqlite-common-db/get-storage-conn storage schema)
+      (let [schema (ldb/get-schema repo)
+            conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
             _ (when datoms
                 (let [data (map (fn [datom]
                                   [:db/add (:e datom) (:a datom) (:v datom)]) datoms)]
                   (d/transact! conn data {:initial-db? true})))
-            client-ops-conn (when-not @*publishing? (sqlite-common-db/get-storage-conn
+            client-ops-conn (when-not @*publishing? (common-sqlite/get-storage-conn
                                                      client-ops-storage
                                                      client-op/schema-in-db))
             initial-data-exists? (when (nil? datoms)
@@ -357,12 +359,14 @@
             (d/transact! conn initial-data {:initial-db? true})))
 
         (try
-          (when-let [missing-addresses (seq (find-missing-addresses db))]
-            (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses})))
+          (when-not import-type
+            (when-let [missing-addresses (seq (find-missing-addresses db))]
+              (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
 
           (db-migrate/migrate conn search-db)
 
           (catch :default _e
+            (log/error "DB migrate failed, retrying")
             (when db-based?
               (rebuild-db-from-datoms! conn db import-type)
               (db-migrate/migrate conn search-db))))
@@ -489,7 +493,7 @@
                 id)]
       (some->> eid
                (d/pull @conn selector)
-               (sqlite-common-db/with-parent @conn)))))
+               (common-initial-data/with-parent @conn)))))
 
 (def ^:private *get-blocks-cache (volatile! (cache/lru-cache-factory {} :threshold 1000)))
 (def ^:private get-blocks-with-cache
@@ -503,7 +507,7 @@
      (when db
        (mapv (fn [{:keys [id opts]}]
                (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                 (-> (sqlite-common-db/get-block-and-children db id' opts)
+                 (-> (common-initial-data/get-block-and-children db id' opts)
                      (assoc :id id)))) requests)))))
 
 (def-thread-api :thread-api/get-blocks
@@ -601,7 +605,7 @@
 (def-thread-api :thread-api/get-initial-data
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (sqlite-common-db/get-initial-data @conn)))
+    (common-initial-data/get-initial-data @conn)))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
@@ -851,7 +855,7 @@
          :rtc-sync-state])))
 
 (defn- <init-service!
-  [graph]
+  [graph import?]
   (let [[prev-graph service] @*service]
     (some-> prev-graph close-db!)
     (when graph
@@ -860,7 +864,8 @@
         (p/let [service (shared-service/<create-service graph
                                                         (bean/->js fns)
                                                         #(on-become-master graph)
-                                                        broadcast-data-types)]
+                                                        broadcast-data-types
+                                                        {:import? import?})]
           (assert (p/promise? (get-in service [:status :ready])))
           (reset! *service [graph service])
           service)))))
@@ -880,10 +885,10 @@
                                 (= :thread-api/create-or-open-db method-k)
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
-                                (let [[graph _opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph)]
+                                (let [[graph opts] (ldb/read-transit-str (last args))]
+                                  (p/let [service (<init-service! graph (some? (:import-type opts)))]
                                     (get-in service [:status :ready])
-                                      ;; wait for service ready
+                                    ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
                                 (or (contains? #{:thread-api/sync-app-state} method-k)
