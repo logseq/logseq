@@ -79,7 +79,6 @@
         relation (ldb/get-pages-relation db journal?)
         tagged-pages (ldb/get-all-tagged-pages db)
         namespaces (gp-db/get-all-namespace-relation db)
-        tags (set (map second tagged-pages))
         full-pages (ldb/get-all-pages db)
         db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
