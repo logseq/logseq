@@ -311,7 +311,7 @@
           _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
           property-type (get property :logseq.property/type :default)
           _ (assert (some? v) "Can't set a nil property value must be not nil")
-          ref? (db-property-type/value-ref-property-types property-type)
+          ref? (contains? db-property-type/all-ref-property-types property-type)
           default-url-not-closed? (and (contains? #{:default :url} property-type)
                                        (not (seq (:property/closed-values property))))
           v' (if ref?
