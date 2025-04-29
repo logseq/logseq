@@ -1,6 +1,7 @@
 (ns user
   "fns used on repl"
   (:require [clojure.test :refer [run-tests run-test]]
+            [eftest.runner :as eftest]
             [logseq.e2e.block :as b]
             [logseq.e2e.commands-test]
             [logseq.e2e.config :as config]
@@ -83,11 +84,13 @@
              'logseq.e2e.outliner-test
              'logseq.e2e.rtc-basic-test)
 
-  (do
-    (reset! config/*headless true)
-    (reset! config/*slow-mo 50)
-    (dotimes [i 5]
-      (run-multi-tabs-test)))
+  (time
+   (do
+     (reset! config/*headless true)
+     (reset! config/*slow-mo 50)
+     (eftest/run-tests (eftest/find-tests "test") {:multithread? :namespaces})
+     (dotimes [i 5]
+      (run-multi-tabs-test))))
 
   ;;
   )

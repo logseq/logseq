@@ -151,8 +151,8 @@
       :or {username "e2etest"
            password "Logseq-e2e"}}]
   (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
-  (w/click "button[title=\"More\"]")
-  (w/click "div:text(\"Login\")")
+  (w/click "button.toolbar-dots-btn")
+  (w/click (w/get-by-text "Login"))
   (input username)
   (k/tab)
   (input password)

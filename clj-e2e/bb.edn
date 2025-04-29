@@ -13,7 +13,7 @@
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
   test {:task (do
-                (clojure "-T:build test")
+                (clojure "-X:eftest")
                 (System/exit 0))}
 
   -dev {:depends [serve prn test]}

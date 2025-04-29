@@ -8,8 +8,7 @@
    [logseq.e2e.page :as page]
    [logseq.e2e.rtc :as rtc]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-2-pages)
 

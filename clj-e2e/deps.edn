@@ -2,7 +2,7 @@
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
         ;; io.github.pfeodrippe/wally {:local/root "../../../wally"}
         io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
-                                    :sha "80ea665c75704a8ca80cb22caeaec3ae6f39ffdb"}
+                                    :sha "1fce69d261e7ee1e609e59a8cb802fe90fc23c08"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         org.clj-commons/claypoole          {:mvn/version "1.2.2"}
         clj-time/clj-time                  {:mvn/version "0.15.2"}}
@@ -17,4 +17,8 @@
          :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
                       io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}}}
-  :dev {:extra-paths ["dev" "test"]}}}
+  :eftest {:extra-deps {eftest/eftest {:mvn/version "0.6.0"}}
+           :extra-paths ["test"]
+           :exec-fn logseq.e2e.core/-main}
+  :dev {:extra-paths ["dev" "test"]
+        :extra-deps {eftest/eftest {:mvn/version "0.6.0"}}}}}
