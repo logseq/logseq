@@ -554,7 +554,7 @@
                   (map
                    (fn [[by-value entities]]
                      (let [by-value' (if (de/entity? by-value)
-                                       (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
+                                       (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
                                        by-value)
                            pages? (not (some :block/page entities))
                            group (if (and list-view? (not pages?))
