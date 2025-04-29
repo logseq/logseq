@@ -88,6 +88,18 @@
       [all-pages])
 
     (ionic/ion-content
+      (ionic/ion-refresher
+        {:slot "fixed"
+         :pull-factor 0.5
+         :pull-min 100
+         :pull-max 200
+         :on-ion-refresh (fn [^js e]
+                           (js/setTimeout
+                             (fn [] (.complete (.-detail e))
+                               (set-reload! (inc reload)))
+                             1000))}
+        (ionic/ion-refresher-content))
+
       (when page-input-open?
         (create-page-input {:close! #(set-page-input-open? false)
                             :reload-pages! #(set-reload! (inc reload))}))
