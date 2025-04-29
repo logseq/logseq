@@ -170,16 +170,7 @@
       )
     ))
 
-(rum/defc root <
-  rum/reactive
-  {:did-mount
-   (fn [s]
-     (js/setTimeout
-       (fn []
-         (.setStyle StatusBar #js {:style (.-Light Style)})
-         (.setBackgroundColor StatusBar #js {:color "#ffffff"}))
-       300)
-     s)}
+(rum/defc root < rum/reactive
   []
   (let [db-restoring? (fstate/sub :db/restoring?)]
     [:<>
@@ -215,8 +206,8 @@
     ;; global
     (rum/use-effect!
       (fn []
-        (some-> js/window.externalsjs
-          (.initGlobalListeners)))
+        (some-> js/window.externalsjs (.settleStatusBar))
+        (some-> js/window.externalsjs (.initGlobalListeners)))
       [])
 
     ;; navigation

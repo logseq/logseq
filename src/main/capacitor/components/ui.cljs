@@ -125,6 +125,17 @@
            :buttons (bean/->js (or buttons (:buttons modal-props)))
            :inputs (bean/->js (or inputs (:inputs modal-props) []))}))
 
+      :action-sheet
+      (ionic/ion-action-sheet
+        (merge modal-props
+          {:is-open true
+           :header (or content title header)
+           :onWillDismiss (fn [^js e]
+                            (when on-action
+                              (on-action (bean/->clj (.-detail e))))
+                            (close!))
+           :buttons (bean/->js (or buttons (:buttons modal-props)))}))
+
       ;; default
       (ionic/ion-modal
         (merge modal-props

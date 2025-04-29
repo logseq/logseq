@@ -40,3 +40,4 @@
 (defonce ion-refresher-content (shui-util/react->rum (.-IonRefresherContent ionic-react) false))
 (defonce ion-menu (shui-util/react->rum (.-IonMenu ionic-react) false))
 (defonce ion-menu-button (shui-util/react->rum (.-IonMenuButton ionic-react) false))
+(defonce ion-action-sheet (shui-util/react->rum (.-IonActionSheet ionic-react) false))
