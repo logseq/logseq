@@ -717,6 +717,7 @@
                                   (and alias? (= (or (:db/id (:block/page block))
                                                      (:db/id block))
                                                  (:db/id node)))
+                                  (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)
                                     (ldb/private-tags (:db/ident node))
@@ -729,7 +730,6 @@
                                     :else
                                     false))))
                           result)))
-
         options (map (fn [node]
                        (let [node (if (:value node)
                                     (assoc (:value node) :block/title (:label node))
