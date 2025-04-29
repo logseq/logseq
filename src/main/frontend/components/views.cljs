@@ -1753,9 +1753,12 @@
                                                      (assoc-in [:data-fns :add-new-object!] add-new-object!)
                                                      (assoc :data group ; data for this group
                                                             )))
-                       readable-property-value #(if (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                  (db-property/property-value-content %)
-                                                  (str %))
+                       readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                      (db-property/property-value-content %)
+                                                      (= (:db/ident %) :logseq.property/empty-placeholder)
+                                                      "Empty"
+                                                      :else
+                                                      (str %))
                        group-by-page? (or (= :block/page group-by-property-ident)
                                           (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
                    (rum/with-key
