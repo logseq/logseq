@@ -1,4 +1,4 @@
-(ns logseq.db.frontend.entity-plus
+(ns logseq.db.common.entity-plus
   "Add map ops such as assoc/dissoc to datascript Entity.
 
    NOTE: This doesn't work for nbb/sci yet because of https://github.com/babashka/sci/issues/639"
@@ -58,7 +58,7 @@
     ;; FIXME: Correct dependency ordering instead of resolve workaround
     #?(:org.babashka/nbb false
        :cljs (when-let [f (resolve 'frontend.common.missionary/background-task-running?)]
-               (f :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!)))))
+               (f :logseq.db.common.entity-plus/reset-immutable-entities-cache!)))))
 
 (defn entity-memoized
   [db eid]

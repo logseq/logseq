@@ -21,7 +21,7 @@
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]

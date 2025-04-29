@@ -357,10 +357,20 @@
 
       ;; task management
       (get-statuses)
-      [["Deadline" [[:editor/clear-current-slash]
-                    [:editor/set-deadline]] "" :icon/calendar-stats]
-       ["Scheduled" [[:editor/clear-current-slash]
-                     [:editor/set-scheduled]] "" :icon/calendar-month]]
+
+      ;; task date
+      [["Deadline"
+        [[:editor/clear-current-slash]
+         [:editor/set-deadline]]
+        ""
+        :icon/calendar-stats
+        "TASK DATE"]
+       ["Scheduled"
+        [[:editor/clear-current-slash]
+         [:editor/set-scheduled]]
+        ""
+        :icon/calendar-month
+        "TASK DATE"]]
 
       ;; priority
       (get-priorities)

@@ -1,7 +1,8 @@
 (ns logseq.e2e.fixtures
-  (:require [wally.main :as w]
-            [logseq.e2e.config :as config]
-            [logseq.e2e.playwright-page :as pw-page]))
+  (:require [logseq.e2e.config :as config]
+            [logseq.e2e.playwright-page :as pw-page]
+            [logseq.e2e.util :as util]
+            [wally.main :as w]))
 
 ;; TODO: save trace
 ;; TODO: parallel support
@@ -10,8 +11,7 @@
   (w/with-page-open
     (w/make-page {:headless (or headless @config/*headless)
                   :persistent false
-                  :slow-mo @config/*slow-mo
-                  })
+                  :slow-mo @config/*slow-mo})
     (w/navigate (str "http://localhost:" (or port @config/*port)))
     (f)))
 
@@ -55,3 +55,10 @@
     (binding [*pw-ctx* ctx]
       (f)
       (.close (.browser *pw-ctx*)))))
+
+(defonce *page-number (atom 0))
+
+(defn new-logseq-page
+  [f]
+  (util/new-page (str "page " (swap! *page-number inc)))
+  (f))

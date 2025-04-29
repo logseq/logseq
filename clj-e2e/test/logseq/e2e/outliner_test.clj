@@ -1,16 +1,16 @@
 (ns logseq.e2e.outliner-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
-   [logseq.e2e.block :as b]
    [logseq.e2e.util :as util]
    [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
+(use-fixtures :each fixtures/new-logseq-page)
 
 (deftest create-test-page-and-insert-blocks
-  (util/new-page "p1")
   ;; a page block and a child block
   (is (= 2 (util/blocks-count)))
   (b/new-blocks ["first block" "second block"])
@@ -18,7 +18,6 @@
   (is (= 3 (util/blocks-count))))
 
 (deftest indent-and-outdent-test
-  (util/new-page "p2")
   (b/new-blocks ["b1" "b2"])
   (testing "simple indent and outdent"
     (util/indent)
@@ -44,7 +43,6 @@
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
 
 (deftest move-up-down-test
-  (util/new-page "p3")
   (b/new-blocks ["b1" "b2" "b3" "b4"])
   (util/repeat-keyboard 2 "Shift+ArrowUp")
   (let [contents (util/get-page-blocks-contents)]
@@ -58,16 +56,15 @@
 
 (deftest delete-test
   (testing "Delete blocks case 1"
-    (util/new-page "p4")
     (b/new-blocks ["b1" "b2" "b3" "b4"])
     (b/delete-blocks)                   ; delete b4
     (util/repeat-keyboard 2 "Shift+ArrowUp") ; select b3 and b2
     (b/delete-blocks)
     (is (= "b1" (util/get-edit-content)))
-    (is (= 1 (util/page-blocks-count))))
+    (is (= 1 (util/page-blocks-count)))))
 
+(deftest delete-test-with-children
   (testing "Delete block with its children"
-    (util/new-page "p5")
     (b/new-blocks ["b1" "b2" "b3" "b4"])
     (util/indent)
     (k/arrow-up)

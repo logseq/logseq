@@ -61,7 +61,7 @@
     :else (throw (ex-info "Not a schema-version" {:data schema-version}))))
 
 (def schema
-  "Schema for DB graphs"
+  "Schema for DB graphs. :block/tags are classes in this schema"
   (merge
    (apply dissoc file-schema/schema file-schema/file-only-attributes)
    {:block/name {:db/index true}        ; remove db/unique for :block/name

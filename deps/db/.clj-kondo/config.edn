@@ -9,10 +9,11 @@
   :consistent-alias
   {:aliases {clojure.string string
              logseq.db ldb
+             logseq.db.common.entity-plus entity-plus
              logseq.db.common.entity-util common-entity-util
              logseq.db.common.order db-order
              logseq.db.common.property-util db-property-util
-             logseq.db.common.sqlite sqlite-common-db
+             logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
              logseq.db.frontend.content db-content
              logseq.db.frontend.class db-class
@@ -25,12 +26,12 @@
              logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
              logseq.db.file-based.entity-util file-entity-util
-             logseq.db.frontend.entity-plus entity-plus
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
              logseq.db.sqlite.build sqlite-build
-             logseq.db.sqlite.cli sqlite-cli
+             logseq.db.common.initial-data common-initial-data
+             logseq.db.common.sqlite-cli sqlite-cli
              logseq.db.sqlite.create-graph sqlite-create-graph
              logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util}}}

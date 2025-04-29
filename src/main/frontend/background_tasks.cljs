@@ -2,11 +2,11 @@
   "Some background tasks"
   (:require [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [missionary.core :as m]))
 
 (c.m/run-background-task
- :logseq.db.frontend.entity-plus/reset-immutable-entities-cache!
+ :logseq.db.common.entity-plus/reset-immutable-entities-cache!
  (m/reduce
   (fn [_ repo]
     (when (some? repo)
