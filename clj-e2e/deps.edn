@@ -2,7 +2,7 @@
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
         ;; io.github.pfeodrippe/wally {:local/root "../../../wally"}
         io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
-                                    :sha "1fce69d261e7ee1e609e59a8cb802fe90fc23c08"}
+                                    :sha "e3cfaafe7b67d4473d0a8eaabbbb518792cbe327"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         org.clj-commons/claypoole          {:mvn/version "1.2.2"}
         clj-time/clj-time                  {:mvn/version "0.15.2"}}
