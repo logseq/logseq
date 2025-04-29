@@ -554,7 +554,8 @@
                  (ldb/hidden? ref)
                  (and db-based? (contains? (set (map :db/id (:block/tags ref))) id))
                  (some? (get ref (:db/ident block)))
-                 (= id (:db/id ref)))))
+                 (= id (:db/id ref))
+                 (= id (:db/id (:block/page ref))))))
           (:block/_refs block)))))))
 
 (def-thread-api :thread-api/get-block-parents
