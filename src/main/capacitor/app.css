@@ -9,12 +9,21 @@
 }
 
 html.plt-capacitor.plt-android {
+  --ion-safe-area-top: 40px;
+
   ion-button, ion-tab-button {
     --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
   }
 
   ion-app {
-    margin-top: 40px;
+    margin-top: 0;
+  }
+
+  ion-nav {
+    .header-md {
+      box-shadow: 0 2px 8px #eee;
+      border-bottom: .5px solid rgba(0, 0, 0, .15);
+    }
   }
 }
 
