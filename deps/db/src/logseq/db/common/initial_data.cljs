@@ -238,11 +238,15 @@
           (d/datoms db :avet :block/closed-value-property))
          (mapcat (fn [d]
                    (let [block-datoms (d/datoms db :eavt (:e d))
-                         property-desc-datoms (when (= (:v d) class-property-id)
-                                                (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
-                                                  (d/datoms db :eavt (:db/id desc))))]
-                     (if property-desc-datoms
-                       (concat block-datoms property-desc-datoms)
+                         properties-of-property-datoms
+                         (when (= (:v d) class-property-id)
+                           (concat
+                            (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
+                              (d/datoms db :eavt (:db/id desc)))
+                            (when-let [desc (:logseq.property/default-value (d/entity db (:e d)))]
+                              (d/datoms db :eavt (:db/id desc)))))]
+                     (if (seq properties-of-property-datoms)
+                       (concat block-datoms properties-of-property-datoms)
                        block-datoms)))))))
 
 (defn- get-favorites
