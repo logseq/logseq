@@ -523,9 +523,20 @@
                               (filter (fn [row] (row-matched? db row filters input)) entities)
                               entities)
           group-by-page? (= group-by-property-ident :block/page)
+          readable-property-value-or-ent
+          (fn readable-property-value-or-ent [ent]
+            (let [pvalue (get ent group-by-property-ident)]
+              (if (de/entity? pvalue)
+              ;; Allow original grouping for pvalues with :db/ident e.g. closed values like status
+              ;; OR for any type that aren't text types
+                (if (or (:db/ident pvalue)
+                        (not (contains? db-property-type/closed-value-property-types (:logseq.property/type group-by-property))))
+                  pvalue
+                  (db-property/property-value-content pvalue))
+                pvalue)))
           result (if group-by-property-ident
                    (->> filtered-entities
-                        (group-by group-by-property-ident)
+                        (group-by readable-property-value-or-ent)
                         (seq)
                         (sort-by (fn [[by-value _]]
                                    (cond
