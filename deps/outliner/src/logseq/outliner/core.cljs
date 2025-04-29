@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
@@ -163,7 +164,9 @@
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
         content-refs (when-let [content (:block/title block)]
-                       (gp-block/extract-refs-from-text repo db content date-formatter))]
+                       (let [format (or (:block/format block) :markdown)
+                             content' (str (common-config/get-block-pattern format) " " content)]
+                         (gp-block/extract-refs-from-text repo db content' date-formatter)))]
     (concat property-refs content-refs)))
 
 (defn ^:api rebuild-block-refs
