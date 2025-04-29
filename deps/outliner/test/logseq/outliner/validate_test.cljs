@@ -1,7 +1,7 @@
 (ns logseq.outliner.validate-test
   (:require [cljs.test :refer [are deftest is testing]]
             [datascript.core :as d]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.validate :as outliner-validate]))
 

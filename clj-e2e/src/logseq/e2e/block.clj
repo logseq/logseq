@@ -11,14 +11,30 @@
   (assert/assert-in-normal-mode?)
   (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
 
-(defn new-block
-  [title]
-  (k/enter)
-  (util/input title))
-
 (defn save-block
   [text]
-  (util/input text))
+  (w/fill ".editor-wrapper textarea" text))
+
+(defn new-block
+  [title]
+  (let [editor? (util/get-editor)]
+    (when-not editor? (open-last-block))
+    (assert/assert-editor-mode)
+    (k/enter)
+    (save-block title)))
+
+;; TODO: support tree
+(defn new-blocks
+  [titles]
+  (let [editor? (util/get-editor)]
+    (when-not editor? (open-last-block))
+    (assert/assert-editor-mode)
+    (let [value (util/get-edit-content)]
+      (if (string/blank? value)           ; empty block
+        (save-block (first titles))
+        (new-block (first titles))))
+    (doseq [title (rest titles)]
+      (new-block title))))
 
 (defn delete-blocks
   "Delete the current block if in editing mode, otherwise, delete all the selected blocks."
@@ -26,19 +42,6 @@
   (let [editor (util/get-editor)]
     (when editor (util/exit-edit))
     (k/backspace)))
-
-;; TODO: support tree
-(defn new-blocks
-  [titles]
-  (open-last-block)
-  (let [value (util/get-edit-content)]
-    (if (string/blank? value)           ; empty block
-      (do
-        (save-block (first titles))
-        (doseq [title (rest titles)]
-          (new-block title)))
-      (doseq [title titles]
-        (new-block title)))))
 
 (defn assert-blocks-visible
   "blocks - coll of :block/title"

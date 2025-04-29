@@ -170,7 +170,7 @@
   (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
 (defn build-initial-views
-  "Builds initial blocks used for storing views. Used by db and file graphs"
+  "Builds initial blocks used for storing views"
   []
   (let [page-id (common-uuid/gen-uuid :builtin-block-uuid common-config/views-page-name)]
     [(sqlite-util/block-with-timestamps

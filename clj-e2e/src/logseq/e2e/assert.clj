@@ -29,3 +29,9 @@
   []
   ;; there's some blocks visible now
   (assert-is-visible "span.block-title-wrap"))
+
+(defn assert-editor-mode
+  []
+  (let [klass ".editor-wrapper textarea"
+        editor (w/-query klass)]
+    (w/wait-for editor)))

@@ -6,7 +6,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.datascript-report :as ds-report]))
 

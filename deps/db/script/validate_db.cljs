@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [malli.core :as m]
             [malli.error :as me]
             [nbb.core :as nbb]))

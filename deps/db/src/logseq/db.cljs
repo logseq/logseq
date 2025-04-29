@@ -10,14 +10,16 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -190,7 +192,7 @@
        (map first)
        (remove hidden?)))
 
-(def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
+(def get-first-page-by-name common-initial-data/get-first-page-by-name)
 
 (def db-based-graph? entity-plus/db-based-graph?)
 
@@ -248,7 +250,7 @@
     (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
                     (parse-uuid page-name-or-uuid))]
       (d/entity db [:block/uuid id])
-      (d/entity db (sqlite-common-db/get-first-page-by-title db page-name-or-uuid)))))
+      (d/entity db (common-initial-data/get-first-page-by-title db page-name-or-uuid)))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -347,8 +349,8 @@
         (recur (:block/uuid parent) (conj parents' parent) (inc d))
         parents'))))
 
-(def get-block-children-ids sqlite-common-db/get-block-children-ids)
-(def get-block-children sqlite-common-db/get-block-children)
+(def get-block-children-ids common-initial-data/get-block-children-ids)
+(def get-block-children common-initial-data/get-block-children)
 
 (defn- get-sorted-page-block-ids
   [db page-id]
@@ -541,9 +543,9 @@
 (def get-class-ident-by-display-type db-db/get-class-ident-by-display-type)
 (def get-display-type-by-class-ident db-db/get-display-type-by-class-ident)
 
-(def get-recent-updated-pages sqlite-common-db/get-recent-updated-pages)
+(def get-recent-updated-pages common-initial-data/get-recent-updated-pages)
 
-(def get-latest-journals sqlite-common-db/get-latest-journals)
+(def get-latest-journals common-initial-data/get-latest-journals)
 
 (defn get-pages-relation
   [db with-journal?]
@@ -578,3 +580,10 @@
          :where
          [?page :block/tags ?tag]]
        db))
+
+(defn get-schema
+  "Returns schema for given repo"
+  [repo]
+  (if (sqlite-util/db-based-graph? repo)
+    db-schema/schema
+    file-schema/schema))

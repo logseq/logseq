@@ -55,7 +55,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.file-based.schema :as file-schema]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]

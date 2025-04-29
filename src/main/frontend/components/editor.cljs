@@ -47,7 +47,7 @@
               (or
                (= "Add new property" (first item))
                (when (= (count item) 5)
-                 (contains? #{"TASK STATUS" "PRIORITY"} (last item))))) commands)
+                 (contains? #{"TASK STATUS" "TASK DATE" "PRIORITY"} (last item))))) commands)
     commands))
 
 (rum/defcs commands < rum/reactive

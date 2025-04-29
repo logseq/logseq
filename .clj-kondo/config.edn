@@ -9,7 +9,7 @@
 
   all-frontend
   {:linters {:discouraged-namespace
-             {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+             {logseq.db.common.sqlite-cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
               logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}}}
 
   ;; false positive with match/match and _
@@ -45,7 +45,7 @@
    rum.core/use-layout-effect! {:message "Use frontend.hooks/use-layout-effect! instead" :level :info}
    rum.core/use-callback {:message "Use frontend.hooks/use-callback instead" :level :info}}
   :unused-namespace {:level :warning
-                     :exclude [logseq.db.frontend.entity-plus]}
+                     :exclude [logseq.db.common.entity-plus]}
 
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
@@ -173,10 +173,12 @@
              logseq.common.util.namespace ns-util
              logseq.common.util.page-ref page-ref
              logseq.db ldb
+             logseq.db.common.entity-plus entity-plus
              logseq.db.common.entity-util common-entity-util
+             logseq.db.common.initial-data common-initial-data
              logseq.db.common.order db-order
              logseq.db.common.property-util db-property-util
-             logseq.db.common.sqlite sqlite-common-db
+             logseq.db.common.sqlite common-sqlite
              logseq.db.common.view db-view
              logseq.db.file-based.rules file-rules
              logseq.db.file-based.schema file-schema
@@ -185,7 +187,6 @@
              logseq.db.frontend.content db-content
              logseq.db.frontend.db db-db
              logseq.db.frontend.db-ident db-ident
-             logseq.db.frontend.entity-plus entity-plus
              logseq.db.frontend.entity-util entity-util
              logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.property db-property
@@ -195,7 +196,7 @@
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
              logseq.db.sqlite.build sqlite-build
-             logseq.db.sqlite.cli sqlite-cli
+             logseq.db.common.sqlite-cli sqlite-cli
              logseq.db.sqlite.create-graph sqlite-create-graph
              logseq.db.sqlite.export sqlite-export
              logseq.db.sqlite.util sqlite-util

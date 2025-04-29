@@ -197,16 +197,17 @@
     "page"))
 
 (defmethod load-results :initial [_ state]
-  (let [!results (::results state)
-        recent-pages (map (fn [block]
-                            (let [text (block-handler/block-unique-title block)
-                                  icon (get-page-icon block)]
-                              {:icon icon
-                               :icon-theme :gray
-                               :text text
-                               :source-block block}))
-                          (ldb/get-recent-updated-pages (db/get-db)))]
-    (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages))))
+  (when-let [db (db/get-db)]
+    (let [!results (::results state)
+          recent-pages (map (fn [block]
+                              (let [text (block-handler/block-unique-title block)
+                                    icon (get-page-icon block)]
+                                {:icon icon
+                                 :icon-theme :gray
+                                 :text text
+                                 :source-block block}))
+                            (ldb/get-recent-updated-pages db))]
+      (reset! !results (assoc-in default-results [:recently-updated-pages :items] recent-pages)))))
 
 ;; The commands search uses the command-palette handler
 (defmethod load-results :commands [group state]

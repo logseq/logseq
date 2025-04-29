@@ -74,7 +74,7 @@
                          (not= (util/safe-parse-int (or port 0))
                                (util/safe-parse-int (or (:port server-state) 0))))
         changed?     (or hp-changed? (->> [autostart (:autostart server-state)]
-                                          (mapv #(cond-> % (nil? %) not))
+                                          (mapv #(cond-> % (nil? %) boolean))
                                           (apply not=)))]
 
     [:div.cp__server-configs-panel.pt-5
@@ -104,7 +104,7 @@
        (ui/checkbox
         {:on-change #(let [checked (.-checked (.-target %))]
                        (swap! *configs assoc :autostart checked))
-         :value     (not (false? autostart))})
+         :checked   (not (false? autostart))})
 
        [:strong.select-none "Auto start server with the app launched"]]]
 

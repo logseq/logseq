@@ -22,7 +22,7 @@
    [goog.dom :as gdom]
    [lambdaisland.glogi :as log]
    [logseq.db :as ldb]
-   [logseq.db.common.sqlite :as sqlite-common-db]
+   [logseq.db.common.sqlite :as common-sqlite]
    [logseq.publishing.html :as publish-html]
    [promesa.core :as p])
   (:import
@@ -58,7 +58,7 @@
   [repo]
   (p/let [db-data (persist-db/<export-db repo {:return-data? true})
           filename "db.sqlite"
-          repo-name (sqlite-common-db/sanitize-db-name repo)
+          repo-name (common-sqlite/sanitize-db-name repo)
           assets (assets-handler/<get-all-assets)
           files (cons [filename db-data] assets)
           zipfile (zip/make-zip repo-name files repo)]
@@ -255,7 +255,7 @@
   (when (and repo (= repo (state/get-current-repo)))
     (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
       (p/let [handle (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
-              repo-name (sqlite-common-db/sanitize-db-name repo)]
+              repo-name (common-sqlite/sanitize-db-name repo)]
         (if handle
           (->
            (p/let [graph-dir-handle (.getDirectoryHandle handle repo-name #js {:create true})

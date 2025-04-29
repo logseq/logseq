@@ -80,7 +80,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]

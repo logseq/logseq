@@ -302,8 +302,9 @@
 (defn <create-service
   "broadcast-data-types - For data matching these types,
                           forward the data broadcast from the master client directly to the UI thread."
-  [service-name target on-become-master-handler broadcast-data-types]
+  [service-name target on-become-master-handler broadcast-data-types {:keys [import?]}]
   (clear-old-service!)
+  (when import? (reset! *master-client? true))
   (p/let [broadcast-data-types (set broadcast-data-types)
           status {:ready (p/deferred)}
           common-channel (ensure-common-channel service-name)

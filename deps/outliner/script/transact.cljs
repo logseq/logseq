@@ -6,7 +6,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.sqlite.cli :as sqlite-cli]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.outliner.db-pipeline :as db-pipeline]
             [nbb.core :as nbb]))
 
