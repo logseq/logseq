@@ -1158,7 +1158,7 @@
                                                (d/has-class? node "tag")))))
                         (show-popup! target))))]
         (shui/trigger-as
-         (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
+         (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
          {:ref *el
           :id trigger-id
           :tabIndex 0
@@ -1280,7 +1280,7 @@
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
 
-      (and (= type :number) (not editing?))
+      (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))
 
       :else
