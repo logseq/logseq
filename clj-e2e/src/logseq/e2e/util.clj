@@ -68,7 +68,7 @@
 (defn search-and-click
   [search-text]
   (search search-text)
-  (w/click (w/get-by-test-id search-text)))
+  (w/click (.first (w/get-by-test-id search-text))))
 
 (defn wait-editor-gone
   ([]
@@ -79,15 +79,6 @@
 (defn wait-editor-visible
   []
   (w/wait-for ".editor-wrapper textarea"))
-
-(defn new-page
-  [title]
-  ;; Question: what's the best way to close all the popups?
-  ;; close popup, exit editing
-  ;; (repl/pause)
-  (search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
-  (wait-editor-visible))
 
 (defn count-elements
   [q]

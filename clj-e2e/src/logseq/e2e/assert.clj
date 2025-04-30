@@ -4,21 +4,14 @@
 
 (def assert-that PlaywrightAssertions/assertThat)
 
-(defn- locator-from-q
-  [q]
-  (if (instance? com.microsoft.playwright.Locator q)
-    q
-    (w/-query q)))
-
 (defn assert-is-visible
-  "Multiple elements may match `q`, check and wait for the first element to be visible."
   [q]
-  (-> (locator-from-q q) assert-that .isVisible)
+  (-> (w/-query q) .first assert-that .isVisible)
   true)
 
 (defn assert-is-hidden
   [q]
-  (-> (locator-from-q q) assert-that .isHidden)
+  (-> (w/-query q) assert-that .isHidden)
   true)
 
 (defn assert-in-normal-mode?
