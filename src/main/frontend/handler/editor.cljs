@@ -2092,7 +2092,7 @@
         (cond->> new-content
           (not keep-uuid?) (property-file/remove-property-when-file-based repo format "id")
           true             (property-file/remove-property-when-file-based repo format "custom_id"))]
-    (merge (apply dissoc block (conj (when-not keep-uuid? [:block/_refs]) :block/pre-block? :block/meta))
+    (merge (apply dissoc block (conj (if-not keep-uuid? [:block/_refs] []) :block/pre-block? :block/meta))
            (cond->
             {:block/page {:db/id (:db/id page)}
              :block/title new-content}
