@@ -6,9 +6,9 @@
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
@@ -242,15 +242,19 @@
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
   [conn property-id v property-type]
-  (if (and (integer? v)
-           (or (not= property-type :number)
+  (let [number-property? (= property-type :number)]
+    (if (and (integer? v)
+             (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
-               (and (= property-type :number)
-                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
-                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
-    v
-    ;; only value-ref-property types should call this
-    (find-or-create-property-value conn property-id v)))
+                 (and number-property?
+                      (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                          (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
+      v
+      ;; only value-ref-property types should call this
+      (let [v' (if (and number-property? (string? v))
+                 (parse-double v)
+                 v)]
+        (find-or-create-property-value conn property-id v')))))
 
 (defn- throw-error-if-self-value
   [block value ref?]
@@ -295,7 +299,7 @@
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values."
-  [conn block-ids property-id v]
+  [conn block-ids property-id v option]
   (assert property-id "property-id is nil")
   (throw-error-if-read-only-property property-id)
   (if (nil? v)
@@ -314,7 +318,8 @@
           ref? (contains? db-property-type/all-ref-property-types property-type)
           default-url-not-closed? (and (contains? #{:default :url} property-type)
                                        (not (seq (:property/closed-values property))))
-          v' (if ref?
+          entity-id? (and (:entity-id? option) (number? v))
+          v' (if (and ref? (not entity-id?))
                (convert-ref-property-value conn property-id v property-type)
                v)
           txs (doall
