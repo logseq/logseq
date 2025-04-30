@@ -54,8 +54,8 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -1049,10 +1049,11 @@
   [copy?]
   (when copy? (copy-selection-blocks true))
   (state/set-block-op-type! :cut)
-  (when-let [blocks (seq (get-selected-blocks))]
+  (when-let [blocks (->> (get-selected-blocks)
+                         (remove #(dom/has-class? % "property-value-container"))
+                         seq)]
     ;; remove queries
-    (let [dom-blocks (remove (fn [block]
-                               (= "true" (dom/attr block "data-query"))) blocks)]
+    (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
       (when (seq dom-blocks)
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
@@ -2698,7 +2699,8 @@
   [_current-block sibling-block]
   (when-let [trigger (first (dom/by-class sibling-block "jtrigger"))]
     (state/clear-edit!)
-    (if (dom/has-class? trigger "ls-number")
+    (if (or (dom/has-class? trigger "ls-number")
+            (dom/has-class? trigger "ls-empty-text-property"))
       (.click trigger)
       (.focus trigger))))
 
@@ -2768,9 +2770,10 @@
       (move-cross-boundary-up-down direction move-opts)
 
       :else
-      (if up?
-        (cursor/move-cursor-up input)
-        (cursor/move-cursor-down input)))))
+      (when input
+        (if up?
+          (cursor/move-cursor-up input)
+          (cursor/move-cursor-down input))))))
 
 (defn move-to-block-when-cross-boundary
   [direction {:keys [block]}]
