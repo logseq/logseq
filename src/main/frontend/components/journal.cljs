@@ -19,13 +19,14 @@
 
 (defn- sub-journals
   []
-  (-> (react/q (state/get-current-repo)
-               [:frontend.worker.react/journals]
-               {:query-fn (fn [_]
-                            (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
-                              (remove nil? data)))}
-               nil)
-      util/react))
+  (when-let [repo (state/get-current-repo)]
+    (-> (react/q repo
+                 [:frontend.worker.react/journals]
+                 {:query-fn (fn [_]
+                              (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
+                                (remove nil? data)))}
+                 nil)
+        util/react)))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
