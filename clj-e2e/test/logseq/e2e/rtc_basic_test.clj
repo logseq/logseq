@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
    [com.climate.claypoole :as cp]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
    [logseq.e2e.page :as page]
@@ -26,7 +27,7 @@
       (w/with-page @*page2
         (graph/wait-for-remote-graph graph-name)
         (graph/switch-graph graph-name true)))
-    (testing "do some operations on logseq pages"
+    (testing "logseq pages add/delete"
       (doseq [page-name page-names]
         (let [{:keys [_local-tx remote-tx]}
               (w/with-page @*page1
@@ -34,8 +35,19 @@
                   (page/new-page page-name)))]
           (w/with-page @*page2
             (rtc/wait-tx-update-to remote-tx)
-            (util/search-and-click page-name)))))
-
+            (util/search-and-click page-name))))
+      (let [*last-remote-tx (atom nil)]
+        (doseq [page-name page-names]
+          (let [{:keys [_local-tx remote-tx]}
+                (w/with-page @*page1
+                  (rtc/with-wait-tx-updated
+                    (page/delete-page page-name)))]
+            (reset! *last-remote-tx remote-tx)))
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to @*last-remote-tx)
+          (doseq [page-name page-names]
+            (util/search page-name)
+            (assert/assert-is-hidden (w/get-by-test-id page-name))))))
     (testing "cleanup"
       (w/with-page @*page2
         (graph/remove-remote-graph graph-name)))))
