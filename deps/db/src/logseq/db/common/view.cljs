@@ -164,6 +164,15 @@
       :else
       value)))
 
+(defn- match-property-value-as-entity?
+  "Determines if the property value entity should be treated as an entity. For some property types
+   like :default, we want match on the entity's content as that is what the user sees and interacts with"
+  [property-value-entity property-entity]
+  ;; Allow pvalue entities with :db/ident e.g. closed values like status OR for any type
+  ;; that aren't text types
+  (or (:db/ident property-value-entity)
+      (not (contains? db-property-type/closed-value-property-types (:logseq.property/type property-entity)))))
+
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
   (let [or? (:or? filters)
@@ -194,7 +203,12 @@
                       true
                       :else
                       (if entity?
-                        (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                        (let [property (d/entity db property-ident)]
+                          (if (match-property-value-as-entity? (first value') property)
+                            (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                            (boolean (seq (set/intersection (set (map db-property/property-value-content value'))
+                                                            (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
+                                                                      match)))))))
                         (boolean (seq (set/intersection (set value') match))))))
 
                   :is-not
@@ -207,7 +221,12 @@
                       true
                       :else
                       (if entity?
-                        (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                        (let [property (d/entity db property-ident)]
+                          (if (match-property-value-as-entity? (first value') property)
+                            (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                            (boolean (empty? (set/intersection (set (map db-property/property-value-content value'))
+                                                               (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
+                                                                         match)))))))
                         (boolean (empty? (set/intersection (set value') match))))))
 
                   :text-contains
@@ -527,10 +546,7 @@
           (fn readable-property-value-or-ent [ent]
             (let [pvalue (get ent group-by-property-ident)]
               (if (de/entity? pvalue)
-              ;; Allow original grouping for pvalues with :db/ident e.g. closed values like status
-              ;; OR for any type that aren't text types
-                (if (or (:db/ident pvalue)
-                        (not (contains? db-property-type/closed-value-property-types (:logseq.property/type group-by-property))))
+                (if (match-property-value-as-entity? pvalue group-by-property)
                   pvalue
                   (db-property/property-value-content pvalue))
                 pvalue)))
