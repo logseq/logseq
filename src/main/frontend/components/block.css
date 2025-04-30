@@ -533,7 +533,7 @@
 }
 
 .ls-block {
-  @apply relative py-0.5 transition-[background-color] mx-auto;
+  @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
 
   &.selected {
     @apply rounded;
