@@ -995,6 +995,9 @@
       (cond
         (seq value-block)
         [:div.property-block-container.content.w-full
+         {:style (if (= (:db/ident property) :logseq.property/default-value)
+                   {:min-width 300}
+                   {})}
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
                                   (:block/uuid value-block)))
@@ -1190,7 +1193,9 @@
       :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
-       [:div.jtrigger.cursor-pointer.text-sm.px-2 "Set default value"]
+       [:div.jtrigger.cursor-pointer.text-sm.px-2
+        {:on-click #(<create-new-block! block property "")}
+        "Set default value"]
 
        text-ref-type?
        (property-block-value value block property page-cp opts)
