@@ -2,7 +2,8 @@
   (:require [logseq.e2e.config :as config]
             [logseq.e2e.playwright-page :as pw-page]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w]
+            [logseq.e2e.page :as page]))
 
 ;; TODO: save trace
 ;; TODO: parallel support
@@ -60,5 +61,5 @@
 
 (defn new-logseq-page
   [f]
-  (util/new-page (str "page " (swap! *page-number inc)))
+  (page/new-page (str "page " (swap! *page-number inc)))
   (f))
