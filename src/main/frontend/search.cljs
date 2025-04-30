@@ -55,7 +55,7 @@
                              (p/let [result (db-async/<get-all-templates repo)]
                                (vals result)))]
            (when (seq templates)
-             (let [extract-fn (if db-based? :block/title :template)]
+             (let [extract-fn :block/title]
                (fuzzy/fuzzy-search templates q {:limit limit
                                                 :extract-fn extract-fn})))))))))
 
