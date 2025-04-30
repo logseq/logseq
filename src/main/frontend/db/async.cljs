@@ -42,7 +42,10 @@
                        :where
                        [?b :block/properties ?p]
                        [(get ?p :template) ?t]])]
-    (into {} result)))
+    (->> result
+         (map (fn [[template b]]
+                [template (assoc b :block/title template)]))
+         (into {}))))
 
 (defn <get-template-by-name
   [name]

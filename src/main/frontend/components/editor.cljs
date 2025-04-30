@@ -350,11 +350,11 @@
 
 (rum/defc template-search-aux
   [id q]
-  (let [db-based? (config/db-based-graph?)
-        [matched-templates set-matched-templates!] (rum/use-state nil)]
+  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
-                           (set-matched-templates! (sort-by :block/title result))))
+                           (set-matched-templates!
+                            (sort-by :block/title result))))
                        [q])
     (ui/auto-complete
      matched-templates
@@ -362,7 +362,7 @@
       :on-enter    (fn [_state] (state/clear-editor-action!))
       :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
       :item-render (fn [template]
-                     (if db-based? (:block/title template) (:template template)))
+                     (:block/title template))
       :class       "black"})))
 
 (rum/defc template-search < rum/reactive
