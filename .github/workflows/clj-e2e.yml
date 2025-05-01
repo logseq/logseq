@@ -86,3 +86,11 @@ jobs:
         run: cd clj-e2e && bb dev
         env:
           DEBUG: "pw:api"
+          
+      - name: Collect screenshots
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e-dump/*
+          retention-days: 1
