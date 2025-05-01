@@ -1429,7 +1429,7 @@
          v (let [v (get block (:db/ident property))]
              (or
               (cond
-                (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+                (and multiple-values? (or (set? v) (coll? v) (nil? v)))
                 v
                 multiple-values?
                 #{v}
