@@ -236,7 +236,7 @@
 
 (defn highlight-block!
   [block-uuid]
-  (let [blocks (array-seq (js/document.getElementsByClassName (str "id" block-uuid)))]
+  (let [blocks (util/get-blocks-by-id block-uuid)]
     (doseq [block blocks]
       (dom/add-class! block "block-highlight"))))
 
@@ -3452,7 +3452,6 @@
                (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
-
       (cond
         (or (state/editing?) (active-jtrigger?))
         (keydown-up-down-handler direction {})
@@ -3905,7 +3904,7 @@
                                              :collapse? true})]
        (->> blocks
             (map (fn [b] (or (some-> (:db/id (:block/link b)) db/entity) b)))
-            (map (comp gdom/getElementByClass (fn [b] (str "id" (:block/uuid b)))))
+            (mapcat (fn [b] (util/get-blocks-by-id (:block/uuid b))))
             state/exit-editing-and-set-selected-blocks!)))
    (state/set-state! :selection/selected-all? true)))
 
@@ -3920,7 +3919,7 @@
       (do
         (util/stop e)
         (state/exit-editing-and-set-selected-blocks!
-         [(gdom/getElementByClass (str "id" (:block/uuid edit-block)))]))
+         [(util/get-first-block-by-id (:block/uuid edit-block))]))
 
       edit-block
       nil
@@ -3948,7 +3947,8 @@
                   nil
 
                   (and parent (:block/parent parent))
-                  (state/exit-editing-and-set-selected-blocks! [(gdom/getElementByClass (str "id" (:block/uuid parent)))])
+                  (state/exit-editing-and-set-selected-blocks!
+                   [(util/get-first-block-by-id (:block/uuid parent))])
 
                   (:block/name parent)
                   ;; page block

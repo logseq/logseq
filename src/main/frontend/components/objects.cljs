@@ -10,6 +10,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -34,9 +35,19 @@
              [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
 
+(comment
+  (defn- edit-new-object
+    [ref id]
+    (js/setTimeout
+     (fn []
+       (when-let [title-node (d/sel1 ref (util/format ".ls-table-row[data-id='%d'] .table-block-title" id))]
+         (.click title-node)))
+     100)))
+
 (rum/defc class-objects-inner < rum/static
   [config class properties]
-  (let [;; Properties can be nil for published private graphs
+  (let [*ref (hooks/use-ref nil)
+        ;; Properties can be nil for published private graphs
         properties' (remove nil? properties)
         columns* (views/build-columns config properties' {:add-tags-column? true})
         columns (cond
@@ -70,19 +81,22 @@
                                                        (set-data! (concat full-data (map :db/id entities))))))})]))
                                 (p/let [block (add-new-class-object! class properties)]
                                   (when (:db/id block)
+                                    (set-data! (conj (vec full-data) (:db/id block)))
                                     (state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)
-                                    (set-data! (conj (vec full-data) (:db/id block)))))))))]
+                                    ;; (edit-new-object (rum/deref *ref) (:db/id block))
+                                    ))))))]
 
-    (views/view {:config config
-                 :view-parent class
-                 :view-feature-type :class-objects
-                 :columns columns
-                 :add-new-object! add-new-object!
-                 :show-add-property? true
-                 :show-items-count? true
-                 :add-property! (fn []
-                                  (state/pub-event! [:editor/new-property {:block class
-                                                                           :class-schema? true}]))})))
+    [:div {:ref *ref}
+     (views/view {:config config
+                  :view-parent class
+                  :view-feature-type :class-objects
+                  :columns columns
+                  :add-new-object! add-new-object!
+                  :show-add-property? true
+                  :show-items-count? true
+                  :add-property! (fn []
+                                   (state/pub-event! [:editor/new-property {:block class
+                                                                            :class-schema? true}]))})]))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]
