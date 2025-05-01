@@ -991,7 +991,7 @@
         table-text-property-render (:table-text-property-render opts)]
     (if table-text-property-render
       (table-text-property-render
-       (if multiple-values? (first value-block) value-block)
+       value-block
        {:create-new-block #(<create-new-block! block property "")
         :property-ident (:db/ident property)})
       (cond
