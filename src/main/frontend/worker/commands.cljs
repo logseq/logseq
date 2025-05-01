@@ -15,7 +15,7 @@
   (atom
    [[:repeated-task
      {:title "Repeated task"
-      :entity-conditions [{:property :logseq.task/repeated?
+      :entity-conditions [{:property :logseq.property.repeat/repeated?
                            :value true}]
       :tx-conditions [{:property :status
                        :value :done}]
@@ -32,7 +32,7 @@
   [entity property]
   (if (= property :status)
     (or
-     (:db/ident (:logseq.task/recur-status-property entity))
+     (:db/ident (:logseq.property.repeat/checked-property entity))
      :logseq.task/status)
     property))
 
@@ -41,7 +41,7 @@
   (cond
     (and (= property :status) (= value :done))
     (or
-     (let [p (:logseq.task/recur-status-property entity)
+     (let [p (:logseq.property.repeat/checked-property entity)
            choices (:property/closed-values p)
            checkbox? (= :checkbox (:logseq.property/type p))]
        (if checkbox?
@@ -52,7 +52,7 @@
      :logseq.task/status.done)
     (and (= property :status) (= value :todo))
     (or
-     (let [p (:logseq.task/recur-status-property entity)
+     (let [p (:logseq.property.repeat/checked-property entity)
            choices (:property/closed-values p)
            checkbox? (= :checkbox (:logseq.property/type p))]
        (if checkbox?
@@ -130,30 +130,30 @@
   (let [current-date-time (tc/to-date-time current-value)
         default-timezone-time (t/to-default-time-zone current-date-time)
         [recur-unit period-f] (case (:db/ident unit)
-                                :logseq.task/recur-unit.minute [t/minutes t/in-minutes]
-                                :logseq.task/recur-unit.hour [t/hours t/in-hours]
-                                :logseq.task/recur-unit.day [t/days t/in-days]
-                                :logseq.task/recur-unit.week [t/weeks t/in-weeks]
-                                :logseq.task/recur-unit.month [t/months t/in-months]
-                                :logseq.task/recur-unit.year [t/years t/in-years]
+                                :logseq.property.repeat/recur-unit.minute [t/minutes t/in-minutes]
+                                :logseq.property.repeat/recur-unit.hour [t/hours t/in-hours]
+                                :logseq.property.repeat/recur-unit.day [t/days t/in-days]
+                                :logseq.property.repeat/recur-unit.week [t/weeks t/in-weeks]
+                                :logseq.property.repeat/recur-unit.month [t/months t/in-months]
+                                :logseq.property.repeat/recur-unit.year [t/years t/in-years]
                                 nil)]
     (when recur-unit
       (let [delta (recur-unit frequency)
             next-time (case (:db/ident unit)
-                        :logseq.task/recur-unit.year
+                        :logseq.property.repeat/recur-unit.year
                         (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.task/recur-unit.month
+                        :logseq.property.repeat/recur-unit.month
                         (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.task/recur-unit.week
+                        :logseq.property.repeat/recur-unit.week
                         (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f true)
                         (t/plus (t/now) delta))]
         (tc/to-long next-time)))))
 
 (defmethod handle-command :reschedule [_ db entity _datoms]
-  (let [property-ident (or (:db/ident (:logseq.task/scheduled-on-property entity))
+  (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
                            :logseq.task/scheduled)
-        frequency (db-property/property-value-content (:logseq.task/recur-frequency entity))
-        unit (:logseq.task/recur-unit entity)
+        frequency (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
+        unit (:logseq.property.repeat/recur-unit entity)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
         current-value (cond->
