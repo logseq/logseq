@@ -274,15 +274,15 @@
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
-        (property-value block (db/entity :logseq.task/repeated?)
+        (property-value block (db/entity :logseq.property.repeat/repeated?)
                         (assoc opts
                                :on-checked-change (fn [value]
                                                     (if value
                                                       (db-property-handler/set-block-property! (:db/id block)
-                                                                                               :logseq.task/scheduled-on-property
+                                                                                               :logseq.property.repeat/temporal-property
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
-                                                                                                  :logseq.task/scheduled-on-property)))))]
+                                                                                                  :logseq.property.repeat/temporal-property)))))]
        (if (#{:logseq.task/deadline :logseq.task/scheduled} (:db/ident property))
          [:div "Repeat task"]
          [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
@@ -292,11 +292,11 @@
 
       ;; recur frequency
       [:div.w-6
-       (property-value block (db/entity :logseq.task/recur-frequency) opts)]
+       (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
 
       ;; recur unit
       [:div.w-20
-       (property-value block (db/entity :logseq.task/recur-unit) (assoc opts :property property))]]
+       (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
                        (filter (fn [property]
@@ -304,7 +304,7 @@
                                       (>= (count (:property/closed-values property)) 2))))
                        (concat [(db/entity :logseq.task/status)])
                        (util/distinct-by :db/id))
-           status-property (or (:logseq.task/recur-status-property block)
+           status-property (or (:logseq.property.repeat/checked-property block)
                                (db/entity :logseq.task/status))
            property-id (:db/id status-property)
            done-choice (or
@@ -317,7 +317,7 @@
          (cond->
           {:on-value-change (fn [v]
                               (db-property-handler/set-block-property! (:db/id block)
-                                                                       :logseq.task/recur-status-property
+                                                                       :logseq.property.repeat/checked-property
                                                                        v))}
            property-id
            (assoc :default-value property-id))
@@ -482,7 +482,7 @@
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
-        repeated-task? (:logseq.task/repeated? block)]
+        repeated-task? (:logseq.property.repeat/repeated? block)]
     (if editing?
       (content-fn {:id :date-picker})
       (if multiple-values?
@@ -911,11 +911,11 @@
             closed-values? (seq (:property/closed-values property))
             items (if closed-values?
                     (let [date? (and
-                                 (= (:db/ident property) :logseq.task/recur-unit)
+                                 (= (:db/ident property) :logseq.property.repeat/recur-unit)
                                  (= :date (:logseq.property/type (:property opts))))
                           values (cond->> (:property/closed-values property)
                                    date?
-                                   (remove (fn [b] (contains? #{:logseq.task/recur-unit.minute :logseq.task/recur-unit.hour} (:db/ident b)))))]
+                                   (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                       (keep (fn [block]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
                                     value (db-property/closed-value-content block)]

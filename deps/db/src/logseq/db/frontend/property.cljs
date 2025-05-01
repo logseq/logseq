@@ -335,42 +335,42 @@
       :properties {:logseq.property/hide-empty-value true
                    :logseq.property/description "Use it to plan something to start at a specific date(time)."}
       :queryable? true}
-     :logseq.task/recur-frequency
+     :logseq.property.repeat/recur-frequency
      (let [schema {:type :number
                    :public? false}]
-       {:title "Recur frequency"
+       {:title "Repeating recur frequency"
         :schema schema
         :properties {:logseq.property/hide-empty-value true
                      :logseq.property/default-value 1}
         :queryable? true})
-     :logseq.task/recur-unit
-     {:title "Recur unit"
+     :logseq.property.repeat/recur-unit
+     {:title "Repeating recur unit"
       :schema {:type :default
                :public? false}
       :closed-values (mapv (fn [[db-ident value]]
                              {:db-ident db-ident
                               :value value
                               :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)})
-                           [[:logseq.task/recur-unit.minute "Minute"]
-                            [:logseq.task/recur-unit.hour "Hour"]
-                            [:logseq.task/recur-unit.day "Day"]
-                            [:logseq.task/recur-unit.week "Week"]
-                            [:logseq.task/recur-unit.month "Month"]
-                            [:logseq.task/recur-unit.year "Year"]])
+                           [[:logseq.property.repeat/recur-unit.minute "Minute"]
+                            [:logseq.property.repeat/recur-unit.hour "Hour"]
+                            [:logseq.property.repeat/recur-unit.day "Day"]
+                            [:logseq.property.repeat/recur-unit.week "Week"]
+                            [:logseq.property.repeat/recur-unit.month "Month"]
+                            [:logseq.property.repeat/recur-unit.year "Year"]])
       :properties {:logseq.property/hide-empty-value true
-                   :logseq.property/default-value :logseq.task/recur-unit.day}
+                   :logseq.property/default-value :logseq.property.repeat/recur-unit.day}
       :queryable? true}
-     :logseq.task/repeated?
-     {:title "Repeated task?"
+     :logseq.property.repeat/repeated?
+     {:title "Node Repeats?"
       :schema {:type :checkbox
                :hide? true}
       :queryable? true}
-     :logseq.task/scheduled-on-property
-     {:title "Scheduled on property"
+     :logseq.property.repeat/temporal-property
+     {:title "Repeating Temporal Property"
       :schema {:type :property
                :hide? true}}
-     :logseq.task/recur-status-property
-     {:title "Recur status property"
+     :logseq.property.repeat/checked-property
+     {:title "Repeating Checked Property"
       :schema {:type :property
                :hide? true}}
 
@@ -625,7 +625,7 @@
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
-    "logseq.property.code"
+    "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
     "logseq.property.user" "logseq.property.history"})
 

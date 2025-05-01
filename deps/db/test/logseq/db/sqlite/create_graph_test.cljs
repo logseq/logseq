@@ -120,7 +120,7 @@
                  :logseq.property/enable-history?))
           "A :checkbox property is created correctly")
       (is (= 1
-             (-> (d/entity @conn :logseq.task/recur-frequency)
+             (-> (d/entity @conn :logseq.property.repeat/recur-frequency)
                  :logseq.property/default-value
                  db-property/property-value-content))
           "A numeric property is created correctly"))))
