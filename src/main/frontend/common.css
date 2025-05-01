@@ -326,7 +326,9 @@ h1.title, h1.title input, .ls-page-title-container {
 
 .block-highlight,
 .ls-block.selected,
-.ls-dummy-block.selected {
+.ls-dummy-block.selected,
+.ls-table-cell.selected
+{
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color, var(--rx-gray-04));
 }

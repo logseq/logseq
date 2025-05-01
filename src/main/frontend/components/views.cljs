@@ -191,11 +191,18 @@
 (rum/defc block-title
   "Used on table view"
   [block {:keys [create-new-block width]}]
-  (let [inline-title (state/get-component :block/inline-title)
+  (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
+        [focus-timeout set-focus-timeout!] (hooks/use-state nil)
+        inline-title (state/get-component :block/inline-title)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)]
+    (hooks/use-effect!
+     (fn []
+       #(some-> focus-timeout js/clearTimeout))
+     [])
     [:div.table-block-title.relative.flex.items-center.w-full.h-full.cursor-pointer.items-center
-     {:on-mouse-over #(set-opacity! 100)
+     {:ref *ref
+      :on-mouse-over #(set-opacity! 100)
       :on-mouse-out #(set-opacity! 0)
       :on-click (fn [e]
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))
@@ -211,36 +218,43 @@
                         :else
                         (p/do!
                          (shui/popup-show!
-                           (.closest (.-target e) ".ls-table-cell")
-                           (fn []
-                             (let [width (-> (max 160 width)
-                                           (- 18))]
-                               [:div.ls-table-block.flex.flex-row.items-start
-                                {:style {:width width :max-width width :margin-right "6px"}
-                                 :on-click util/stop-propagation}
-                                (block-container {:popup? true
-                                                  :view? true
-                                                  :table-block-title? true} block)
-                                (shui/button
-                                  {:variant :ghost
-                                   :title "Open node"
-                                   :on-click (fn [e]
-                                               (util/stop-propagation e)
-                                               (shui/popup-hide!)
-                                               (redirect!))
-                                   :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                                            "opacity-" opacity)}
-                                  (ui/icon "arrow-right"))]))
-                           {:id :ls-table-block-editor
-                            :as-mask? true})
-                          (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
+                          (.closest (.-target e) ".ls-table-cell")
+                          (fn []
+                            (let [width (-> (max 160 width)
+                                            (- 18))]
+                              [:div.ls-table-block.flex.flex-row.items-start
+                               {:style {:width width :max-width width :margin-right "6px"}
+                                :on-click util/stop-propagation}
+                               (block-container {:popup? true
+                                                 :view? true
+                                                 :table-block-title? true} block)
+                               (shui/button
+                                {:variant :ghost
+                                 :title "Open node"
+                                 :on-click (fn [e]
+                                             (util/stop-propagation e)
+                                             (shui/popup-hide!)
+                                             (redirect!))
+                                 :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                                             "opacity-" opacity)}
+                                (ui/icon "arrow-right"))]))
+                          {:id :ls-table-block-editor
+                           :as-mask? true
+                           :on-after-hide (fn []
+                                            (let [node (rum/deref *ref)
+                                                  cell (util/rec-get-node node "ls-table-cell")]
+                                              (p/do!
+                                               (editor-handler/save-current-block!)
+                                               (state/exit-editing-and-set-selected-blocks! [cell])
+                                               (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
+                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
      (if block
        [:div
         (inline-title
-          (some->> (:block/title block)
-            string/trim
-            string/split-lines
-            first))]
+         (some->> (:block/title block)
+                  string/trim
+                  string/split-lines
+                  first))]
        [:div])
 
      [:div.absolute.right-0.p-1
@@ -249,11 +263,11 @@
                    (add-to-sidebar!))}
       [:div.flex.items-center
        (shui/button
-         {:variant :ghost
-          :title "Open in sidebar"
-          :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                   "opacity-" opacity)}
-         (ui/icon "layout-sidebar-right"))]]]))
+        {:variant :ghost
+         :title "Open in sidebar"
+         :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                     "opacity-" opacity)}
+        (ui/icon "layout-sidebar-right"))]]]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -263,30 +277,30 @@
   (let [;; FIXME: Shouldn't file graphs have :block/tags?
         add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
         properties' (->>
-                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
-                        properties
-                        (conj properties (db/entity :block/tags)))
-                      (remove nil?))]
+                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+                       properties
+                       (conj properties (db/entity :block/tags)))
+                     (remove nil?))]
     (->> (concat
-           [{:id :select
-             :name "Select"
-             :header (fn [table _column] (header-checkbox table))
-             :cell (fn [table row column]
-                     (row-checkbox table row column))
-             :column-list? false
-             :resizable? false}
-            (when with-id?
-              {:id :id
-               :name "ID"
-               :header (fn [_table _column] (header-index))
-               :cell (fn [table row _column]
-                       (inc (.indexOf (:rows table) (:db/id row))))
-               :resizable? false})
-            (when with-object-name?
-              {:id :block/title
-               :name "Name"
-               :type :string
-               :header header-cp
+          [{:id :select
+            :name "Select"
+            :header (fn [table _column] (header-checkbox table))
+            :cell (fn [table row column]
+                    (row-checkbox table row column))
+            :column-list? false
+            :resizable? false}
+           (when with-id?
+             {:id :id
+              :name "ID"
+              :header (fn [_table _column] (header-index))
+              :cell (fn [table row _column]
+                      (inc (.indexOf (:rows table) (:db/id row))))
+              :resizable? false})
+           (when with-object-name?
+             {:id :block/title
+              :name "Name"
+              :type :string
+              :header header-cp
               :cell (fn [_table row _column style]
                       (block-title row {:property-ident :block/title
                                         :sidebar? (:sidebar? config)
@@ -653,14 +667,109 @@
   [cell-render-f cell-placeholder]
   (let [^js state (ui/useInView #js {:rootMargin "0px"})
         in-view? (.-inView state)]
-    [:div.h-full {:ref (.-ref state)}
+    [:div.h-full
+     {:ref (.-ref state)}
      (if in-view?
        (cell-render-f)
        cell-placeholder)]))
 
+(defn- click-cell
+  [node]
+  (when-let [trigger (or (dom/sel1 node ".jtrigger")
+                         (dom/sel1 node ".table-block-title"))]
+    (.click trigger)))
+
+(defn navigate-to-cell
+  [e cell direction]
+  (util/stop e)
+  (let [row (util/rec-get-node cell "ls-table-row")
+        cells (dom/sel row ".ls-table-cell")
+        idx (.indexOf cells cell)
+        rows-container (util/rec-get-node row "ls-table-rows")
+        rows (dom/sel rows-container ".ls-table-row")
+        row-idx (.indexOf rows row)
+        container-left (.-left (.getBoundingClientRect rows-container))
+        next-cell (case direction
+                    :left (if (> idx 1)               ; don't focus on checkbox
+                            (nth cells (dec idx))
+                            ;; last cell in the prev row
+                            (let [prev-row (when (> row-idx 0)
+                                             (nth rows (dec row-idx)))]
+                              (when prev-row
+                                (let [cells (dom/sel prev-row ".ls-table-cell")]
+                                  (last cells)))))
+                    :right (if (< idx (dec (count cells)))
+                             (nth cells (inc idx))
+                             ;; first cell in the next row
+                             (let [next-row (when (< row-idx (dec (count rows)))
+                                              (nth rows (inc row-idx)))]
+                               (when next-row
+                                 (let [cells (dom/sel next-row ".ls-table-cell")]
+                                   (second cells)))))
+                    :up (let [prev-row (when (> row-idx 0)
+                                         (nth rows (dec row-idx)))]
+                          (when prev-row
+                            (let [cells (dom/sel prev-row ".ls-table-cell")]
+                              (nth cells idx))))
+                    :down (let [next-row (when (< row-idx (dec (count rows)))
+                                           (nth rows (inc row-idx)))]
+                            (when next-row
+                              (let [cells (dom/sel next-row ".ls-table-cell")]
+                                (nth cells idx)))))]
+    (when next-cell
+      (let [next-cell-left (.-left (.getBoundingClientRect next-cell))]
+        (state/clear-selection!)
+        (dom/add-class! next-cell "selected")
+        (.focus next-cell)
+        (when (< next-cell-left container-left)
+          (.scrollIntoView next-cell #js {:inline "center"
+                                          :block "nearest"}))))))
+
+(rum/defc table-cell-container
+  [cell-opts body]
+  (let [*ref (hooks/use-ref nil)]
+    (shui/table-cell
+     (assoc cell-opts
+            :tabIndex 0
+            :ref *ref
+            :on-click (fn [] (click-cell (rum/deref *ref)))
+            :on-key-down (fn [e]
+                           (let [container (rum/deref *ref)]
+                             (case (util/ekey e)
+                               "Escape"
+                               (do
+                                 (if (util/input? (.-target e))
+                                   (do
+                                     (state/exit-editing-and-set-selected-blocks! [container])
+                                     (.focus container))
+                                   (do
+                                     (dom/remove-class! container "selected")
+                                     (let [row (util/rec-get-node container "ls-table-row")]
+                                       (state/exit-editing-and-set-selected-blocks! [row]))))
+                                 (util/stop e))
+                               "Enter"
+                               (do
+                                 (if (util/input? (.-target e)) ; number
+                                   (do
+                                     (state/exit-editing-and-set-selected-blocks! [container])
+                                     (.focus container))
+                                   (click-cell container))
+                                 (util/stop e))
+                               "ArrowUp"
+                               (navigate-to-cell e container :up)
+                               "ArrowDown"
+                               (navigate-to-cell e container :down)
+                               "ArrowLeft"
+                               (navigate-to-cell e container :left)
+                               "ArrowRight"
+                               (navigate-to-cell e container :right)
+                               nil))))
+     body)))
+
 (rum/defc table-row-inner < rum/static
   [{:keys [row-selected?] :as table} row props {:keys [show-add-property? scrolling?]}]
-  (let [pinned-columns (get-in table [:state :pinned-columns])
+  (let [*ref (hooks/use-ref nil)
+        pinned-columns (get-in table [:state :pinned-columns])
         unpinned (get-in table [:state :unpinned-columns])
         unpinned-columns (if show-add-property?
                            (conj (vec unpinned)
@@ -678,19 +787,60 @@
                                       :select? select?
                                       :add-property? add-property?
                                       :style style}
-                           cell-placeholder (shui/table-cell cell-opts nil)]
+                           cell-placeholder (table-cell-container cell-opts nil)]
                        (if (and scrolling? (not (:block/title row)))
                          cell-placeholder
                          (when-let [render (get column :cell)]
                            (lazy-table-cell
-                            (fn [] (shui/table-cell cell-opts (render table row column style)))
+                            (fn []
+                              (table-cell-container
+                               cell-opts (render table row column style)))
                             cell-placeholder)))))]
     (shui/table-row
      (merge
       props
       {:key (str (:db/id row))
+       :tabIndex 0
+       :ref *ref
        :data-state (when (row-selected? row) "selected")
-       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))})
+       :data-id (:db/id row)
+       :blockid (str (:block/uuid row))
+       :on-pointer-down (fn [_e] (db-async/<get-block (state/get-current-repo) (:db/id row) {:children? false}))
+       :on-key-down (fn [e]
+                      (let [container (rum/deref *ref)]
+                        (when (dom/has-class? container "selected")
+                          (case (util/ekey e)
+                            "Enter"
+                            (do
+                              (state/sidebar-add-block! (state/get-current-repo) (:db/id row) :block)
+                              (state/clear-selection!)
+                              (util/stop e))
+                            "ArrowLeft"
+                            (do
+                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                   (remove (fn [node]
+                                                             (some? (dom/sel1 node ".ui__checkbox"))))
+                                                   first)]
+                                (state/clear-selection!)
+                                (dom/add-class! cell "selected")
+                                (.focus cell))
+                              (util/stop e))
+                            "ArrowRight"
+                            (do
+                              (when-let [cell (->> (dom/sel container ".ls-table-cell")
+                                                   (remove (fn [node]
+                                                             (some? (dom/sel1 node ".ui__checkbox"))))
+                                                   last)]
+                                (state/clear-selection!)
+                                (dom/remove-class! container "selected")
+                                (dom/add-class! cell "selected")
+                                (.focus cell))
+                              (util/stop e))
+                            "Escape"
+                            (do
+                              (state/clear-selection!)
+                              (util/stop e))
+                            nil))))})
      (when (seq pinned-columns)
        [:div.sticky-columns.flex.flex-row
         (map #(row-cell-f % {}) pinned-columns)])
@@ -1285,6 +1435,7 @@
     (when (seq rows)
       (ui/virtualized-list
        {:ref #(reset! *scroller-ref %)
+        :increase-viewport-by {:top 300 :bottom 300}
         :custom-scroll-parent (if sidebar?
                                 (first (dom/by-class "sidebar-item-list"))
                                 (gdom/getElement "main-content-container"))

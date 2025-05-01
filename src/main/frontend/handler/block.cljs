@@ -66,7 +66,7 @@
 
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str "id" block-uuid))]
+  (let [blocks (util/get-blocks-by-id block-uuid)]
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
 
