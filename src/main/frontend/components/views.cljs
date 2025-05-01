@@ -39,6 +39,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
@@ -190,12 +191,15 @@
 
 (rum/defc block-title
   "Used on table view"
-  [block {:keys [create-new-block width]}]
+  [block {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
         inline-title (state/get-component :block/inline-title)
-        add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo) (:db/id block) :block)]
+        many? (db-property/many? property)
+        add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
+                                                   (or (and many? (:db/id row)) (:db/id block))
+                                                   :block)]
     (hooks/use-effect!
      (fn []
        #(some-> focus-timeout js/clearTimeout))
@@ -216,38 +220,43 @@
                         (add-to-sidebar!)
 
                         :else
-                        (p/do!
-                         (shui/popup-show!
-                          (.closest (.-target e) ".ls-table-cell")
-                          (fn []
-                            (let [width (-> (max 160 width)
-                                            (- 18))]
-                              [:div.ls-table-block.flex.flex-row.items-start
-                               {:style {:width width :max-width width :margin-right "6px"}
-                                :on-click util/stop-propagation}
-                               (block-container {:popup? true
-                                                 :view? true
-                                                 :table-block-title? true} block)
-                               (shui/button
-                                {:variant :ghost
-                                 :title "Open node"
-                                 :on-click (fn [e]
-                                             (util/stop-propagation e)
-                                             (shui/popup-hide!)
-                                             (redirect!))
-                                 :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                                             "opacity-" opacity)}
-                                (ui/icon "arrow-right"))]))
-                          {:id :ls-table-block-editor
-                           :as-mask? true
-                           :on-after-hide (fn []
-                                            (let [node (rum/deref *ref)
-                                                  cell (util/rec-get-node node "ls-table-cell")]
-                                              (p/do!
-                                               (editor-handler/save-current-block!)
-                                               (state/exit-editing-and-set-selected-blocks! [cell])
-                                               (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
-                         (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))}
+                        (let [popup (fn []
+                                      (let [width (-> (max 160 width) (- 18))]
+                                        (if many?
+                                          [:div.ls-table-block.flex.flex-row.items-start
+                                           {:style {:width width :max-width width :margin-right "6px"}
+                                            :on-click util/stop-propagation}
+                                           (pv/property-value row property {})]
+                                          [:div.ls-table-block.flex.flex-row.items-start
+                                           {:style {:width width :max-width width :margin-right "6px"}
+                                            :on-click util/stop-propagation}
+                                           (block-container {:popup? true
+                                                             :view? true
+                                                             :table-block-title? true} block)
+                                           (shui/button
+                                            {:variant :ghost
+                                             :title "Open node"
+                                             :on-click (fn [e]
+                                                         (util/stop-propagation e)
+                                                         (shui/popup-hide!)
+                                                         (redirect!))
+                                             :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                                                         "opacity-" opacity)}
+                                            (ui/icon "arrow-right"))])))]
+                          (p/do!
+                           (shui/popup-show!
+                            (.closest (.-target e) ".ls-table-cell")
+                            popup
+                            {:id :ls-table-block-editor
+                             :as-mask? true
+                             :on-after-hide (fn []
+                                              (let [node (rum/deref *ref)
+                                                    cell (util/rec-get-node node "ls-table-cell")]
+                                                (p/do!
+                                                 (editor-handler/save-current-block!)
+                                                 (state/exit-editing-and-set-selected-blocks! [cell])
+                                                 (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
+                           (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (if block
        [:div
         (inline-title
@@ -334,6 +343,8 @@
                                                                    :table-text-property-render
                                                                    (fn [block opts]
                                                                      (block-title block (assoc opts
+                                                                                               :row row
+                                                                                               :property property
                                                                                                :width (:width style)
                                                                                                :sidebar? (:sidebar? config))))}))))
                     :get-value get-value
