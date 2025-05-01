@@ -18,6 +18,7 @@
 (reset! config/*port 3001)
 ;; show ui
 (reset! config/*headless false)
+(reset! config/*slow-mo 100)
 
 (def *futures (atom {}))
 
@@ -45,6 +46,13 @@
   []
   (->> (future (run-tests 'logseq.e2e.multi-tabs-test))
        (swap! *futures assoc :multi-tabs-test)))
+
+(defn run-all-test
+  []
+  (run-tests 'logseq.e2e.commands-test
+             'logseq.e2e.multi-tabs-test
+             'logseq.e2e.outliner-test
+             'logseq.e2e.rtc-basic-test))
 
 (comment
 
