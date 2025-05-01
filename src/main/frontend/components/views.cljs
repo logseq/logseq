@@ -191,12 +191,13 @@
 
 (rum/defc block-title
   "Used on table view"
-  [block {:keys [create-new-block width row property]}]
+  [block* {:keys [create-new-block width row property]}]
   (let [*ref (hooks/use-ref nil)
         [opacity set-opacity!] (hooks/use-state 0)
         [focus-timeout set-focus-timeout!] (hooks/use-state nil)
         inline-title (state/get-component :block/inline-title)
         many? (db-property/many? property)
+        block (if many? (first block*) block*)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
                                                    (or (and many? (:db/id row)) (:db/id block))
                                                    :block)]
@@ -258,12 +259,18 @@
                                                  (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (if block
-       [:div
-        (inline-title
-         (some->> (:block/title block)
-                  string/trim
-                  string/split-lines
-                  first))]
+       [:div.flex.flex-row
+        (let [render (fn [block]
+                       [:div
+                        (inline-title
+                         (some->> (:block/title block)
+                                  string/trim
+                                  string/split-lines
+                                  first))])]
+          (if many?
+            (->> (map render block*)
+                 (interpose [:div.mr-1 ","]))
+            (render block*)))]
        [:div])
 
      [:div.absolute.right-0.p-1
