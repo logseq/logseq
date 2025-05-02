@@ -17,7 +17,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
