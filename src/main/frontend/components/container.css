@@ -552,7 +552,7 @@
     top: 0;
     left: 0;
     right: 0;
-    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
+    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-02, --ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;
