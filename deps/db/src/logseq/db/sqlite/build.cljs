@@ -708,10 +708,17 @@
 
 (defn validate-options
   [{:keys [properties] :as options}]
-  (when-let [errors (->> options (m/explain Options) me/humanize)]
+  (when-let [errors (m/explain Options options)]
     (println "The build-blocks-tx has the following options errors:")
-    (pprint/pprint errors)
-    (throw (ex-info "Options validation failed" {:errors errors})))
+    (pprint/pprint (me/humanize errors))
+    (println "Invalid data for options errors:")
+    (pprint/pprint (reduce (fn [m e]
+                             (assoc-in m
+                                       (:in e)
+                                       (get-in options (:in e))))
+                           {}
+                           (:errors errors)))
+    (throw (ex-info "Options validation failed" {:errors (me/humanize errors)})))
   (when-not (:auto-create-ontology? options)
     (let [used-properties (get-used-properties-from-options options)
           undeclared-properties (-> (set (keys used-properties))
