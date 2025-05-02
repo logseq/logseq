@@ -206,7 +206,8 @@
         block (if many? (first block*) block*)
         add-to-sidebar! #(state/sidebar-add-block! (state/get-current-repo)
                                                    (or (and many? (:db/id row)) (:db/id block))
-                                                   :block)]
+                                                   :block)
+        redirect! #(some-> (:block/uuid block) route-handler/redirect-to-page!)]
     (hooks/use-effect!
      (fn []
        #(some-> focus-timeout js/clearTimeout))
@@ -216,8 +217,7 @@
       :on-mouse-over #(set-opacity! 100)
       :on-mouse-out #(set-opacity! 0)
       :on-click (fn [e]
-                  (p/let [block (or block (and (fn? create-new-block) (create-new-block)))
-                          redirect! #(some-> (:block/uuid block) route-handler/redirect-to-page!)]
+                  (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
                       (cond
                         (util/meta-key? e)
@@ -239,17 +239,7 @@
                                             :on-click util/stop-propagation}
                                            (block-container {:popup? true
                                                              :view? true
-                                                             :table-block-title? true} block)
-                                           (shui/button
-                                            {:variant :ghost
-                                             :title "Open node"
-                                             :on-click (fn [e]
-                                                         (util/stop-propagation e)
-                                                         (shui/popup-hide!)
-                                                         (redirect!))
-                                             :class (str "h-6 w-6 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                                                         "opacity-" opacity)}
-                                            (ui/icon "arrow-right"))])))]
+                                                             :table-block-title? true} block)])))]
                           (p/do!
                            (shui/popup-show!
                             (.closest (.-target e) ".ls-table-cell")
@@ -279,17 +269,26 @@
             (render block*)))]
        [:div])
 
-     [:div.absolute.right-0.p-1
-      {:on-click (fn [e]
-                   (util/stop-propagation e)
-                   (add-to-sidebar!))}
-      [:div.flex.items-center
-       (shui/button
-        {:variant :ghost
-         :title "Open in sidebar"
-         :class (str "h-5 w-5 !p-0 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                     "opacity-" opacity)}
-        (ui/icon "layout-sidebar-right"))]]]))
+     (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                      "opacity-" opacity)]
+       [:div.absolute.-right-1
+        [:div.flex.flex-row.items-center
+         (shui/button
+          {:variant :ghost
+           :title "Open"
+           :on-click (fn [e]
+                       (util/stop-propagation e)
+                       (redirect!))
+           :class class}
+          (ui/icon "arrow-right"))
+         (shui/button
+          {:variant :ghost
+           :title "Open in sidebar"
+           :class class
+           :on-click (fn [e]
+                       (util/stop-propagation e)
+                       (add-to-sidebar!))}
+          (ui/icon "layout-sidebar-right"))]])]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
