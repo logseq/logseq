@@ -138,21 +138,19 @@
        [(= ?t ?tc)]
        (parent ?t ?tc))]
 
-    :has-property-or-default-value
-    '[(has-property-or-default-value? ?b ?prop)
+    :has-property-or-object-property
+    '[(has-property-or-object-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
       (or
        [?b ?prop _]
-       (and (object-has-class-property? ?b ?prop)
-            (or [?prop-e :logseq.property/default-value _]
-                [?prop-e :logseq.property/scalar-default-value _])))]
+       (object-has-class-property? ?b ?prop))]
 
     ;; Checks if a property exists for simple queries. Supports default values
     :has-simple-query-property
     '[(has-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (has-property-or-default-value? ?b ?prop)
+      (has-property-or-object-property? ?b ?prop)
       (or
        [(missing? $ ?prop-e :logseq.property/public?)]
        [?prop-e :logseq.property/public? true])]
@@ -162,7 +160,7 @@
     '[(has-private-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (has-property-or-default-value? ?b ?prop)]
+      (has-property-or-object-property? ?b ?prop)]
 
     ;; Checks if a property exists for any features that are not simple queries
     :has-property
@@ -237,10 +235,10 @@
   {:task #{:simple-query-property}
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
-   :has-property-or-default-value #{:object-has-class-property}
+   :has-property-or-object-property #{:object-has-class-property}
    :object-has-class-property #{:parent}
-   :has-simple-query-property #{:has-property-or-default-value}
-   :has-private-simple-query-property #{:has-property-or-default-value}
+   :has-simple-query-property #{:has-property-or-object-property}
+   :has-private-simple-query-property #{:has-property-or-object-property}
    :property-default-value #{:existing-property-value :property-missing-value}
    :property-scalar-default-value #{:existing-property-value :property-missing-value}
    :property-value #{:property-default-value :property-scalar-default-value}

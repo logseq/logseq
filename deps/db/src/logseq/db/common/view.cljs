@@ -414,9 +414,9 @@
         '[:find [?b ...]
           :in $ % ?prop
           :where
-          (has-property-or-default-value? ?b ?prop)]
+          (has-property-or-object-property? ?b ?prop)]
         db
-        (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+        (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-object-property]
                              {:deps rules/rules-dependencies})
         property-ident)
        (keep (fn [id] (non-hidden-e id))))

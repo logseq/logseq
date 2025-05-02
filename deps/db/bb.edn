@@ -38,7 +38,7 @@
                                                 :property :simple-query-property :private-property
                                                 :property-scalar-default-value
                                                 :property-missing-value
-                                                :has-property-or-default-value)))))}}
+                                                :has-property-or-object-property)))))}}
 
  :tasks/config
  {:large-vars
