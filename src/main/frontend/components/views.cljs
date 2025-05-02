@@ -21,6 +21,7 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
+            [frontend.db.react :as react]
             [frontend.handler.db-based.export :as db-export-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
@@ -38,7 +39,6 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property :as db-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -2037,7 +2037,8 @@
         (:logseq.property.linked-references/includes view-parent)
         (:logseq.property.linked-references/excludes view-parent)
         (:filters view-parent)
-        query-entity-ids]))
+        query-entity-ids
+        (:data-changes-version option)]))
     (if loading?
       [:div.flex.flex-col.space-2.gap-2.my-2
        (repeat 3 (shui/skeleton {:class "h-6 w-full"}))]
@@ -2061,10 +2062,24 @@
                                           :load-view-data load-view-data
                                           :set-view-entity! set-view-entity!))])))
 
+(defn sub-view-data-changes
+  [view-parent view-feature-type]
+  (when view-parent
+    (when-let [repo (state/get-current-repo)]
+      (when-let [k (case view-feature-type
+                     :class-objects :frontend.worker.react/objects
+                     :linked-references :frontend.worker.react/refs
+                     nil)]
+        (let [*version (atom 0)]
+          (react/q repo [k (:db/id view-parent)]
+                   {:query-fn (fn [_] (swap! *version inc))}
+                   nil))))))
+
 (rum/defc sub-view < rum/reactive db-mixins/query
   [view-entity option]
-  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)]
-    (view-aux view option)))
+  (let [view (or (some-> (:db/id view-entity) db/sub-block) view-entity)
+        data-changes-version (some-> (sub-view-data-changes (:view-parent option) (:view-feature-type option)) rum/react)]
+    (view-aux view (assoc option :data-changes-version data-changes-version))))
 
 (rum/defc view < rum/static
   [{:keys [view-parent view-feature-type view-entity] :as option}]
@@ -2075,7 +2090,7 @@
     (hooks/use-effect!
      #(c.m/run-task*
        (m/sp
-         (when-not query?             ; TODO: move query logic to worker
+         (when-not query?
            (let [repo (state/get-current-repo)]
              (when (and db-based? (not view-entity))
                (c.m/<? (db-async/<get-views repo (:db/id view-parent) view-feature-type))
@@ -2092,6 +2107,8 @@
     (when (if db-based? view-entity (or view-entity view-parent
                                         (= view-feature-type :all-pages)))
       (let [option' (assoc option
+                           :view-feature-type (or view-feature-type
+                                                  (:logseq.property.view/feature-type view-entity))
                            :views views
                            :set-views! set-views!
                            :set-view-entity! set-view-entity!)]
