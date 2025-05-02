@@ -828,9 +828,10 @@
 #?(:cljs
    (defn react
      [ref]
-     (if rum/*reactions*
-       (rum/react ref)
-       @ref)))
+     (when ref
+       (if rum/*reactions*
+         (rum/react ref)
+         @ref))))
 
 #?(:cljs
    (def time-ms common-util/time-ms))
