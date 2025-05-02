@@ -47,6 +47,12 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(defn- get-scroll-parent
+  [config]
+  (if (:sidebar? config)
+    (dom/sel1 ".sidebar-item-list")
+    (gdom/getElement "main-content-container")))
+
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
   (let [[show? set-show!] (rum/use-state false)]
@@ -1448,15 +1454,12 @@
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref set-items-rendered!]
-  (let [[scrolling? set-scrolling!] (hooks/use-state false)
-        sidebar? (get-in option [:config :sidebar?])]
+  (let [[scrolling? set-scrolling!] (hooks/use-state false)]
     (when (seq rows)
       (ui/virtualized-list
        {:ref #(reset! *scroller-ref %)
         :increase-viewport-by {:top 300 :bottom 300}
-        :custom-scroll-parent (if sidebar?
-                                (first (dom/by-class "sidebar-item-list"))
-                                (gdom/getElement "main-content-container"))
+        :custom-scroll-parent (get-scroll-parent (:config option))
         :compute-item-key (fn [idx]
                             (let [block-id (util/nth-safe rows idx)]
                               (str "table-row-" block-id)))
@@ -1501,7 +1504,7 @@
                     (ui/virtualized-list
                      {:ref #(reset! *scroller-ref %)
                       :class "content"
-                      :custom-scroll-parent (gdom/getElement "main-content-container")
+                      :custom-scroll-parent (get-scroll-parent config)
                       :increase-viewport-by {:top 64 :bottom 64}
                       :compute-item-key (fn [idx]
                                           (let [block-id (util/nth-safe rows idx)]
@@ -1546,7 +1549,7 @@
        (ui/virtualized-grid
         {:ref #(reset! *scroller-ref %)
          :total-count (count blocks)
-         :custom-scroll-parent (gdom/getElement "main-content-container")
+         :custom-scroll-parent (get-scroll-parent config)
          :skipAnimationFrameInResizeObserver true
          :compute-item-key (fn [idx]
                              (str (:db/id view-entity) "-card-" idx))
