@@ -2097,7 +2097,7 @@
             {:block/page {:db/id (:db/id page)}
              :block/title new-content}
              (not db-based?)
-             (assoc :block/properties (apply dissoc (:block/properties block)
+             (assoc :block/properties (apply dissoc (not-empty (:block/properties block))
                                              (concat
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
