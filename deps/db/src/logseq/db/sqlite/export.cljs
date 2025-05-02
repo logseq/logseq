@@ -15,7 +15,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
             [medley.core :as medley]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.schema :as db-schema]))
 
 ;; Export fns
 ;; ==========
@@ -743,7 +744,8 @@
         ;; Remove all non-ref uuids after all nodes are built.
         ;; Only way to ensure all pvalue uuids present across block types
         graph-export' (-> (remove-uuids-if-not-ref graph-export all-ref-uuids)
-                          (update :pages-and-blocks sort-pages-and-blocks))]
+                          (update :pages-and-blocks sort-pages-and-blocks)
+                          (assoc ::schema-version db-schema/version))]
     (cond-> graph-export'
       (not exclude-files?)
       (assoc ::graph-files files)
@@ -836,10 +838,10 @@
           (build-graph-export db (:graph-options options)))]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options)
+        (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values) options))
+      (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
@@ -948,7 +950,7 @@
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
       (if (= :graph (::export-type export-map''))
-        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values ::export-type))
+        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values ::export-type ::schema-version))
             (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                          (::kv-values export-map'')))))
         (sqlite-build/build-blocks-tx export-map'')))))
