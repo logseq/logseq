@@ -17,6 +17,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -45,7 +46,9 @@
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
   (route-handler/redirect-to-home!)
-  (js/window.location.reload))
+  (if util/web-platform?
+    (js/window.location.reload)
+    (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- roam-import-handler
   [e]
