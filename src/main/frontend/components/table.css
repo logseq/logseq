@@ -107,7 +107,7 @@ html.is-resizing-buf {
 }
 
 .query-table, .classic-table {
-  @apply my-2 rounded overflow-hidden;
+  @apply my-2 rounded;
 
   &.force-visible-scrollbar {
     @apply !overflow-x-auto pb-1;

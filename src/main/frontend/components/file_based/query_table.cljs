@@ -152,13 +152,14 @@
                (date/int->local-time-2 updated-at))]
 
     [:string
-     (if comma-separated-property?
+     (let [value (get-in row [:block/properties column])]
+       (if (or comma-separated-property? (coll? value))
          ;; Return original properties since comma properties need to
          ;; return collections for display purposes
-       (get-in row [:block/properties column])
-       (or (get-in row [:block/properties-text-values column])
-             ;; Fallback to original properties for page blocks
-           (get-in row [:block/properties column])))]))
+         value
+         (or (get-in row [:block/properties-text-values column])
+           ;; Fallback to original properties for page blocks
+             value)))]))
 
 (defn- render-column-value
   [{:keys [row-block row-format cell-format value]} page-cp inline-text]
