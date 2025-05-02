@@ -45,9 +45,8 @@
   []
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
-  (ui-handler/re-render-root!)
   (route-handler/redirect-to-home!)
-  (js/setTimeout ui-handler/re-render-root! 500))
+  (js/window.location.reload))
 
 (defn- roam-import-handler
   [e]

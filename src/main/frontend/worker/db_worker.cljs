@@ -838,12 +838,13 @@
            (js/console.error (str "DB is not found for " repo))))))))
 
 (defn- on-become-master
-  [repo]
+  [repo import?]
   (js/Promise.
    (m/sp
      (c.m/<? (init-sqlite-module!))
-     (c.m/<? (start-db! repo {}))
-     (assert (some? (worker-state/get-datascript-conn repo)))
+     (when-not import?
+       (c.m/<? (start-db! repo {}))
+       (assert (some? (worker-state/get-datascript-conn repo))))
      (m/? (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
@@ -865,7 +866,7 @@
         service
         (p/let [service (shared-service/<create-service graph
                                                         (bean/->js fns)
-                                                        #(on-become-master graph)
+                                                        #(on-become-master graph import?)
                                                         broadcast-data-types
                                                         {:import? import?})]
           (assert (p/promise? (get-in service [:status :ready])))
