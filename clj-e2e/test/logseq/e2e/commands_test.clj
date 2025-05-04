@@ -145,3 +145,16 @@
           (util/exit-edit)
           (w/wait-for (str ".ls-icon-" (get priority->icon priority
                                             (str "priorityLvl" priority)))))))))
+
+(deftest scheduled-deadline-test
+  (testing "task scheduled and deadline commands"
+    (doseq [command ["Scheduled" "Deadline"]]
+      (fixtures/create-page)
+      (let [text (str command " test ")]
+        (b/new-block text)
+        (input-command command)
+        (k/enter)
+        (k/esc)
+        (util/exit-edit)
+        (is (= command (util/get-text ".property-k")))
+        (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
