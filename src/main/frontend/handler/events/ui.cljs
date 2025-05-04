@@ -44,12 +44,6 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
-(defmethod events/handle :class/configure [[_ page]]
-  (shui/dialog-open!
-   #(block/block-container {} page)
-   {:label "page-configure"
-    :align :top}))
-
 (defmethod events/handle :go/search [_]
   (shui/dialog-open!
    cmdk/cmdk-modal
