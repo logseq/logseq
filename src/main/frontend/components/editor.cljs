@@ -203,10 +203,10 @@
                                  (ui/icon "letter-p" {:size 14})
 
                                  (db-model/whiteboard-page? block')
-                                 (ui/icon "whiteboard" {:extension? true})
+                                 (ui/icon "writing")
 
                                  (:page? block')
-                                 (ui/icon "page" {:extension? true})
+                                 (ui/icon "file")
 
                                  (or (string/starts-with? (str (:block/title block')) (t :new-tag))
                                      (string/starts-with? (str (:block/title block')) (t :new-page)))
