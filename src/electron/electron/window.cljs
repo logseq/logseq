@@ -4,7 +4,7 @@
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
-            ["electron" :refer [BrowserWindow app session shell] :as electron]
+            ["electron" :refer [BrowserWindow app session shell dialog] :as electron]
             ["path" :as node-path]
             ["url" :as URL]
             [electron.state :as state]
@@ -125,9 +125,18 @@
   [url default-open]
   (let [URL (.-URL URL)
         parsed-url (try (URL. url) (catch :default _ nil))]
-    (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
-      (.openExternal shell url)
-      (when default-open (default-open url)))))
+    (when parsed-url
+      (if (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url))
+        (.openExternal shell url)
+        (when-let [^js res (and (fn? default-open)
+                             (.showMessageBoxSync dialog
+                               #js {:type "warning"
+                                    :message (str "Are you sure you want to open this link? \n\n" url)
+                                    :defaultId 1
+                                    :cancelId 0
+                                    :buttons #js ["Cancel" "OK"]}))]
+          (when (= res 1)
+            (default-open url)))))))
 
 (defn setup-window-listeners!
   [^js win]
@@ -167,18 +176,18 @@
               (-> (if (= url "about:blank")
                     (merge {:action "allow"
                             :overrideBrowserWindowOptions
-                            {:frame                true
-                             :titleBarStyle        "default"
+                            {:frame true
+                             :titleBarStyle "default"
                              :trafficLightPosition {:x 16 :y 16}
-                             :autoHideMenuBar      (not mac?)
-                             :fullscreenable       (not fullscreen?)
+                             :autoHideMenuBar (not mac?)
+                             :fullscreenable (not fullscreen?)
                              :webPreferences
-                             {:plugins          true
-                              :nodeIntegration  false
-                              :webSecurity      (not dev?)
-                              :preload          (node-path/join js/__dirname "js/preload.js")
+                             {:plugins true
+                              :nodeIntegration false
+                              :webSecurity (not dev?)
+                              :preload (node-path/join js/__dirname "js/preload.js")
                               :nativeWindowOpen true}}}
-                           features)
+                      features)
                     (do (open-external! url) {:action "deny"}))
                   (bean/->js))))]
 
