@@ -23,10 +23,10 @@ html[data-theme=light] {
 
 .cp__header {
   > .r > div:not(.ui__dropdown-trigger) a, button {
-    color: var(--lx-gray-11, var(--ls-header-button-background, var(--rx-gray-11)));
+    @apply opacity-70;
 
     &:hover {
-      color: var(--lx-gray-12, var(--ls-header-button-background, var(--rx-gray-12)));
+      @apply opacity-100;
     }
   }
 }

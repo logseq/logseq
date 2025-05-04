@@ -112,15 +112,15 @@
   }
 
   .page-icon {
-    @apply flex items-center mr-2 text-center align-baseline leading-none;
+    @apply flex items-center text-center align-baseline leading-none;
+  }
+
+  .ui__icon {
+    @apply relative flex justify-center w-[16px] text-base mr-2 opacity-70;
   }
 
   a.item {
     @apply flex items-center pl-1.5 pr-0.5 h-8 select-none;
-
-    .ui__icon {
-      @apply relative flex justify-center w-[16px] text-base mr-2;
-    }
 
     .graph-icon {
       @apply ml-[3px] mr-[11px];
@@ -132,10 +132,6 @@
 
     &:hover, &.active, > .thumb {
       background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-
-      .ui__icon {
-        @apply opacity-100;
-      }
     }
   }
 
