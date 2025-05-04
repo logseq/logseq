@@ -62,7 +62,11 @@
 
 (defonce *page-number (atom 0))
 
+(defn create-page
+  []
+  (page/new-page (str "page " (swap! *page-number inc))))
+
 (defn new-logseq-page
   [f]
-  (page/new-page (str "page " (swap! *page-number inc)))
+  (create-page)
   (f))
