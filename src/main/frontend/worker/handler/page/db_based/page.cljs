@@ -6,10 +6,10 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -168,13 +168,12 @@
 (defn create
   "Pure function without side effects"
   [db title*
-   {:keys [create-first-block? properties uuid persist-op? whiteboard?
-           class? today-journal? split-namespace? skip-existing-page-check?]
+   {:keys [create-first-block? tags properties uuid persist-op? whiteboard?
+           class? today-journal? split-namespace?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
-           persist-op?              true
-           skip-existing-page-check? false}
+           persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
         title (sanitize-title title*)
@@ -184,9 +183,12 @@
                     #{:logseq.class/Whiteboard}
                     today-journal?
                     #{:logseq.class/Journal}
+                    (seq tags)
+                    (set (map :db/ident tags))
                     :else
-                    #{:logseq.class/Page})]
-    (if-let [existing-page-id (first (ldb/page-exists? db title types))]
+                    #{:logseq.class/Page})
+        existing-page-id (first (ldb/page-exists? db title types))]
+    (if existing-page-id
       (let [existing-page (d/entity db existing-page-id)
             tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
@@ -202,9 +204,7 @@
       (let [page      (gp-block/page-name->map title db true date-formatter
                                                {:class? class?
                                                 :page-uuid (when (uuid? uuid) uuid)
-                                                :skip-existing-page-check? (if (some? skip-existing-page-check?)
-                                                                             skip-existing-page-check?
-                                                                             true)})
+                                                :skip-existing-page-check? true})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
