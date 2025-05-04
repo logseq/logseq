@@ -79,8 +79,8 @@
             [logseq.common.util.macro :as macro-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]
@@ -3008,6 +3008,37 @@
     (when-not edit?
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
+(rum/defc block-content-with-error
+  [config block edit-input-id block-id slide? *show-query? editor-box]
+  (let [[editing? set-editing!] (hooks/use-state false)
+        query (:logseq.property/query block)]
+    (ui/catch-error
+     (if query
+       (if editing?
+         (editor-box {:block query
+                      :block-id (:block/uuid query)
+                      :block-parent-id uuid
+                      :format (get block :block/format :markdown)}
+                     (str "edit-block-" (:block/uuid query))
+                     (assoc config :editor-opts {:on-blur #(set-editing! false)}))
+         [:a.text-sm
+          {:on-click (fn []
+                       (set-editing! true)
+                       (editor-handler/edit-block! query :max {:container-id (:container-id config)}))}
+          "Click to fix query: "
+          (:block/title query)])
+       [:div.flex.flex-1.flex-col.w-full.gap-2
+        (ui/block-error "Block Render Error:"
+                        {:content (or (:block/title query)
+                                      (:block/title block))
+                         :section-attrs
+                         {:on-click #(let [content (:block/title block)]
+                                       (editor-handler/clear-selection!)
+                                       (editor-handler/unhighlight-blocks!)
+                                       (state/set-editing! edit-input-id content block "" {:db (db/get-db)
+                                                                                           :container-id (:container-id config)}))}})])
+     (block-content config block edit-input-id block-id slide? *show-query?))))
+
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   (rum/local false ::hover?)
   [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
@@ -3048,17 +3079,7 @@
                        edit-input-id
                        config))]
          [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
-          (ui/catch-error
-           (ui/block-error "Block Render Error:"
-                           {:content (:block/title block)
-                            :section-attrs
-                            {:on-click #(let [content (or (:block/title block)
-                                                          (:block/title block))]
-                                          (editor-handler/clear-selection!)
-                                          (editor-handler/unhighlight-blocks!)
-                                          (state/set-editing! edit-input-id content block "" {:db (db/get-db)
-                                                                                              :container-id (:container-id config)}))}})
-           (block-content config block edit-input-id block-id slide? *show-query?))
+          (block-content-with-error config block edit-input-id block-id slide? *show-query? editor-box)
 
           (when (and (not hide-block-refs-count?)
                      (not named?)
@@ -3762,20 +3783,15 @@
                   (assoc config :container-id container-id)
                   config)]
     (when (:block/uuid block)
-      (ui/catch-error
-       (fn [^js error]
-         [:div.flex.flex-col.pl-6.my-1
-          [:code (str "#uuid\"" (:block/uuid block) "\"")]
-          [:code.flex.p-1.text-red-rx-09 "Block render error: " (.-message error)]])
-       (rum/with-key
-         (block-container-inner state repo config' block
-                                (merge
-                                 opts
-                                 {:navigating-block navigating-block :navigated? navigated?}))
-         (str "block-inner-"
-              (:container-id config)
-              "-"
-              (:block/uuid block)))))))
+      (rum/with-key
+        (block-container-inner state repo config' block
+                               (merge
+                                opts
+                                {:navigating-block navigating-block :navigated? navigated?}))
+        (str "block-inner-"
+             (:container-id config)
+             "-"
+             (:block/uuid block))))))
 
 (rum/defc block-container
   [config block* & {:as opts}]
