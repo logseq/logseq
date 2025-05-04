@@ -2371,9 +2371,22 @@
         opacity (if hover? "opacity-100" "opacity-0")
         query (:logseq.property/query block)
         advanced-query? (and query? (= :code (:logseq.property.node/display-type query)))
-        show-query? (and *show-query? @*show-query?)]
+        show-query? (and *show-query? @*show-query?)
+        query-setting (when query?
+                        (ui/tooltip
+                         (shui/button
+                          {:size :sm
+                           :variant :ghost
+                           :class (str "ls-small-icon text-muted-foreground ml-2 w-6 h-6 transition-opacity ease-in duration-300 " opacity)
+                           :on-pointer-down (fn [e]
+                                              (util/stop e)
+                                              (when *show-query? (swap! *show-query? not)))}
+                          (ui/icon "settings"))
+                         [:div.opacity-75 (if show-query?
+                                            "Hide query"
+                                            "Set query")]))]
     [:div.w-full
-     {:class (if (and query? blank?)
+     {:class (if query?
                "inline-flex"
                "inline")
       :on-mouse-over #(set-hover? true)
@@ -2384,20 +2397,8 @@
        (and query? blank?)
        (query-builder-component/builder query {})
        :else
-       [:div.inline (text-block-title config block)])
-     (when query?
-       (ui/tooltip
-        (shui/button
-         {:size :sm
-          :variant :ghost
-          :class (str "ls-small-icon text-muted-foreground ml-2 w-6 h-6 transition-opacity ease-in duration-300 " opacity)
-          :on-pointer-down (fn [e]
-                             (util/stop e)
-                             (when *show-query? (swap! *show-query? not)))}
-         (ui/icon "settings"))
-        [:div.opacity-75 (if show-query?
-                           "Hide query"
-                           "Set query")]))
+       (text-block-title config block))
+     query-setting
      (when-let [property (:logseq.property/created-from-property block)]
        (when-let [message (when (= :url (:logseq.property/type property))
                             (first (outliner-property/validate-property-value (db/get-db) property (:db/id block))))]
