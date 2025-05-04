@@ -120,3 +120,28 @@
         (is (= text (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
+
+(deftest status-test
+  (testing "task status commands"
+    (let [status->icon {"Doing" "InProgress50"
+                        "In review" "InReview"
+                        "Canceled" "Cancelled"}]
+      (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]]
+        (let [text (str status " test ")]
+          (b/new-block text)
+          (input-command status)
+          (is (= text (util/get-edit-content)))
+          (util/exit-edit)
+          (w/wait-for (str ".ls-icon-" (get status->icon status status))))))))
+
+(deftest priority-test
+  (testing "task priority commands"
+    (let [priority->icon {"No priority" "line-dashed"}]
+      (doseq [priority ["No priority" "Low" "Medium" "High" "Urgent"]]
+        (let [text (str priority " test ")]
+          (b/new-block text)
+          (input-command priority)
+          (is (= text (util/get-edit-content)))
+          (util/exit-edit)
+          (w/wait-for (str ".ls-icon-" (get priority->icon priority
+                                            (str "priorityLvl" priority)))))))))
