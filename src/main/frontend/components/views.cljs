@@ -393,16 +393,18 @@
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
-        group-by-columns (concat (filter (fn [column]
+        group-by-columns (concat (when (or
+                                        (contains? #{:linked-references :unlinked-references}
+                                                   (:logseq.property.view/feature-type view-entity))
+                                        (:logseq.property/query view-entity))
+                                   [{:id :block/page
+                                     :name "Block Page"}])
+                                 (filter (fn [column]
                                            (when (:id column)
                                              (when-let [p (db/entity (:id column))]
                                                (and (not (db-property/many? p))
                                                     (contains? #{:default :number :checkbox :url :node :date}
-                                                               (:logseq.property/type p)))))) columns)
-                                 (when (contains? #{:linked-references :unlinked-references}
-                                                  (:logseq.property.view/feature-type view-entity))
-                                   [{:id :block/page
-                                     :name "Block Page"}]))]
+                                                               (:logseq.property/type p)))))) columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
