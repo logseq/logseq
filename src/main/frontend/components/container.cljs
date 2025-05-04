@@ -283,8 +283,7 @@
                 :href (rfe/href :whiteboards)
                 :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
                 :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                :icon "whiteboard"
-                :icon-extension? true
+                :icon "writing"
                 :shortcut :go/whiteboards})))
 
           (= nav :flashcards)
