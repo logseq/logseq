@@ -58,7 +58,7 @@
   (let [current-page (state/get-current-page)]
     (->>
      [(when current-page
-        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"})
+        {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "file"})
       {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
       {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
       {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
@@ -200,9 +200,9 @@
     (ldb/property? entity)
     "letter-p"
     (ldb/whiteboard? entity)
-    "whiteboard"
+    "writing"
     :else
-    "page"))
+    "file"))
 
 (defmethod load-results :initial [_ state]
   (when-let [db (db/get-db)]
@@ -630,7 +630,7 @@
       [:div.search-results
        (for [item visible-items
              :let [highlighted? (= item highlighted-item)
-                   page? (= "page" (some-> item :icon))
+                   page? (= "file" (some-> item :icon))
                    text (some-> item :text)
                    source-page (some-> item :source-page)
                    hls-page? (and page? (pdf-utils/hls-file? (:block/title source-page)))]]
