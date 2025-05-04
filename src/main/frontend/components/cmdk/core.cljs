@@ -112,9 +112,17 @@
                             (take (get-group-limit group) items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (some-> (text/get-namespace-last-part input)
-                                     string/trim
-                                     db/get-page)
+                         (or (let [page (some-> (text/get-namespace-last-part input)
+                                                string/trim
+                                                db/get-page)
+                                   parent-title (:block/title (:logseq.property/parent page))
+                                   namespace? (string/includes? input "/")]
+                               (and page
+                                    (or (not namespace?)
+                                        (and
+                                         parent-title
+                                         (= (util/page-name-sanity-lc parent-title)
+                                            (util/page-name-sanity-lc (nth (reverse (string/split input "/")) 1)))))))
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
