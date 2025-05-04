@@ -8,8 +8,8 @@
             [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -518,11 +518,7 @@
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-          group-by-property-ident (or (:db/ident group-by-property)
-                                      (when (and list-view? (nil? group-by-property))
-                                        :block/page)
-                                      (when (contains? #{:linked-references :unlinked-references} view-feature-type)
-                                        :block/page))
+          group-by-property-ident (:db/ident group-by-property)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)

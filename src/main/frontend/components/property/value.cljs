@@ -218,8 +218,18 @@
          (when (ldb/class? property)
            (<set-class-as-property! repo property))
          (db-property-handler/class-add-property! (:db/id block) property-id))
-        (let [block-ids (map :block/uuid blocks)]
-          (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})))
+        (let [block-ids (map :block/uuid blocks)
+              set-query-list-view? (and (:logseq.property/query block)
+                                        (= property-id :logseq.property.view/type)
+                                        (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
+          (ui-outliner-tx/transact!
+           {:outliner-op :set-block-property}
+           (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
+           (when (and set-query-list-view?
+                      (nil? (:logseq.property.view/group-by-property block)))
+             (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
+                                                         (:db/id (db/entity :block/page))
+                                                         {:entity-id? entity-id?})))))
       (when (seq (:view/selected-blocks @state/state))
         (notification/show! "Property updated!" :success))
       (when-not many?
