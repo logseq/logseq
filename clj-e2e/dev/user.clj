@@ -69,7 +69,7 @@
   (repl/resume)
 
   ;; Run specific test
-  (future (run-test logseq.e2e.commands-test/scheduled-deadline-test))
+  (future (run-test logseq.e2e.commands-test/date-time-test))
 
   ;; after the test has been paused, you can do anything with the current page like this
   (repl/with-page

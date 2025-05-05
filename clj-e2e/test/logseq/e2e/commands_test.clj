@@ -1,5 +1,8 @@
 (ns logseq.e2e.commands-test
   (:require
+   [clj-time.core :as t]
+   [clj-time.format :as tf]
+   [clj-time.local :as tl]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.block :as b]
@@ -158,3 +161,31 @@
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
+
+;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
+(deftest date-time-test
+  (testing "date time commands"
+    (input-command "today")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    (b/new-block "")
+    (input-command "yesterday")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    (b/new-block "")
+    (input-command "tomorrow")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    (b/new-block "")
+    (input-command "time")
+    (let [text (util/get-edit-content)
+          t (tl/local-now)]
+      (is (= text (str (t/hour t) ":" (t/minute t)))))
+    (b/new-block "")
+    (input-command "date picker")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))))
