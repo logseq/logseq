@@ -4,7 +4,8 @@
         io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
                                     :sha "80ea665c75704a8ca80cb22caeaec3ae6f39ffdb"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
-        org.clj-commons/claypoole          {:mvn/version "1.2.2"}}
+        org.clj-commons/claypoole          {:mvn/version "1.2.2"}
+        clj-time/clj-time                  {:mvn/version "0.15.2"}}
  :aliases
  {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
           :ns-default build}
