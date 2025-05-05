@@ -138,7 +138,7 @@
     (is (thrown-with-msg?
          js/Error
          #"Can't set tag.*Priority"
-         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.task/priority))
+         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.property/priority))
         "Nodes can't be tagged with built-in non tags")))
 
 ;; Try as many of the validations against a new graph to confirm

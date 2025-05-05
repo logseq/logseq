@@ -2848,7 +2848,7 @@
        (fn []
          (p/let [result (db-async/<task-spent-time repo (:db/id block))]
            (set-result! result)))
-       [(:logseq.task/status block)])
+       [(:logseq.property/status block)])
       (when (and time-spent (> time-spent 0))
         [:div.text-sm.time-spent.ml-1
          (shui/button

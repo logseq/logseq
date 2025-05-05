@@ -658,19 +658,19 @@
 (defn db-based-cycle-todo!
   [block]
   (let [status-value (if (ldb/class-instance? (db/entity :logseq.class/Task) block)
-                       (:logseq.task/status block)
-                       (get block :logseq.task/status {}))
+                       (:logseq.property/status block)
+                       (get block :logseq.property/status {}))
         next-status (case (:db/ident status-value)
-                      :logseq.task/status.todo
-                      :logseq.task/status.doing
-                      :logseq.task/status.doing
-                      :logseq.task/status.done
-                      :logseq.task/status.done
+                      :logseq.property/status.todo
+                      :logseq.property/status.doing
+                      :logseq.property/status.doing
+                      :logseq.property/status.done
+                      :logseq.property/status.done
                       nil
-                      :logseq.task/status.todo)
+                      :logseq.property/status.todo)
         repo (state/get-current-repo)]
     (property-handler/set-block-property! repo (:block/uuid block)
-                                          :logseq.task/status
+                                          :logseq.property/status
                                           (:db/id (db/entity next-status)))))
 
 (defn cycle-todos!

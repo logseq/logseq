@@ -253,7 +253,7 @@
                     {:block/title "b2"
                      :build/tags [:user.class/MyClass]}
                     {:block/title "some task"
-                     :build/properties {:logseq.task/status :logseq.task/status.doing}
+                     :build/properties {:logseq.property/status :logseq.property/status.doing}
                      :build/tags [:logseq.class/Task]}]}]}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
