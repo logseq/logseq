@@ -229,3 +229,30 @@
 [?r :block/title \"bar\"]]}")
     (k/esc)
     (is (some? (w/find-one-by-text "div" "Live query (2)")))))
+
+(deftest calculator-test
+  (testing "calculator"
+    (b/new-block "")
+    (util/input-command "calculator")
+    (util/input "1 + 2")
+    (is (some? (w/find-one-by-text "div.extensions__code-calc-output-line" "3")))))
+
+(deftest template-test
+  (testing "template"
+    (b/new-block "template 1")
+    (util/type " #")
+    (util/type "Template")
+    (w/wait-for (w/find-one-by-text "a.menu-link mark" "Template"))
+    (k/enter)
+    (b/new-blocks ["block 1" "block 2" "block 3" "test"])
+    (k/arrow-up)
+    (util/repeat-keyboard 3 "Shift+ArrowUp")
+    (k/tab)
+    (b/jump-to-block "test")
+    (util/input-command "template")
+    (util/input "template 1")
+    (k/enter)
+    (util/exit-edit)
+    (let [content (w/all-text-contents ".ls-block .block-content")]
+      (doseq [text ["block 1" "block 2" "block 3"]]
+        (is (= 2 (count (filter #(= % text) content))))))))
