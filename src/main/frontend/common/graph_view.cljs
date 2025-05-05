@@ -18,7 +18,7 @@
         links))
 
 (defn- build-nodes
-  [dark? current-page page-links nodes namespaces color-property color-settings]
+  [dark? db-based? db current-page page-links nodes namespaces color-property color-settings]
   (let [page-parents (set (map last namespaces))
         current-page (or current-page "")
         pages (common-util/distinct-by :db/id nodes)]
@@ -29,8 +29,9 @@
      (mapv (fn [p]
              (let [page-title (:block/title p)
                    current-page? (= page-title current-page)
-                   properties (:block/properties p)
-                   color-type (get properties color-property)
+                   color-type (if db-based?
+                                (:block/title (d/entity db (last (map :db/id (:block/tags p)))))
+                                (get (:block/properties p) color-property))
                    color (get color-settings color-type)
                    color (if current-page?
                            (if dark? "#ffffff" "#045591")
@@ -109,7 +110,7 @@
         page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                              (update v inc))) {} links)
         links (build-links links)
-        nodes (build-nodes dark? nil page-links nodes namespaces color-property color-settings)]
+        nodes (build-nodes dark? db-based? db nil page-links nodes namespaces color-property color-settings)]
     (-> {:nodes nodes
          :links links}
         normalize-page-name
@@ -201,7 +202,7 @@
                    (remove nil?)
                    (map #(d/entity db %))
                    (common-util/distinct-by :db/id))
-        nodes (build-nodes dark? (:block/title page-entity) links nodes namespaces color-property color-settings)]
+        nodes (build-nodes dark? db-based? db (:block/title page-entity) links nodes namespaces color-property color-settings)]
     (normalize-page-name
      {:nodes nodes
       :links links})))
@@ -211,6 +212,7 @@
   [db block-uuid theme color-property color-settings]
   (when-let [block (and (uuid? block-uuid) (d/entity db [:block/uuid block-uuid]))]
     (let [dark? (= "dark" theme)
+          db-based? (entity-plus/db-based-graph? db)
           ref-blocks (->> (concat (:block/_refs block) (:block/refs block))
                           (map (fn [b]
                                  (if (ldb/page? b) b (:block/page b))))
@@ -227,7 +229,7 @@
                      distinct
                        ;; FIXME: get block tags
                      )
-          nodes (build-nodes dark? block links nodes namespaces color-property color-settings)]
+          nodes (build-nodes dark? db-based? db block links nodes namespaces color-property color-settings)]
       (normalize-page-name
        {:nodes nodes
         :links links}))))
