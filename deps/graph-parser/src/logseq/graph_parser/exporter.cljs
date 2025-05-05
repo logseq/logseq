@@ -268,22 +268,22 @@
   "If a block has a marker, convert it to a task object"
   [block {:keys [log-fn]}]
   (if-let [marker (:block/marker block)]
-    (let [old-to-new {"TODO" :logseq.task/status.todo
-                      "LATER" :logseq.task/status.todo
-                      "IN-PROGRESS" :logseq.task/status.doing
-                      "NOW" :logseq.task/status.doing
-                      "DOING" :logseq.task/status.doing
-                      "DONE" :logseq.task/status.done
-                      "WAIT" :logseq.task/status.backlog
-                      "WAITING" :logseq.task/status.backlog
-                      "CANCELED" :logseq.task/status.canceled
-                      "CANCELLED" :logseq.task/status.canceled}
+    (let [old-to-new {"TODO" :logseq.property/status.todo
+                      "LATER" :logseq.property/status.todo
+                      "IN-PROGRESS" :logseq.property/status.doing
+                      "NOW" :logseq.property/status.doing
+                      "DOING" :logseq.property/status.doing
+                      "DONE" :logseq.property/status.done
+                      "WAIT" :logseq.property/status.backlog
+                      "WAITING" :logseq.property/status.backlog
+                      "CANCELED" :logseq.property/status.canceled
+                      "CANCELLED" :logseq.property/status.canceled}
           status-ident (or (old-to-new marker)
                            (do
                              (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
-                             :logseq.task/status.todo))]
+                             :logseq.property/status.todo))]
       (-> block
-          (assoc :logseq.task/status status-ident)
+          (assoc :logseq.property/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/Task)
           (dissoc :block/marker)))
@@ -292,15 +292,15 @@
 (defn- update-block-priority
   [block {:keys [log-fn]}]
   (if-let [priority (:block/priority block)]
-    (let [old-to-new {"A" :logseq.task/priority.high
-                      "B" :logseq.task/priority.medium
-                      "C" :logseq.task/priority.low}
+    (let [old-to-new {"A" :logseq.property/priority.high
+                      "B" :logseq.property/priority.medium
+                      "C" :logseq.property/priority.low}
           priority-value (or (old-to-new priority)
                              (do
                                (log-fn :invalid-priority (str (pr-str priority) " is not a valid priority so setting it to low"))
-                               :logseq.task/priority.low))]
+                               :logseq.property/priority.low))]
       (-> block
-          (assoc :logseq.task/priority priority-value)
+          (assoc :logseq.property/priority priority-value)
           (update :block/title string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
           (dissoc :block/priority)))
     block))
@@ -325,7 +325,7 @@
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
           time-long (tc/to-long (date-time-util/int->local-date date-int))
-          datetime-property (if (:block/deadline block) :logseq.task/deadline :logseq.task/scheduled)]
+          datetime-property (if (:block/deadline block) :logseq.property/deadline :logseq.property/scheduled)]
       {:block
        (-> block
            (assoc datetime-property time-long)

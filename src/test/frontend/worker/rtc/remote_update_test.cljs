@@ -55,14 +55,14 @@
             ent (d/entity db [:block/uuid block-uuid])]
         (is (= [[:db/retract (:db/id ent) :block/updated-at]]
                (#'subject/remote-op-value->tx-data db ent {} nil)))))
-    (testing ":logseq.task/status, op-value don't have this attr, means remove this attr"
+    (testing ":logseq.property/status, op-value don't have this attr, means remove this attr"
       (let [db (d/db-with db [{:db/id "ref1"
                                :block/uuid ref-uuid1}
                               {:block/uuid block-uuid
-                               :logseq.task/status "ref1"}])
+                               :logseq.property/status "ref1"}])
             op-value {}
             ent (d/entity db [:block/uuid block-uuid])]
-        (is (= [[:db/retract (:db/id ent) :logseq.task/status]]
+        (is (= [[:db/retract (:db/id ent) :logseq.property/status]]
                (#'subject/remote-op-value->tx-data db ent op-value nil)))))
     (testing "dont update ignored attrs"
       (let [db (d/db-with db [{:block/uuid block-uuid

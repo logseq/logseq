@@ -277,7 +277,7 @@
                :hide? true}
       :queryable? false}
      ;; Task props
-     :logseq.task/status
+     :logseq.property/status
      {:title "Status"
       :schema
       {:type :default
@@ -291,17 +291,17 @@
                :icon {:type :tabler-icon :id icon}
                :properties (when (some? checkbox-state)
                              {:logseq.property/choice-checkbox-state checkbox-state})})
-            [[:logseq.task/status.backlog "Backlog" "Backlog"]
-             [:logseq.task/status.todo "Todo" "Todo" false]
-             [:logseq.task/status.doing "Doing" "InProgress50"]
-             [:logseq.task/status.in-review "In Review" "InReview"]
-             [:logseq.task/status.done "Done" "Done" true]
-             [:logseq.task/status.canceled "Canceled" "Cancelled"]])
+            [[:logseq.property/status.backlog "Backlog" "Backlog"]
+             [:logseq.property/status.todo "Todo" "Todo" false]
+             [:logseq.property/status.doing "Doing" "InProgress50"]
+             [:logseq.property/status.in-review "In Review" "InReview"]
+             [:logseq.property/status.done "Done" "Done" true]
+             [:logseq.property/status.canceled "Canceled" "Cancelled"]])
       :properties {:logseq.property/hide-empty-value true
-                   :logseq.property/default-value :logseq.task/status.todo
+                   :logseq.property/default-value :logseq.property/status.todo
                    :logseq.property/enable-history? true}
       :queryable? true}
-     :logseq.task/priority
+     :logseq.property/priority
      {:title "Priority"
       :schema
       {:type :default
@@ -313,13 +313,13 @@
                :value value
                :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
                :icon {:type :tabler-icon :id icon}})
-            [[:logseq.task/priority.low "Low" "priorityLvlLow"]
-             [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
-             [:logseq.task/priority.high "High" "priorityLvlHigh"]
-             [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])
+            [[:logseq.property/priority.low "Low" "priorityLvlLow"]
+             [:logseq.property/priority.medium "Medium" "priorityLvlMedium"]
+             [:logseq.property/priority.high "High" "priorityLvlHigh"]
+             [:logseq.property/priority.urgent "Urgent" "priorityLvlUrgent"]])
       :properties {:logseq.property/hide-empty-value true
                    :logseq.property/enable-history? true}}
-     :logseq.task/deadline
+     :logseq.property/deadline
      {:title "Deadline"
       :schema {:type :datetime
                :public? true
@@ -327,7 +327,7 @@
       :properties {:logseq.property/hide-empty-value true
                    :logseq.property/description "Use it to finish something at a specific date(time)."}
       :queryable? true}
-     :logseq.task/scheduled
+     :logseq.property/scheduled
      {:title "Scheduled"
       :schema {:type :datetime
                :public? true
@@ -623,7 +623,7 @@
   (set (vals schema-properties-map)))
 
 (def logseq-property-namespaces
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs" "logseq.task"
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.property.fsrs"
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
