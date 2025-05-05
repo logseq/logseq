@@ -15,6 +15,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -85,11 +86,11 @@
 
 (defn save-asset-handler
   [file]
-  (-> (editor-handler/file-based-save-assets! (state/get-current-repo) [(js->clj file)])
+  (-> (file-editor-handler/file-based-save-assets! (state/get-current-repo) [(js->clj file)])
       (p/then
        (fn [res]
          (when-let [[asset-file-name _ full-file-path] (and (seq res) (first res))]
-           (editor-handler/resolve-relative-path (or full-file-path asset-file-name)))))))
+           (file-editor-handler/resolve-relative-path (or full-file-path asset-file-name)))))))
 
 (defn references-count
   [props]

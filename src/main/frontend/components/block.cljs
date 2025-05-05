@@ -45,6 +45,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.file-sync :as file-sync]
@@ -3328,7 +3329,7 @@
               (when (and (config/local-file-based-graph? repo) (not (state/editing?)))
                 ;; Basically the same logic as editor-handler/upload-asset,
                 ;; does not require edting
-                (-> (editor-handler/file-based-save-assets! repo (js->clj files))
+                (-> (file-editor-handler/file-based-save-assets! repo (js->clj files))
                     (p/then
                      (fn [res]
                        (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (first res)]
@@ -3338,7 +3339,7 @@
                                                                                   (str
                                                                                    (if image? "../assets/" "")
                                                                                    "@" (:name matched-alias) "/" asset-file-name)
-                                                                                  (editor-handler/resolve-relative-path (or asset-file-fpath asset-file-name)))
+                                                                                  (file-editor-handler/resolve-relative-path (or asset-file-fpath asset-file-name)))
                                                                                 (if file-obj (.-name file-obj) (if image? "image" "asset"))
                                                                                 image?)]
                            (editor-handler/api-insert-new-block!
