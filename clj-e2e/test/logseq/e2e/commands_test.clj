@@ -240,10 +240,7 @@
 (deftest template-test
   (testing "template"
     (b/new-block "template 1")
-    (util/type " #")
-    (util/type "Template")
-    (w/wait-for (w/find-one-by-text "a.menu-link mark" "Template"))
-    (k/enter)
+    (util/set-tag "Template")
     (b/new-blocks ["block 1" "block 2" "block 3" "test"])
     (k/arrow-up)
     (util/repeat-keyboard 3 "Shift+ArrowUp")
