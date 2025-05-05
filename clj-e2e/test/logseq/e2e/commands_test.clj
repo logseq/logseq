@@ -8,7 +8,8 @@
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -202,3 +203,29 @@
     (b/jump-to-block "a")
     (util/input-command "number children")
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
+
+(deftest query-test
+  (testing "query"
+    (b/new-blocks ["[[foo]] block" "[[foo]] another" ""])
+    (util/input-command "query")
+    (let [btn (w/find-one-by-text "button" "Filter")]
+      (w/click btn)
+      (util/input "page reference")
+      (is (some? (w/find-one-by-text "div" "page reference")))
+      (k/enter)
+      (util/input "foo")
+      (is (some? (w/find-one-by-text "div" "foo")))
+      (k/enter)
+      (is (some? (w/find-one-by-text "div" "Live query (2)"))))))
+
+(deftest advanced-query-test
+  (testing "query"
+    (b/new-blocks ["[[bar]] block" "[[bar]] another" ""])
+    (util/input-command "advanced query")
+    (w/click ".ls-query-setting")
+    (w/click "pre.CodeMirror-line")
+    (util/input "{:query [:find (pull ?b [*])
+:where [?b :block/refs ?r]
+[?r :block/title \"bar\"]]}")
+    (k/esc)
+    (is (some? (w/find-one-by-text "div" "Live query (2)")))))
