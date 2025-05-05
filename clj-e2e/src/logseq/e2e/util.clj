@@ -171,3 +171,14 @@
 (defn move-cursor-to-start
   []
   (k/press "ControlOrMeta+a" "ArrowLeft"))
+
+(defn input-command
+  [command]
+  (let [content (get-edit-content)]
+    (when (and (not= (str (last content)) " ")
+               (not= content ""))
+      (type " ")))
+  (type "/")
+  (type command)
+  (w/wait-for ".ui__popover-content")
+  (k/enter))
