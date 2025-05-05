@@ -425,7 +425,8 @@
        ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
-       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
+       (when-not db?
+         ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode])
        ["Calculator"
         (calc-steps)
         "Insert a calculator" :icon/calculator]
