@@ -253,3 +253,45 @@
     (let [content (w/all-text-contents ".ls-block .block-content")]
       (doseq [text ["block 1" "block 2" "block 3"]]
         (is (= 2 (count (filter #(= % text) content))))))))
+
+(deftest embed-html-test
+  (testing "embed html"
+    (b/new-block "")
+    (util/input-command "embed html")
+    (util/type "<div id=\"embed-test\">test</div>")
+    (util/exit-edit)
+    (is (= "test" (util/get-text "#embed-test")))))
+
+(deftest embed-video-test
+  (testing "embed video"
+    (b/new-block "")
+    (util/input-command "embed video")
+    (util/type "https://www.youtube.com/watch?v=7xTGNNLPyMI")
+    (util/exit-edit)
+    (w/wait-for "iframe")))
+
+(deftest embed-tweet-test
+  (testing "embed tweet"
+    (b/new-block "")
+    (util/input-command "embed tweet")
+    (util/type "https://x.com/logseq/status/1784914564083314839")
+    (util/exit-edit)
+    (w/wait-for "iframe")))
+
+(deftest cloze-test
+  (testing "cloze"
+    (b/new-block "")
+    (util/input-command "cloze")
+    (util/type "hidden answer")
+    (util/exit-edit)
+    (w/click "a.cloze")
+    (w/wait-for "a.cloze-revealed")))
+
+(deftest new-property-test
+  (testing "new property"
+    (b/new-block "")
+    (util/input-command "add new property")
+    (util/input "p1")
+    (w/click "a:has-text(\"+ New option: p1\")")
+    (k/enter)
+    (is (= "p1" (util/get-text "a.property-k")))))
