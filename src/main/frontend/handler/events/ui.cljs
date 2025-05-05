@@ -2,7 +2,6 @@
   "UI events"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [frontend.components.block :as block]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.page :as component-page]
