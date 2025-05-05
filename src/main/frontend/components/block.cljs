@@ -2377,7 +2377,7 @@
                          (shui/button
                           {:size :sm
                            :variant :ghost
-                           :class (str "ls-small-icon text-muted-foreground ml-2 w-6 h-6 transition-opacity ease-in duration-300 " opacity)
+                           :class (str "ls-query-setting ls-small-icon text-muted-foreground ml-2 w-6 h-6 transition-opacity ease-in duration-300 " opacity)
                            :on-pointer-down (fn [e]
                                               (util/stop e)
                                               (when *show-query? (swap! *show-query? not)))}
