@@ -112,14 +112,14 @@
       (let [conn (helper/get-downloaded-test-conn)
             block1 (d/pull @conn
                            [{:block/tags [:db/ident]}
-                            {:logseq.task/status [:db/ident]}
-                            {:logseq.task/deadline [:block/journal-day]}]
+                            {:logseq.property/status [:db/ident]}
+                            {:logseq.property/deadline [:block/journal-day]}]
                            [:block/uuid const/block1-uuid])]
-        (when-not (= :logseq.task/status.doing (:db/ident (:logseq.task/status block1)))
+        (when-not (= :logseq.property/status.doing (:db/ident (:logseq.property/status block1)))
           (throw (ex-info "wait block1's task properties to be synced" {:missionary/retry true})))
         (is (= {:block/tags [{:db/ident :logseq.class/Task}],
-                :logseq.task/status {:db/ident :logseq.task/status.doing}
-                :logseq.task/deadline {:block/journal-day 20240907}}
+                :logseq.property/status {:db/ident :logseq.property/status.doing}
+                :logseq.property/deadline {:block/journal-day 20240907}}
                block1)))))})
 (def ^:private step4
   "client1:

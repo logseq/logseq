@@ -706,6 +706,31 @@
                        :logseq.task/recur-status-property :logseq.property.repeat/checked-property})
    conn search-db))
 
+(defn- rename-task-properties
+  [conn search-db]
+  (when (ldb/db-based-graph? @conn)
+    (let [closed-values-tx (mapv (fn [[old new]]
+                                   {:db/id (:db/id (d/entity @conn old))
+                                    :db/ident new})
+                                 {:logseq.task/status.backlog :logseq.property/status.backlog
+                                  :logseq.task/status.todo :logseq.property/status.todo
+                                  :logseq.task/status.doing :logseq.property/status.doing
+                                  :logseq.task/status.in-review :logseq.property/status.in-review
+                                  :logseq.task/status.done :logseq.property/status.done
+                                  :logseq.task/status.canceled :logseq.property/status.canceled
+                                  :logseq.task/priority.low :logseq.property/priority.low
+                                  :logseq.task/priority.medium :logseq.property/priority.medium
+                                  :logseq.task/priority.high :logseq.property/priority.high
+                                  :logseq.task/priority.urgent :logseq.property/priority.urgent})]
+      (ldb/transact! conn closed-values-tx {:db-migrate? true})))
+
+  ;; This needs to be last as the returned tx are used
+  ((rename-properties {:logseq.task/status :logseq.property/status
+                       :logseq.task/priority :logseq.property/priority
+                       :logseq.task/deadline :logseq.property/deadline
+                       :logseq.task/scheduled :logseq.property/scheduled})
+   conn search-db))
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -816,7 +841,8 @@
    ["64.4" {:properties [:logseq.property/created-by-ref]}]
    ["64.5" {:fix add-group-by-property-for-list-views}]
    ["64.6" {:fix cardinality-one-multiple-values}]
-   ["64.7" {:fix rename-repeated-properties}]])
+   ["64.7" {:fix rename-repeated-properties}]
+   ["64.8" {:fix rename-task-properties}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))

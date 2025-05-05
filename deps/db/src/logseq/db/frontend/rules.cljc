@@ -219,13 +219,13 @@
     :task
     '[(task ?b ?statuses)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.task/status ?val)
+      (and (simple-query-property ?b :logseq.property/status ?val)
            [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.task/priority ?priority)
+      (and (simple-query-property ?b :logseq.property/priority ?priority)
            [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies

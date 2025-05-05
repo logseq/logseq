@@ -222,14 +222,14 @@
                       '[:find [(pull ?block ?block-attrs) ...]
                         :in $ ?start-time ?end-time ?block-attrs
                         :where
-                        (or [?block :logseq.task/scheduled ?n]
-                            [?block :logseq.task/deadline ?n])
+                        (or [?block :logseq.property/scheduled ?n]
+                            [?block :logseq.property/deadline ?n])
                         [(>= ?n ?start-time)]
                         [(<= ?n ?end-time)]
-                        [?block :logseq.task/status ?status]
+                        [?block :logseq.property/status ?status]
                         [?status :db/ident ?status-ident]
-                        [(not= ?status-ident :logseq.task/status.done)]
-                        [(not= ?status-ident :logseq.task/status.canceled)]]
+                        [(not= ?status-ident :logseq.property/status.done)]
+                        [(not= ?status-ident :logseq.property/status.canceled)]]
                       start-time
                       future-time
                       '[*])
@@ -342,7 +342,7 @@
   [graph block-id]
   (p/let [history (<get-block-properties-history graph block-id)
           status-history (filter
-                          (fn [b] (= :logseq.task/status (:db/ident (:logseq.property.history/property b))))
+                          (fn [b] (= :logseq.property/status (:db/ident (:logseq.property.history/property b))))
                           history)]
     (when (seq status-history)
       (let [time (loop [[last-item item & others] status-history
@@ -350,17 +350,17 @@
                    (if item
                      (let [last-status (:db/ident (:logseq.property.history/ref-value last-item))
                            this-status (:db/ident (:logseq.property.history/ref-value item))]
-                       (if (and (= this-status :logseq.task/status.doing)
+                       (if (and (= this-status :logseq.property/status.doing)
                                 (empty? others))
                          (-> (+ time (- (tc/to-long (t/now)) (:block/created-at item)))
                              (quot 1000))
                          (let [time' (if (or
-                                          (= last-status :logseq.task/status.doing)
+                                          (= last-status :logseq.property/status.doing)
                                           (and
-                                           (not (contains? #{:logseq.task/status.canceled
-                                                             :logseq.task/status.backlog
-                                                             :logseq.task/status.done} last-status))
-                                           (= this-status :logseq.task/status.done)))
+                                           (not (contains? #{:logseq.property/status.canceled
+                                                             :logseq.property/status.backlog
+                                                             :logseq.property/status.done} last-status))
+                                           (= this-status :logseq.property/status.done)))
                                        (+ time (- (:block/created-at item) (:block/created-at last-item)))
                                        time)]
                            (recur (cons item others) time'))))

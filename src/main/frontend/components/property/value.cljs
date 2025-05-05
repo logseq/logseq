@@ -293,7 +293,7 @@
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
                                                                                                   :logseq.property.repeat/temporal-property)))))]
-       (if (#{:logseq.task/deadline :logseq.task/scheduled} (:db/ident property))
+       (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
          [:div "Repeat task"]
          [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
@@ -312,14 +312,14 @@
                        (filter (fn [property]
                                  (and (not (ldb/built-in? property))
                                       (>= (count (:property/closed-values property)) 2))))
-                       (concat [(db/entity :logseq.task/status)])
+                       (concat [(db/entity :logseq.property/status)])
                        (util/distinct-by :db/id))
            status-property (or (:logseq.property.repeat/checked-property block)
-                               (db/entity :logseq.task/status))
+                               (db/entity :logseq.property/status))
            property-id (:db/id status-property)
            done-choice (or
                         (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
-                        (db/entity :logseq.task/status.done))]
+                        (db/entity :logseq.property/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
          "When"]
@@ -463,7 +463,7 @@
                       (str (util/zero-pad hours)
                            ":"
                            (util/zero-pad minutes))])]]
-      (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} property-id))
+      (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
 
@@ -534,7 +534,7 @@
                                         :meta-click? other-position?
                                         :label (human-date-label (t/to-default-time-zone date))} value)
                               (:db/id value)))]
-              (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
+              (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
                 content))
 
