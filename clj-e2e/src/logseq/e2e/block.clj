@@ -49,3 +49,7 @@
   [blocks]
   (doseq [block blocks]
     (assert/assert-is-visible (format ".ls-page-blocks .ls-block :text('%s')" block))))
+
+(defn jump-to-block
+  [block-text]
+  (w/click (w/find-one-by-text ".ls-block .block-content" block-text)))
