@@ -148,12 +148,13 @@
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
-                           (if db-tag?
-                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (map (fn [title] {:block/title title
-                                                    :nlp-date? true})
-                                       date/nlp-pages)
-                                  (take 10)))
+                           (when db-based?
+                             (if db-tag?
+                               (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                               (->> (map (fn [title] {:block/title title
+                                                      :nlp-date? true})
+                                         date/nlp-pages)
+                                    (take 10))))
                            ;; reorder, shortest and starts-with first.
                            (let [matched-pages-with-new-page
                                  (fn [partial-matched-pages]
@@ -185,7 +186,8 @@
                                        (or (db/entity [:block/uuid id]) block)
                                        block)]
                           [:div.flex.flex-col
-                           (when (and (not (or (:page? block) (ldb/page? block))) (:block/uuid block'))
+                           (when (and (not (or db-tag? (:page? block) (ldb/page? block)))
+                                      (:block/uuid block'))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
