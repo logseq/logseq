@@ -182,3 +182,10 @@
   (type command)
   (w/wait-for ".ui__popover-content")
   (k/enter))
+
+(defn set-tag
+  [tag]
+  (type " #")
+  (type tag)
+  (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
+  (k/enter))
