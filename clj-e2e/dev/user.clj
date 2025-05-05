@@ -54,14 +54,16 @@
              'logseq.e2e.outliner-test
              'logseq.e2e.rtc-basic-test))
 
-(comment
-
+(defn start
+  []
   (future
     (fixtures/open-page
      repl/pause
-     {:headless false}))
+     {:headless false})))
 
-  ;; You can put `(repl/pause)` in any test to pause the tests,
+(comment
+
+  ;; You can call or put `(repl/pause)` in any test to pause the tests,
   ;; this allows us to continue experimenting with the current page.
   (repl/pause)
 
