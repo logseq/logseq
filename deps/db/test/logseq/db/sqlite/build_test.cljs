@@ -53,12 +53,12 @@
            conn
            [{:page {:block/title "page1"}
              :blocks [{:block/title "some todo"
-                       :build/properties {:logseq.task/status :logseq.task/status.doing}}
+                       :build/properties {:logseq.property/status :logseq.property/status.doing}}
                       {:block/title "some slide"
                        :build/properties {:logseq.property/background-image "https://placekitten.com/200/300"}}]}])]
-    (is (= :logseq.task/status.doing
+    (is (= :logseq.property/status.doing
            (->> (db-test/find-block-by-content @conn "some todo")
-                :logseq.task/status
+                :logseq.property/status
                 :db/ident))
         "built-in property with closed value is created and correctly associated to a block")
 
@@ -103,7 +103,7 @@
         (sqlite-build/build-blocks-tx
          {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
                               :blocks [(merge {:block/title "imported task" :block/uuid (:block/uuid block)}
-                                              {:build/properties {:logseq.task/status :logseq.task/status.todo}
+                                              {:build/properties {:logseq.property/status :logseq.property/status.todo}
                                                :build/tags [:logseq.class/Task]})]}]
           :build-existing-tx? true})
         _ (d/transact! conn init-tx)
@@ -129,7 +129,7 @@
           "Tx doesn't try to create new blocks or modify existing idents")
       (is (= "imported task" (:block/title updated-block)))
       (is (= {:block/tags [:logseq.class/Task]
-              :logseq.task/status :logseq.task/status.todo}
+              :logseq.property/status :logseq.property/status.todo}
              (db-test/readable-properties updated-block))
           "Block's properties and tags are updated"))
 

@@ -33,7 +33,7 @@
   (if (= property :status)
     (or
      (:db/ident (:logseq.property.repeat/checked-property entity))
-     :logseq.task/status)
+     :logseq.property/status)
     property))
 
 (defn- get-value
@@ -49,7 +49,7 @@
          (some (fn [choice]
                  (when (:logseq.property/choice-checkbox-state choice)
                    (:db/id choice))) choices)))
-     :logseq.task/status.done)
+     :logseq.property/status.done)
     (and (= property :status) (= value :todo))
     (or
      (let [p (:logseq.property.repeat/checked-property entity)
@@ -60,7 +60,7 @@
          (some (fn [choice]
                  (when (false? (:logseq.property/choice-checkbox-state choice))
                    (:db/id choice))) choices)))
-     :logseq.task/status.todo)
+     :logseq.property/status.todo)
     :else
     value))
 
@@ -151,7 +151,7 @@
 
 (defmethod handle-command :reschedule [_ db entity _datoms]
   (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
-                           :logseq.task/scheduled)
+                           :logseq.property/scheduled)
         frequency (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
         unit (:logseq.property.repeat/recur-unit entity)
         property (d/entity db property-ident)

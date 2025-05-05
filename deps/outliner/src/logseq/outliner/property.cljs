@@ -39,7 +39,7 @@
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id value)
-                            (and (contains? #{:logseq.task/status :logseq.task/scheduled :logseq.task/deadline} property-id)
+                            (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
                                  (or (empty? (:block/tags block)) (ldb/internal-page? block)))
                             (assoc :block/tags :logseq.class/Task))]
       (cond-> []

@@ -85,14 +85,14 @@
     {:block/uuid block1-uuid
      :block/updated-at 1725454876718
      :block/tags :logseq.class/Task
-     :logseq.task/status :logseq.task/status.done
-     :logseq.task/deadline "id-0907"}]
+     :logseq.property/status :logseq.property/status.done
+     :logseq.property/deadline "id-0907"}]
    :step3-toggle-status-TODO
    [{:block/uuid block1-uuid
-     :logseq.task/status :logseq.task/status.todo}]
+     :logseq.property/status :logseq.property/status.todo}]
    :step3-toggle-status-DOING
    [{:block/uuid block1-uuid
-     :logseq.task/status :logseq.task/status.doing}]
+     :logseq.property/status :logseq.property/status.doing}]
    :move-blocks-concurrently-1
    [{:db/id "page"
      :block/uuid page3-uuid

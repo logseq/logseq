@@ -125,7 +125,7 @@
 (defn db-based-statuses
   []
   (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/status)))
+       (db-pu/get-closed-property-values :logseq.property/status)))
 
 (defn db-based-embed-page
   []
@@ -260,7 +260,7 @@
 (defn db-based-priorities
   []
   (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/priority)))
+       (db-pu/get-closed-property-values :logseq.property/priority)))
 
 (defn get-priorities
   []
@@ -757,7 +757,7 @@
 (defn- db-based-set-status
   [status]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/status status)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/status status)))
 
 (defmethod handle-step :editor/set-status [[_ status] format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -796,8 +796,8 @@
   [priority]
   (when-let [block (state/get-edit-block)]
     (if (nil? priority)
-      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.task/priority)
-      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority))))
+      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/priority)
+      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))
