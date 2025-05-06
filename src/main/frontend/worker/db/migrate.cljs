@@ -789,20 +789,47 @@
 (defn- rename-task-properties
   [conn search-db]
   (when (ldb/db-based-graph? @conn)
-    (let [closed-values-tx (mapv (fn [[old new]]
+    (let [db @conn
+          new-idents {:logseq.task/status.backlog :logseq.property/status.backlog
+                      :logseq.task/status.todo :logseq.property/status.todo
+                      :logseq.task/status.doing :logseq.property/status.doing
+                      :logseq.task/status.in-review :logseq.property/status.in-review
+                      :logseq.task/status.done :logseq.property/status.done
+                      :logseq.task/status.canceled :logseq.property/status.canceled
+                      :logseq.task/priority.low :logseq.property/priority.low
+                      :logseq.task/priority.medium :logseq.property/priority.medium
+                      :logseq.task/priority.high :logseq.property/priority.high
+                      :logseq.task/priority.urgent :logseq.property/priority.urgent}
+          closed-values-tx (mapv (fn [[old new]]
                                    {:db/id (:db/id (d/entity @conn old))
                                     :db/ident new})
-                                 {:logseq.task/status.backlog :logseq.property/status.backlog
-                                  :logseq.task/status.todo :logseq.property/status.todo
-                                  :logseq.task/status.doing :logseq.property/status.doing
-                                  :logseq.task/status.in-review :logseq.property/status.in-review
-                                  :logseq.task/status.done :logseq.property/status.done
-                                  :logseq.task/status.canceled :logseq.property/status.canceled
-                                  :logseq.task/priority.low :logseq.property/priority.low
-                                  :logseq.task/priority.medium :logseq.property/priority.medium
-                                  :logseq.task/priority.high :logseq.property/priority.high
-                                  :logseq.task/priority.urgent :logseq.property/priority.urgent})]
-      (ldb/transact! conn closed-values-tx {:db-migrate? true})))
+                                 new-idents)
+          filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
+                          (keep (fn [d]
+                                  (let [filters (:filters (:v d))]
+                                    (when (some (fn [item]
+                                                  (and (vector? item) (contains? #{:logseq.task/status :logseq.task/priority}
+                                                                                 (first item)))) filters)
+                                      (let [value (update (:v d) :filters
+                                                          (fn [col]
+                                                            (reduce
+                                                             (fn [col property]
+                                                               (mapv (fn [item]
+                                                                       (if (and (vector? item) (= property (first item)))
+                                                                         (let [[p o v] item
+                                                                               f (fn [id]
+                                                                                   (let [new-ident (get new-idents (:db/ident (d/entity db [:block/uuid id])))]
+                                                                                     (common-uuid/gen-uuid :db-ident-block-uuid new-ident)))
+                                                                               v' (if (set? v)
+                                                                                    (set (map f v))
+                                                                                    (f v))]
+                                                                           [p o v'])
+                                                                         item))
+                                                                     col))
+                                                             col
+                                                             [:logseq.task/status :logseq.task/priority])))]
+                                        [:db/add (:e d) :logseq.property.table/filters value]))))))]
+      (ldb/transact! conn (concat closed-values-tx filters-tx) {:db-migrate? true})))
 
   ;; This needs to be last as the returned tx are used
   ((rename-properties {:logseq.task/status :logseq.property/status
