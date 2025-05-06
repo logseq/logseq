@@ -254,6 +254,7 @@
     (util/input-command "template")
     (util/input "template 1")
     (k/enter)
+    (util/exit-edit)
     (let [content (w/all-text-contents ".ls-block")]
       (doseq [text ["block 1" "block 2" "block 3"]]
         (is (= 2 (count (filter #(= % text) content))))))))
