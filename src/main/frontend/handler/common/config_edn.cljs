@@ -88,36 +88,34 @@ nested keys or positional errors e.g. tuples"
 
 (def file-only-config
   "File only config that is deprecated in DB graphs"
-  {:preferred-format
-   "is not used in DB graphs as there is only markdown mode."
-   :preferred-workflow
-   "is not used in DB graphs"
-   :property/separated-by-commas
-   "is not used in DB graphs"
-   :property-pages/enabled?
-   "is not used in DB graphs as all properties have pages"
-   :property-pages/excludelist
-   "is not used in DB graphs"
-   :hidden
-   "is not used in DB graphs"
-   :org-mode/insert-file-link?
-   "is not used in DB graphs"
-   :block-hidden-properties
-   "is not used in DB graphs as hiding a property is done in its configuration"
-   :ignored-page-references-keywords
-   "is not used in DB graphs"
-   :file/name-format
-   "is not used in DB graphs"
-   :feature/enable-block-timestamps?
-   "is not used in DB graphs as it is always enabled"
-   :favorites
-   "is not stored in config for DB graphs"
-   :journal/page-title-format
-   "is not used in DB graphs"
-   :srs/learning-fraction
-   "is not used in DB graphs"
-   :srs/initial-interval
-   "is not used in DB graphs"})
+  (merge
+   (zipmap
+    [:file/name-format
+     :file-sync/ignore-files
+     :hidden
+     :ignored-page-references-keywords
+     :journal/page-title-format
+     :journals-directory
+     :logbook/settings
+     :org-mode/insert-file-link?
+     :pages-directory
+     :preferred-workflow
+     :property/separated-by-commas
+     :property-pages/excludelist
+     :srs/learning-fraction
+     :srs/initial-interval
+     :whiteboards-directory]
+    (repeat "is not used in DB graphs"))
+   {:preferred-format
+    "is not used in DB graphs as there is only markdown mode."
+    :property-pages/enabled?
+    "is not used in DB graphs as all properties have pages"
+    :block-hidden-properties
+    "is not used in DB graphs as hiding a property is done in its configuration"
+    :feature/enable-block-timestamps?
+    "is not used in DB graphs as it is always enabled"
+    :favorites
+    "is not stored in config for DB graphs"}))
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"

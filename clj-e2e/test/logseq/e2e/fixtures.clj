@@ -1,7 +1,7 @@
 (ns logseq.e2e.fixtures
   (:require [logseq.e2e.config :as config]
-            [logseq.e2e.playwright-page :as pw-page]
-            [logseq.e2e.util :as util]
+            [logseq.e2e.custom-report :as custom-report]
+            [logseq.e2e.page :as page]
             [wally.main :as w]))
 
 ;; TODO: save trace
@@ -12,8 +12,9 @@
     (w/make-page {:headless (or headless @config/*headless)
                   :persistent false
                   :slow-mo @config/*slow-mo})
-    (w/navigate (str "http://localhost:" (or port @config/*port)))
-    (f)))
+    (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}]
+      (w/navigate (str "http://localhost:" (or port @config/*port)))
+      (f))))
 
 (def *page1 (atom nil))
 (def *page2 (atom nil))
@@ -28,15 +29,17 @@
         p1 (w/make-page page-opts)
         p2 (w/make-page page-opts)
         port' (or port @config/*port)]
-    (run!
-     #(w/with-page %
-        (w/navigate (str "http://localhost:" port')))
-     [p1 p2])
-
     (reset! *page1 p1)
     (reset! *page2 p2)
-    (binding [w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
+    (binding [custom-report/*pw-contexts* (set [(.context @p1) (.context @p2)])
+              w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
+      (run!
+       #(w/with-page %
+          (w/navigate (str "http://localhost:" port')))
+       [p1 p2])
       (f))
+
+    ;; use with-page-open to release resources
     (w/with-page-open p1)
     (w/with-page-open p2)))
 
@@ -52,13 +55,18 @@
     ;; context for p is no longer needed
     (.close (.context p))
     (w/with-page-open p)              ; use with-page-open to close playwright instance
-    (binding [*pw-ctx* ctx]
+    (binding [custom-report/*pw-contexts* #{ctx}
+              *pw-ctx* ctx]
       (f)
       (.close (.browser *pw-ctx*)))))
 
 (defonce *page-number (atom 0))
 
+(defn create-page
+  []
+  (page/new-page (str "page " (swap! *page-number inc))))
+
 (defn new-logseq-page
   [f]
-  (util/new-page (str "page " (swap! *page-number inc)))
+  (create-page)
   (f))

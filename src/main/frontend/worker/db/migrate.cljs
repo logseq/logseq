@@ -109,18 +109,98 @@
                               [:db/add id new prop-value]]))))
             old-new-props)))
 
+(defn- rename-properties-aux
+  [db props-to-rename]
+  (let [property-tx (map
+                     (fn [[old new]]
+                       (merge {:db/id (:db/id (d/entity db old))
+                               :db/ident new}
+                              (when-let [new-title (get-in db-property/built-in-properties [new :title])]
+                                {:block/title new-title
+                                 :block/name (common-util/page-name-sanity-lc new-title)})))
+                     props-to-rename)
+        titles-tx (->> (d/datoms db :avet :block/title)
+                       (keep (fn [d]
+                               (when-let [props (seq (filter (fn [[old _new]] (string/includes? (:v d) (str old))) props-to-rename))]
+                                 (let [title' (reduce (fn [title [old new]]
+                                                        (string/replace title (str old) (str new))) (:v d) props)]
+                                   [:db/add (:e d) :block/title title'])))))
+        sorting-tx (->> (d/datoms db :avet :logseq.property.table/sorting)
+                        (keep (fn [d]
+                                (when-let [props (seq (filter (fn [[old _new]]
+                                                                (some (fn [item] (= old (:id item))) (:v d))) props-to-rename))]
+                                  (let [value (reduce
+                                               (fn [sorting [old new]]
+                                                 (mapv
+                                                  (fn [item]
+                                                    (if (= old (:id item))
+                                                      (assoc item :id new)
+                                                      item))
+                                                  sorting))
+                                               (:v d)
+                                               props)]
+                                    [:db/add (:e d) :logseq.property.table/sorting value])))))
+        sized-columns-tx (->> (d/datoms db :avet :logseq.property.table/sized-columns)
+                              (keep (fn [d]
+                                      (when-let [props (seq (filter (fn [[old _new]] (get (:v d) old)) props-to-rename))]
+                                        (let [value (reduce
+                                                     (fn [sizes [old new]]
+                                                       (if-let [size (get sizes old)]
+                                                         (-> sizes
+                                                             (dissoc old)
+                                                             (assoc new size))
+                                                         sizes))
+                                                     (:v d)
+                                                     props)]
+                                          [:db/add (:e d) :logseq.property.table/sized-columns value])))))
+        hidden-columns-tx (mapcat
+                           (fn [[old new]]
+                             (->> (d/datoms db :avet :logseq.property.table/hidden-columns old)
+                                  (mapcat (fn [d]
+                                            [[:db/retract (:e d) :logseq.property.table/hidden-columns old]
+                                             [:db/add (:e d) :logseq.property.table/hidden-columns new]]))))
+                           props-to-rename)
+        ordered-columns-tx (->> (d/datoms db :avet :logseq.property.table/ordered-columns)
+                                (keep (fn [d]
+                                        (when-let [props (seq (filter (fn [[old _new]] ((set (:v d)) old)) props-to-rename))]
+                                          (let [value (reduce
+                                                       (fn [col [old new]]
+                                                         (mapv (fn [v] (if (= old v) new v)) col))
+                                                       (:v d)
+                                                       props)]
+                                            [:db/add (:e d) :logseq.property.table/ordered-columns value])))))
+        filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
+                        (keep (fn [d]
+                                (let [filters (:filters (:v d))]
+                                  (when-let [props (seq (filter (fn [[old _new]]
+                                                                  (some (fn [item] (and (vector? item)
+                                                                                        (= old (first item)))) filters)) props-to-rename))]
+                                    (let [value (update (:v d) :filters
+                                                        (fn [col]
+                                                          (reduce
+                                                           (fn [col [old new]]
+                                                             (mapv (fn [item]
+                                                                     (if (and (vector? item) (= old (first item)))
+                                                                       (vec (cons new (rest item)))
+                                                                       item))
+                                                                   col))
+                                                           col
+                                                           props)))]
+                                      [:db/add (:e d) :logseq.property.table/filters value]))))))]
+    (concat property-tx
+            titles-tx
+            sorting-tx
+            sized-columns-tx
+            hidden-columns-tx
+            ordered-columns-tx
+            filters-tx)))
+
 (defn- rename-properties
   [props-to-rename]
   (fn [conn _search-db]
     (when (ldb/db-based-graph? @conn)
-      (let [props-tx (mapv (fn [[old new]]
-                             (merge {:db/id (:db/id (d/entity @conn old))
-                                     :db/ident new}
-                                    (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                      {:block/title new-title
-                                       :block/name (common-util/page-name-sanity-lc new-title)})))
-                           props-to-rename)]
-       ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
+      (let [props-tx (rename-properties-aux @conn props-to-rename)]
+        ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
         (ldb/transact! conn props-tx {:db-migrate? true})
 
         (mapcat (fn [[old new]]
@@ -684,6 +764,80 @@
       block-ids)
      (remove nil?))))
 
+(defn- rename-repeated-properties
+  [conn search-db]
+  (when (ldb/db-based-graph? @conn)
+    (let [closed-values-tx (mapv (fn [[old new]]
+                                   {:db/id (:db/id (d/entity @conn old))
+                                    :db/ident new})
+                                 {:logseq.task/recur-unit.minute :logseq.property.repeat/recur-unit.minute
+                                  :logseq.task/recur-unit.hour :logseq.property.repeat/recur-unit.hour
+                                  :logseq.task/recur-unit.day :logseq.property.repeat/recur-unit.day
+                                  :logseq.task/recur-unit.week :logseq.property.repeat/recur-unit.week
+                                  :logseq.task/recur-unit.month :logseq.property.repeat/recur-unit.month
+                                  :logseq.task/recur-unit.year :logseq.property.repeat/recur-unit.year})]
+      (ldb/transact! conn closed-values-tx {:db-migrate? true})))
+
+  ;; This needs to be last as the returned tx are used
+  ((rename-properties {:logseq.task/recur-frequency :logseq.property.repeat/recur-frequency
+                       :logseq.task/recur-unit :logseq.property.repeat/recur-unit
+                       :logseq.task/repeated? :logseq.property.repeat/repeated?
+                       :logseq.task/scheduled-on-property :logseq.property.repeat/temporal-property
+                       :logseq.task/recur-status-property :logseq.property.repeat/checked-property})
+   conn search-db))
+
+(defn- rename-task-properties
+  [conn search-db]
+  (when (ldb/db-based-graph? @conn)
+    (let [db @conn
+          new-idents {:logseq.task/status.backlog :logseq.property/status.backlog
+                      :logseq.task/status.todo :logseq.property/status.todo
+                      :logseq.task/status.doing :logseq.property/status.doing
+                      :logseq.task/status.in-review :logseq.property/status.in-review
+                      :logseq.task/status.done :logseq.property/status.done
+                      :logseq.task/status.canceled :logseq.property/status.canceled
+                      :logseq.task/priority.low :logseq.property/priority.low
+                      :logseq.task/priority.medium :logseq.property/priority.medium
+                      :logseq.task/priority.high :logseq.property/priority.high
+                      :logseq.task/priority.urgent :logseq.property/priority.urgent}
+          closed-values-tx (mapv (fn [[old new]]
+                                   {:db/id (:db/id (d/entity @conn old))
+                                    :db/ident new})
+                                 new-idents)
+          filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
+                          (keep (fn [d]
+                                  (let [filters (:filters (:v d))]
+                                    (when (some (fn [item]
+                                                  (and (vector? item) (contains? #{:logseq.task/status :logseq.task/priority}
+                                                                                 (first item)))) filters)
+                                      (let [value (update (:v d) :filters
+                                                          (fn [col]
+                                                            (reduce
+                                                             (fn [col property]
+                                                               (mapv (fn [item]
+                                                                       (if (and (vector? item) (= property (first item)))
+                                                                         (let [[p o v] item
+                                                                               f (fn [id]
+                                                                                   (let [new-ident (get new-idents (:db/ident (d/entity db [:block/uuid id])))]
+                                                                                     (common-uuid/gen-uuid :db-ident-block-uuid new-ident)))
+                                                                               v' (if (set? v)
+                                                                                    (set (map f v))
+                                                                                    (f v))]
+                                                                           [p o v'])
+                                                                         item))
+                                                                     col))
+                                                             col
+                                                             [:logseq.task/status :logseq.task/priority])))]
+                                        [:db/add (:e d) :logseq.property.table/filters value]))))))]
+      (ldb/transact! conn (concat closed-values-tx filters-tx) {:db-migrate? true})))
+
+  ;; This needs to be last as the returned tx are used
+  ((rename-properties {:logseq.task/status :logseq.property/status
+                       :logseq.task/priority :logseq.property/priority
+                       :logseq.task/deadline :logseq.property/deadline
+                       :logseq.task/scheduled :logseq.property/scheduled})
+   conn search-db))
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -793,7 +947,9 @@
             :classes [:logseq.class/Template]}]
    ["64.4" {:properties [:logseq.property/created-by-ref]}]
    ["64.5" {:fix add-group-by-property-for-list-views}]
-   ["64.6" {:fix cardinality-one-multiple-values}]])
+   ["64.6" {:fix cardinality-one-multiple-values}]
+   ["64.7" {:fix rename-repeated-properties}]
+   ["64.8" {:fix rename-task-properties}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))

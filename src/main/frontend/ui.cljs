@@ -104,8 +104,6 @@
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)
                       *mouse-point (volatile! nil)]
-                  ;; Passing aria-label as a prop to TextareaAutosize removes the dash
-                  (.setAttribute el "aria-label" "editing block")
                   (doto el
                     (.addEventListener "select"
                                        #(let [start (util/get-selection-start el)
@@ -136,6 +134,7 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
+                     "data-testid" "block editor"
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
@@ -709,7 +708,7 @@
 (rum/defc block-error
   "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
-  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui.w-full
    section-attrs
    [:div.flex.justify-between.items-center.px-1
     [:h5.text-error.pb-1 title]
@@ -876,8 +875,8 @@
         enabled-tooltip? (state/enable-tooltip?)]
     (if (and enabled-tooltip? shortcut-tooltip?)
       (tooltip content
-        [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
-        {:trigger-props {:as-child true}})
+               [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+               {:trigger-props {:as-child true}})
       content)))
 
 (rum/defc progress-bar
@@ -977,12 +976,12 @@
 (rum/defc tooltip
   [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
   (shui/tooltip-provider
-    (shui/tooltip root-props
-      (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
-      (if (not (false? portal?))
-        (shui/tooltip-portal
-          (shui/tooltip-content content-props tooltip-content))
-        (shui/tooltip-content content-props tooltip-content)))))
+   (shui/tooltip root-props
+                 (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
+                 (if (not (false? portal?))
+                   (shui/tooltip-portal
+                    (shui/tooltip-content content-props tooltip-content))
+                   (shui/tooltip-content content-props tooltip-content)))))
 
 (rum/defc DelDateButton
   [on-delete]

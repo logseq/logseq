@@ -125,13 +125,13 @@
             536872312
             {:block-uuid uuid1
              :av-coll
-             [[:logseq.task/status status-value-uuid 536872312 true]]}]]
+             [[:logseq.property/status status-value-uuid 536872312 true]]}]]
           r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (= {uuid1
               {:op :update-attrs
                :self uuid1
                :parents [uuid2]
-               :logseq.task/status [status-value-uuid]}}
+               :logseq.property/status [status-value-uuid]}}
              r))))
   (testing "case7: toggle status(2)"
     (let [[uuid1 uuid2 status-value-uuid1 status-value-uuid2] (repeatedly random-uuid)
@@ -145,15 +145,15 @@
             536872314
             {:block-uuid uuid1
              :av-coll
-             [[:logseq.task/status status-value-uuid1 536872312 true]
-              [:logseq.task/status status-value-uuid1 536872312 false]
-              [:logseq.task/status status-value-uuid2 536872314 true]]}]]
+             [[:logseq.property/status status-value-uuid1 536872312 true]
+              [:logseq.property/status status-value-uuid1 536872312 false]
+              [:logseq.property/status status-value-uuid2 536872314 true]]}]]
           r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (= {uuid1
               {:op :update-attrs
                :self uuid1
                :parents [uuid2]
-               :logseq.task/status [status-value-uuid2]}}
+               :logseq.property/status [status-value-uuid2]}}
              r)))))
 
 (deftest apply-remote-move-ops-test

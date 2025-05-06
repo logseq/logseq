@@ -5,6 +5,7 @@
             [logseq.e2e.commands-test]
             [logseq.e2e.config :as config]
             [logseq.e2e.fixtures :as fixtures]
+            [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.multi-tabs-test]
             [logseq.e2e.outliner-test]
@@ -17,6 +18,7 @@
 (reset! config/*port 3001)
 ;; show ui
 (reset! config/*headless false)
+(reset! config/*slow-mo 100)
 
 (def *futures (atom {}))
 
@@ -45,14 +47,23 @@
   (->> (future (run-tests 'logseq.e2e.multi-tabs-test))
        (swap! *futures assoc :multi-tabs-test)))
 
-(comment
+(defn run-all-test
+  []
+  (run-tests 'logseq.e2e.commands-test
+             'logseq.e2e.multi-tabs-test
+             'logseq.e2e.outliner-test
+             'logseq.e2e.rtc-basic-test))
 
+(defn start
+  []
   (future
     (fixtures/open-page
      repl/pause
-     {:headless false}))
+     {:headless false})))
 
-  ;; You can put `(repl/pause)` in any test to pause the tests,
+(comment
+
+  ;; You can call or put `(repl/pause)` in any test to pause the tests,
   ;; this allows us to continue experimenting with the current page.
   (repl/pause)
 
@@ -60,7 +71,7 @@
   (repl/resume)
 
   ;; Run specific test
-  (future (run-test logseq.e2e.editor-test/commands-test))
+  (future (run-test logseq.e2e.commands-test/new-property-test))
 
   ;; after the test has been paused, you can do anything with the current page like this
   (repl/with-page
@@ -74,7 +85,9 @@
 
   (do
     (reset! config/*headless true)
-    (dotimes [i 10]
-      (run-outliner-test)))
+    (reset! config/*slow-mo 100)
+    (dotimes [i 5]
+      (run-multi-tabs-test)))
+
   ;;
   )

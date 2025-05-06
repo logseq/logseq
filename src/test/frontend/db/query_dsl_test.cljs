@@ -447,11 +447,11 @@ prop-d:: [[nada]]"}])
   (load-test-files (if js/process.env.DB_GRAPH
                      [{:page {:block/title "page1"}
                        :blocks [{:block/title "[#A] b1"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.high}}
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}
                                 {:block/title "[#B] b2"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.medium}}
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.medium}}
                                 {:block/title "[#A] b3"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.high}}]}]
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]
 
                      [{:file/path "pages/page1.md"
                        :file/content "foo:: bar

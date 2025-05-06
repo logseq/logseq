@@ -69,7 +69,8 @@
   (cond
     (seq tags)
     (when-let [another-id (first
-                           (d/q (if (ldb/property? entity)
+                           (d/q (cond
+                                  (ldb/property? entity)
                                   ;; Property names are unique in that they can
                                   ;; have the same names as built-in property names
                                   '[:find [?b ...]
@@ -79,6 +80,18 @@
                                     [?b :block/tags ?tag-id]
                                     [(missing? $ ?b :logseq.property/built-in?)]
                                     [(not= ?b ?eid)]]
+                                  (:logseq.property/parent entity)
+                                  '[:find [?b ...]
+                                    :in $ ?eid ?title [?tag-id ...]
+                                    :where
+                                    [?b :block/title ?title]
+                                    [?b :block/tags ?tag-id]
+                                    [(not= ?b ?eid)]
+                                    ;; same parent
+                                    [?b :logseq.property/parent ?bp]
+                                    [?eid :logseq.property/parent ?ep]
+                                    [(= ?bp ?ep)]]
+                                  :else
                                   '[:find [?b ...]
                                     :in $ ?eid ?title [?tag-id ...]
                                     :where

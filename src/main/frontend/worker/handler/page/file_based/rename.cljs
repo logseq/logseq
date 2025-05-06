@@ -3,8 +3,8 @@
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.common.file.util :as wfu]
             [frontend.common.file-based.db :as common-file-db]
+            [frontend.common.file.util :as wfu]
             [frontend.worker.handler.page :as worker-page]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -243,7 +243,8 @@
 
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
-                                        {:old-name old-name
+                                        {:page-id (:db/id page)
+                                         :old-name old-name
                                          :new-name new-name}
                                          (and old-path new-path)
                                          (merge {:old-path old-path
@@ -329,7 +330,8 @@
           (ldb/transact! conn
                          [{:db/id (:db/id page-e)
                            :block/title new-name}]
-                         {:persist-op? persist-op?
+                         {:page-id (:db/id page-e)
+                          :persist-op? persist-op?
                           :outliner-op :rename-page})
 
           (and (not= old-page-name new-page-name)
