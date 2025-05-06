@@ -109,18 +109,98 @@
                               [:db/add id new prop-value]]))))
             old-new-props)))
 
+(defn- rename-properties-aux
+  [db props-to-rename]
+  (let [property-tx (map
+                     (fn [[old new]]
+                       (merge {:db/id (:db/id (d/entity db old))
+                               :db/ident new}
+                              (when-let [new-title (get-in db-property/built-in-properties [new :title])]
+                                {:block/title new-title
+                                 :block/name (common-util/page-name-sanity-lc new-title)})))
+                     props-to-rename)
+        titles-tx (->> (d/datoms db :avet :block/title)
+                       (keep (fn [d]
+                               (when-let [props (seq (filter (fn [[old _new]] (string/includes? (:v d) (str old))) props-to-rename))]
+                                 (let [title' (reduce (fn [title [old new]]
+                                                        (string/replace title (str old) (str new))) (:v d) props)]
+                                   [:db/add (:e d) :block/title title'])))))
+        sorting-tx (->> (d/datoms db :avet :logseq.property.table/sorting)
+                        (keep (fn [d]
+                                (when-let [props (seq (filter (fn [[old _new]]
+                                                                (some (fn [item] (= old (:id item))) (:v d))) props-to-rename))]
+                                  (let [value (reduce
+                                               (fn [sorting [old new]]
+                                                 (mapv
+                                                  (fn [item]
+                                                    (if (= old (:id item))
+                                                      (assoc item :id new)
+                                                      item))
+                                                  sorting))
+                                               (:v d)
+                                               props)]
+                                    [:db/add (:e d) :logseq.property.table/sorting value])))))
+        sized-columns-tx (->> (d/datoms db :avet :logseq.property.table/sized-columns)
+                              (keep (fn [d]
+                                      (when-let [props (seq (filter (fn [[old _new]] (get (:v d) old)) props-to-rename))]
+                                        (let [value (reduce
+                                                     (fn [sizes [old new]]
+                                                       (if-let [size (get sizes old)]
+                                                         (-> sizes
+                                                             (dissoc old)
+                                                             (assoc new size))
+                                                         sizes))
+                                                     (:v d)
+                                                     props)]
+                                          [:db/add (:e d) :logseq.property.table/sized-columns value])))))
+        hidden-columns-tx (mapcat
+                           (fn [[old new]]
+                             (->> (d/datoms db :avet :logseq.property.table/hidden-columns old)
+                                  (mapcat (fn [d]
+                                            [[:db/retract (:e d) :logseq.property.table/hidden-columns old]
+                                             [:db/add (:e d) :logseq.property.table/hidden-columns new]]))))
+                           props-to-rename)
+        ordered-columns-tx (->> (d/datoms db :avet :logseq.property.table/ordered-columns)
+                                (keep (fn [d]
+                                        (when-let [props (seq (filter (fn [[old _new]] ((set (:v d)) old)) props-to-rename))]
+                                          (let [value (reduce
+                                                       (fn [col [old new]]
+                                                         (mapv (fn [v] (if (= old v) new v)) col))
+                                                       (:v d)
+                                                       props)]
+                                            [:db/add (:e d) :logseq.property.table/ordered-columns value])))))
+        filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
+                        (keep (fn [d]
+                                (let [filters (:filters (:v d))]
+                                  (when-let [props (seq (filter (fn [[old _new]]
+                                                                  (some (fn [item] (and (vector? item)
+                                                                                        (= old (first item)))) filters)) props-to-rename))]
+                                    (let [value (update (:v d) :filters
+                                                        (fn [col]
+                                                          (reduce
+                                                           (fn [col [old new]]
+                                                             (mapv (fn [item]
+                                                                     (if (and (vector? item) (= old (first item)))
+                                                                       (vec (cons new (rest item)))
+                                                                       item))
+                                                                   col))
+                                                           col
+                                                           props)))]
+                                      [:db/add (:e d) :logseq.property.table/filters value]))))))]
+    (concat property-tx
+            titles-tx
+            sorting-tx
+            sized-columns-tx
+            hidden-columns-tx
+            ordered-columns-tx
+            filters-tx)))
+
 (defn- rename-properties
   [props-to-rename]
   (fn [conn _search-db]
     (when (ldb/db-based-graph? @conn)
-      (let [props-tx (mapv (fn [[old new]]
-                             (merge {:db/id (:db/id (d/entity @conn old))
-                                     :db/ident new}
-                                    (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                      {:block/title new-title
-                                       :block/name (common-util/page-name-sanity-lc new-title)})))
-                           props-to-rename)]
-       ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
+      (let [props-tx (rename-properties-aux @conn props-to-rename)]
+        ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
         (ldb/transact! conn props-tx {:db-migrate? true})
 
         (mapcat (fn [[old new]]
