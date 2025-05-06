@@ -3,7 +3,8 @@
   (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
-            [wally.main :as w])
+            [wally.main :as w]
+            [wally.repl :as repl])
   (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
                                      Locator$FilterOptions)
            (com.microsoft.playwright TimeoutError)))
@@ -182,16 +183,15 @@
                (not= content ""))
       (press-seq " ")))
   (press-seq "/" {:delay 20})
-  (press-seq command {:delay 20})
   (w/wait-for ".ui__popover-content")
-  (k/enter))
+  (press-seq command {:delay 20})
+  (w/click "a.menu-link.chosen"))
 
 (defn set-tag
   [tag]
   (press-seq " #" {:delay 20})
   (press-seq tag)
-  (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
-  (k/enter)
+  (w/click (format "a.menu-link:has-text(\"%s\")" tag))
   ;; wait tag added on ui
   (assert/assert-is-visible
    (-> (w/-query ".ls-block")
