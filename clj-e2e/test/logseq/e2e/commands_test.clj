@@ -29,7 +29,7 @@
   (testing "Node reference"
     (testing "Page reference"
       (b/new-blocks ["b1" ""])
-      (util/input-command "Node eferen")
+      (util/input-command "Node reference")
       (util/press-seq "Another page")
       (k/enter)
       (is (= "[[Another page]]" (util/get-edit-content)))
@@ -37,7 +37,7 @@
       (is (= "Another page" (util/get-text "a.page-ref"))))
     (testing "Block reference"
       (b/new-block "")
-      (util/input-command "Node eferen")
+      (util/input-command "Node reference")
       (util/press-seq "b1")
       (util/wait-timeout 300)
       (k/enter)
@@ -151,7 +151,7 @@
         (b/new-block text)
         (util/input-command command)
         (k/enter)
-        (k/esc)
+        (assert/assert-editor-mode)
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
@@ -216,11 +216,8 @@
     (let [btn (util/-query-last "button:text('filter')")]
       (w/click btn)
       (util/input "page reference")
-      (assert/assert-is-visible "div:text('page reference')")
-      (k/enter)
-      (util/input "foo")
-      (assert/assert-is-visible "div:text('foo')")
-      (k/enter)
+      (w/click "a.menu-link:has-text('page reference')")
+      (w/click "a.menu-link:has-text('foo')")
       (assert/assert-is-visible "div:text('Live query (2)')"))))
 
 (deftest advanced-query-test
