@@ -213,15 +213,15 @@
   (testing "query"
     (b/new-blocks ["[[foo]] block" "[[foo]] another" ""])
     (util/input-command "query")
-    (let [btn (w/find-one-by-text "button" "Filter")]
+    (let [btn (util/-query-last "button:text('filter')")]
       (w/click btn)
       (util/input "page reference")
-      (is (some? (w/find-one-by-text "div" "page reference")))
+      (assert/assert-is-visible "div:text('page reference')")
       (k/enter)
       (util/input "foo")
-      (is (some? (w/find-one-by-text "div" "foo")))
+      (assert/assert-is-visible "div:text('foo')")
       (k/enter)
-      (is (some? (w/find-one-by-text "div" "Live query (2)"))))))
+      (assert/assert-is-visible "div:text('Live query (2)')"))))
 
 (deftest advanced-query-test
   (testing "query"
@@ -255,6 +255,7 @@
     (util/input "template 1")
     (k/enter)
     (util/exit-edit)
+    (assert/assert-in-normal-mode?)
     (let [content (w/all-text-contents ".ls-block")]
       (doseq [text ["block 1" "block 2" "block 3"]]
         (is (= 2 (count (filter #(= % text) content))))))))

@@ -191,3 +191,7 @@
   (press-seq tag)
   (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
   (k/enter))
+
+(defn -query-last
+  [q]
+  (.last (w/-query q)))
