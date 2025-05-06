@@ -4,7 +4,8 @@
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [wally.main :as w])
-  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions)
+  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
+                                     Locator$FilterOptions)
            (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
@@ -190,7 +191,14 @@
   (press-seq " #" {:delay 20})
   (press-seq tag)
   (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
-  (k/enter))
+  (k/enter)
+  ;; wait tag added on ui
+  (assert/assert-is-visible
+   (-> (w/-query ".ls-block")
+       (.filter (.setHas (Locator$FilterOptions.)
+                         (w/-query ".editor-wrapper textarea")))
+       (.filter (.setHas (Locator$FilterOptions.)
+                         (w/-query (format ".block-tag :text('%s')" tag)))))))
 
 (defn -query-last
   [q]
