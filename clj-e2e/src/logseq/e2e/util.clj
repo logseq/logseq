@@ -3,9 +3,8 @@
   (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
-            [wally.main :as w]
-            [wally.selectors :as ws])
-  (:import (com.microsoft.playwright Locator$TypeOptions)
+            [wally.main :as w])
+  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions)
            (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
@@ -48,12 +47,11 @@
   [text]
   (w/fill "*:focus" text))
 
-(defn type
-  [text & {:keys [delay]
-           :or {delay 0}}]
+(defn press-seq
+  [text & {:keys [delay] :or {delay 0}}]
   (let [input-node (w/-query "*:focus")]
-    (.type input-node text
-           (.setDelay (Locator$TypeOptions.) delay))))
+    (.pressSequentially input-node text
+                        (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
@@ -181,15 +179,15 @@
   (let [content (get-edit-content)]
     (when (and (not= (str (last content)) " ")
                (not= content ""))
-      (type " ")))
-  (type "/" {:delay 20})
-  (type command {:delay 20})
+      (press-seq " ")))
+  (press-seq "/" {:delay 20})
+  (press-seq command {:delay 20})
   (w/wait-for ".ui__popover-content")
   (k/enter))
 
 (defn set-tag
   [tag]
-  (type " #" {:delay 20})
-  (type tag)
+  (press-seq " #" {:delay 20})
+  (press-seq tag)
   (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
   (k/enter))
