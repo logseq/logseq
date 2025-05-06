@@ -30,11 +30,12 @@
   []
   (w/-query "*:focus"))
 
+(def editor-q ".editor-wrapper textarea")
+
 (defn get-editor
   []
-  (let [klass ".editor-wrapper textarea"
-        editor (w/-query klass)]
-    (when (w/visible? klass)
+  (let [editor (w/-query editor-q)]
+    (when (w/visible? editor-q)
       editor)))
 
 (defn get-edit-block-container
