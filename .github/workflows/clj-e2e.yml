@@ -92,5 +92,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-screenshots
-          path: e2e-dump/*
+          path: clj-e2e/e2e-dump/*
           retention-days: 1
