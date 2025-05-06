@@ -496,13 +496,14 @@
                                                        :else
                                                        [(str v) v])]
                                {:label label
-                                :value value})))
-                      (common-util/distinct-by :label)))]
-    (if default-value
-      (cons {:label (get-property-value-content db default-value)
-             :value (select-keys default-value [:db/id :block/uuid])}
-            values)
-      values)))
+                                :value value})))))]
+    (->>
+     (if default-value
+       (cons {:label (get-property-value-content db default-value)
+              :value (select-keys default-value [:db/id :block/uuid])}
+             values)
+       values)
+     (common-util/distinct-by :label))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids filters sorting]
