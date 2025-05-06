@@ -4,6 +4,7 @@
    [clj-time.local :as tl]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
@@ -191,7 +192,10 @@
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))
     ;; double `enter` convert the next block to bullet block
     (k/enter)
+    (assert/assert-have-count "span.typed-list" 4)
+    (util/wait-timeout 60)
     (k/enter)
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
 
 (deftest number-children-test
@@ -202,6 +206,7 @@
     (k/tab)
     (b/jump-to-block "a")
     (util/input-command "number children")
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
 
 (deftest query-test
@@ -249,8 +254,7 @@
     (util/input-command "template")
     (util/input "template 1")
     (k/enter)
-    (util/exit-edit)
-    (let [content (w/all-text-contents ".ls-block .block-content")]
+    (let [content (w/all-text-contents ".ls-block")]
       (doseq [text ["block 1" "block 2" "block 3"]]
         (is (= 2 (count (filter #(= % text) content))))))))
 
