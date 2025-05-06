@@ -19,7 +19,7 @@
 (deftest command-trigger-test
   (testing "/command trigger popup"
     (b/new-block "b2")
-    (util/type " /")
+    (util/press-seq " /")
     (w/wait-for ".ui__popover-content")
     (is (some? (w/find-one-by-text "span" "Node reference")))
     (k/backspace)
@@ -30,7 +30,7 @@
     (testing "Page reference"
       (b/new-blocks ["b1" ""])
       (util/input-command "Node eferen")
-      (util/type "Another page")
+      (util/press-seq "Another page")
       (k/enter)
       (is (= "[[Another page]]" (util/get-edit-content)))
       (util/exit-edit)
@@ -38,7 +38,7 @@
     (testing "Block reference"
       (b/new-block "")
       (util/input-command "Node eferen")
-      (util/type "b1")
+      (util/press-seq "b1")
       (util/wait-timeout 300)
       (k/enter)
       (is (string/includes? (util/get-edit-content) "[["))
@@ -48,16 +48,16 @@
 (deftest link-test
   (testing "/link"
     (let [add-logseq-link (fn []
-                            (util/type "https://logseq.com")
+                            (util/press-seq "https://logseq.com")
                             (k/tab)
-                            (util/type "Logseq")
+                            (util/press-seq "Logseq")
                             (k/tab)
                             (k/enter))]
       (b/new-block "")
       (util/input-command "link")
       (add-logseq-link)
       (is (= "[Logseq](https://logseq.com)" (util/get-edit-content)))
-      (util/type " some content ")
+      (util/press-seq " some content ")
       (util/input-command "link")
       (add-logseq-link)
       (is (= (str "[Logseq](https://logseq.com)"
@@ -68,9 +68,9 @@
   (testing "/image link"
     (b/new-block "")
     (util/input-command "image link")
-    (util/type "https://logseq.com/test.png")
+    (util/press-seq "https://logseq.com/test.png")
     (k/tab)
-    (util/type "Logseq")
+    (util/press-seq "Logseq")
     (k/tab)
     (k/enter)
     (is (= "![Logseq](https://logseq.com/test.png)" (util/get-edit-content)))))
@@ -80,7 +80,7 @@
     (b/new-block "")
     (util/input-command "underline")
     (is (= "<ins></ins>" (util/get-edit-content)))
-    (util/type "test")
+    (util/press-seq "test")
     (is (= "<ins>test</ins>" (util/get-edit-content)))
     (util/move-cursor-to-end)))
 
@@ -97,7 +97,7 @@
   (testing "/math block"
     (b/new-block "")
     (util/input-command "math block")
-    (util/type "1 + 2 = 3")
+    (util/press-seq "1 + 2 = 3")
     (util/exit-edit)
     (w/wait-for ".katex")))
 
@@ -263,7 +263,7 @@
   (testing "embed html"
     (b/new-block "")
     (util/input-command "embed html")
-    (util/type "<div id=\"embed-test\">test</div>")
+    (util/press-seq "<div id=\"embed-test\">test</div>")
     (util/exit-edit)
     (is (= "test" (util/get-text "#embed-test")))))
 
@@ -271,7 +271,7 @@
   (testing "embed video"
     (b/new-block "")
     (util/input-command "embed video")
-    (util/type "https://www.youtube.com/watch?v=7xTGNNLPyMI")
+    (util/press-seq "https://www.youtube.com/watch?v=7xTGNNLPyMI")
     (util/exit-edit)
     (w/wait-for "iframe")))
 
@@ -279,7 +279,7 @@
   (testing "embed tweet"
     (b/new-block "")
     (util/input-command "embed tweet")
-    (util/type "https://x.com/logseq/status/1784914564083314839")
+    (util/press-seq "https://x.com/logseq/status/1784914564083314839")
     (util/exit-edit)
     (w/wait-for "iframe")))
 
@@ -287,7 +287,7 @@
   (testing "cloze"
     (b/new-block "")
     (util/input-command "cloze")
-    (util/type "hidden answer")
+    (util/press-seq "hidden answer")
     (util/exit-edit)
     (w/click "a.cloze")
     (w/wait-for "a.cloze-revealed")))
