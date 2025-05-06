@@ -113,11 +113,16 @@
   [db props-to-rename]
   (let [property-tx (map
                      (fn [[old new]]
-                       (merge {:db/id (:db/id (d/entity db old))
-                               :db/ident new}
-                              (when-let [new-title (get-in db-property/built-in-properties [new :title])]
-                                {:block/title new-title
-                                 :block/name (common-util/page-name-sanity-lc new-title)})))
+                       (let [e-new (d/entity db new)
+                             e-old (d/entity db old)]
+                         (if e-new
+                           (when e-old
+                             [:db/retractEntity (:db/id e-old)])
+                           (merge {:db/id (:db/id (d/entity db old))
+                                   :db/ident new}
+                                  (when-let [new-title (get-in db-property/built-in-properties [new :title])]
+                                    {:block/title new-title
+                                     :block/name (common-util/page-name-sanity-lc new-title)})))))
                      props-to-rename)
         titles-tx (->> (d/datoms db :avet :block/title)
                        (keep (fn [d]
@@ -805,8 +810,13 @@
                       :logseq.task/priority.high :logseq.property/priority.high
                       :logseq.task/priority.urgent :logseq.property/priority.urgent}
           closed-values-tx (mapv (fn [[old new]]
-                                   {:db/id (:db/id (d/entity @conn old))
-                                    :db/ident new})
+                                   (let [e-new (d/entity @conn new)
+                                         e-old (d/entity @conn old)]
+                                     (if e-new
+                                       (when e-old
+                                         [:db/retractEntity (:db/id e-old)])
+                                       {:db/id (:db/id (d/entity @conn old))
+                                        :db/ident new})))
                                  new-idents)
           filters-tx (->> (d/datoms db :avet :logseq.property.table/filters)
                           (keep (fn [d]
