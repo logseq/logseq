@@ -365,8 +365,8 @@
 
           (db-migrate/migrate conn search-db)
 
-          (catch :default _e
-            (log/error "DB migrate failed, retrying")
+          (catch :default e
+            (log/error "DB migrate failed, retrying" e)
             (when db-based?
               (rebuild-db-from-datoms! conn db import-type)
               (db-migrate/migrate conn search-db))))
