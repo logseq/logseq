@@ -143,7 +143,7 @@
                               (remove empty?))]
              (when (seq tx-data) (d/transact! conn tx-data))
              (when-not skip-refresh?
-               (react/refresh-affected-queries! graph affected-keys))))
+               (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
 
          (if children-only? children block))
        (p/catch (fn [error]
