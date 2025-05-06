@@ -20,8 +20,7 @@
   (testing "/command trigger popup"
     (b/new-block "b2")
     (util/press-seq " /")
-    (w/wait-for ".ui__popover-content")
-    (is (some? (w/find-one-by-text "span" "Node reference")))
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
@@ -237,7 +236,8 @@
     (b/new-block "")
     (util/input-command "calculator")
     (util/input "1 + 2")
-    (is (some? (w/find-one-by-text "div.extensions__code-calc-output-line" "3")))))
+    (w/wait-for "div.extensions__code-calc-output-line")
+    (is (= "3" (util/get-text "div.extensions__code-calc-output-line")))))
 
 (deftest template-test
   (testing "template"
