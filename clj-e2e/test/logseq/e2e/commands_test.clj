@@ -254,11 +254,9 @@
     (util/input-command "template")
     (util/input "template 1")
     (k/enter)
-    (util/exit-edit)
-    (assert/assert-in-normal-mode?)
-    (let [content (w/all-text-contents ".ls-block")]
-      (doseq [text ["block 1" "block 2" "block 3"]]
-        (is (= 2 (count (filter #(= % text) content))))))))
+    (doseq [text ["block 1" "block 2" "block 3"]]
+      (assert/assert-have-count (.or (w/-query (format ".ls-block .block-title-wrap:text('%s')" text))
+                                     (w/-query (format ".ls-block textarea:text('%s')" text))) 2))))
 
 (deftest embed-html-test
   (testing "embed html"
