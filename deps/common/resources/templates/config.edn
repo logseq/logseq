@@ -136,21 +136,24 @@
  ;; :default-home {:page "home", :sidebar ["Page A" "Page B"]}
 
  ;; Set the default location for storing notes.
+ ;; This is _only_ for file graphs.
  ;; Default value: "pages"
  ;; :pages-directory "pages"
 
  ;; Set the default location for storing journals.
+ ;; This is _only_ for file graphs.
  ;; Default value: "journals"
  ;; :journals-directory "journals"
 
  ;; Set the default location for storing whiteboards.
+ ;; This is _only_ for file graphs.
  ;; Default value: "whiteboards"
  ;; :whiteboards-directory "whiteboards"
 
  ;; Enabling this option converts
- ;; This is _only_ for file graphs.
  ;; [[Grant Ideas]] to [[file:./grant_ideas.org][Grant Ideas]] for org-mode.
  ;; For more information, visit https://github.com/logseq/logseq/issues/672
+ ;; This is _only_ for file graphs.
  ;; :org-mode/insert-file-link? false
 
  ;; Configure custom shortcuts.
@@ -204,7 +207,7 @@
  ;; Example usage for DB graphs:
 ;;  :query/result-transforms
 ;;  {:sort-by-priority
-;;   (fn [result] (sort-by (fn [h] (get h :logseq.task/priority "Z")) result))}
+;;   (fn [result] (sort-by (fn [h] (get h :logseq.property/priority "Z")) result))}
 
 ;; Queries will be displayed at the bottom of today's journal page.
 ;; Example usage:
@@ -314,6 +317,7 @@
  ;; :ignored-page-references-keywords #{:author :website}
 
  ;; logbook configuration.
+ ;; This is _only_ for file graphs.
  ;; :logbook/settings
  ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
  ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
@@ -371,6 +375,7 @@
 
  ;; File sync options
  ;; Ignore these files when syncing, regexp is supported.
+ ;; This is _only_ for file graphs.
  ;; :file-sync/ignore-files []
 
  ;; Configure the Enter key behavior for

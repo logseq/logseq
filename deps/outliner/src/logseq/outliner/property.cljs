@@ -6,9 +6,9 @@
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
@@ -39,7 +39,7 @@
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id value)
-                            (and (contains? #{:logseq.task/status :logseq.task/scheduled :logseq.task/deadline} property-id)
+                            (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
                                  (or (empty? (:block/tags block)) (ldb/internal-page? block)))
                             (assoc :block/tags :logseq.class/Task))]
       (cond-> []
@@ -242,15 +242,19 @@
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
   [conn property-id v property-type]
-  (if (and (integer? v)
-           (or (not= property-type :number)
+  (let [number-property? (= property-type :number)]
+    (if (and (integer? v)
+             (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
-               (and (= property-type :number)
-                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
-                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
-    v
-    ;; only value-ref-property types should call this
-    (find-or-create-property-value conn property-id v)))
+                 (and number-property?
+                      (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                          (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
+      v
+      ;; only value-ref-property types should call this
+      (let [v' (if (and number-property? (string? v))
+                 (parse-double v)
+                 v)]
+        (find-or-create-property-value conn property-id v')))))
 
 (defn- throw-error-if-self-value
   [block value ref?]
@@ -295,42 +299,45 @@
 (defn batch-set-property!
   "Sets properties for multiple blocks. Automatically handles property value refs.
    Does no validation of property values."
-  [conn block-ids property-id v]
-  (assert property-id "property-id is nil")
-  (throw-error-if-read-only-property property-id)
-  (if (nil? v)
-    (batch-remove-property! conn block-ids property-id)
-    (let [block-eids (map ->eid block-ids)
-          _ (when (= property-id :block/tags)
-              (outliner-validate/validate-tags-property @conn block-eids v))
-          property (d/entity @conn property-id)
-          _ (when (= (:db/ident property) :logseq.property/parent)
-              (outliner-validate/validate-parent-property
-               (if (number? v) (d/entity @conn v) v)
-               (map #(d/entity @conn %) block-eids)))
-          _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-          property-type (get property :logseq.property/type :default)
-          _ (assert (some? v) "Can't set a nil property value must be not nil")
-          ref? (db-property-type/value-ref-property-types property-type)
-          default-url-not-closed? (and (contains? #{:default :url} property-type)
-                                       (not (seq (:property/closed-values property))))
-          v' (if ref?
-               (convert-ref-property-value conn property-id v property-type)
-               v)
-          txs (doall
-               (mapcat
-                (fn [eid]
-                  (if-let [block (d/entity @conn eid)]
-                    (let [v' (if default-url-not-closed?
-                               (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
-                                 (convert-ref-property-value conn property-id v property-type))
-                               v')]
-                      (throw-error-if-self-value block v' ref?)
-                      (build-property-value-tx-data conn block property-id v'))
-                    (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
-                block-eids))]
-      (when (seq txs)
-        (ldb/transact! conn txs {:outliner-op :save-block})))))
+  ([conn block-ids property-id v]
+   (batch-set-property! conn block-ids property-id v {}))
+  ([conn block-ids property-id v options]
+   (assert property-id "property-id is nil")
+   (throw-error-if-read-only-property property-id)
+   (if (nil? v)
+     (batch-remove-property! conn block-ids property-id)
+     (let [block-eids (map ->eid block-ids)
+           _ (when (= property-id :block/tags)
+               (outliner-validate/validate-tags-property @conn block-eids v))
+           property (d/entity @conn property-id)
+           _ (when (= (:db/ident property) :logseq.property/parent)
+               (outliner-validate/validate-parent-property
+                (if (number? v) (d/entity @conn v) v)
+                (map #(d/entity @conn %) block-eids)))
+           _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+           property-type (get property :logseq.property/type :default)
+           _ (assert (some? v) "Can't set a nil property value must be not nil")
+           ref? (contains? db-property-type/all-ref-property-types property-type)
+           default-url-not-closed? (and (contains? #{:default :url} property-type)
+                                        (not (seq (:property/closed-values property))))
+           entity-id? (and (:entity-id? options) (number? v))
+           v' (if (and ref? (not entity-id?))
+                (convert-ref-property-value conn property-id v property-type)
+                v)
+           txs (doall
+                (mapcat
+                 (fn [eid]
+                   (if-let [block (d/entity @conn eid)]
+                     (let [v' (if default-url-not-closed?
+                                (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
+                                  (convert-ref-property-value conn property-id v property-type))
+                                v')]
+                       (throw-error-if-self-value block v' ref?)
+                       (build-property-value-tx-data conn block property-id v'))
+                     (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+                 block-eids))]
+       (when (seq txs)
+         (ldb/transact! conn txs {:outliner-op :save-block}))))))
 
 (defn remove-block-property!
   [conn eid property-id]

@@ -592,31 +592,18 @@ independent of format as format specific heading characters are stripped"
    (when repo
      (when (conn/get-db repo)
        (let [entity (db-utils/entity eid)
-             ids (page-alias-set repo eid)]
-         (->>
-          (react/q repo
-                   [:frontend.worker.react/refs eid]
-                   {:query-fn (fn []
-                                (let [entities (mapcat (fn [id]
-                                                         (:block/_refs (db-utils/entity id))) ids)
-                                      blocks (map (fn [e]
-                                                    {:block/parent (:block/parent e)
-                                                     :block/order (:block/order e)
-                                                     :block/page (:block/page e)
-                                                     :block/collapsed? (:block/collapsed? e)}) entities)]
-                                  {:entities entities
-                                   :blocks blocks}))}
-                   nil)
-          react
-          :entities
-          (remove (fn [block]
-                    (or
-                     (= (:db/id block) eid)
-                     (= eid (:db/id (:block/page block)))
-                     (ldb/hidden? (:block/page block))
-                     (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
-                     (some? (get block (:db/ident entity))))))
-          (util/distinct-by :db/id)))))))
+             ids (page-alias-set repo eid)
+             entities (mapcat (fn [id]
+                                (:block/_refs (db-utils/entity id))) ids)]
+         (->> entities
+              (remove (fn [block]
+                        (or
+                         (= (:db/id block) eid)
+                         (= eid (:db/id (:block/page block)))
+                         (ldb/hidden? (:block/page block))
+                         (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
+                         (some? (get block (:db/ident entity))))))
+              (util/distinct-by :db/id)))))))
 
 (defn get-block-referenced-blocks
   ([block-id]

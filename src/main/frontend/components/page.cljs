@@ -446,6 +446,7 @@
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
+      :data-testid "page title"
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)

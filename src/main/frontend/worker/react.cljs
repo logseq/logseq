@@ -15,7 +15,7 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
-;; get class's Objects
+;; get class's objects
 (s/def ::objects (s/tuple #(= ::objects %) int?))
 ;; custom react-query
 (s/def ::custom any?)

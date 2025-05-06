@@ -81,16 +81,16 @@
       (assoc :block/created-at (:created-at props)))))
 
 (def file-to-db-statuses
-  {"TODO" :logseq.task/status.todo
-   "LATER" :logseq.task/status.todo
-   "IN-PROGRESS" :logseq.task/status.doing
-   "NOW" :logseq.task/status.doing
-   "DOING" :logseq.task/status.doing
-   "DONE" :logseq.task/status.done
-   "WAIT" :logseq.task/status.backlog
-   "WAITING" :logseq.task/status.backlog
-   "CANCELED" :logseq.task/status.canceled
-   "CANCELLED" :logseq.task/status.canceled})
+  {"TODO" :logseq.property/status.todo
+   "LATER" :logseq.property/status.todo
+   "IN-PROGRESS" :logseq.property/status.doing
+   "NOW" :logseq.property/status.doing
+   "DOING" :logseq.property/status.doing
+   "DONE" :logseq.property/status.done
+   "WAIT" :logseq.property/status.backlog
+   "WAITING" :logseq.property/status.backlog
+   "CANCELED" :logseq.property/status.canceled
+   "CANCELLED" :logseq.property/status.canceled})
 
 (defn- parse-content
   "Given a file's content as markdown, returns blocks and page attributes for the file
@@ -117,7 +117,7 @@
                                        file-to-db-statuses)]
                  (-> %
                      (assoc :block/tags [{:db/ident :logseq.class/Task}])
-                     (update :build/properties merge {:logseq.task/status status}))
+                     (update :build/properties merge {:logseq.property/status status}))
                  %)
               blocks*)]
     {:blocks (mapv (fn [b] (update b :block/title #(string/replace-first % #"^-\s*" "")))

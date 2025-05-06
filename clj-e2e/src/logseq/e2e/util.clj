@@ -30,11 +30,12 @@
   []
   (w/-query "*:focus"))
 
+(def editor-q ".editor-wrapper textarea")
+
 (defn get-editor
   []
-  (let [klass ".editor-wrapper textarea"
-        editor (w/-query klass)]
-    (when (w/visible? klass)
+  (let [editor (w/-query editor-q)]
+    (when (w/visible? editor-q)
       editor)))
 
 (defn get-edit-block-container
@@ -62,20 +63,22 @@
   (double-esc)
   (assert/assert-in-normal-mode?)
   (w/click :#search-button)
+  (w/wait-for ".cp__cmdk-search-input")
   (w/fill ".cp__cmdk-search-input" text))
 
 (defn search-and-click
   [search-text]
   (search search-text)
-  (w/click (w/get-by-label search-text)))
+  (w/click (.first (w/get-by-test-id search-text))))
 
-(defn new-page
-  [title]
-  ;; Question: what's the best way to close all the popups?
-  ;; close popup, exit editing
-  ;; (repl/pause)
-  (search title)
-  (w/click [(ws/text "Create page") (ws/nth= "0")])
+(defn wait-editor-gone
+  ([]
+   (wait-editor-gone ".editor-wrapper textarea"))
+  ([editor]
+   (w/wait-for-not-visible editor)))
+
+(defn wait-editor-visible
+  []
   (w/wait-for ".editor-wrapper textarea"))
 
 (defn count-elements
@@ -169,3 +172,21 @@
 (defn move-cursor-to-start
   []
   (k/press "ControlOrMeta+a" "ArrowLeft"))
+
+(defn input-command
+  [command]
+  (let [content (get-edit-content)]
+    (when (and (not= (str (last content)) " ")
+               (not= content ""))
+      (type " ")))
+  (type "/")
+  (type command)
+  (w/wait-for ".ui__popover-content")
+  (k/enter))
+
+(defn set-tag
+  [tag]
+  (type " #")
+  (type tag)
+  (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
+  (k/enter))

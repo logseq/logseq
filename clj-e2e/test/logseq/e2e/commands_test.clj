@@ -1,12 +1,15 @@
 (ns logseq.e2e.commands-test
   (:require
+   [clj-time.core :as t]
+   [clj-time.local :as tl]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -21,18 +24,11 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
-(defn- input-command
-  [command-match]
-  (util/type "/")
-  (util/type command-match)
-  (w/wait-for ".ui__popover-content")
-  (k/enter))
-
 (deftest node-reference-test
   (testing "Node reference"
     (testing "Page reference"
       (b/new-blocks ["b1" ""])
-      (input-command "Node eferen")
+      (util/input-command "Node eferen")
       (util/type "Another page")
       (k/enter)
       (is (= "[[Another page]]" (util/get-edit-content)))
@@ -40,7 +36,7 @@
       (is (= "Another page" (util/get-text "a.page-ref"))))
     (testing "Block reference"
       (b/new-block "")
-      (input-command "Node eferen")
+      (util/input-command "Node eferen")
       (util/type "b1")
       (util/wait-timeout 300)
       (k/enter)
@@ -57,11 +53,11 @@
                             (k/tab)
                             (k/enter))]
       (b/new-block "")
-      (input-command "link")
+      (util/input-command "link")
       (add-logseq-link)
       (is (= "[Logseq](https://logseq.com)" (util/get-edit-content)))
       (util/type " some content ")
-      (input-command "link")
+      (util/input-command "link")
       (add-logseq-link)
       (is (= (str "[Logseq](https://logseq.com)"
                   " some content "
@@ -70,7 +66,7 @@
 (deftest link-image-test
   (testing "/image link"
     (b/new-block "")
-    (input-command "image link")
+    (util/input-command "image link")
     (util/type "https://logseq.com/test.png")
     (k/tab)
     (util/type "Logseq")
@@ -81,7 +77,7 @@
 (deftest underline-test
   (testing "/underline"
     (b/new-block "")
-    (input-command "underline")
+    (util/input-command "underline")
     (is (= "<ins></ins>" (util/get-edit-content)))
     (util/type "test")
     (is (= "<ins>test</ins>" (util/get-edit-content)))
@@ -90,7 +86,7 @@
 (deftest code-block-test
   (testing "/code block"
     (b/new-block "")
-    (input-command "code block")
+    (util/input-command "code block")
     (w/wait-for ".CodeMirror")
     (util/wait-timeout 100)
     ;; create another block
@@ -99,7 +95,7 @@
 (deftest math-block-test
   (testing "/math block"
     (b/new-block "")
-    (input-command "math block")
+    (util/input-command "math block")
     (util/type "1 + 2 = 3")
     (util/exit-edit)
     (w/wait-for ".katex")))
@@ -107,7 +103,7 @@
 (deftest quote-test
   (testing "/quote"
     (b/new-block "")
-    (input-command "quote")
+    (util/input-command "quote")
     (w/wait-for "div[data-node-type='quote']")))
 
 (deftest headings-test
@@ -116,7 +112,186 @@
       (let [heading (str "h" (inc i))
             text (str heading " test ")]
         (b/new-block text)
-        (input-command heading)
+        (util/input-command heading)
         (is (= text (util/get-edit-content)))
         (util/exit-edit)
         (w/wait-for heading)))))
+
+(deftest status-test
+  (testing "task status commands"
+    (let [status->icon {"Doing" "InProgress50"
+                        "In review" "InReview"
+                        "Canceled" "Cancelled"}]
+      (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]]
+        (let [text (str status " test ")]
+          (b/new-block text)
+          (util/input-command status)
+          (is (= text (util/get-edit-content)))
+          (util/exit-edit)
+          (w/wait-for (str ".ls-icon-" (get status->icon status status))))))))
+
+(deftest priority-test
+  (testing "task priority commands"
+    (let [priority->icon {"No priority" "line-dashed"}]
+      (doseq [priority ["No priority" "Low" "Medium" "High" "Urgent"]]
+        (let [text (str priority " test ")]
+          (b/new-block text)
+          (util/input-command priority)
+          (is (= text (util/get-edit-content)))
+          (util/exit-edit)
+          (w/wait-for (str ".ls-icon-" (get priority->icon priority
+                                            (str "priorityLvl" priority)))))))))
+
+(deftest scheduled-deadline-test
+  (testing "task scheduled and deadline commands"
+    (doseq [command ["Scheduled" "Deadline"]]
+      (fixtures/create-page)
+      (let [text (str command " test ")]
+        (b/new-block text)
+        (util/input-command command)
+        (k/enter)
+        (k/esc)
+        (util/exit-edit)
+        (is (= command (util/get-text ".property-k")))
+        (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
+
+;; TODO: java "MMMM d, yyyy" vs js "MMM do, yyyy"
+(deftest date-time-test
+  (testing "date time commands"
+    (util/input-command "today")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    (b/new-block "")
+    (util/input-command "yesterday")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    (b/new-block "")
+    (util/input-command "tomorrow")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))
+    ;; FIXME:
+    ;; (b/new-block "")
+    ;; (util/input-command "time")
+    ;; (let [text (util/get-edit-content)
+    ;;       t (tl/local-now)]
+    ;;   (is (= text (str (t/hour t) ":" (t/minute t)))))
+    (b/new-block "")
+    (util/input-command "date picker")
+    (let [text (util/get-edit-content)]
+      (and (string/starts-with? text "[[")
+           (string/ends-with? text "]]")))))
+
+(deftest number-list-test
+  (testing "number list commands"
+    (util/input-command "number list")
+    (b/new-blocks ["a" "b" "c"])
+    (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))
+    ;; double `enter` convert the next block to bullet block
+    (k/enter)
+    (k/enter)
+    (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
+
+(deftest number-children-test
+  (testing "number children commands"
+    (b/new-blocks ["a" "a1" "a2" "a3" "b"])
+    (k/arrow-up)
+    (util/repeat-keyboard 3 "Shift+ArrowUp")
+    (k/tab)
+    (b/jump-to-block "a")
+    (util/input-command "number children")
+    (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
+
+(deftest query-test
+  (testing "query"
+    (b/new-blocks ["[[foo]] block" "[[foo]] another" ""])
+    (util/input-command "query")
+    (let [btn (w/find-one-by-text "button" "Filter")]
+      (w/click btn)
+      (util/input "page reference")
+      (is (some? (w/find-one-by-text "div" "page reference")))
+      (k/enter)
+      (util/input "foo")
+      (is (some? (w/find-one-by-text "div" "foo")))
+      (k/enter)
+      (is (some? (w/find-one-by-text "div" "Live query (2)"))))))
+
+(deftest advanced-query-test
+  (testing "query"
+    (b/new-blocks ["[[bar]] block" "[[bar]] another" ""])
+    (util/input-command "advanced query")
+    (w/click ".ls-query-setting")
+    (w/click "pre.CodeMirror-line")
+    (util/input "{:query [:find (pull ?b [*])
+:where [?b :block/refs ?r]
+[?r :block/title \"bar\"]]}")
+    (k/esc)
+    (is (some? (w/find-one-by-text "div" "Live query (2)")))))
+
+(deftest calculator-test
+  (testing "calculator"
+    (b/new-block "")
+    (util/input-command "calculator")
+    (util/input "1 + 2")
+    (is (some? (w/find-one-by-text "div.extensions__code-calc-output-line" "3")))))
+
+(deftest template-test
+  (testing "template"
+    (b/new-block "template 1")
+    (util/set-tag "Template")
+    (b/new-blocks ["block 1" "block 2" "block 3" "test"])
+    (k/arrow-up)
+    (util/repeat-keyboard 3 "Shift+ArrowUp")
+    (k/tab)
+    (b/jump-to-block "test")
+    (util/input-command "template")
+    (util/input "template 1")
+    (k/enter)
+    (util/exit-edit)
+    (let [content (w/all-text-contents ".ls-block .block-content")]
+      (doseq [text ["block 1" "block 2" "block 3"]]
+        (is (= 2 (count (filter #(= % text) content))))))))
+
+(deftest embed-html-test
+  (testing "embed html"
+    (b/new-block "")
+    (util/input-command "embed html")
+    (util/type "<div id=\"embed-test\">test</div>")
+    (util/exit-edit)
+    (is (= "test" (util/get-text "#embed-test")))))
+
+(deftest embed-video-test
+  (testing "embed video"
+    (b/new-block "")
+    (util/input-command "embed video")
+    (util/type "https://www.youtube.com/watch?v=7xTGNNLPyMI")
+    (util/exit-edit)
+    (w/wait-for "iframe")))
+
+(deftest embed-tweet-test
+  (testing "embed tweet"
+    (b/new-block "")
+    (util/input-command "embed tweet")
+    (util/type "https://x.com/logseq/status/1784914564083314839")
+    (util/exit-edit)
+    (w/wait-for "iframe")))
+
+(deftest cloze-test
+  (testing "cloze"
+    (b/new-block "")
+    (util/input-command "cloze")
+    (util/type "hidden answer")
+    (util/exit-edit)
+    (w/click "a.cloze")
+    (w/wait-for "a.cloze-revealed")))
+
+(deftest new-property-test
+  (testing "new property"
+    (b/new-block "")
+    (util/input-command "add new property")
+    (util/input "p1")
+    (w/click "a:has-text(\"+ New option: p1\")")
+    (k/enter)
+    (is (= "p1" (util/get-text "a.property-k")))))

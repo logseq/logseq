@@ -8,8 +8,8 @@
             [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -164,6 +164,15 @@
       :else
       value)))
 
+(defn- match-property-value-as-entity?
+  "Determines if the property value entity should be treated as an entity. For some property types
+   like :default, we want match on the entity's content as that is what the user sees and interacts with"
+  [property-value-entity property-entity]
+  ;; Allow pvalue entities with :db/ident e.g. closed values like status OR for any type
+  ;; that aren't text types
+  (or (:db/ident property-value-entity)
+      (not (contains? db-property-type/closed-value-property-types (:logseq.property/type property-entity)))))
+
 (defn- ^:large-vars/cleanup-todo row-matched?
   [db row filters input]
   (let [or? (:or? filters)
@@ -194,7 +203,12 @@
                       true
                       :else
                       (if entity?
-                        (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                        (let [property (d/entity db property-ident)]
+                          (if (match-property-value-as-entity? (first value') property)
+                            (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                            (boolean (seq (set/intersection (set (map db-property/property-value-content value'))
+                                                            (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
+                                                                      match)))))))
                         (boolean (seq (set/intersection (set value') match))))))
 
                   :is-not
@@ -207,7 +221,12 @@
                       true
                       :else
                       (if entity?
-                        (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                        (let [property (d/entity db property-ident)]
+                          (if (match-property-value-as-entity? (first value') property)
+                            (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                            (boolean (empty? (set/intersection (set (map db-property/property-value-content value'))
+                                                               (set (map (comp db-property/property-value-content #(d/entity db [:block/uuid %]))
+                                                                         match)))))))
                         (boolean (empty? (set/intersection (set value') match))))))
 
                   :text-contains
@@ -395,9 +414,9 @@
         '[:find [?b ...]
           :in $ % ?prop
           :where
-          (has-property-or-default-value? ?b ?prop)]
+          (has-property-or-object-property? ?b ?prop)]
         db
-        (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-default-value]
+        (rules/extract-rules rules/db-query-dsl-rules [:has-property-or-object-property]
                              {:deps rules/rules-dependencies})
         property-ident)
        (keep (fn [id] (non-hidden-e id))))
@@ -477,13 +496,14 @@
                                                        :else
                                                        [(str v) v])]
                                {:label label
-                                :value value})))
-                      (common-util/distinct-by :label)))]
-    (if default-value
-      (cons {:label (get-property-value-content db default-value)
-             :value (select-keys default-value [:db/id :block/uuid])}
-            values)
-      values)))
+                                :value value})))))]
+    (->>
+     (if default-value
+       (cons {:label (get-property-value-content db default-value)
+              :value (select-keys default-value [:db/id :block/uuid])}
+             values)
+       values)
+     (common-util/distinct-by :label))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids filters sorting]
@@ -499,11 +519,7 @@
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-          group-by-property-ident (or (:db/ident group-by-property)
-                                      (when (and list-view? (nil? group-by-property))
-                                        :block/page)
-                                      (when (contains? #{:linked-references :unlinked-references} view-feature-type)
-                                        :block/page))
+          group-by-property-ident (:db/ident group-by-property)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)
@@ -523,9 +539,17 @@
                               (filter (fn [row] (row-matched? db row filters input)) entities)
                               entities)
           group-by-page? (= group-by-property-ident :block/page)
+          readable-property-value-or-ent
+          (fn readable-property-value-or-ent [ent]
+            (let [pvalue (get ent group-by-property-ident)]
+              (if (de/entity? pvalue)
+                (if (match-property-value-as-entity? pvalue group-by-property)
+                  pvalue
+                  (db-property/property-value-content pvalue))
+                pvalue)))
           result (if group-by-property-ident
                    (->> filtered-entities
-                        (group-by group-by-property-ident)
+                        (group-by readable-property-value-or-ent)
                         (seq)
                         (sort-by (fn [[by-value _]]
                                    (cond
@@ -543,7 +567,7 @@
                   (map
                    (fn [[by-value entities]]
                      (let [by-value' (if (de/entity? by-value)
-                                       (select-keys by-value [:db/id :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
+                                       (select-keys by-value [:db/id :db/ident :block/uuid :block/title :block/name :logseq.property/value :logseq.property/icon :block/tags])
                                        by-value)
                            pages? (not (some :block/page entities))
                            group (if (and list-view? (not pages?))

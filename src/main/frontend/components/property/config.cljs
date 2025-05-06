@@ -33,7 +33,7 @@
 (defn- re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
   [property]
-  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
+  (when (contains? #{:logseq.property/status :logseq.property/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
 (defn- <upsert-closed-value!

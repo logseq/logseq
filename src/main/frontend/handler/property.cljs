@@ -1,9 +1,9 @@
 (ns frontend.handler.property
   "Property fns for both file and DB graphs"
-  (:require [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.file-based.property :as file-property-handler]
+  (:require [frontend.config :as config]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
-            [frontend.config :as config]
+            [frontend.handler.file-based.property :as file-property-handler]
             [frontend.state :as state]))
 
 (defn remove-block-property!
@@ -53,12 +53,12 @@
     (file-property-handler/batch-remove-block-property! block-ids key)))
 
 (defn batch-set-block-property!
-  [repo block-ids key value]
+  [repo block-ids key value & {:as opts}]
   (assert (some? key) "key is nil")
   (if (config/db-based-graph? repo)
     (if (nil? value)
       (db-property-handler/batch-remove-property! block-ids key)
-      (db-property-handler/batch-set-property! block-ids key value))
+      (db-property-handler/batch-set-property! block-ids key value opts))
     (file-property-handler/batch-set-block-property! block-ids key value)))
 
 (defn set-block-properties!

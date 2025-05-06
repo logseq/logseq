@@ -104,23 +104,23 @@
 
     ;; testing :properties config
     (testing "A built-in property that has"
-      (is (= :logseq.task/status.todo
-             (-> (d/entity @conn :logseq.task/status)
+      (is (= :logseq.property/status.todo
+             (-> (d/entity @conn :logseq.property/status)
                  :logseq.property/default-value
                  :db/ident))
           "A property with a :db/ident property value is created correctly")
-      (is (-> (d/entity @conn :logseq.task/deadline)
+      (is (-> (d/entity @conn :logseq.property/deadline)
               :logseq.property/description
               db-property/property-value-content
               str
               (string/includes? "finish something"))
           "A :default property is created correctly")
       (is (= true
-             (-> (d/entity @conn :logseq.task/status)
+             (-> (d/entity @conn :logseq.property/status)
                  :logseq.property/enable-history?))
           "A :checkbox property is created correctly")
       (is (= 1
-             (-> (d/entity @conn :logseq.task/recur-frequency)
+             (-> (d/entity @conn :logseq.property.repeat/recur-frequency)
                  :logseq.property/default-value
                  db-property/property-value-content))
           "A numeric property is created correctly"))))

@@ -1,12 +1,12 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [logseq.outliner.transaction :as outliner-tx]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
-            [datascript.core :as d]
-            [malli.core :as m]
-            [logseq.db :as ldb]
-            [clojure.string :as string]))
+            [logseq.outliner.transaction :as outliner-tx]
+            [malli.core :as m]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -64,7 +64,7 @@
    [:batch-set-property
     [:catn
      [:op :keyword]
-     [:args [:tuple ::block-ids ::property-id ::value]]]]
+     [:args [:tuple ::block-ids ::property-id ::value ::option]]]]
    [:batch-remove-property
     [:catn
      [:op :keyword]

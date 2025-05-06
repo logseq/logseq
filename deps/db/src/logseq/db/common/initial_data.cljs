@@ -6,9 +6,9 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- get-pages-by-name
@@ -183,7 +183,7 @@
                                               (or children-props
                                                   [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
                                                    ;; pre-loading feature-related properties to avoid UI refreshing
-                                                   :logseq.task/status :logseq.property.node/display-type]))]
+                                                   :logseq.property/status :logseq.property.node/display-type]))]
                          (map
                           (fn [block]
                             (if (= children-props '[*])
@@ -238,11 +238,15 @@
           (d/datoms db :avet :block/closed-value-property))
          (mapcat (fn [d]
                    (let [block-datoms (d/datoms db :eavt (:e d))
-                         property-desc-datoms (when (= (:v d) class-property-id)
-                                                (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
-                                                  (d/datoms db :eavt (:db/id desc))))]
-                     (if property-desc-datoms
-                       (concat block-datoms property-desc-datoms)
+                         properties-of-property-datoms
+                         (when (= (:v d) class-property-id)
+                           (concat
+                            (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
+                              (d/datoms db :eavt (:db/id desc)))
+                            (when-let [desc (:logseq.property/default-value (d/entity db (:e d)))]
+                              (d/datoms db :eavt (:db/id desc)))))]
+                     (if (seq properties-of-property-datoms)
+                       (concat block-datoms properties-of-property-datoms)
                        block-datoms)))))))
 
 (defn- get-favorites
@@ -305,10 +309,14 @@
                             (get-structured-datoms db))
         recent-updated-pages (let [pages (get-recent-updated-pages db)]
                                (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
-        pages-datoms (let [contents-id (get-first-page-by-title db "Contents")
-                           views-id (get-first-page-by-title db common-config/views-page-name)]
-                       (mapcat #(d/datoms db :eavt %)
-                               (remove nil? [contents-id views-id])))
+        pages-datoms (if db-graph?
+                       (let [contents-id (get-first-page-by-title db "Contents")
+                             views-id (get-first-page-by-title db common-config/views-page-name)]
+                         (mapcat #(d/datoms db :eavt %)
+                                 (remove nil? [contents-id views-id])))
+                       ;; load all pages for file graphs
+                       (->> (d/datoms db :avet :block/name)
+                            (mapcat (fn [d] (d/datoms db :eavt (:e d))))))
         data (distinct
               (concat idents
                       structured-datoms

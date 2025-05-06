@@ -148,12 +148,13 @@
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
-                           (if db-tag?
-                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (map (fn [title] {:block/title title
-                                                    :nlp-date? true})
-                                       date/nlp-pages)
-                                  (take 10)))
+                           (when db-based?
+                             (if db-tag?
+                               (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                               (->> (map (fn [title] {:block/title title
+                                                      :nlp-date? true})
+                                         date/nlp-pages)
+                                    (take 10))))
                            ;; reorder, shortest and starts-with first.
                            (let [matched-pages-with-new-page
                                  (fn [partial-matched-pages]
@@ -185,7 +186,8 @@
                                        (or (db/entity [:block/uuid id]) block)
                                        block)]
                           [:div.flex.flex-col
-                           (when (and (not (or (:page? block) (ldb/page? block))) (:block/uuid block'))
+                           (when (and (not (or db-tag? (:page? block) (ldb/page? block)))
+                                      (:block/uuid block'))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
@@ -203,10 +205,10 @@
                                  (ui/icon "letter-p" {:size 14})
 
                                  (db-model/whiteboard-page? block')
-                                 (ui/icon "whiteboard" {:extension? true})
+                                 (ui/icon "writing")
 
                                  (:page? block')
-                                 (ui/icon "page" {:extension? true})
+                                 (ui/icon "file")
 
                                  (or (string/starts-with? (str (:block/title block')) (t :new-tag))
                                      (string/starts-with? (str (:block/title block')) (t :new-page)))
@@ -350,11 +352,11 @@
 
 (rum/defc template-search-aux
   [id q]
-  (let [db-based? (config/db-based-graph?)
-        [matched-templates set-matched-templates!] (rum/use-state nil)]
+  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
-                           (set-matched-templates! (sort-by :block/title result))))
+                           (set-matched-templates!
+                            (sort-by :block/title result))))
                        [q])
     (ui/auto-complete
      matched-templates
@@ -362,7 +364,7 @@
       :on-enter    (fn [_state] (state/clear-editor-action!))
       :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
       :item-render (fn [template]
-                     (if db-based? (:block/title template) (:template template)))
+                     (:block/title template))
       :class       "black"})))
 
 (rum/defc template-search < rum/reactive

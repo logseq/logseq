@@ -215,7 +215,7 @@
                  (when collapsed? "collapsed")]}
         (let [[title component] item]
           [:div.flex.flex-col.w-full.relative
-           [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
+           [:.flex.flex-row.justify-between.sidebar-item-header.color-level.rounded-t-md
             {:class         (when collapsed? "rounded-b-md")
              :draggable     true
              :on-context-menu (fn [e]
@@ -235,7 +235,7 @@
                                 (when (= (.-which (.-nativeEvent event)) 2)
                                   (state/sidebar-remove-block! idx)))}
 
-            [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
+            [:button.flex.flex-row.px-2.items-center.w-full.overflow-hidden
              {:aria-expanded (str (not collapsed?))
               :id            (str "sidebar-panel-header-" idx)
               :aria-controls (str "sidebar-panel-content-" idx)
@@ -244,13 +244,13 @@
                                (state/sidebar-block-toggle-collapse! db-id))}
              [:span.opacity-50.hover:opacity-100.flex.items-center.pr-1
               (ui/rotating-arrow collapsed?)]
-             [:div.ml-1.font-medium.overflow-hidden.whitespace-nowrap
+             [:div.ml-1.font-medium.text-sm.overflow-hidden.whitespace-nowrap
               title]]
             [:.item-actions.flex.items-center
              (shui/button
               {:title (t :right-side-bar/pane-more)
-               :class "px-3"
-               :variant :text
+               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
+               :variant :ghost
                :on-click #(shui/popup-show!
                            (.-target %)
                            (actions-menu-content db-id idx block-type collapsed? block-count)
@@ -260,8 +260,8 @@
 
              (shui/button
               {:title (t :right-side-bar/pane-close)
-               :variant :text
-               :class "px-3"
+               :variant :ghost
+               :class "px-2 py-2 h-8 w-8 text-muted-foreground"
                :on-click #(state/sidebar-remove-block! idx)}
               (ui/icon "x"))]]
 

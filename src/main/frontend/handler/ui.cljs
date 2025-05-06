@@ -98,7 +98,7 @@
             (> (count fragment) 36)
             (subs fragment (- (count fragment) 36)))]
     (if (and id (util/uuid-string? id))
-      (let [elements (array-seq (js/document.getElementsByClassName (str "id" id)))]
+      (let [elements (util/get-blocks-by-id id)]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
         (state/exit-editing-and-set-selected-blocks! elements))

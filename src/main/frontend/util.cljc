@@ -828,9 +828,10 @@
 #?(:cljs
    (defn react
      [ref]
-     (if rum/*reactions*
-       (rum/react ref)
-       @ref)))
+     (when ref
+       (if rum/*reactions*
+         (rum/react ref)
+         @ref))))
 
 #?(:cljs
    (def time-ms common-util/time-ms))
@@ -993,12 +994,15 @@
                    :clj nil))
 
 #?(:cljs
+   (defn get-blocks-by-id
+     [block-id]
+     (when (uuid-string? (str block-id))
+       (d/sel (format "[blockid='%s']" (str block-id))))))
+
+#?(:cljs
    (defn get-first-block-by-id
      [block-id]
-     (when block-id
-       (let [block-id (str block-id)]
-         (when (uuid-string? block-id)
-           (first (array-seq (js/document.getElementsByClassName (str "id" block-id)))))))))
+     (first (get-blocks-by-id block-id))))
 
 #?(:cljs
    (defn url-encode

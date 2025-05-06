@@ -73,6 +73,7 @@
                            (let [entity (d/entity @conn e)]
                              (and (not (:db/ident entity))
                                   (not (ldb/journal? entity))
-                                  (not (:logseq.property/built-in? entity)))))
+                                  (not (:logseq.property/built-in? entity))
+                                  (not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property entity)))))))
                     (d/datom e a (str "debug " e) t)
                     (d/datom e a v t))))))

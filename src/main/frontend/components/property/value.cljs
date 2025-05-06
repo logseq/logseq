@@ -203,7 +203,7 @@
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
   ([block property-id property-value] (<add-property! block property-id property-value {}))
-  ([block property-id property-value {:keys [selected? exit-edit? class-schema?]
+  ([block property-id property-value {:keys [selected? exit-edit? class-schema? entity-id?]
                                       :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
          class? (ldb/class? block)
@@ -218,8 +218,18 @@
          (when (ldb/class? property)
            (<set-class-as-property! repo property))
          (db-property-handler/class-add-property! (:db/id block) property-id))
-        (let [block-ids (map :block/uuid blocks)]
-          (property-handler/batch-set-block-property! repo block-ids property-id property-value)))
+        (let [block-ids (map :block/uuid blocks)
+              set-query-list-view? (and (:logseq.property/query block)
+                                        (= property-id :logseq.property.view/type)
+                                        (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
+          (ui-outliner-tx/transact!
+           {:outliner-op :set-block-property}
+           (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
+           (when (and set-query-list-view?
+                      (nil? (:logseq.property.view/group-by-property block)))
+             (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
+                                                         (:db/id (db/entity :block/page))
+                                                         {:entity-id? entity-id?})))))
       (when (seq (:view/selected-blocks @state/state))
         (notification/show! "Property updated!" :success))
       (when-not many?
@@ -238,7 +248,7 @@
                                         :property property}))))))
 
 (defn- add-or-remove-property-value
-  [block property value selected? {:keys [refresh-result-f] :as opts}]
+  [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
   (let [many? (db-property/many? property)
         blocks (get-operating-blocks block)
         repo (state/get-current-repo)]
@@ -252,6 +262,7 @@
      (if selected?
        (<add-property! block (:db/ident property) value
                        {:selected? selected?
+                        :entity-id? entity-id?
                         :exit-edit? (if (some? (:exit-edit? opts)) (:exit-edit? opts) (not many?))})
        (p/do!
         (ui-outliner-tx/transact!
@@ -273,16 +284,16 @@
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
-        (property-value block (db/entity :logseq.task/repeated?)
+        (property-value block (db/entity :logseq.property.repeat/repeated?)
                         (assoc opts
                                :on-checked-change (fn [value]
                                                     (if value
                                                       (db-property-handler/set-block-property! (:db/id block)
-                                                                                               :logseq.task/scheduled-on-property
+                                                                                               :logseq.property.repeat/temporal-property
                                                                                                (:db/id property))
                                                       (db-property-handler/remove-block-property! (:db/id block)
-                                                                                                  :logseq.task/scheduled-on-property)))))]
-       (if (#{:logseq.task/deadline :logseq.task/scheduled} (:db/ident property))
+                                                                                                  :logseq.property.repeat/temporal-property)))))]
+       (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
          [:div "Repeat task"]
          [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
      [:div.flex.flex-row.gap-2
@@ -291,24 +302,24 @@
 
       ;; recur frequency
       [:div.w-6
-       (property-value block (db/entity :logseq.task/recur-frequency) opts)]
+       (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
 
       ;; recur unit
       [:div.w-20
-       (property-value block (db/entity :logseq.task/recur-unit) (assoc opts :property property))]]
+       (property-value block (db/entity :logseq.property.repeat/recur-unit) (assoc opts :property property))]]
      (let [properties (->>
                        (outliner-property/get-block-full-properties (db/get-db) (:db/id block))
                        (filter (fn [property]
                                  (and (not (ldb/built-in? property))
                                       (>= (count (:property/closed-values property)) 2))))
-                       (concat [(db/entity :logseq.task/status)])
+                       (concat [(db/entity :logseq.property/status)])
                        (util/distinct-by :db/id))
-           status-property (or (:logseq.task/recur-status-property block)
-                               (db/entity :logseq.task/status))
+           status-property (or (:logseq.property.repeat/checked-property block)
+                               (db/entity :logseq.property/status))
            property-id (:db/id status-property)
            done-choice (or
                         (some (fn [choice] (when (true? (:logseq.property/choice-checkbox-state choice)) choice)) (:property/closed-values status-property))
-                        (db/entity :logseq.task/status.done))]
+                        (db/entity :logseq.property/status.done))]
        [:div.flex.flex-col.gap-2
         [:div.text-muted-foreground
          "When"]
@@ -316,7 +327,7 @@
          (cond->
           {:on-value-change (fn [v]
                               (db-property-handler/set-block-property! (:db/id block)
-                                                                       :logseq.task/recur-status-property
+                                                                       :logseq.property.repeat/checked-property
                                                                        v))}
            property-id
            (assoc :default-value property-id))
@@ -452,7 +463,7 @@
                       (str (util/zero-pad hours)
                            ":"
                            (util/zero-pad minutes))])]]
-      (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} property-id))
+      (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
 
@@ -481,7 +492,7 @@
                         (when-not config/publishing?
                           (shui/popup-show! (.-target e) content-fn
                                             {:align "start" :auto-focus? true}))))
-        repeated-task? (:logseq.task/repeated? block)]
+        repeated-task? (:logseq.property.repeat/repeated? block)]
     (if editing?
       (content-fn {:id :date-picker})
       (if multiple-values?
@@ -523,7 +534,7 @@
                                         :meta-click? other-position?
                                         :label (human-date-label (t/to-default-time-zone date))} value)
                               (:db/id value)))]
-              (if (or repeated-task? (contains? #{:logseq.task/deadline :logseq.task/scheduled} (:db/id property)))
+              (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
                 content))
 
@@ -717,6 +728,7 @@
                                   (and alias? (= (or (:db/id (:block/page block))
                                                      (:db/id block))
                                                  (:db/id node)))
+                                  (= :logseq.property/empty-placeholder (:db/ident node))
                                   (cond
                                     (= property-type :class)
                                     (ldb/private-tags (:db/ident node))
@@ -729,7 +741,6 @@
                                     :else
                                     false))))
                           result)))
-
         options (map (fn [node]
                        (let [node (if (:value node)
                                     (assoc (:value node) :block/title (:label node))
@@ -910,11 +921,11 @@
             closed-values? (seq (:property/closed-values property))
             items (if closed-values?
                     (let [date? (and
-                                 (= (:db/ident property) :logseq.task/recur-unit)
+                                 (= (:db/ident property) :logseq.property.repeat/recur-unit)
                                  (= :date (:logseq.property/type (:property opts))))
                           values (cond->> (:property/closed-values property)
                                    date?
-                                   (remove (fn [b] (contains? #{:logseq.task/recur-unit.minute :logseq.task/recur-unit.hour} (:db/ident b)))))]
+                                   (remove (fn [b] (contains? #{:logseq.property.repeat/recur-unit.minute :logseq.property.repeat/recur-unit.hour} (:db/ident b)))))]
                       (keep (fn [block]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
                                     value (db-property/closed-value-content block)]
@@ -940,7 +951,8 @@
             on-chosen (fn [chosen selected?]
                         (let [value (if (map? chosen) (:value chosen) chosen)]
                           (add-or-remove-property-value block property value selected?
-                                                        {:exit-edit? exit-edit?
+                                                        {:entity-id? (when (integer? value) true)
+                                                         :exit-edit? exit-edit?
                                                          :refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (every? #(and (map? %) (:db/id %)) selected-choices')
@@ -989,12 +1001,15 @@
         table-text-property-render (:table-text-property-render opts)]
     (if table-text-property-render
       (table-text-property-render
-       (if multiple-values? (first value-block) value-block)
+       value-block
        {:create-new-block #(<create-new-block! block property "")
         :property-ident (:db/ident property)})
       (cond
         (seq value-block)
         [:div.property-block-container.content.w-full
+         {:style (if (= (:db/ident property) :logseq.property/default-value)
+                   {:min-width 300}
+                   {})}
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
                                   (:block/uuid value-block)))
@@ -1015,7 +1030,7 @@
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
         :else
-        [:div.w-full.h-full
+        [:div.w-full.h-full.jtrigger.ls-empty-text-property
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
           :style {:min-height 20}
@@ -1153,7 +1168,7 @@
                                                (d/has-class? node "tag")))))
                         (show-popup! target))))]
         (shui/trigger-as
-         (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full)
+         (if (:other-position? opts) :div.jtrigger :div.jtrigger.flex.flex-1.w-full.cursor-pointer)
          {:ref *el
           :id trigger-id
           :tabIndex 0
@@ -1190,7 +1205,9 @@
       :style {:min-height 24}}
      (cond
        (and (= :logseq.property/default-value (:db/ident property)) (nil? (:block/title value)))
-       [:div.jtrigger.cursor-pointer.text-sm.px-2 "Set default value"]
+       [:div.jtrigger.cursor-pointer.text-sm.px-2
+        {:on-click #(<create-new-block! block property "")}
+        "Set default value"]
 
        text-ref-type?
        (property-block-value value block property page-cp opts)
@@ -1273,7 +1290,7 @@
       (= :logseq.property/icon (:db/ident property))
       (icon-row block editing?)
 
-      (and (= type :number) (not editing?))
+      (and (= type :number) (not editing?) (not closed-values?))
       (single-number-input block property value (:table-view? opts))
 
       :else
@@ -1422,7 +1439,7 @@
          v (let [v (get block (:db/ident property))]
              (or
               (cond
-                (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+                (and multiple-values? (or (set? v) (coll? v) (nil? v)))
                 v
                 multiple-values?
                 #{v}

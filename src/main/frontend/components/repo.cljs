@@ -69,7 +69,7 @@
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
-                                                        :aria-label (str "e2e " url)}
+                                                        :data-testid url}
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
@@ -375,7 +375,7 @@
                                      {:as-dropdown? true
                                       :content-props {:class "repos-list"}
                                       :align :start}))}
-      [:span.thumb (shui/tabler-icon (if remote? "cloud" (if db-based? "database" "folder")) {:size 16})]
+      [:span.thumb (shui/tabler-icon (if remote? "cloud" (if db-based? "topology-star" "folder")) {:size 16})]
       [:strong short-repo-name]
       (shui/tabler-icon "selector" {:size 18})]]))
 

@@ -29,6 +29,10 @@
     }
   }
 
+  .ls-table-row, .ls-table-cell, .ls-table-cell .jtrigger {
+    @apply focus:ring-0 focus:ring-offset-0 focus-visible:outline-none;
+  }
+
   .ls-table-row {
     @apply h-[33px] min-h-[33px] max-h-[33px];
     div, span, a {
@@ -103,7 +107,7 @@ html.is-resizing-buf {
 }
 
 .query-table, .classic-table {
-  @apply my-2 rounded overflow-hidden;
+  @apply my-2 rounded;
 
   &.force-visible-scrollbar {
     @apply !overflow-x-auto pb-1;
