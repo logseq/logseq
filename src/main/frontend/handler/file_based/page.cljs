@@ -1,4 +1,4 @@
-(ns frontend.handler.file-based.page
+(ns ^:no-doc frontend.handler.file-based.page
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
