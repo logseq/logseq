@@ -261,7 +261,7 @@
        (tags repo *tree opts loc)
 
        "task"
-       (let [items (let [values (:property/closed-values (db/entity :logseq.task/status))]
+       (let [items (let [values (:property/closed-values (db/entity :logseq.property/status))]
                      (mapv db-property/property-value-content values))]
          (select items
                  (constantly nil)
@@ -277,7 +277,7 @@
 
        "priority"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-priorities)
                (constantly nil)
@@ -342,7 +342,7 @@
 
        "task"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/status))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/status))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-markers)
                (constantly nil)
@@ -358,7 +358,7 @@
 
        "priority"
        (select (if (config/db-based-graph? repo)
-                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                 (let [values (:property/closed-values (db/entity :logseq.property/priority))]
                    (mapv db-property/property-value-content values))
                  gp-db/built-in-priorities)
                (constantly nil)

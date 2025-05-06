@@ -21,23 +21,34 @@
     (w/click "button#rtc-sync"))
   (w/click "button:text(\"Submit\")")
   (when enable-sync?
-    (w/wait-for "button.cloud.on.idle" {:timeout 20000})))
+    (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
+  ;; new graph can blocks the ui because the db need to be created and restored,
+  ;; I have no idea why `search-and-click` failed to auto-wait sometimes.
+  (util/wait-timeout 1000))
 
 (defn wait-for-remote-graph
   [graph-name]
   (goto-all-graphs)
   (util/repeat-until-visible 5
-                             (format "div[aria-label='e2e logseq_db_%s']" graph-name)
+                             (format "div[data-testid='logseq_db_%s']" graph-name)
                              refresh-all-remote-graphs))
 
 (defn remove-remote-graph
   [graph-name]
   (wait-for-remote-graph graph-name)
-  (w/click (format "div[aria-label='e2e logseq_db_%s'] a:has-text(\"Remove (server)\")" graph-name))
-  (w/click "div[role='alertdialog'] button:text('ok')"))
+  (let [local-unlink-button-q
+        (.first (w/-query (format "div[data-testid='logseq_db_%s'] a:has-text(\"Unlink (local)\")" graph-name)))]
+    (if (.isVisible local-unlink-button-q)
+      (do (w/click local-unlink-button-q)
+          (w/click "div[role='alertdialog'] button:text('ok')")
+          (remove-remote-graph graph-name))
+      (do (w/click (format "div[data-testid='logseq_db_%s'] a:has-text(\"Remove (server)\")" graph-name))
+          (w/click "div[role='alertdialog'] button:text('ok')")))))
 
 (defn switch-graph
-  [to-graph-name]
+  [to-graph-name wait-sync?]
   (goto-all-graphs)
-  (w/click (format "div[aria-label='e2e logseq_db_%1$s'] span:text('%1$s')" to-graph-name))
+  (w/click (.last (w/-query (format "div[data-testid='logseq_db_%1$s'] span:has-text('%1$s')" to-graph-name))))
+  (when wait-sync?
+    (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   (assert/assert-graph-loaded?))

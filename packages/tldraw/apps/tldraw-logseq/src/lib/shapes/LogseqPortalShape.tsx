@@ -489,7 +489,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 setTimeout(() => {
                   app.api.editShape(this)
                   window.logseq?.api?.edit_block?.(uuid)
-                })
+                }, 128)
               }}
               placeholder="Create or search your graph..."
             />

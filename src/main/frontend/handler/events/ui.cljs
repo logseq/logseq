@@ -2,7 +2,6 @@
   "UI events"
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
-            [frontend.components.block :as block]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.file-sync :as file-sync]
             [frontend.components.page :as component-page]
@@ -43,12 +42,6 @@
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
-
-(defmethod events/handle :class/configure [[_ page]]
-  (shui/dialog-open!
-   #(block/block-container {} page)
-   {:label "page-configure"
-    :align :top}))
 
 (defmethod events/handle :go/search [_]
   (shui/dialog-open!
