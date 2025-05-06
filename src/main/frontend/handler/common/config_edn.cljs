@@ -94,6 +94,7 @@ nested keys or positional errors e.g. tuples"
      :file-sync/ignore-files
      :hidden
      :ignored-page-references-keywords
+     :journal/file-name-format
      :journal/page-title-format
      :journals-directory
      :logbook/settings

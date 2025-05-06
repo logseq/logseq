@@ -18,6 +18,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.page :as file-page-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -92,22 +93,6 @@
                               (distinct))]
           (keep (fn [page-name] (db/get-page page-name)) page-names))))))
 
-;; FIXME: add whiteboard
-(defn- get-directory
-  [journal?]
-  (if journal?
-    (config/get-journals-directory)
-    (config/get-pages-directory)))
-
-(defn- get-file-name
-  [journal? title]
-  (when-let [s (if journal?
-                 (date/journal-title->default title)
-                 ;; legacy in org-mode format, don't escape slashes except bug reported
-                 (common-util/page-name-sanity (string/lower-case title)))]
-    ;; Win10 file path has a length limit of 260 chars
-    (common-util/safe-subs s 0 200)))
-
 (defn toggle-favorite! []
   ;; NOTE: in journals or settings, current-page is nil
   (when-let [page-name (state/get-current-page)]
@@ -159,31 +144,9 @@
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
-        page-name (string/lower-case page)]
-    (if (and edit-block-file-path
-             (state/org-mode-file-link? (state/get-current-repo)))
-      (if-let [ref-file-path (:file/path (db/get-page-file page-name))]
-        (util/format "[[file:%s][%s]]"
-                     (util/get-relative-path edit-block-file-path ref-file-path)
-                     page)
-        (let [journal? (date/valid-journal-title? page)
-              ref-file-path (str
-                             (if (or (util/electron?) (mobile-util/native-platform?))
-                               (-> (config/get-repo-dir (state/get-current-repo))
-                                   js/decodeURI
-                                   (string/replace #"/+$" "")
-                                   (str "/"))
-                               "")
-                             (get-directory journal?)
-                             "/"
-                             (get-file-name journal? page)
-                             ".org")]
-          (<create! page {:redirect? false})
-          (util/format "[[file:%s][%s]]"
-                       (util/get-relative-path edit-block-file-path ref-file-path)
-                       page)))
-      (page-ref/->page-ref page))))
+  (if (config/db-based-graph?)
+    (page-ref/->page-ref page)
+    (file-page-handler/get-page-ref-text page)))
 
 (defn init-commands!
   []
