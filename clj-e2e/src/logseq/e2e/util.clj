@@ -5,7 +5,8 @@
             [logseq.e2e.keyboard :as k]
             [wally.main :as w]
             [wally.selectors :as ws])
-  (:import [com.microsoft.playwright TimeoutError]))
+  (:import (com.microsoft.playwright Locator$TypeOptions)
+           (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
   [n q repeat-fn]
@@ -48,9 +49,11 @@
   (w/fill "*:focus" text))
 
 (defn type
-  [text]
+  [text & {:keys [delay]
+           :or {delay 0}}]
   (let [input-node (w/-query "*:focus")]
-    (.type input-node text)))
+    (.type input-node text
+           (.setDelay (Locator$TypeOptions.) delay))))
 
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
@@ -179,14 +182,14 @@
     (when (and (not= (str (last content)) " ")
                (not= content ""))
       (type " ")))
-  (type "/")
-  (type command)
+  (type "/" {:delay 20})
+  (type command {:delay 20})
   (w/wait-for ".ui__popover-content")
   (k/enter))
 
 (defn set-tag
   [tag]
-  (type " #")
+  (type " #" {:delay 20})
   (type tag)
   (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
   (k/enter))
