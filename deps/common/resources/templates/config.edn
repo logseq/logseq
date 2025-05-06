@@ -22,6 +22,7 @@
 
  ;; Define the default journal page template.
  ;; Enter the template name between the quotes.
+ ;; This is _only_ for file graphs.
  :default-templates
  {:journals ""}
 

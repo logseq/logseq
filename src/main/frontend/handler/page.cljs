@@ -366,18 +366,20 @@
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
-              template (state/get-default-journal-template)
+              db-based? (config/db-based-graph? repo)
               create-f (fn []
                          (p/do!
                           (<create! title {:redirect? false
                                            :split-namespace? false
-                                           :create-first-block? (not template)
+                                           :create-first-block? (if db-based?
+                                                                  true
+                                                                  (not (state/get-default-journal-template)))
                                            :today-journal? true})
-                          (state/pub-event! [:journal/insert-template today-page])
+                          (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
                           (ui-handler/re-render-root!)
                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
-            (if (config/db-based-graph? repo)
+            (if db-based?
               (when-not (model/get-journal-page title)
                 (create-f))
               (p/let [file-name (date/journal-title->default title)

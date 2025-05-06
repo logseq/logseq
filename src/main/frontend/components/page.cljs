@@ -191,13 +191,14 @@
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
-                 (let [page-e (first (:rum/args state))
-                       page-name (:block/name page-e)]
-                   (when (and page-name
-                              (db/journal-page? page-name)
-                              (>= (date/journal-title->int page-name)
-                                  (date/journal-title->int (date/today))))
-                     (state/pub-event! [:journal/insert-template page-name])))
+                 (when-not (config/db-based-graph?)
+                  (let [page-e (first (:rum/args state))
+                        page-name (:block/name page-e)]
+                    (when (and page-name
+                               (db/journal-page? page-name)
+                               (>= (date/journal-title->int page-name)
+                                   (date/journal-title->int (date/today))))
+                      (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
   [state block* {:keys [sidebar? whiteboard?] :as config}]
   (when-let [id (:db/id block*)]
