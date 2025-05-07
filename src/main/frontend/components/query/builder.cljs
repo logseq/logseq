@@ -8,6 +8,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
@@ -321,7 +322,7 @@
     [:div
      (case @*mode
        "namespace"
-       (let [items (sort (map :block/title (db-model/get-all-namespace-parents repo)))]
+       (let [items (sort (map :block/title (file-model/get-all-namespace-parents repo)))]
          (select items
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))

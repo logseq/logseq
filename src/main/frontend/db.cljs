@@ -25,21 +25,15 @@
   entity pull pull-many]
 
  [frontend.db.model
-  delete-blocks get-pre-block
-  delete-files delete-pages-by-files
-  get-block-and-children get-block-by-uuid get-block-children sort-by-order
+  delete-files get-block-and-children get-block-by-uuid get-block-children sort-by-order
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-immediate-children get-block-page
-  get-custom-css
-  get-file get-file-page get-file-page-id file-exists?
-  get-files-blocks get-files-full get-journals-length
+  get-custom-css get-file file-exists?  get-files-full get-journals-length
   get-latest-journals get-page get-case-page get-page-alias-names
-  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format
-  get-referenced-blocks get-page-referenced-blocks-full
-  journal-page? page? page-alias-set sub-block sub-entity
+  get-page-blocks-count get-page-blocks-no-cache get-page-format
+  get-referenced-blocks journal-page? page? page-alias-set sub-block sub-entity
   page-empty? page-exists? get-alias-source-page
-  has-children? whiteboard-page?
-  get-namespace-pages get-all-namespace-relation]
+  has-children? whiteboard-page?]
 
  [frontend.db.react
   get-current-page
