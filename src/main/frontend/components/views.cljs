@@ -80,10 +80,13 @@
    "ID"])
 
 (rum/defc row-checkbox < rum/static
-  [{:keys [row-selected? row-toggle-selected!]} row _column]
-  (let [id (str (:db/id row) "-" "checkbox")
+  [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
+  (let [idx (.indexOf data (:db/id row))
+        id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
-        checked? (row-selected? row)]
+        checked? (row-selected? row)
+        {:keys [last-selected-idx row-selection]} state
+        {:keys [set-last-selected-idx! set-row-selection!]} data-fns]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
      {:html-for (str (:db/id row) "-" "checkbox")
       :on-mouse-over #(set-show! true)
@@ -91,11 +94,24 @@
      (shui/checkbox
       {:id id
        :checked checked?
+       :on-click (fn [e]
+                   (when (and (.-shiftKey e) last-selected-idx)
+                     ;; add selection
+                     (util/stop e)
+                     (when (not= last-selected-idx idx)
+                       (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                         (when (seq new-ids)
+                           (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
+                             (set-row-selection! row-selection')))))))
        :on-checked-change (fn [v]
                             (p/do!
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
-                             (row-toggle-selected! row v)))
+                             (if v
+                               (set-last-selected-idx! idx)
+                               (when (= (:db/id row) last-selected-idx)
+                                 (set-last-selected-idx! nil)))
+                             (row-toggle-selected! row-selection row v)))
        :aria-label "Select row"
        :class (str "flex transition-opacity "
                    (if (or show? checked?) "opacity-100" "opacity-0"))})]))
@@ -1845,6 +1861,7 @@
                                           :set-sized-columns! set-sized-columns!
                                           :set-ordered-columns! set-ordered-columns!})
         [row-selection set-row-selection!] (rum/use-state {})
+        [last-selected-idx set-last-selected-idx!] (rum/use-state nil)
         columns (sort-columns columns ordered-columns)
         select? (first (filter (fn [item] (= (:id item) :select)) columns))
         id? (first (filter (fn [item] (= (:id item) :id)) columns))
@@ -1871,7 +1888,8 @@
                            :ordered-columns ordered-columns
                            :pinned-columns pinned
                            :unpinned-columns unpinned
-                           :group-by-property group-by-property}
+                           :group-by-property group-by-property
+                           :last-selected-idx last-selected-idx}
                    :data-fns {:set-data! set-data!
                               :set-filters! set-filters!
                               :set-sorting! set-sorting!
@@ -1879,7 +1897,8 @@
                               :set-ordered-columns! set-ordered-columns!
                               :set-sized-columns! set-sized-columns!
                               :set-row-selection! set-row-selection!
-                              :add-new-object! add-new-object!}}
+                              :add-new-object! add-new-object!
+                              :set-last-selected-idx! set-last-selected-idx!}}
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
         display-type (if (config/db-based-graph?)
