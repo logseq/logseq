@@ -42,7 +42,7 @@
       ;; ensure cursor exists
       ;; Sometimes when the editor exists, there isn't a blinking cursor,
       ;; causing subsequent operations (like pressing Enter) to fail.
-      (w/click editor)
+      (.focus editor)
       editor)))
 
 (defn get-edit-block-container
