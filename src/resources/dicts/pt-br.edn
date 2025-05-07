@@ -433,7 +433,6 @@
  :all-pages "Todas as páginas"
  :all-whiteboards "Todos os whiteboards"
  :all-files "Todos os arquivos"
- :remove-orphaned-pages "Remover páginas órfãs?"
  :all-journals "Todos os diários"
  :settings "Configurações"
  :plugins "Plugins"

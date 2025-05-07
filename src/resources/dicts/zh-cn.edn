@@ -222,7 +222,6 @@
  :all-graphs "所有图谱"
  :all-pages "所有页面"
  :all-files "所有文件"
- :remove-orphaned-pages "删除孤立页面？"
  :settings "设置"
  :settings-of-plugins "插件设置"
  :plugins "插件"

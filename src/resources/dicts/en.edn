@@ -464,7 +464,6 @@
  :all-pages/failed-to-delete-pages "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
  :all-whiteboards "All whiteboards"
  :all-files "All files"
- :remove-orphaned-pages "Remove orphaned pages?"
  :all-journals "All journals"
  :settings "Settings"
  :settings-of-plugins "Plugins"

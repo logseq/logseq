@@ -168,7 +168,6 @@
                 (map (fn [id]
                        (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
                      checked-page-ids)
-                false
                 (fn []
                   (set-checked-page-ids #{})
                   (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
