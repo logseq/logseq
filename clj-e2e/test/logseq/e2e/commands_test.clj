@@ -129,6 +129,7 @@
           (util/input-command status)
           (is (= text (util/get-edit-content)))
           (util/exit-edit)
+          (k/esc)
           (w/wait-for (str ".ls-icon-" (get status->icon status status))))))))
 
 (deftest priority-test
@@ -203,6 +204,7 @@
   (testing "number children commands"
     (b/new-blocks ["a" "a1" "a2" "a3" "b"])
     (k/arrow-up)
+    (w/wait-for "textarea:text('a3')")
     (util/repeat-keyboard 3 "Shift+ArrowUp")
     (k/tab)
     (b/jump-to-block "a")
