@@ -6,14 +6,11 @@
   "
   (:require [clojure.core.async :as async]
             [datascript.core :as d]
-            [frontend.date :as date]
             [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
@@ -150,19 +147,6 @@
                 ;; Don't notify watches now
                 (set! (.-state result-atom) result')
                 result-atom))))))))
-
-(defn get-current-page
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])
-        page (case route-name
-               :page
-               (get-in match [:path-params :name])
-               (date/journal-name))]
-    (when page
-      (if (common-util/uuid-string? page)
-        (db-utils/entity [:block/uuid (uuid page)])
-        (ldb/get-page (conn/get-db) page)))))
 
 (defn- execute-query!
   [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result built-in-query?]
