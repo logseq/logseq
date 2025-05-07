@@ -1,34 +1,15 @@
 (ns frontend.idb
   "This system component provides indexedDB functionality"
-  (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
+  (:require ["/frontend/idbkv" :as idb-keyval]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.storage :as storage]
-            [goog.object :as gobj]
             [promesa.core :as p]))
-
 
 ;; offline db
 
 ;; To maintain backward compatibility
 
-
 (defonce store (atom nil))
-
-(defn clear-idb!
-  []
-  (when @store
-    (->
-     (p/let [_ (idb-keyval/clear @store)
-             dbs (js/window.indexedDB.databases)]
-       (doseq [db dbs]
-         (js/window.indexedDB.deleteDatabase (gobj/get db "name"))))
-     (p/catch (fn [_e])))))
-
-(defn clear-local-storage-and-idb!
-  []
-  (storage/clear)
-  (clear-idb!))
 
 (defn remove-item!
   [key]
@@ -48,10 +29,11 @@
         (idb-keyval/set new-key value @store)
         (idb-keyval/del old-key @store)))))
 
-(defn set-batch!
-  [items]
-  (when (and (seq items) @store)
-    (idb-keyval/setBatch (clj->js items) @store)))
+(comment
+  (defn set-batch!
+    [items]
+    (when (and (seq items) @store)
+      (idb-keyval/setBatch (clj->js items) @store))))
 
 (defn get-item
   [key]
@@ -81,4 +63,5 @@
 (defn start
   "This component's only responsibility is to create a Store object"
   []
-  (reset! store (Store. "localforage" "keyvaluepairs" 2)))
+  (when (nil? @store)
+    (reset! store (idb-keyval/newStore "localforage" "keyvaluepairs" 2))))

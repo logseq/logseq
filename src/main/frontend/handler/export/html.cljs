@@ -5,13 +5,12 @@
             [clojure.string :as string]
             [clojure.zip :as z]
             [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
             [frontend.handler.export.common :as common :refer [*state*]]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [hiccups.runtime :as h]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
             [malli.core :as m]))
 
 (def ^:private hiccup-malli-schema
@@ -383,7 +382,7 @@
                                :remove-page-ref-brackets? (contains? remove-options :page-ref)
                                :remove-tags? (contains? remove-options :tag)
                                :keep-only-level<=N (:keep-only-level<=N other-options)}})]
-      (let [ast (util/profile :gp-mldoc/->edn (gp-mldoc/->edn content (gp-mldoc/default-config format)))
+      (let [ast (util/profile :mldoc/->edn (mldoc/->edn content format))
             ast (util/profile :remove-pos (mapv common/remove-block-ast-pos ast))
             ast (removev common/Properties-block-ast? ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
@@ -416,16 +415,17 @@
 
 (defn export-blocks-as-html
   "options: see also `export-blocks-as-markdown`"
-  [repo root-block-uuids-or-page-name options]
-  {:pre [(or (coll? root-block-uuids-or-page-name)
-             (string? root-block-uuids-or-page-name))]}
+  [repo root-block-uuids-or-page-uuid options]
+  {:pre [(or (coll? root-block-uuids-or-page-uuid)
+             (uuid? root-block-uuids-or-page-uuid))]}
   (let [content
-        (if (string? root-block-uuids-or-page-name)
+        (if (uuid? root-block-uuids-or-page-uuid)
           ;; page
-          (common/get-page-content root-block-uuids-or-page-name)
-          (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-        first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
-        format (or (:block/format first-block) (state/get-preferred-format))]
+          (common/get-page-content root-block-uuids-or-page-uuid)
+          (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+        first-block (and (coll? root-block-uuids-or-page-uuid)
+                         (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+        format (get first-block :block/format :markdown)]
     (export-helper content format options)))
 
 ;;; export fns (ends)

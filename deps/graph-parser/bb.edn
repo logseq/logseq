@@ -6,7 +6,7 @@
    :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}}
  
  :pods
- {clj-kondo/clj-kondo {:version "2023.05.26"}}
+ {clj-kondo/clj-kondo {:version "2024.09.27"}}
 
  :tasks
  {test:load-all-namespaces-with-nbb

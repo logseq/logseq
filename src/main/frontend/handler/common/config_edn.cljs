@@ -36,7 +36,7 @@ nested keys or positional errors e.g. tuples"
   ([title body]
    (config-notification-show! title body :error))
   ([title body status]
-   (config-notification-show! title body status true))
+   (config-notification-show! title body status false))
   ([title body status clear?]
    (notification/show!
     [:.mb-2
@@ -86,13 +86,53 @@ nested keys or positional errors e.g. tuples"
       :else
       (validate-config-map parsed-body schema path))))
 
+(def file-only-config
+  "File only config that is deprecated in DB graphs"
+  (merge
+   (zipmap
+    [:file/name-format
+     :file-sync/ignore-files
+     :hidden
+     :ignored-page-references-keywords
+     :journal/file-name-format
+     :journal/page-title-format
+     :journals-directory
+     :logbook/settings
+     :org-mode/insert-file-link?
+     :pages-directory
+     :preferred-workflow
+     :property/separated-by-commas
+     :property-pages/excludelist
+     :srs/learning-fraction
+     :srs/initial-interval
+     :whiteboards-directory]
+    (repeat "is not used in DB graphs"))
+   {:preferred-format
+    "is not used in DB graphs as there is only markdown mode."
+    :property-pages/enabled?
+    "is not used in DB graphs as all properties have pages"
+    :block-hidden-properties
+    "is not used in DB graphs as hiding a property is done in its configuration"
+    :feature/enable-block-timestamps?
+    "is not used in DB graphs as it is always enabled"
+    :favorites
+    "is not stored in config for DB graphs"
+    :default-templates
+    "is replaced by #Template and the `Apply template to tags` property"}))
+
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
-  [path content]
+  [path content {:keys [db-graph?]}]
   (let [body (try (edn/read-string content)
                (catch :default _ ::failed-to-detect))
-        warnings {:editor/command-trigger
-                  "is no longer supported. Please use '/' and report bugs on it."}]
+        warnings (cond->
+                  {:editor/command-trigger
+                   "is no longer supported. Please use '/' and report bugs on it."
+                   :arweave/gateway
+                   "is no longer supported."}
+                   db-graph?
+                   (merge
+                    file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")
