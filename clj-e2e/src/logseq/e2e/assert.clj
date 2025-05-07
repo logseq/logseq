@@ -24,6 +24,10 @@
   (assert-is-visible "#search-button")
   true)
 
+(defn assert-have-count
+  [q count]
+  (-> (w/-query q) assert-that (.hasCount count)))
+
 (defn assert-graph-loaded?
   []
   ;; there's some blocks visible now

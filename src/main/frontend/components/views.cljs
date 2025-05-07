@@ -757,7 +757,9 @@
      (assoc cell-opts
             :tabIndex 0
             :ref *ref
-            :on-click (fn [] (click-cell (rum/deref *ref)))
+            :on-click (fn [e]
+                        (when-not (dom/has-class? (.-target e) "jtrigger")
+                          (click-cell (rum/deref *ref))))
             :on-key-down (fn [e]
                            (let [container (rum/deref *ref)]
                              (case (util/ekey e)
