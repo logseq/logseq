@@ -24,7 +24,7 @@
     (try
       (k/enter)
       (assert/assert-have-count ".ls-block" (inc blocks-count))
-      (catch Exception _e
+      (catch org.opentest4j.AssertionFailedError _e
         ;; retry once
         (k/enter)
         (assert/assert-have-count ".ls-block" (inc blocks-count))))
