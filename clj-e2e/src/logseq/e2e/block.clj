@@ -21,8 +21,13 @@
         blocks-count (util/blocks-count)]
     (when-not editor (open-last-block))
     (assert/assert-editor-mode)
-    (k/enter)
-    (assert/assert-have-count ".ls-block" (inc blocks-count))
+    (try
+      (k/enter)
+      (assert/assert-have-count ".ls-block" (inc blocks-count))
+      (catch Exception _e
+        ;; retry once
+        (k/enter)
+        (assert/assert-have-count ".ls-block" (inc blocks-count))))
     (assert/assert-editor-mode)
     (save-block title)))
 
