@@ -32,11 +32,14 @@ function initGlobalListeners () {
   }
 }
 
+let initialSettled = false
+
 const settleStatusBar = async () => {
   if (Capacitor.getPlatform() === 'android') {
     try {
       await Capacitor.Plugins.App.getInfo() // 等待平台初始化??
-      await (new Promise((r) => setTimeout(r, 500)))
+      await (new Promise((r) => setTimeout(r, initialSettled ? 300 : 500)))
+      if (!initialSettled) { initialSettled = true }
       await StatusBar.setStyle({ style: Style.Light }) // 可选：设置状态栏样式
       await StatusBar.setBackgroundColor({ color: '#ffffff' })
       await StatusBar.setOverlaysWebView({ overlay: true })
