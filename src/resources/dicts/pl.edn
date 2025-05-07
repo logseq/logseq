@@ -628,7 +628,7 @@
  :page/slide-view                                 "Pokaż jako slajdy"
  :page/slide-view-tip-go-fullscreen               (fn [] [[:span.opacity-70 "Wskazówka: wciśnij "] [:code "f"] [:span.opacity-70 " żeby otworzyć na pełnym ekranie"]])
  :page/something-went-wrong                       "Coś poszło nie tak"
- :page/step                                       "Step (1)"
+ :page/step                                       "Krok {1}"
  :page/try                                        "Spróbuj"
  :page/whiteboard-to-journal-error                "Tablice nie mogą być nazwane tak jak tytuły dziennika!"
  :pdf/auto-open-context-menu                      "Automatycznie otwórz menu kontekstowe dla zaznaczeń"
