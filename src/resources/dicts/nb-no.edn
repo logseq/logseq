@@ -548,7 +548,6 @@
 
  :loading "Laster..."
  :new-page "Ny side:"
- :remove-orphaned-pages "Fjern foreldreløse sider?"
  :bug-report/inspector-page-btn-back "Gå tilbake"
  :bug-report/inspector-page-btn-copy "Kopier resultatet"
  :bug-report/inspector-page-btn-create-issue "Opprett et problem"

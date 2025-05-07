@@ -91,9 +91,7 @@
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
-   (component-page/batch-delete-dialog
-    selected-rows false
-    ok-handler)))
+   (component-page/batch-delete-dialog selected-rows ok-handler)))
 
 (defn ask-permission
   [repo]

@@ -449,7 +449,6 @@
  :all-pages "全ページ"
  :all-whiteboards "全てのホワイトボード"
  :all-files "全ファイル"
- :remove-orphaned-pages "孤立したページを削除しますか？"
  :all-journals "全日誌"
  :settings "設定"
  :settings-of-plugins "プラグイン設定"

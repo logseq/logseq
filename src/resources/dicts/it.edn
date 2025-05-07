@@ -298,7 +298,6 @@
  :loading "Caricamento..."
  :new-page "Nuova pagina:"
  :remove-heading "Rimuovi titolo"
- :remove-orphaned-pages "Rimuovere le pagine orfane?"
  :toggle-theme "Inverti tema"
  :untitled "Senza titolo"
  :whiteboards "Lavagne"
