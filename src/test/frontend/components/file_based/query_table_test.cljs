@@ -4,7 +4,7 @@
             [frontend.state :as state]
             [frontend.components.file-based.query-table :as query-table]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.db :as db]
+            [frontend.db.react :as react]
             [frontend.util :as util]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
@@ -12,7 +12,7 @@
 
 (defn- dsl-query
   [s]
-  (db/clear-query-state!)
+  (react/clear-query-state!)
   (when-let [result (query-dsl/query test-helper/test-db s)]
     (map first (deref result))))
 
