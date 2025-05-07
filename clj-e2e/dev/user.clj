@@ -85,7 +85,7 @@
 
   (do
     (reset! config/*headless true)
-    (reset! config/*slow-mo 50)
+    (reset! config/*slow-mo 10)
     (dotimes [i 5]
       (run-multi-tabs-test)))
 
