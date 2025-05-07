@@ -165,8 +165,7 @@
      (fn [a]
        (when-let [ns (namespace a)]
          (and
-          (or (= "logseq.task" ns)
-              (string/starts-with? ns "logseq.property")
+          (or (string/starts-with? ns "logseq.property")
               (string/ends-with? ns ".property"))
           (= :db.cardinality/one (:db/cardinality (db-schema a)))))) a-coll)))
 

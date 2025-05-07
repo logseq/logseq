@@ -38,3 +38,18 @@
   (when-let [all-contexts (seq *pw-contexts*)]
     (doseq [page (mapcat pw-page/get-pages all-contexts)]
       (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*))))))
+
+(defmethod t/report :fail
+  [m]
+  (t/with-test-out
+    (t/inc-report-counter :fail)
+    (println "\nFAIL in" (t/testing-vars-str m))
+    (when (seq t/*testing-contexts*) (println (t/testing-contexts-str)))
+    (when-let [message (:message m)] (println message))
+    (println "expected:" (pr-str (:expected m)))
+    (println "  actual:" (pr-str (:actual m))))
+
+  ;; screenshot for all pw pages when :fail
+  (when-let [all-contexts (seq *pw-contexts*)]
+    (doseq [page (mapcat pw-page/get-pages all-contexts)]
+      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*))))))
