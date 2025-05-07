@@ -39,6 +39,10 @@
   []
   (let [editor (w/-query editor-q)]
     (when (w/visible? editor-q)
+      ;; ensure cursor exists
+      ;; Sometimes when the editor exists, there isn't a blinking cursor,
+      ;; causing subsequent operations (like pressing Enter) to fail.
+      (w/click editor)
       editor)))
 
 (defn get-edit-block-container
