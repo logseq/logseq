@@ -1,7 +1,5 @@
 (ns frontend.db.model
   "Core db functions."
-  ;; TODO: Remove this config once how repos are passed to this ns are standardized
-  {:clj-kondo/config {:linters {:unused-binding {:level :off}}}}
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -16,12 +14,10 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.shui.hooks :as hooks]))
+            [logseq.db.frontend.rules :as rules]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -149,8 +145,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page-alias-names
   [repo page-id]
-  (let [page (db-utils/entity page-id)
-        alias-ids (->> (page-alias-set repo page-id)
+  (let [alias-ids (->> (page-alias-set repo page-id)
                        (remove #{page-id}))]
     (when (seq alias-ids)
       (map (fn [id] (:block/title (db-utils/entity id))) alias-ids))))
@@ -185,21 +180,6 @@ independent of format as format specific heading characters are stripped"
             (let [e (-> ref react)]
               (when-let [id (:db/id e)]
                 (db-utils/entity id))))))))
-
-(defn sub-entity
-  "Used for react function components"
-  [entity* watch-id]
-  (let [id (:db/id entity*)
-        *ref (sub-block id {:ref? true})
-        [entity set-entity!] (hooks/use-state @*ref)]
-    (add-watch *ref watch-id (fn [_ _ _ new-value]
-                               (set-entity! new-value)))
-    (hooks/use-effect!
-     (fn []
-       #(remove-watch *ref watch-id))
-     [])
-
-    [entity set-entity!]))
 
 (defn sort-by-order-recursive
   [form]
@@ -394,27 +374,6 @@ independent of format as format specific heading characters are stripped"
                (:block/name page-entity)
                page-name)))))))
 
-(defn get-journals-length
-  []
-  (let [today (date-time-util/date->int (js/Date.))]
-    (if (config/db-based-graph?)
-      (d/q '[:find (count ?page) .
-             :in $ ?today
-             :where
-             [?page :block/tags :logseq.class/Journal]
-             [?page :block/journal-day ?journal-day]
-             [(<= ?journal-day ?today)]]
-           (conn/get-db (state/get-current-repo))
-           today)
-      (d/q '[:find (count ?page) .
-             :in $ ?today
-             :where
-             [?page :block/type "journal"]
-             [?page :block/journal-day ?journal-day]
-             [(<= ?journal-day ?today)]]
-           (conn/get-db (state/get-current-repo))
-           today))))
-
 (defn get-latest-journals
   ([n]
    (get-latest-journals (state/get-current-repo) n))
@@ -430,10 +389,8 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page-referenced-blocks-full
   ([page-id]
-   (get-page-referenced-blocks-full (state/get-current-repo) page-id nil))
-  ([page-id options]
-   (get-page-referenced-blocks-full (state/get-current-repo) page-id options))
-  ([repo page-id options]
+   (get-page-referenced-blocks-full (state/get-current-repo) page-id))
+  ([repo page-id]
    (when (and repo page-id)
      (when-let [db (conn/get-db repo)]
        (let [pages (page-alias-set repo page-id)
@@ -457,10 +414,8 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-referenced-blocks
   ([eid]
-   (get-referenced-blocks (state/get-current-repo) eid nil))
-  ([eid options]
-   (get-referenced-blocks (state/get-current-repo) eid options))
-  ([repo eid options]
+   (get-referenced-blocks (state/get-current-repo) eid))
+  ([repo eid]
    (when repo
      (when (conn/get-db repo)
        (let [entity (db-utils/entity eid)
@@ -478,14 +433,12 @@ independent of format as format specific heading characters are stripped"
               (util/distinct-by :db/id)))))))
 
 (defn get-block-referenced-blocks
-  ([block-id]
-   (get-block-referenced-blocks block-id {}))
-  ([block-id options]
-   (when-let [repo (state/get-current-repo)]
-     (when (conn/get-db repo)
-       (->> (get-referenced-blocks repo block-id options)
-            (sort-by-order-recursive)
-            db-utils/group-by-page)))))
+  [block-id]
+  (when-let [repo (state/get-current-repo)]
+    (when (conn/get-db repo)
+      (->> (get-referenced-blocks repo block-id)
+           (sort-by-order-recursive)
+           db-utils/group-by-page))))
 
 (defn journal-page?
   "sanitized page-name only"
