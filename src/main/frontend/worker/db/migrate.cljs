@@ -1304,6 +1304,11 @@
       (let [data (deprecate-logseq-user-ns conn nil)]
         (when (seq data)
           (d/transact! conn data {:fix-db? true})))
+      (let [data1 (rename-repeated-properties conn nil)
+            data2 (rename-task-properties conn nil)
+            data (concat data1 data2)]
+        (when (seq data)
+          (d/transact! conn data {:fix-db? true})))
       (when (seq invalid-entity-ids)
         (fix-invalid-data! conn invalid-entity-ids))
 
