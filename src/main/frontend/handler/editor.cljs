@@ -9,6 +9,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -1397,7 +1398,7 @@
         (delete-block-aux! asset-block)
         (when-let [href (if (util/electron?) href
                             (second (re-find #"\((.+)\)$" full-text)))]
-          (let [block-file-rpath (db-model/get-block-file-path block)
+          (let [block-file-rpath (file-model/get-block-file-path block)
                 asset-fpath (if (string/starts-with? href "assets://")
                               (path/url-to-path href)
                               (config/get-repo-fpath
