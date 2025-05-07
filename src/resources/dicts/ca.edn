@@ -50,7 +50,6 @@
  :relaunch-confirm-to-work                          "Ha de reiniciar la aplicació per fer que funcioni. Desitja reiniciar-la ara?"
  :remove-background                                 "Eliminar el fons"
  :remove-heading                                    "Eliminar encapçalament"
- :remove-orphaned-pages                             "Eliminar pàgines orfes?"
  :save                                              "Desar"
  :settings                                          "Opcions"
  :settings-of-plugins                               "Opcions d'Extensions"

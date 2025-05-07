@@ -314,7 +314,6 @@
  :loading                                         "Wczytywanie..."
  :new-page                                        "Nowa strona:"
  :remove-heading                                  "Usuń nagłówek"
- :remove-orphaned-pages                           "Usunąć nie linkowane strony?"
  :toggle-theme                                    "Przełącz motyw"
  :untitled                                        "Bez tytułu"
  :whiteboards                                     "Tablice"

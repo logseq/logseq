@@ -310,7 +310,6 @@
  :all-pages                                            "Все страницы"
  :all-whiteboards                                      "Все интерактивные доски"
  :all-files                                            "Все файлы"
- :remove-orphaned-pages                                "Удалить страницы без родителя?"
  :all-journals                                         "Все журналы"
  :settings                                             "Настройки"
  :settings-of-plugins                                  "Расширения"
