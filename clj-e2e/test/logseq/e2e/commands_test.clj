@@ -189,6 +189,7 @@
   (testing "number list commands"
     (util/input-command "number list")
     (b/new-blocks ["a" "b" "c"])
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))
     ;; double `enter` convert the next block to bullet block
     (k/enter)
@@ -246,11 +247,13 @@
     (util/set-tag "Template")
     (b/new-blocks ["block 1" "block 2" "block 3" "test"])
     (k/arrow-up)
+    (w/wait-for "textarea:text('block 3')")
     (util/repeat-keyboard 3 "Shift+ArrowUp")
     (k/tab)
     (b/jump-to-block "test")
     (util/input-command "template")
     (util/input "template 1")
+    (w/wait-for "a.menu-link.chosen:has-text('template 1')")
     (k/enter)
     (doseq [text ["block 1" "block 2" "block 3"]]
       (assert/assert-have-count
