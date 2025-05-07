@@ -126,7 +126,7 @@
                               (select-all? row-selection filtered-rows))
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
-           :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
+           :row-toggle-selected! (fn [row-selection row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [table value]
                                    (toggle-selected-all! table value set-row-selection!))
            :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
