@@ -3355,19 +3355,24 @@
             (prn ::unhandled-drop-data-transfer-type transfer-types))))))
   (block-drag-end event *move-to'))
 
+(defonce *block-last-mouse-event (atom nil))
+
 (defn- block-mouse-over
-  [e block *control-show? block-id doc-mode?]
-  (when-not (or @*dragging? (= (:block/uuid block) (:block/uuid (state/get-edit-block))))
-    (.preventDefault e)
-    (reset! *control-show? true)
-    (when-let [parent (gdom/getElement block-id)]
-      (let [node (.querySelector parent ".bullet-container")]
-        (when doc-mode?
-          (dom/remove-class! node "hide-inner-bullet"))))
-    (when (non-dragging? e)
-      (when-let [container (gdom/getElement "app-container-wrapper")]
-        (dom/add-class! container "blocks-selection-mode"))
-      (editor-handler/highlight-selection-area! block-id {:append? true}))))
+  [^js e block *control-show? block-id doc-mode?]
+  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))]
+    (when (and mouse-moving?
+            (not @*dragging?)
+            (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
+      (.preventDefault e)
+      (reset! *control-show? true)
+      (when-let [parent (gdom/getElement block-id)]
+        (let [node (.querySelector parent ".bullet-container")]
+          (when doc-mode?
+            (dom/remove-class! node "hide-inner-bullet"))))
+      (when (non-dragging? e)
+        (when-let [container (gdom/getElement "app-container-wrapper")]
+          (dom/add-class! container "blocks-selection-mode"))
+        (editor-handler/highlight-selection-area! block-id {:append? true})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
@@ -3608,6 +3613,8 @@
                             (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
+         :on-mouse-move (fn [e]
+                           (reset! *block-last-mouse-event e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
