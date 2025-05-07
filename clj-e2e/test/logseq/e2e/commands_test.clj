@@ -8,6 +8,7 @@
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
    [wally.main :as w]
    [wally.repl :as repl]))
@@ -252,8 +253,10 @@
     (util/input "template 1")
     (k/enter)
     (doseq [text ["block 1" "block 2" "block 3"]]
-      (assert/assert-have-count (.or (w/-query (format ".ls-block .block-title-wrap:text('%s')" text))
-                                     (w/-query (format ".ls-block textarea:text('%s')" text))) 2))))
+      (assert/assert-have-count
+       (loc/or (format ".ls-block .block-title-wrap:text('%s')" text)
+               (format ".ls-block textarea:text('%s')" text))
+       2))))
 
 (deftest embed-html-test
   (testing "embed html"

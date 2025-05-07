@@ -3,6 +3,7 @@
   (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [wally.main :as w]
             [wally.repl :as repl])
   (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
@@ -194,11 +195,9 @@
   (w/click (format "a.menu-link:has-text(\"%s\")" tag))
   ;; wait tag added on ui
   (assert/assert-is-visible
-   (-> (w/-query ".ls-block")
-       (.filter (.setHas (Locator$FilterOptions.)
-                         (w/-query ".editor-wrapper textarea")))
-       (.filter (.setHas (Locator$FilterOptions.)
-                         (w/-query (format ".block-tag :text('%s')" tag)))))))
+   (-> ".ls-block"
+       (loc/filter :has ".editor-wrapper textarea")
+       (loc/filter :has (format ".block-tag :text('%s')" tag)))))
 
 (defn -query-last
   [q]
