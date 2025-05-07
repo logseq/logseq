@@ -5,7 +5,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -354,7 +354,7 @@
 
    Requires editing state"
   [file-path]
-  (if-let [current-file-rpath (or (db-model/get-block-file-path (state/get-edit-block))
+  (if-let [current-file-rpath (or (file-model/get-block-file-path (state/get-edit-block))
                                   ;; fix dummy file path of page
                                   (when (config/get-pages-directory)
                                     (path/path-join (config/get-pages-directory) "_.md"))
