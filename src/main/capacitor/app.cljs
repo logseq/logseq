@@ -115,7 +115,24 @@
                                            (-> (repo-handler/new-db! db-name)
                                              (p/then #(set-reload! (inc reload)))))))}
           [:span {:slot "icon-only"} (ionic/tabler-icon "plus" {:size 22})])]
-       [:h2.py-1.text-lg (fstate/get-current-repo)]
+
+       [:h2.py-1.text-lg
+        (let [graphs (fstate/get-repos)]
+          (ionic/ion-button
+            {:fill "clear" :mode "ios"
+             :class "border w-full rounded-lg"
+             :on-click (fn []
+                         (ui/open-modal! "Switch graph"
+                           {:type :action-sheet
+                            :buttons (for [repo graphs]
+                                       {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
+                                        :role (:url repo)})
+                            :inputs []
+                            :on-action (fn [e]
+                                         (when-let [url (:role e)]
+                                           (when (string/starts-with? url "logseq_db_")
+                                             (fstate/pub-event! [:graph/switch url]))))}))}
+            (fstate/get-current-repo)))]
 
        [:div.flex.justify-between.items-center.mt-4
         [:h1.text-3xl.font-mono.font-bold.py-2 "Journals"]
