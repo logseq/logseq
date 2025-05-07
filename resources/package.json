@@ -52,7 +52,7 @@
     "@electron-forge/maker-dmg": "^7.8.0",
     "@electron-forge/maker-wix": "^7.8.0",
     "@electron-forge/maker-rpm": "^7.8.0",
-    "@electron-forge/maker-squirrel": "^7.8.0",
+    "@electron-forge/maker-squirrel": "7.3.1",
     "@electron-forge/maker-zip": "^7.8.0",
     "@electron/rebuild": "3.7.2",
     "electron": "35.2.2",
