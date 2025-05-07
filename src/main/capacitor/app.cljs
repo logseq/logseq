@@ -6,6 +6,7 @@
             [frontend.db.react :as react]
             [frontend.util :as util]
             [rum.core :as rum]
+            [frontend.rum :as frum]
             [promesa.core :as p]
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
@@ -230,14 +231,15 @@
 
 (rum/defc main []
   (let [nav-ref (rum/use-ref nil)
-        [_ set-nav-root!] (state/use-nav-root)]
+        [_ set-nav-root!] (state/use-nav-root)
+        current-repo (frum/use-atom-in fstate/state :git/current-repo)]
 
     ;; global
     (rum/use-effect!
       (fn []
         (some-> js/window.externalsjs (.settleStatusBar))
         (some-> js/window.externalsjs (.initGlobalListeners)))
-      [])
+      [current-repo])
 
     ;; navigation
     (rum/use-effect!
