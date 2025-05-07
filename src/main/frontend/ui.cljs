@@ -715,7 +715,7 @@
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
-   (when content [:pre.m-0.text-sm content])])
+   (when content [:pre.m-0.text-sm (str content)])])
 
 (def component-error
   "Well styled error message for higher level components. Currently same as
