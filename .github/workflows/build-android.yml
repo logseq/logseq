@@ -139,7 +139,7 @@ jobs:
         run: npx cap sync android
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v2
+        uses: android-actions/setup-android@v3.2.2
 
       - name: Build Android
         run: |
@@ -152,7 +152,7 @@ jobs:
       - name: Sign Android APK
         run: |
           echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
-          /usr/local/lib/android/sdk/build-tools/33.0.0/apksigner sign \
+          $ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner sign \
             --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             --in app/build/outputs/apk/release/app-release-unsigned.apk \
             --out app-signed.apk
