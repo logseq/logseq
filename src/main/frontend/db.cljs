@@ -3,7 +3,6 @@
   (:require [frontend.config :as config]
             [frontend.db.conn :as conn]
             [frontend.db.model]
-            [frontend.db.react :as react]
             [frontend.db.utils]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
@@ -26,20 +25,14 @@
 
  [frontend.db.model
   delete-files get-block-and-children get-block-by-uuid get-block-children sort-by-order
-  get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
+  get-block-parent get-block-parents parents-collapsed?
   get-block-immediate-children get-block-page
-  get-custom-css get-file file-exists?  get-files-full get-journals-length
+  get-file file-exists?  get-files-full
   get-latest-journals get-page get-case-page get-page-alias-names
-  get-page-blocks-count get-page-blocks-no-cache get-page-format
-  get-referenced-blocks journal-page? page? page-alias-set sub-block sub-entity
+  get-page-blocks-no-cache get-page-format
+  journal-page? page? sub-block
   page-empty? page-exists? get-alias-source-page
-  has-children? whiteboard-page?]
-
- [frontend.db.react
-  get-current-page
-  remove-query-component! add-q! add-query-component! clear-query-state!
-  q
-  query-state component->query-key set-new-result!])
+  has-children? whiteboard-page?])
 
 (defn start-db-conn!
   ([repo]
