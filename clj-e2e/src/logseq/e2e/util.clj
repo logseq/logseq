@@ -4,8 +4,10 @@
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [wally.main :as w]
-            [wally.selectors :as ws])
-  (:import [com.microsoft.playwright TimeoutError]))
+            [wally.repl :as repl])
+  (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
+                                     Locator$FilterOptions)
+           (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
   [n q repeat-fn]
@@ -47,10 +49,11 @@
   [text]
   (w/fill "*:focus" text))
 
-(defn type
-  [text]
+(defn press-seq
+  [text & {:keys [delay] :or {delay 0}}]
   (let [input-node (w/-query "*:focus")]
-    (.type input-node text)))
+    (.pressSequentially input-node text
+                        (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
@@ -178,15 +181,25 @@
   (let [content (get-edit-content)]
     (when (and (not= (str (last content)) " ")
                (not= content ""))
-      (type " ")))
-  (type "/")
-  (type command)
+      (press-seq " ")))
+  (press-seq "/" {:delay 20})
   (w/wait-for ".ui__popover-content")
-  (k/enter))
+  (press-seq command {:delay 20})
+  (w/click "a.menu-link.chosen"))
 
 (defn set-tag
   [tag]
-  (type " #")
-  (type tag)
-  (w/wait-for (w/find-one-by-text "a.menu-link mark" tag))
-  (k/enter))
+  (press-seq " #" {:delay 20})
+  (press-seq tag)
+  (w/click (format "a.menu-link:has-text(\"%s\")" tag))
+  ;; wait tag added on ui
+  (assert/assert-is-visible
+   (-> (w/-query ".ls-block")
+       (.filter (.setHas (Locator$FilterOptions.)
+                         (w/-query ".editor-wrapper textarea")))
+       (.filter (.setHas (Locator$FilterOptions.)
+                         (w/-query (format ".block-tag :text('%s')" tag)))))))
+
+(defn -query-last
+  [q]
+  (.last (w/-query q)))

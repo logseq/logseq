@@ -4,8 +4,8 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
@@ -37,8 +37,11 @@
                        depth 0]
                   (if (or (>= depth max-depth) (empty? current-refs))
                     result-refs
-                    (let [next-refs (mapcat :block/refs current-refs)]
-                      (recur (apply conj result-refs next-refs) next-refs (inc depth)))))]
+                    (let [next-refs (set (mapcat :block/refs current-refs))
+                          result-refs' (apply conj result-refs next-refs)]
+                      (if (= (count result-refs') (count result-refs))
+                        result-refs
+                        (recur (apply conj result-refs next-refs) next-refs (inc depth))))))]
     (loop [result (db-content/id-ref->title-ref (:block/title ent) ref-set true)
            last-result nil
            depth 0]

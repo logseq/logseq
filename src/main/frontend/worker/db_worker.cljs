@@ -365,11 +365,13 @@
 
           (db-migrate/migrate conn search-db)
 
-          (catch :default _e
-            (log/error "DB migrate failed, retrying")
-            (when db-based?
-              (rebuild-db-from-datoms! conn db import-type)
-              (db-migrate/migrate conn search-db))))
+          (catch :default e
+            (log/error "DB migrate failed, error: " e)
+            (if (and db-based? (= (.-message e) "DB missing addresses"))
+              (do
+                (rebuild-db-from-datoms! conn db import-type)
+                (db-migrate/migrate conn search-db))
+              (throw e))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

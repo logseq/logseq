@@ -5,19 +5,6 @@
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
-(defn- wait-for-new-empty-block-inserted
-  "When inserting a new block, if the operation is too fast,
-  the w/fill operation can begin before k/enter has finished creating the block,
-  leading to the save-block not updating the block contents."
-  [last-edit-block-id]
-  (loop [i 5]
-    (if (zero? i)
-      (throw (ex-info "wait-for-new-empty-block-inserted" {}))
-      (if (not= last-edit-block-id (.getAttribute (w/-query util/editor-q) "id"))
-        :done
-        (do (util/wait-timeout 50)
-            (recur (dec i)))))))
-
 (defn open-last-block
   []
   (util/double-esc)
@@ -31,12 +18,12 @@
 (defn new-block
   [title]
   (let [editor (util/get-editor)
-        last-edit-block-id (when editor (.getAttribute editor "id"))]
+        blocks-count (util/blocks-count)]
     (when-not editor (open-last-block))
     (assert/assert-editor-mode)
     (k/enter)
+    (assert/assert-have-count ".ls-block" (inc blocks-count))
     (assert/assert-editor-mode)
-    (when last-edit-block-id (wait-for-new-empty-block-inserted last-edit-block-id))
     (save-block title)))
 
 ;; TODO: support tree

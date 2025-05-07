@@ -22,6 +22,7 @@
 
  ;; Define the default journal page template.
  ;; Enter the template name between the quotes.
+ ;; This is _only_ for file graphs.
  :default-templates
  {:journals ""}
 
@@ -37,6 +38,7 @@
  ;;   This configuration is not retroactive and affects only new journals.
  ;;   To show old journal files in the app, manually rename the files in the
  ;;   journal directory to match the new format.
+ ;; This is _only_ for file graphs.
  ;; Default value: "yyyy_MM_dd"
  ;; :journal/file-name-format "yyyy_MM_dd"
 

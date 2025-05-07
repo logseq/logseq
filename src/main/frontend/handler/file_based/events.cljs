@@ -10,9 +10,11 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
@@ -353,3 +355,15 @@
                                           :remote? true)
                                    r))
                                (state/get-repos)))))))
+
+(defmethod events/handle :journal/insert-template [[_ page-name]]
+  (let [page-name (util/page-name-sanity-lc page-name)]
+    (when-let [page (db/get-page page-name)]
+      (p/do!
+       (db-async/<get-block (state/get-current-repo) (:db/id page))
+       (when (db/page-empty? (state/get-current-repo) page-name)
+         (when-let [template (state/get-default-journal-template)]
+           (editor-handler/insert-template!
+            nil
+            template
+            {:target page})))))))

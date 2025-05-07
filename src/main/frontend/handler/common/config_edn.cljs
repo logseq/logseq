@@ -94,6 +94,7 @@ nested keys or positional errors e.g. tuples"
      :file-sync/ignore-files
      :hidden
      :ignored-page-references-keywords
+     :journal/file-name-format
      :journal/page-title-format
      :journals-directory
      :logbook/settings
@@ -115,7 +116,9 @@ nested keys or positional errors e.g. tuples"
     :feature/enable-block-timestamps?
     "is not used in DB graphs as it is always enabled"
     :favorites
-    "is not stored in config for DB graphs"}))
+    "is not stored in config for DB graphs"
+    :default-templates
+    "is replaced by #Template and the `Apply template to tags` property"}))
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"

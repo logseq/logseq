@@ -1158,6 +1158,7 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
+                    (util/stop e)
                     (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
                                     (util/shift-key? e)

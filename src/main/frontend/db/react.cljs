@@ -173,7 +173,8 @@
       (set-new-result! k result'))))
 
 (defn refresh-affected-queries!
-  [repo-url affected-keys]
+  [repo-url affected-keys & {:keys [skip-kv-custom-keys?]
+                             :or {skip-kv-custom-keys? false}}]
   (util/profile
    "refresh!"
    (let [db (conn/get-db repo-url)
@@ -186,7 +187,8 @@
                                 [k' cache]))) @query-state)
                     (into {}))
          all-keys (concat (distinct affected-keys)
-                          (filter #(contains? #{:custom :kv} (first %)) (keys state)))]
+                          (when-not skip-kv-custom-keys?
+                            (filter #(contains? #{:custom :kv} (first %)) (keys state))))]
      (doseq [k all-keys]
        (when-let [cache (get state k)]
          (let [{:keys [query query-fn]} cache

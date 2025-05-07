@@ -4,6 +4,7 @@
    [clj-time.local :as tl]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
@@ -18,9 +19,8 @@
 (deftest command-trigger-test
   (testing "/command trigger popup"
     (b/new-block "b2")
-    (util/type " /")
-    (w/wait-for ".ui__popover-content")
-    (is (some? (w/find-one-by-text "span" "Node reference")))
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
@@ -28,16 +28,16 @@
   (testing "Node reference"
     (testing "Page reference"
       (b/new-blocks ["b1" ""])
-      (util/input-command "Node eferen")
-      (util/type "Another page")
+      (util/input-command "Node reference")
+      (util/press-seq "Another page")
       (k/enter)
       (is (= "[[Another page]]" (util/get-edit-content)))
       (util/exit-edit)
       (is (= "Another page" (util/get-text "a.page-ref"))))
     (testing "Block reference"
       (b/new-block "")
-      (util/input-command "Node eferen")
-      (util/type "b1")
+      (util/input-command "Node reference")
+      (util/press-seq "b1")
       (util/wait-timeout 300)
       (k/enter)
       (is (string/includes? (util/get-edit-content) "[["))
@@ -47,16 +47,16 @@
 (deftest link-test
   (testing "/link"
     (let [add-logseq-link (fn []
-                            (util/type "https://logseq.com")
+                            (util/press-seq "https://logseq.com")
                             (k/tab)
-                            (util/type "Logseq")
+                            (util/press-seq "Logseq")
                             (k/tab)
                             (k/enter))]
       (b/new-block "")
       (util/input-command "link")
       (add-logseq-link)
       (is (= "[Logseq](https://logseq.com)" (util/get-edit-content)))
-      (util/type " some content ")
+      (util/press-seq " some content ")
       (util/input-command "link")
       (add-logseq-link)
       (is (= (str "[Logseq](https://logseq.com)"
@@ -67,9 +67,9 @@
   (testing "/image link"
     (b/new-block "")
     (util/input-command "image link")
-    (util/type "https://logseq.com/test.png")
+    (util/press-seq "https://logseq.com/test.png")
     (k/tab)
-    (util/type "Logseq")
+    (util/press-seq "Logseq")
     (k/tab)
     (k/enter)
     (is (= "![Logseq](https://logseq.com/test.png)" (util/get-edit-content)))))
@@ -79,7 +79,7 @@
     (b/new-block "")
     (util/input-command "underline")
     (is (= "<ins></ins>" (util/get-edit-content)))
-    (util/type "test")
+    (util/press-seq "test")
     (is (= "<ins>test</ins>" (util/get-edit-content)))
     (util/move-cursor-to-end)))
 
@@ -96,7 +96,7 @@
   (testing "/math block"
     (b/new-block "")
     (util/input-command "math block")
-    (util/type "1 + 2 = 3")
+    (util/press-seq "1 + 2 = 3")
     (util/exit-edit)
     (w/wait-for ".katex")))
 
@@ -150,7 +150,7 @@
         (b/new-block text)
         (util/input-command command)
         (k/enter)
-        (k/esc)
+        (assert/assert-editor-mode)
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))
@@ -191,7 +191,10 @@
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))
     ;; double `enter` convert the next block to bullet block
     (k/enter)
+    (assert/assert-have-count "span.typed-list" 4)
+    (util/wait-timeout 60)
     (k/enter)
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
 
 (deftest number-children-test
@@ -202,21 +205,19 @@
     (k/tab)
     (b/jump-to-block "a")
     (util/input-command "number children")
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
 
 (deftest query-test
   (testing "query"
     (b/new-blocks ["[[foo]] block" "[[foo]] another" ""])
     (util/input-command "query")
-    (let [btn (w/find-one-by-text "button" "Filter")]
+    (let [btn (util/-query-last "button:text('filter')")]
       (w/click btn)
       (util/input "page reference")
-      (is (some? (w/find-one-by-text "div" "page reference")))
-      (k/enter)
-      (util/input "foo")
-      (is (some? (w/find-one-by-text "div" "foo")))
-      (k/enter)
-      (is (some? (w/find-one-by-text "div" "Live query (2)"))))))
+      (w/click "a.menu-link:has-text('page reference')")
+      (w/click "a.menu-link:has-text('foo')")
+      (assert/assert-is-visible "div:text('Live query (2)')"))))
 
 (deftest advanced-query-test
   (testing "query"
@@ -235,7 +236,8 @@
     (b/new-block "")
     (util/input-command "calculator")
     (util/input "1 + 2")
-    (is (some? (w/find-one-by-text "div.extensions__code-calc-output-line" "3")))))
+    (w/wait-for "div.extensions__code-calc-output-line")
+    (is (= "3" (util/get-text "div.extensions__code-calc-output-line")))))
 
 (deftest template-test
   (testing "template"
@@ -249,16 +251,15 @@
     (util/input-command "template")
     (util/input "template 1")
     (k/enter)
-    (util/exit-edit)
-    (let [content (w/all-text-contents ".ls-block .block-content")]
-      (doseq [text ["block 1" "block 2" "block 3"]]
-        (is (= 2 (count (filter #(= % text) content))))))))
+    (doseq [text ["block 1" "block 2" "block 3"]]
+      (assert/assert-have-count (.or (w/-query (format ".ls-block .block-title-wrap:text('%s')" text))
+                                     (w/-query (format ".ls-block textarea:text('%s')" text))) 2))))
 
 (deftest embed-html-test
   (testing "embed html"
     (b/new-block "")
     (util/input-command "embed html")
-    (util/type "<div id=\"embed-test\">test</div>")
+    (util/press-seq "<div id=\"embed-test\">test</div>")
     (util/exit-edit)
     (is (= "test" (util/get-text "#embed-test")))))
 
@@ -266,7 +267,7 @@
   (testing "embed video"
     (b/new-block "")
     (util/input-command "embed video")
-    (util/type "https://www.youtube.com/watch?v=7xTGNNLPyMI")
+    (util/press-seq "https://www.youtube.com/watch?v=7xTGNNLPyMI")
     (util/exit-edit)
     (w/wait-for "iframe")))
 
@@ -274,7 +275,7 @@
   (testing "embed tweet"
     (b/new-block "")
     (util/input-command "embed tweet")
-    (util/type "https://x.com/logseq/status/1784914564083314839")
+    (util/press-seq "https://x.com/logseq/status/1784914564083314839")
     (util/exit-edit)
     (w/wait-for "iframe")))
 
@@ -282,7 +283,7 @@
   (testing "cloze"
     (b/new-block "")
     (util/input-command "cloze")
-    (util/type "hidden answer")
+    (util/press-seq "hidden answer")
     (util/exit-edit)
     (w/click "a.cloze")
     (w/wait-for "a.cloze-revealed")))
