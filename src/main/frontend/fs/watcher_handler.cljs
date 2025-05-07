@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.property :as file-property-handler]
@@ -101,7 +102,7 @@
                      exists-in-db?)
                 (p/let [dir-exists? (fs/file-exists? dir "")]
                   (when dir-exists?
-                    (when-let [page-name (db/get-file-page path)]
+                    (when-let [page-name (file-model/get-file-page path)]
                       (println "Delete page: " page-name ", file path: " path ".")
                       (page-handler/<delete! page-name #()))))
 
@@ -177,7 +178,7 @@
         (p/do!
          (when (seq deleted-files)
            (p/all (map (fn [path]
-                         (when-let [page-name (db/get-file-page path)]
+                         (when-let [page-name (file-model/get-file-page path)]
                            (println "Delete page: " page-name ", file path: " path ".")
                            (page-handler/<delete! page-name #())))
                        deleted-files)))

@@ -10,6 +10,7 @@
             [frontend.db.async.util :as db-async-util]
             [frontend.db.file-based.async :as file-async]
             [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.file-based.property.util :as property-util]
@@ -251,7 +252,7 @@
                                  [(>= ?d ?day)])]
                       date
                       future-day
-                      db-model/file-graph-block-attrs))]
+                      file-model/file-graph-block-attrs))]
           (->> result
                db-model/sort-by-order-recursive
                db-utils/group-by-page))))))

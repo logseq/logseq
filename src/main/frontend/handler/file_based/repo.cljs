@@ -2,6 +2,7 @@
   "Repo fns for creating, loading and parsing file graphs"
   (:require [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
@@ -313,14 +314,14 @@
               add-files (filter-diffs "add")
               delete-files (when (seq remove-files)
                              (db/delete-files remove-files))
-              delete-blocks (db/delete-blocks repo-url remove-files true)
+              delete-blocks (file-model/delete-blocks repo-url remove-files true)
               delete-blocks (->>
                              (concat
                               delete-blocks
-                              (db/delete-blocks repo-url modify-files false))
+                              (file-model/delete-blocks repo-url modify-files false))
                              (remove nil?))
               delete-pages (if (seq remove-files)
-                             (db/delete-pages-by-files remove-files)
+                             (file-model/delete-pages-by-files remove-files)
                              [])
               add-or-modify-files (some->>
                                    (concat modify-files add-files)

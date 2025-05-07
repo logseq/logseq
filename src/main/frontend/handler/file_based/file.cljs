@@ -3,6 +3,7 @@
   (:refer-clojure :exclude [load-file])
   (:require [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -163,7 +164,7 @@
             result (if reset?
                      (do
                        (when-not skip-db-transact?
-                         (when-let [page-id (db/get-file-page-id path)]
+                         (when-let [page-id (file-model/get-file-page-id path)]
                            (db/transact! repo
                                          [[:db/retract page-id :block/alias]
                                           [:db/retract page-id :block/tags]]

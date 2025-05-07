@@ -29,6 +29,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.model :as model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -1565,7 +1566,7 @@
                   config (assoc config :redirect-page-name redirect-page-name)
                   label-text (get-label-text label)
                   page (if (string/blank? label-text)
-                         {:block/name (db/get-file-page (string/replace href "file:" "") false)}
+                         {:block/name (file-model/get-file-page (string/replace href "file:" "") false)}
                          (get-page label))
                   show-brackets? (state/show-brackets?)]
               (if (and page
@@ -1856,7 +1857,7 @@
         (let [namespace (first arguments)]
           (when-not (string/blank? namespace)
             (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
-                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+                  children (file-model/get-namespace-hierarchy (state/get-current-repo) namespace)]
               (namespace-hierarchy config namespace children)))))
 
       (= name "youtube")
