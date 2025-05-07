@@ -21,13 +21,8 @@
         blocks-count (util/blocks-count)]
     (when-not editor (open-last-block))
     (assert/assert-editor-mode)
-    (try
-      (k/enter)
-      (assert/assert-have-count ".ls-block" (inc blocks-count))
-      (catch org.opentest4j.AssertionFailedError _e
-        ;; retry once
-        (k/enter)
-        (assert/assert-have-count ".ls-block" (inc blocks-count))))
+    (k/enter)
+    (assert/assert-have-count ".ls-block" (inc blocks-count))
     (assert/assert-editor-mode)
     (save-block title)))
 
