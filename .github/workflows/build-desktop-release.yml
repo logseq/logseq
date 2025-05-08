@@ -561,6 +561,9 @@ jobs:
     needs: [ build-windows ]
     runs-on: [self-hosted, macos, token]
     steps:
+      - name: Remove old builds
+        run: rm -rf ./builds && mkdir ./builds
+
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
