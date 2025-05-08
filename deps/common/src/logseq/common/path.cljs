@@ -223,8 +223,8 @@
   (if (is-file-url? original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
-    (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
-          path (safe-decode-uri-component (.-pathname url))
+    (let [^js url (js/URL. (string/replace (safe-decode-uri-component original-url) "assets://" "file://"))
+          path (.-pathname url)
           host (.-host url)
           path (if (string/starts-with? path "///")
                  (subs path 2)
