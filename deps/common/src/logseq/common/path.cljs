@@ -226,7 +226,7 @@
                                         (str "original-url: " original-url
                                              " url: " (string/replace (safe-decode-uri-component original-url) "assets://" "file://")))
                       (throw e)))
-          path (.-pathname url)
+          path (safe-decode-uri-component (.-pathname url))
           host (.-host url)
           path (if (string/starts-with? path "///")
                  (subs path 2)
