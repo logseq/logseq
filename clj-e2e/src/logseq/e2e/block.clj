@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
@@ -13,7 +14,8 @@
 
 (defn save-block
   [text]
-  (w/fill util/editor-q text))
+  (w/fill util/editor-q text)
+  (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
 (defn new-block
   [title]

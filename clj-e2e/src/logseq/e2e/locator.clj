@@ -26,5 +26,5 @@
 (defn filter
   "Return locator"
   {:arglists '([q & {:keys [has has-text has-not has-not-text]}])}
-  [q & opts]
+  [q & {:as opts}]
   (.filter (w/-query q) (->filter-options opts)))
