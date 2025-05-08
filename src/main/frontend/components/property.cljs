@@ -374,7 +374,7 @@
                         (and page? (not (contains? types :page)))
                         (conj :page)
                         (empty? types)
-                        #{:block}))
+                        (conj :block)))
         exclude-properties (fn [m]
                              (let [view-context (get m :logseq.property/view-context :all)]
                                (or (contains? #{:logseq.property/query} (:db/ident m))
