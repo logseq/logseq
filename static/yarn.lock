@@ -302,9 +302,9 @@
   optionalDependencies:
     global-agent "^3.0.0"
 
-"@electron/node-gyp@git+https://github.com/electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2":
+"@electron/node-gyp@https://github.com/electron/node-gyp#06b29aafb7708acef8b3669835c8a7857ebc92d2":
   version "10.2.0-electron.1"
-  resolved "git+https://github.com/electron/node-gyp.git#06b29aafb7708acef8b3669835c8a7857ebc92d2"
+  resolved "https://github.com/electron/node-gyp#06b29aafb7708acef8b3669835c8a7857ebc92d2"
   dependencies:
     env-paths "^2.2.0"
     exponential-backoff "^3.1.1"
@@ -515,13 +515,13 @@
     ajv-formats "^3.0.1"
     fast-uri "^3.0.0"
 
-"@fastify/cors@8.2.0":
-  version "8.2.0"
-  resolved "https://registry.yarnpkg.com/@fastify/cors/-/cors-8.2.0.tgz#44ce6b28bc111e12679cb02f980f0ce865ff4877"
-  integrity sha512-qDgwpmg6C4D0D3nh8MTMuRXWyEwPnDZDBODaJv90FP2o9ukbahJByW4FtrM5Bpod5KbTf1oIExBmpItbUTQmHg==
+"@fastify/cors@11.0.1":
+  version "11.0.1"
+  resolved "https://registry.yarnpkg.com/@fastify/cors/-/cors-11.0.1.tgz#5f35396f12231f093b3d05f26fa5d43cab6a7d86"
+  integrity sha512-dmZaE7M1f4SM8ZZuk5RhSsDJ+ezTgI7v3HHRj8Ow9CneczsPLZV6+2j2uwdaSLn8zhTv6QV0F4ZRcqdalGx1pQ==
   dependencies:
-    fastify-plugin "^4.0.0"
-    mnemonist "0.39.5"
+    fastify-plugin "^5.0.0"
+    toad-cache "^3.7.0"
 
 "@fastify/error@^4.0.0":
   version "4.1.0"
@@ -1836,10 +1836,10 @@ ds-store@^0.1.5:
     macos-alias "~0.2.5"
     tn1150 "^0.1.0"
 
-dugite@2.5.1:
-  version "2.5.1"
-  resolved "https://registry.yarnpkg.com/dugite/-/dugite-2.5.1.tgz#6ab808ebf321809edf42d974e62eea9c9e256722"
-  integrity sha512-9OjUguynzq8v3GSmp01kbVcMmErc65ZZ0OssO/0PM2RyhD8Dzb8cCuy3z72+IxLwPwNi754jZ0FtMLAFA3D0qA==
+dugite@2.7.1:
+  version "2.7.1"
+  resolved "https://registry.yarnpkg.com/dugite/-/dugite-2.7.1.tgz#277275fd490bddf20180e124d119f84f708dfb32"
+  integrity sha512-X7v7JngMG6RGHKCKKF0fdqYC9Xcw0CDes43an6dQW2N2dYNd/OOLq3BFszCOyOObgKnrmNVvyggk3O4WGJMpcA==
   dependencies:
     progress "^2.0.3"
     tar "^6.1.11"
@@ -2265,12 +2265,12 @@ fast-uri@^3.0.0, fast-uri@^3.0.1:
   resolved "https://registry.yarnpkg.com/fast-uri/-/fast-uri-3.0.6.tgz#88f130b77cfaea2378d56bf970dea21257a68748"
   integrity sha512-Atfo14OibSv5wAp4VWNsFYE1AchQRTv9cBGWET4pZWHzYshFSS9NQI6I57rdKn9croWVMbYFbLhJ+yJvmZIIHw==
 
-fastify-plugin@^4.0.0:
-  version "4.5.1"
-  resolved "https://registry.yarnpkg.com/fastify-plugin/-/fastify-plugin-4.5.1.tgz#44dc6a3cc2cce0988bc09e13f160120bbd91dbee"
-  integrity sha512-stRHYGeuqpEZTL1Ef0Ovr2ltazUT9g844X5z/zEBFLG8RYlpDiOCIG+ATvYEp+/zmc7sN29mcIMp8gvYplYPIQ==
+fastify-plugin@^5.0.0:
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/fastify-plugin/-/fastify-plugin-5.0.1.tgz#82d44e6fe34d1420bb5a4f7bee434d501e41939f"
+  integrity sha512-HCxs+YnRaWzCl+cWRYFnHmeRFyR5GVnJTAaCJQiYzQSDwK9MgJdyAsuL3nh0EWRCYMgQ5MeziymvmAhUHYHDUQ==
 
-fastify@latest:
+fastify@5.3.2:
   version "5.3.2"
   resolved "https://registry.yarnpkg.com/fastify/-/fastify-5.3.2.tgz#88c895a30c0f67166979077ac8649fe8b205a1b3"
   integrity sha512-AIPqBgtqBAwkOkrnwesEE+dOyU30dQ4kh7udxeGVR05CRGwubZx+p2H8P0C4cRnQT0+EPK4VGea2DTL2RtWttg==
@@ -3491,13 +3491,6 @@ mkdirp@^3.0.1:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-3.0.1.tgz#e44e4c5607fb279c168241713cc6e0fea9adcb50"
   integrity sha512-+NsyUUAZDmo6YVHzL/stxSu3t9YS1iljliy3BSDrXJ/dkn1KYdmtZODGGjLcc9XLgVVpH4KshHB8XmZgMhaBXg==
 
-mnemonist@0.39.5:
-  version "0.39.5"
-  resolved "https://registry.yarnpkg.com/mnemonist/-/mnemonist-0.39.5.tgz#5850d9b30d1b2bc57cc8787e5caa40f6c3420477"
-  integrity sha512-FPUtkhtJ0efmEFGpU14x7jGbTB+s18LrzRL2KgoWz9YvcY3cPomz8tih01GbHwnGk/OmkOKfqd/RAQoc8Lm7DQ==
-  dependencies:
-    obliterator "^2.0.1"
-
 modify-filename@^1.1.0:
   version "1.1.0"
   resolved "https://registry.yarnpkg.com/modify-filename/-/modify-filename-1.1.0.tgz#9a2dec83806fbb2d975f22beec859ca26b393aa1"
@@ -3646,11 +3639,6 @@ object-keys@^1.1.1:
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/object-keys/-/object-keys-1.1.1.tgz#1c47f272df277f3b1daf061677d9c82e2322c60e"
   integrity sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==
-
-obliterator@^2.0.1:
-  version "2.0.5"
-  resolved "https://registry.yarnpkg.com/obliterator/-/obliterator-2.0.5.tgz#031e0145354b0c18840336ae51d41e7d6d2c76aa"
-  integrity sha512-42CPE9AhahZRsMNslczq0ctAEtqk8Eka26QofnqC346BZdHDySk3LWka23LI7ULIw11NmltpiLagIq8gBozxTw==
 
 on-exit-leak-free@^2.1.0:
   version "2.1.2"
