@@ -624,7 +624,6 @@
  :on-boarding/tour-whiteboard-btn-next "Neste"
  :page/illegal-page-name "Ulovlig sidenavn!"
  :page/page-already-exists "Siden “{1}” eksisterer fra før!"
- :page/slide-view "Vis som lysbilder"
  :page/whiteboard-to-journal-error "Whiteboard sider kan ikke bli navnet om til dagboktiter!"
  :plugin/auto-check-for-updates "Se etter oppdateringer automatisk"
  :plugin/installed-plugin "Innstallert utvidelse: {1}"
@@ -668,7 +667,6 @@
  :export-save-to-file "Lagre til fil"
  :export-transparent-background "Transparent bakgrunn"
  :bug-report/clipboard-inspector-title "Utklippstavle datainspektør"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Tips: trykk "] [:code "f"] [:span.opacity-70 " for fullskjerm"]])
  :query/config-property-settings "Egenskapsinnstillinger for denne spørringen:"
  :search-item/no-result "Ingen matchende resultat"
  :settings-permission/start-granting "Gi tillatelse"
