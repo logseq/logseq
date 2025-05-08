@@ -90,6 +90,7 @@
 
 ;; TODO(andelf): distinguish from graph file writing and global file write
 (defn write-file!
+  "Use it only for plain-text files, not binary"
   [repo dir rpath content opts]
   (when content
     (let [path (gp-util/path-normalize rpath)
@@ -170,8 +171,6 @@
       (p/do!
        (mkdir-if-not-exists new-dir)
        (protocol/copy! (get-fs old-path) repo old-path new-path)))))
-
-
 
 (defn open-dir
   [dir]
