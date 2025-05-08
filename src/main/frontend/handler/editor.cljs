@@ -3294,11 +3294,6 @@
   (when (state/editing?)
     (keydown-backspace-handler false e)))
 
-(defn- slide-focused?
-  []
-  (some-> (first (dom/by-class "reveal"))
-          (dom/has-class? "focused")))
-
 (defn- in-page-preview?
   []
   (some-> js/document.activeElement
@@ -3311,7 +3306,6 @@
     (when (and (not (auto-complete?))
                (or (in-page-preview?)
                    (not (in-shui-popup?)))
-               (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
       (cond

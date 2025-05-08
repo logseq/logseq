@@ -1271,7 +1271,6 @@
     (if (and block (:block/title block))
       (let [content-cp (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                       block nil (:block/uuid block)
-                                      (:slide? config)
                                       nil)
             display-type (:logseq.property.node/display-type block)]
         (if (and display-type (not (contains? #{:quote :math} display-type)))
@@ -2264,7 +2263,6 @@
         block-ast-title (:block.temp/ast-title block)
         config (assoc config :block block)
         level (:level config)
-        slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         html-export? (:html-export? config)
@@ -2332,12 +2330,10 @@
         (concat
          (when (config/local-file-based-graph? (state/get-current-repo))
            [(when (and (not pre-block?)
-                       (not html-export?)
-                       (not slide?))
+                       (not html-export?))
               (file-block/block-checkbox block (str "mr-1 cursor")))
             (when (and (not pre-block?)
-                       (not html-export?)
-                       (not slide?))
+                       (not html-export?))
               (file-block/marker-switch block))
             (file-block/marker-cp block)
             (file-block/priority-cp block)])
@@ -2641,13 +2637,12 @@
                 (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
-  [block children block-id slide? top? block-content?]
+  [block children block-id top? block-content?]
   (let [dragging? (rum/react *dragging?)
         drag-to-block (rum/react *drag-to-block)]
     (when (and
            (= block-id drag-to-block)
            dragging?
-           (not slide?)
            (not (:block/pre-block? block)))
       (let [move-to (rum/react *move-to)]
         (when-not
@@ -2864,7 +2859,7 @@
           (clock/seconds->days:hours:minutes:seconds time-spent))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid] :as block} edit-input-id block-id slide? *show-query?]
+  [config {:block/keys [uuid] :as block} edit-input-id block-id *show-query?]
   (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? (state/get-current-repo))
         scheduled (when-not db-based? (:block/scheduled block))
@@ -2932,7 +2927,7 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
-       (not slide?)
+       true
        (merge attrs))
 
      [:<>
@@ -2966,7 +2961,6 @@
                  (let [hidden? (property-file/properties-hidden? (:block/properties block))]
                    (not hidden?))
                  (not (and block-ref? (or (seq ast-title) (seq ast-body))))
-                 (not (:slide? config))
                  (not= block-type :whiteboard-shape)
                  (not (:table-block-title? config)))
         (properties-cp config block))
@@ -3012,7 +3006,7 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defc block-content-with-error
-  [config block edit-input-id block-id slide? *show-query? editor-box]
+  [config block edit-input-id block-id *show-query? editor-box]
   (let [[editing? set-editing!] (hooks/use-state false)
         query (:logseq.property/query block)]
     (ui/catch-error
@@ -3040,7 +3034,7 @@
                                        (editor-handler/unhighlight-blocks!)
                                        (state/set-editing! edit-input-id content block "" {:db (db/get-db)
                                                                                            :container-id (:container-id config)}))}})])
-     (block-content config block edit-input-id block-id slide? *show-query?))))
+     (block-content config block edit-input-id block-id *show-query?))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   (rum/local false ::hover?)
@@ -3050,7 +3044,6 @@
                  (or (:block/format block) :markdown))
         editor-box (state/get-component :editor/box)
         editor-id (str "editor-" edit-input-id)
-        slide? (:slide? config)
         block-reference-only? (some->
                                (:block/title block)
                                string/trim
@@ -3081,8 +3074,8 @@
                         :format format}
                        edit-input-id
                        config))]
-         [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
-          (block-content-with-error config block edit-input-id block-id slide? *show-query? editor-box)
+         [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display "flex"}}
+          (block-content-with-error config block edit-input-id block-id *show-query? editor-box)
 
           (when (and (not hide-block-refs-count?)
                      (not named?)
@@ -3511,7 +3504,6 @@
         breadcrumb-show? (:breadcrumb-show? config)
         *show-left-menu? (::show-block-left-menu? container-state)
         *show-right-menu? (::show-block-right-menu? container-state)
-        slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         page-embed? (:page-embed? config)
@@ -3579,7 +3571,7 @@
        level
        (assoc :level level)
 
-       (not slide?)
+       true
        (merge attrs)
 
        (or reference? (and embed? (not page-embed?)))
@@ -3598,7 +3590,7 @@
 
      ;; only render this for the first block in each container
      (when (and top? (not (or table? property?)))
-       (dnd-separator-wrapper block children block-id slide? true false))
+       (dnd-separator-wrapper block children block-id true false))
 
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
@@ -3619,7 +3611,7 @@
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
-        (when (and (not slide?) (not in-whiteboard?) (not property?) (not (:table-block-title? config)))
+        (when (and (not in-whiteboard?) (not property?) (not (:table-block-title? config)))
           (let [edit? (or editing?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control (assoc config :hide-bullet? (:page-title? config))
@@ -3711,7 +3703,7 @@
                          (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
-     (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id slide? false false))]))
+     (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id false false))]))
 
 (rum/defc block-container-inner
   [container-state repo config* block opts]
@@ -4033,7 +4025,7 @@
              (cond
                (nil? inside-portal?) nil
 
-               (or (:slide? config) inside-portal?)
+               inside-portal?
                (highlight/highlight (str (random-uuid))
                                     {:class (str "language-" language)
                                      :data-lang language}
@@ -4126,8 +4118,7 @@
         (->elem :div.is-paragraph (map-inline config l)))
 
       ["Horizontal_Rule"]
-      (when-not (:slide? config)
-        [:hr])
+      [:hr]
       ["Heading" h]
       (block-container config h)
       ["List" l]

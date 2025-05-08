@@ -779,10 +779,10 @@
 #?(:cljs
    (defn get-blocks-noncollapse
      ([]
-      (->> (d/sel "div:not(.reveal) .ls-block")
+      (->> (d/sel "div .ls-block")
            (filter (fn [b] (some? (gobj/get b "offsetParent"))))))
      ([blocks-container]
-      (->> (d/sel blocks-container "div:not(.reveal) .ls-block")
+      (->> (d/sel blocks-container "div .ls-block")
            (filter (fn [b] (some? (gobj/get b "offsetParent"))))))))
 
 #?(:cljs

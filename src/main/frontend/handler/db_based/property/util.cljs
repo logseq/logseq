@@ -5,11 +5,6 @@
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]))
 
-(defn get-property-name
-  "Get a property's name given its id"
-  [id]
-  (:block/title (db-utils/entity id)))
-
 (defn get-property-value
   "Get a property's name given its id"
   [e]
