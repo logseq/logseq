@@ -54,17 +54,17 @@
            [{:page {:block/title "page1"}
              :blocks [{:block/title "some todo"
                        :build/properties {:logseq.property/status :logseq.property/status.doing}}
-                      {:block/title "some slide"
-                       :build/properties {:logseq.property/background-image "https://placekitten.com/200/300"}}]}])]
+                      {:block/title "rojo"
+                       :build/properties {:logseq.property/background-color "red"}}]}])]
     (is (= :logseq.property/status.doing
            (->> (db-test/find-block-by-content @conn "some todo")
                 :logseq.property/status
                 :db/ident))
         "built-in property with closed value is created and correctly associated to a block")
 
-    (is (= "https://placekitten.com/200/300"
-           (->> (db-test/find-block-by-content @conn "some slide")
-                :logseq.property/background-image
+    (is (= "red"
+           (->> (db-test/find-block-by-content @conn "rojo")
+                :logseq.property/background-color
                 db-property/property-value-content))
         "built-in :default property is created and correctly associated to a block")))
 
