@@ -31,9 +31,9 @@
    (p/let [content (fs/read-file (config/get-repo-dir repo-url) path)]
      content)
    (p/catch
-       (fn [e]
-         (println "Load file failed: " path)
-         (js/console.error e)))))
+    (fn [e]
+      (println "Load file failed: " path)
+      (js/console.error e)))))
 
 (defn load-multiple-files
   [repo-url paths]
@@ -63,7 +63,7 @@
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
                   (let [file-contents (cond->
-                                        (zipmap files contents)
+                                       (zipmap files contents)
 
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
@@ -114,7 +114,7 @@
         path-dir (config/get-repo-dir repo)
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
-    (fs/write-file! repo path-dir path content write-file-options')))
+    (fs/write-plain-text-file! repo path-dir path content write-file-options')))
 
 (defn alter-global-file
   "Does pre-checks on a global file, writes if it's not already written
@@ -125,18 +125,18 @@
     (do
       (detect-deprecations path content)
       (when (validate-file path content)
-       (-> (p/let [_ (when-not from-disk?
-                       (fs/write-file! "" nil path content {:skip-compare? true}))]
-                  (p/do! (global-config-handler/restore-global-config!)
-                         (state/pub-event! [:shortcut/refresh])))
-           (p/catch (fn [error]
-                      (state/pub-event! [:notification/show
-                                         {:content (str "Failed to write to file " path ", error: " error)
-                                          :status :error}])
-                      (log/error :write/failed error)
-                      (state/pub-event! [:capture-error
-                                         {:error error
-                                          :payload {:type :write-file/failed-for-alter-file}}]))))))
+        (-> (p/let [_ (when-not from-disk?
+                        (fs/write-plain-text-file! "" nil path content {:skip-compare? true}))]
+              (p/do! (global-config-handler/restore-global-config!)
+                     (state/pub-event! [:shortcut/refresh])))
+            (p/catch (fn [error]
+                       (state/pub-event! [:notification/show
+                                          {:content (str "Failed to write to file " path ", error: " error)
+                                           :status :error}])
+                       (log/error :write/failed error)
+                       (state/pub-event! [:capture-error
+                                          {:error error
+                                           :payload {:type :write-file/failed-for-alter-file}}]))))))
     (log/error :msg "alter-global-file does not support this file" :file path)))
 
 (defn alter-file
@@ -206,23 +206,23 @@
                        (when path
                          (let [path (gp-util/path-normalize path)
                                original-content (get file->content path)]
-                          (-> (p/let [_ (or
-                                         (util/electron?)
-                                         (nfs/check-directory-permission! repo))]
-                                (fs/write-file! repo (config/get-repo-dir repo) path content
-                                                {:old-content original-content}))
-                              (p/catch (fn [error]
-                                         (state/pub-event! [:notification/show
-                                                            {:content (str "Failed to save the file " path ". Error: "
-                                                                           (str error))
-                                                             :status :error
-                                                             :clear? false}])
-                                         (state/pub-event! [:capture-error
-                                                            {:error error
-                                                             :payload {:type :write-file/failed}}])
-                                         (log/error :write-file/failed {:path path
-                                                                        :content content
-                                                                        :error error})))))))
+                           (-> (p/let [_ (or
+                                          (util/electron?)
+                                          (nfs/check-directory-permission! repo))]
+                                 (fs/write-plain-text-file! repo (config/get-repo-dir repo) path content
+                                                            {:old-content original-content}))
+                               (p/catch (fn [error]
+                                          (state/pub-event! [:notification/show
+                                                             {:content (str "Failed to save the file " path ". Error: "
+                                                                            (str error))
+                                                              :status :error
+                                                              :clear? false}])
+                                          (state/pub-event! [:capture-error
+                                                             {:error error
+                                                              :payload {:type :write-file/failed}}])
+                                          (log/error :write-file/failed {:path path
+                                                                         :content content
+                                                                         :error error})))))))
         finish-handler (fn []
                          (when finish-handler
                            (finish-handler)))]

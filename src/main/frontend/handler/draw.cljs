@@ -29,7 +29,7 @@
         (->
          (p/do!
           (create-draws-directory! repo)
-          (fs/write-file! repo repo-dir path data nil)
+          (fs/write-plain-text-file! repo repo-dir path data nil)
           (db/transact! repo
                         [{:file/path path
                           :block/name (util/page-name-sanity-lc file)

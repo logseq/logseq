@@ -89,7 +89,7 @@
       (protocol/rmdir! fs dir))))
 
 ;; TODO(andelf): distinguish from graph file writing and global file write
-(defn write-file!
+(defn write-plain-text-file!
   "Use it only for plain-text files, not binary"
   [repo dir rpath content opts]
   (when content
@@ -215,7 +215,7 @@
          true)
        (p/catch
         (fn [_error]
-          (p/let [_ (write-file! repo dir path initial-content nil)]
+          (p/let [_ (write-plain-text-file! repo dir path initial-content nil)]
             false))))))
 
 (defn file-exists?

@@ -39,14 +39,14 @@ when a plugin is installed, updated or removed"
                               str)]
          ;; fs protocols require repo and dir when they aren't necessary. For this component,
          ;; neither is needed so these are blank and nil respectively
-         (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn remove-plugin
   "Removes a plugin from plugin.edn"
   [plugin-id]
   (p/let [content (fs/read-file "" (plugin-config-path))
           updated-content (-> content rewrite/parse-string (rewrite/dissoc (keyword plugin-id)) str)]
-    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn- create-plugin-config-file-if-not-exists
   []
@@ -79,16 +79,16 @@ returns map of plugins to install and uninstall"
   (p/catch
    (p/let [edn-plugins* (fs/read-file nil (plugin-config-path))
            edn-plugins (edn/read-string edn-plugins*)]
-          (if-let [errors (->> edn-plugins (m/explain plugin-config-schema/Plugins-edn) me/humanize)]
-            (do
-              (notification/show! "Invalid plugins.edn provided. See javascript console for specific errors"
-                                  :error)
-              (log/error :plugin-edn-errors errors)
-              (println "Invalid plugins.edn, errors: " errors))
-            (let [plugins-to-change (determine-plugins-to-change
-                                     (:plugin/installed-plugins @state/state)
-                                     edn-plugins)]
-              (state/pub-event! [:go/plugins-from-file plugins-to-change]))))
+     (if-let [errors (->> edn-plugins (m/explain plugin-config-schema/Plugins-edn) me/humanize)]
+       (do
+         (notification/show! "Invalid plugins.edn provided. See javascript console for specific errors"
+                             :error)
+         (log/error :plugin-edn-errors errors)
+         (println "Invalid plugins.edn, errors: " errors))
+       (let [plugins-to-change (determine-plugins-to-change
+                                (:plugin/installed-plugins @state/state)
+                                edn-plugins)]
+         (state/pub-event! [:go/plugins-from-file plugins-to-change]))))
    (fn [e]
      (if (= :reader-exception (:type (ex-data e)))
        (notification/show! "Malformed plugins.edn provided. Please check the file has correct edn syntax."

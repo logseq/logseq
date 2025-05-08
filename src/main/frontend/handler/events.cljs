@@ -343,13 +343,13 @@
 (defmethod handle :modal/toggle-accent-colors-modal [_]
   (let [label "accent-colors-picker"]
     (if (or (= label (state/get-modal-id))
-          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
+            (= label (some-> (state/get-sub-modals) (first) :modal/id)))
       (state/close-sub-modal! label)
       (state/set-sub-modal!
-        #(settings/modal-accent-colors-inner)
-        {:center? true
-         :id      label
-         :label   label}))))
+       #(settings/modal-accent-colors-inner)
+       {:center? true
+        :id      label
+        :label   label}))))
 
 (rum/defc modal-output
   [content]
@@ -378,7 +378,6 @@
                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
       (state/set-modal! #(diff/local-file repo path disk-content db-content)
                         {:label "diff__cp"}))))
-
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
   (state/set-modal! #(git-component/file-version-selector versions path get-content)))
@@ -436,7 +435,6 @@
   (state/set-sub-modal!
    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
    {:id :https-proxy-panel :center? true}))
-
 
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
@@ -682,10 +680,10 @@
               (ipc/ipc "clearCache"))
           _ (idb/clear-local-storage-and-idb!)]
     (js/setTimeout
-      (fn [] (if (util/electron?)
-               (ipc/ipc :reloadWindowPage)
-               (js/window.location.reload)))
-      2000)))
+     (fn [] (if (util/electron?)
+              (ipc/ipc :reloadWindowPage)
+              (js/window.location.reload)))
+     2000)))
 
 (defmethod handle :graph/clear-cache! [[_]]
   (clear-cache!))
@@ -900,11 +898,11 @@
                                  (let [dir (config/get-repo-dir repo)]
                                    (p/let [content (fs/read-file dir file)]
                                      (let [new-content (string/replace content (str id) (str (random-uuid)))]
-                                       (p/let [_ (fs/write-file! repo
-                                                                 dir
-                                                                 file
-                                                                 new-content
-                                                                 {})]
+                                       (p/let [_ (fs/write-plain-text-file! repo
+                                                                            dir
+                                                                            file
+                                                                            new-content
+                                                                            {})]
                                          (reset! resolved? true))))))
                      :class "inline mx-1")
           "it."]])]]))
