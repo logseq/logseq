@@ -239,12 +239,8 @@
 (defn- editing-display-type-block?
   []
   (boolean
-   (when-let [editing-block (state/get-edit-block)]
-     ;; FIXME: `logseq.property.node/display-type` doesn't exist within the editing-block when pasting
-     ;; Therefore, now using `querySelectorAll` to determine if we are editing a quote block
-     ;; (contains? #{:quote :math} (:logseq.property.node/display-type editing-block))
-     (let [selector (str "#ls-block-" (:block/uuid editing-block) " [data-node-type]")]
-       (some? (seq (js/document.querySelectorAll selector)))))))
+   (when-let [editing-block (some-> (state/get-edit-block) :db/id db/entity)]
+     (:logseq.property.node/display-type editing-block))))
 
 (defn- paste-text-or-blocks-aux
   [input e text html]
