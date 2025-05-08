@@ -18,11 +18,11 @@
             dir (config/get-repo-dir repo)
             _ (fs/create-if-not-exists repo dir file)
             content (fs/read-file dir file)]
-           content)))
+      content)))
 
 (defn ^:export save_ignore_file
   [content]
   (when-let [repo (and (string? content) (state/get-current-repo))]
     (p/let [file ".gitignore"
             dir (config/get-repo-dir repo)
-            _ (fs/write-file! repo dir file content {:skip-compare? true})])))
+            _ (fs/write-plain-text-file! repo dir file content {:skip-compare? true})])))
