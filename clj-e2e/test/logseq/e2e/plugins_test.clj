@@ -42,5 +42,4 @@
 
 (deftest apis-related-test
   (testing "block related apis"
-    (ls-api-call! :ui.showMsg "hello world" "error")
-    (repl/pause)))
+    (ls-api-call! :ui.showMsg "hello world" "error")))
