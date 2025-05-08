@@ -236,9 +236,20 @@
    (fn [error]
      (js/console.error error))))
 
+(defn- editing-quote-block?
+  []
+  (boolean
+   (when-let [editing-block (state/get-edit-block)]
+     ;; FIXME: `logseq.property.node/display-type` doesn't exist within the editing-block sometimes.
+     ;; Therefore, now using `querySelectorAll` to determine if we are editing a quote block
+     ;; (= :quote (:logseq.property.node/display-type editing-block))
+     (let [selector (str "#ls-block-" (:block/uuid editing-block) " [data-node-type='quote']")]
+       (some? (seq (js/document.querySelectorAll selector)))))))
+
 (defn- paste-text-or-blocks-aux
   [input e text html]
-  (if (or (thingatpt/markdown-src-at-point input)
+  (if (or (editing-quote-block?)
+          (thingatpt/markdown-src-at-point input)
           (thingatpt/org-admonition&src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)
