@@ -53,6 +53,13 @@
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
 
+(defn assets-theme-to-file
+  [theme]
+  (when theme
+    (cond-> theme
+      (util/electron?)
+      (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
+
 (defn load-plugin-preferences
   []
   (-> (invoke-exported-api "load_user_preferences")
@@ -416,7 +423,7 @@
 (defn select-a-plugin-theme
   [pid]
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
-    (when-let [theme (first themes)]
+    (when-let [theme (assets-theme-to-file (first themes))]
       (js/LSPluginCore.selectTheme (bean/->js theme)))))
 
 (defn update-plugin-settings-state
@@ -741,6 +748,7 @@
 
                                 (.on "theme-selected" (fn [^js theme]
                                                         (let [theme (bean/->clj theme)
+                                                              theme (assets-theme-to-file theme)
                                                               url   (:url theme)
                                                               mode  (:mode theme)]
                                                           (when mode

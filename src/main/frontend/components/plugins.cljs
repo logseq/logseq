@@ -103,8 +103,8 @@
               :class    (util/classnames
                           [{:is-selected current-selected?
                             :is-active   (= idx @*cursor)}])
-              :on-click #(do (js/LSPluginCore.selectTheme (bean/->js opt))
-                             (state/close-modal!))}
+              :on-click #(do (js/LSPluginCore.selectTheme (bean/->js (plugin-handler/assets-theme-to-file opt)))
+                           (state/close-modal!))}
              [:div.flex.items-center.text-xs
               [:div.opacity-60 (str (or (:name plg) "Logseq") " •")]
               [:div.name.ml-1 (:name opt)]]
