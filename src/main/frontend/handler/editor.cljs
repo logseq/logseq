@@ -1435,28 +1435,19 @@
                          (not (nil? matched-alias))
                          (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
             dir (or (:dir matched-alias) repo-dir)]
-        (if (util/electron?)
-          (let [from (not-empty (.-path file))]
 
-            (js/console.debug "Debug: Copy Asset #" dir file-rpath from)
-            (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-                (p/then
-                 (fn [dest]
-                   [file-rpath
-                    (if (string? dest) (js/File. #js[] dest) file)
-                    (path/path-join dir file-rpath)
-                    matched-alias]))
-                (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
-
-          (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                 (if (mobile-util/native-platform?)
-                   ;; capacitor fs accepts Blob, File implements Blob
-                   (p/let [buffer (.arrayBuffer file)
-                           content (base64/encodeByteArray (js/Uint8Array. buffer))
-                           fpath (path/path-join dir file-rpath)]
-                     (capacitor-fs/<write-file-with-base64 fpath content))
-                   (fs/write-file! repo dir file-rpath (.stream file) nil))
-                 [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
+        (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+          (if (mobile-util/native-platform?)
+            ;; capacitor fs accepts Blob, File implements Blob
+            (p/let [buffer (.arrayBuffer file)
+                    content (base64/encodeByteArray (js/Uint8Array. buffer))
+                    fpath (path/path-join dir file-rpath)]
+              (capacitor-fs/<write-file-with-base64 fpath content))
+            (p/let [content (if (util/electron?)
+                              (.arrayBuffer file)
+                              (.stream file))]
+              (fs/write-file! repo dir file-rpath content nil)))
+          [file-rpath file (path/path-join dir file-rpath) matched-alias]))))))
 
 (defonce *assets-url-cache (atom {}))
 
