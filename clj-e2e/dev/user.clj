@@ -65,7 +65,8 @@
              'logseq.e2e.multi-tabs-test
              'logseq.e2e.outliner-test
              'logseq.e2e.rtc-basic-test
-             'logseq.e2e.plugins-test))
+             'logseq.e2e.plugins-test
+             'logseq.e2e.reference-test))
 
 (defn start
   []
@@ -99,6 +100,7 @@
   (do
     (reset! config/*headless true)
     (reset! config/*slow-mo 10)
+    (run-tests 'logseq.e2e.reference-test)
     (dotimes [i 10]
       (run-tests 'logseq.e2e.reference-test)))
 
