@@ -357,7 +357,7 @@
                   (not db-based?)
                   (assoc :block/type "journal"))
                 {}))]
-    [page page-entity]))
+    [(cond-> page (and db-based? class?) (dissoc :block/name)) page-entity]))
 
 (defn sanitize-hashtag-name
   "This must be kept in sync with its reverse operation in logseq.db.frontend.content"

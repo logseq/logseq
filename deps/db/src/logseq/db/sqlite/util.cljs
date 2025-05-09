@@ -78,7 +78,6 @@
         {:db/ident db-ident'
          :block/tags #{:logseq.class/Property}
          :logseq.property/type prop-type
-         :block/name (common-util/page-name-sanity-lc (name prop-name))
          :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
          :block/title (name prop-name)
          :db/index true

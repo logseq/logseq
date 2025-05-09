@@ -156,7 +156,6 @@
                                  (:properties schema))]
            (cond->
             {:block/title title'
-             :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
              (seq class-properties)

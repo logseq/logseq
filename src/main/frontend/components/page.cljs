@@ -44,6 +44,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -192,13 +193,15 @@
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
                  (when-not (config/db-based-graph?)
-                  (let [page-e (first (:rum/args state))
-                        page-name (:block/name page-e)]
-                    (when (and page-name
-                               (db/journal-page? page-name)
-                               (>= (date/journal-title->int page-name)
-                                   (date/journal-title->int (date/today))))
-                      (state/pub-event! [:journal/insert-template page-name]))))
+                   (let [page-e (first (:rum/args state))
+                         page-name (or (:block/name page-e)
+                                       (when (or (entity-util/class? page-e) (entity-util/property? page-e))
+                                         (:block/title page-e)))]
+                     (when (and page-name
+                                (db/journal-page? page-name)
+                                (>= (date/journal-title->int page-name)
+                                    (date/journal-title->int (date/today))))
+                       (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
   [state block* {:keys [sidebar? whiteboard?] :as config}]
   (when-let [id (:db/id block*)]

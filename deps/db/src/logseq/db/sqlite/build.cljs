@@ -261,8 +261,7 @@
                        (let [db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
-                              {:block/name (common-util/page-name-sanity-lc (name class-name))
-                               :block/title (name class-name)
+                              {:block/title (name class-name)
                                :block/uuid (or (:block/uuid class-m)
                                                (common-uuid/gen-uuid :db-ident-block-uuid db-ident))
                                :db/ident db-ident

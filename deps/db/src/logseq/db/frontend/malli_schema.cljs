@@ -286,7 +286,7 @@
    (concat
     [:map
      [:db/ident class-ident]]
-    page-attrs
+    (remove #(= :block/name (first %)) page-attrs)
     page-or-block-attrs)))
 
 (def property-common-schema-attrs
@@ -305,7 +305,7 @@
      [:logseq.property/view-context {:optional true} [:enum :page :block :class :property :never]]]
     property-common-schema-attrs
     property-attrs
-    page-attrs
+    (remove #(= :block/name (first %)) page-attrs)
     page-or-block-attrs)))
 
 (def user-property
@@ -317,7 +317,7 @@
      [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
     property-common-schema-attrs
     property-attrs
-    page-attrs
+    (remove #(= :block/name (first %)) page-attrs)
     page-or-block-attrs)))
 
 (def property-page
