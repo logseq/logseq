@@ -276,6 +276,24 @@
    :editor/down                             {:binding ["down" "ctrl+n"]
                                              :fn      (editor-handler/shortcut-up-down :down)}
 
+   :editor/page-up                          {:binding ["pg-up"]
+                                             :fn      (editor-handler/shortcut-page-up-down :up)}
+
+   :editor/page-down                        {:binding ["pg-down"]
+                                             :fn      (editor-handler/shortcut-page-up-down :down)}
+
+   :editor/select-page-up                   {:binding ["shift+pg-up"]
+                                             :fn      (editor-handler/shortcut-select-page-up-down :up)}
+
+   :editor/select-page-down                 {:binding ["shift+pg-down"]
+                                             :fn      (editor-handler/shortcut-select-page-up-down :down)}
+      
+   :editor/select-top                       {:binding ["home"]
+                                             :fn      (editor-handler/shortcut-top-bottom :up)}
+   
+   :editor/select-bottom                    {:binding ["end"]
+                                             :fn      (editor-handler/shortcut-top-bottom :down)}
+   
    :editor/left                             {:binding "left"
                                              :fn      (editor-handler/shortcut-left-right :left)}
 
@@ -659,6 +677,12 @@
             :editor/down
             :editor/left
             :editor/right
+            :editor/page-up
+            :editor/page-down
+            :editor/select-page-up
+            :editor/select-page-down
+            :editor/select-top
+            :editor/select-bottom
             :editor/select-up
             :editor/select-down
             :editor/move-block-up
@@ -784,6 +808,12 @@
       :editor/down
       :editor/left
       :editor/right
+      :editor/page-up
+      :editor/page-down
+      :editor/select-page-up
+      :editor/select-page-down
+      :editor/select-top
+      :editor/select-bottom
       :editor/collapse-block-children
       :editor/expand-block-children
       :editor/toggle-block-children
