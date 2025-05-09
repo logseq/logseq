@@ -98,7 +98,7 @@
          (let [result (lookup-entity e k default-value)
                ;; Replace title for pages only, otherwise it'll recursively
                ;; replace block id refs if there're cycle references of blocks
-               refs (filter common-entity-util/page? (:block/refs e))
+               refs (:block/refs e)
                result' (if (and (string? result) refs)
                          ;; FIXME: Correct namespace dependencies instead of resolve workaround
                          ((resolve 'logseq.db.frontend.content/id-ref->title-ref) result refs search?)
