@@ -11,7 +11,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.common.entity-util :as common-entity-util]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
@@ -100,8 +100,7 @@
                ;; replace block id refs if there're cycle references of blocks
                refs (:block/refs e)
                result' (if (and (string? result) refs)
-                         ;; FIXME: Correct namespace dependencies instead of resolve workaround
-                         ((resolve 'logseq.db.frontend.content/id-ref->title-ref) result refs search?)
+                         (db-content/id-ref->title-ref result refs search?)
                          result)]
            (or result' default-value)))))))
 
@@ -192,8 +191,7 @@
   (let [v @(.-cache this)
         v' (if (:block/title v)
              (assoc v :block/title
-                    ((resolve 'logseq.db.frontend.content/id-ref->title-ref)
-                     (:block/title v) (:block/refs this) (:block.temp/search? this)))
+                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this) (:block.temp/search? this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))
