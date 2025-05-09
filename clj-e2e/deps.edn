@@ -1,8 +1,8 @@
 {:paths ["src" "resources"]
  :deps {org.clojure/clojure {:mvn/version "1.12.0"}
-        io.github.pfeodrippe/wally {:local/root "../../../wally"}
-        ;; io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
-        ;;                             :sha "0b8d376a3b806969dbede7ba63b7bf7efa47295b"}
+        ;; io.github.pfeodrippe/wally {:local/root "../../../wally"}
+        io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
+                                    :sha "d84a2e068ec2e56fc7028fc61e694ccd1ddea03b"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         org.clj-commons/claypoole          {:mvn/version "1.2.2"}
         clj-time/clj-time                  {:mvn/version "0.15.2"}}
