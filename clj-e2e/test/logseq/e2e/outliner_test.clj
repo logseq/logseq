@@ -20,14 +20,14 @@
 (deftest indent-and-outdent-test
   (b/new-blocks ["b1" "b2"])
   (testing "simple indent and outdent"
-    (util/indent)
-    (util/outdent))
+    (b/indent)
+    (b/outdent))
 
   (testing "indent a block with its children"
     (b/new-block "b3")
-    (util/indent)
+    (b/indent)
     (k/arrow-up)
-    (util/indent)
+    (b/indent)
     (util/exit-edit)
     (let [[x1 x2 x3] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b1" "b2" "b3"])]
       (is (< x1 x2 x3))))
@@ -35,9 +35,9 @@
   (testing "unindent a block with its children"
     (b/open-last-block)
     (b/new-blocks ["b4" "b5"])
-    (util/indent)
+    (b/indent)
     (k/arrow-up)
-    (util/outdent)
+    (b/outdent)
     (util/exit-edit)
     (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
@@ -66,9 +66,9 @@
 (deftest delete-test-with-children
   (testing "Delete block with its children"
     (b/new-blocks ["b1" "b2" "b3" "b4"])
-    (util/indent)
+    (b/indent)
     (k/arrow-up)
-    (util/indent)
+    (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
     (is (= "b1" (util/get-edit-content)))

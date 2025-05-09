@@ -10,6 +10,7 @@
             [logseq.e2e.multi-tabs-test]
             [logseq.e2e.outliner-test]
             [logseq.e2e.plugins-test]
+            [logseq.e2e.reference-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
@@ -47,6 +48,11 @@
   []
   (->> (future (run-tests 'logseq.e2e.multi-tabs-test))
        (swap! *futures assoc :multi-tabs-test)))
+
+(defn run-reference-test
+  []
+  (->> (future (run-tests 'logseq.e2e.reference-test))
+       (swap! *futures assoc :reference-test)))
 
 (defn run-plugins-test
   []
@@ -93,8 +99,8 @@
   (do
     (reset! config/*headless true)
     (reset! config/*slow-mo 10)
-    (dotimes [i 5]
-      (run-multi-tabs-test)))
+    (dotimes [i 10]
+      (run-tests 'logseq.e2e.reference-test)))
 
   ;;
   )
