@@ -15,6 +15,16 @@
     "@jridgewell/gen-mapping" "^0.3.5"
     "@jridgewell/trace-mapping" "^0.3.24"
 
+"@aparajita/capacitor-dark-mode@^4.0.1":
+  version "4.0.1"
+  resolved "https://registry.yarnpkg.com/@aparajita/capacitor-dark-mode/-/capacitor-dark-mode-4.0.1.tgz#b4350ec280ba1c61eb3220b7147c88eb1f1325a2"
+  integrity sha512-6FLL3tVHjejGlSvBOZGL5Igh9X3rQTU/goRXAEPG8Rxs6BSy4bmKq9yiRn3YKAKUVRh1H4TYqTOK66WdvbNZvg==
+  dependencies:
+    "@capacitor/android" "^5.5.0"
+    "@capacitor/core" "^5.5.0"
+    "@capacitor/ios" "^5.5.0"
+    "@capacitor/status-bar" "^5.0.6"
+
 "@axe-core/playwright@=4.4.4":
   version "4.4.4"
   resolved "https://registry.yarnpkg.com/@axe-core/playwright/-/playwright-4.4.4.tgz#3786c5f6bba38d1991b608584b00ae2744544573"
@@ -179,6 +189,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-5.7.8.tgz#9c18fec3ea6ebba5b34fa48cc7a01dc6aa46e312"
   integrity sha512-ooWclwcuW0dy3YfqgoozkHkjatX8H2fb2/RwRsJa3cew1P1lUXIXri3Dquuy4LdqFAJA7UHcJ19Bl/6UKdsZYA==
 
+"@capacitor/android@^5.5.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/android/-/android-5.7.8.tgz#9c18fec3ea6ebba5b34fa48cc7a01dc6aa46e312"
+  integrity sha512-ooWclwcuW0dy3YfqgoozkHkjatX8H2fb2/RwRsJa3cew1P1lUXIXri3Dquuy4LdqFAJA7UHcJ19Bl/6UKdsZYA==
+
 "@capacitor/app@^5.0.0":
   version "5.0.8"
   resolved "https://registry.yarnpkg.com/@capacitor/app/-/app-5.0.8.tgz#6edd3396f722aa807e6c481dec3ed481c2d05c45"
@@ -224,6 +239,13 @@
   dependencies:
     tslib "^2.1.0"
 
+"@capacitor/core@^5.5.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-5.7.8.tgz#584d5ac2754501ef1443ab4bf182d8f5be16f65e"
+  integrity sha512-rrZcm/2vJM0WdWRQup1TUidbjQV9PfIadSkV4rAGLD7R6PuzZSMPGT0gmoZzCRlXkqrazrWWDkurei3ozU02FA==
+  dependencies:
+    tslib "^2.1.0"
+
 "@capacitor/filesystem@^5.0.0":
   version "5.2.2"
   resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-5.2.2.tgz#36e7d107b9cc58b9261930624809e3a84b9db119"
@@ -235,6 +257,11 @@
   integrity sha512-PkmBlaApk0vQ/ddm875H0VPmnmUUAQ+lxEtGgvJAaXV83acDdo6zH+pJLCodgIR7UPiscfdcqt6xajeYw2Ld1w==
 
 "@capacitor/ios@^5.0.0":
+  version "5.7.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-5.7.8.tgz#cbed9afa58bc49e8edcf4dfbef130903ad686e39"
+  integrity sha512-XhGrziBnlRmCJ97LdPXOJquHPpYTwSJZIxYSXuPl7SDDuAEve8vs2wY76gLdaaFH2Z6ctdugUX+jR6VNu+ds+w==
+
+"@capacitor/ios@^5.5.0":
   version "5.7.8"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-5.7.8.tgz#cbed9afa58bc49e8edcf4dfbef130903ad686e39"
   integrity sha512-XhGrziBnlRmCJ97LdPXOJquHPpYTwSJZIxYSXuPl7SDDuAEve8vs2wY76gLdaaFH2Z6ctdugUX+jR6VNu+ds+w==
@@ -255,6 +282,11 @@
   integrity sha512-mDRJS9QFxL5UMN74gRr6cBhOtkZjWwdttPCjBJNgcMDJIGi9IAKRJuDGTsqSUbp6zWrPF4AW29Mu6qhXtHpHWg==
 
 "@capacitor/status-bar@^5.0.0":
+  version "5.0.8"
+  resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-5.0.8.tgz#f00e21a99f79b06c36d61ad35ba78675fdefda54"
+  integrity sha512-ES/4ik3/6SV6RVXVVoMm5i7zanwZ+CBtNX6glhBHDHS0nR2m3Dmdxuk/BaFEZWT5bDn4xzg0LlnMsS8mlbUf+A==
+
+"@capacitor/status-bar@^5.0.6":
   version "5.0.8"
   resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-5.0.8.tgz#f00e21a99f79b06c36d61ad35ba78675fdefda54"
   integrity sha512-ES/4ik3/6SV6RVXVVoMm5i7zanwZ+CBtNX6glhBHDHS0nR2m3Dmdxuk/BaFEZWT5bDn4xzg0LlnMsS8mlbUf+A==
