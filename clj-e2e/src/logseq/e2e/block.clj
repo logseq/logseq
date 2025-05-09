@@ -1,5 +1,6 @@
 (ns logseq.e2e.block
   (:require [clojure.string :as string]
+            [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
@@ -57,3 +58,28 @@
 (defn jump-to-block
   [block-text]
   (w/click (w/find-one-by-text ".ls-block .block-content" block-text)))
+
+(defn wait-editor-text
+  [text]
+  (w/wait-for (format ".editor-wrapper textarea:text('%s')" text)))
+
+(def copy #(k/press "ControlOrMeta+c" {:delay 100}))
+(def paste #(k/press "ControlOrMeta+v" {:delay 100}))
+
+(defn- indent-outdent
+  [indent?]
+  (let [editor (util/get-editor)
+        [x1 _] (util/bounding-xy editor)
+        _ (if indent? (k/tab) (k/shift+tab))
+        [x2 _] (util/bounding-xy editor)]
+    (if indent?
+      (is (< x1 x2))
+      (is (> x1 x2)))))
+
+(defn indent
+  []
+  (indent-outdent true))
+
+(defn outdent
+  []
+  (indent-outdent false))
