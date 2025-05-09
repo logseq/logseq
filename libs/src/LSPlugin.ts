@@ -2,6 +2,7 @@ import * as CSS from 'csstype'
 
 import EventEmitter from 'eventemitter3'
 import { LSPluginCaller } from './LSPlugin.caller'
+import { executeBinary, Child_process_config } from './ExecuteBinary.api'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginRequest } from './modules/LSPlugin.Request'
@@ -302,7 +303,14 @@ export type ExternalCommandType =
   | 'logseq.ui/toggle-theme'
   | 'logseq.ui/toggle-wide-mode'
 
-export type UserProxyTags = 'app' | 'editor' | 'db' | 'git' | 'ui' | 'assets'
+export type UserProxyTags =
+  | 'app'
+  | 'editor'
+  | 'db'
+  | 'git'
+  | 'ui'
+  | 'assets'
+  | 'spawn'
 
 export type SearchIndiceInitStatus = boolean
 export type SearchBlockItem = {
@@ -499,10 +507,17 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<
-    Partial<{ name: string; mode: string; pid: string; url: string }>>
+    Partial<{ name: string; mode: string; pid: string; url: string }>
+  >
   onTodayJournalCreated: IUserHook<{ title: string }>
-  onBeforeCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
-  onAfterCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+  onBeforeCommandInvoked: (
+    condition: ExternalCommandType | string,
+    callback: (e: IHookEvent) => void
+  ) => IUserOffHook
+  onAfterCommandInvoked: (
+    condition: ExternalCommandType | string,
+    callback: (e: IHookEvent) => void
+  ) => IUserOffHook
 
   /**
    * provide ui slot to specific block with UUID
@@ -890,7 +905,9 @@ export interface IUIProxy {
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
   queryElementById: (id: string) => Promise<string | boolean>
   checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
-  resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<Record<string, string | undefined> | null>
+  resolveThemeCssPropsVals: (
+    props: string | Array<string>
+  ) => Promise<Record<string, string | undefined> | null>
 }
 
 /**
@@ -944,6 +961,14 @@ export interface ILSPluginThemeManager {
     opt: Theme | LegacyTheme,
     options: { effect?: boolean; emit?: boolean }
   ): Promise<void>
+}
+
+/**
+ * Execute binaries related APIs
+ */
+export interface IExecuteBinary {
+  execute: executeBinary
+  config: Child_process_config
 }
 
 export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
@@ -1101,6 +1126,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   Git: IGitProxy
   UI: IUIProxy
   Assets: IAssetsProxy
+  Spawn: IExecuteBinary
 
   Request: LSPluginRequest
   FileStorage: LSPluginFileStorage
