@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; [[uuid]]
@@ -40,8 +41,9 @@
 
 (defn id-ref->title-ref
   "Convert id ref backs to page name refs using refs."
-  [content* refs search?]
-  (let [content (str content*)]
+  [content* refs* search?]
+  (let [refs (filter common-entity-util/page? refs*)
+        content (str content*)]
     (if (re-find id-ref-pattern content)
       (reduce
        (fn [content ref]
