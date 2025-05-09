@@ -19,12 +19,12 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.common.util.block-ref :as block-ref]
             [logseq.publishing.db :as publish-db]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -324,7 +324,7 @@
   (p/let [ref-block (ensure-ref-block! (state/get-current-pdf) highlight nil)]
     (when ref-block
       (util/copy-to-clipboard!
-       (block-ref/->block-ref (:block/uuid ref-block))
+       (ref/->block-ref (:block/uuid ref-block))
        :owner-window (pdf-windows/resolve-own-window viewer)))))
 
 (defn file-based-open-block-ref!

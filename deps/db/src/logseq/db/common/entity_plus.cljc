@@ -11,6 +11,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
@@ -95,7 +96,9 @@
          (when-not (and search? (keyword-identical? k :block/title))
            (get (.-kv e) k))
          (let [result (lookup-entity e k default-value)
-               refs (:block/refs e)
+               ;; Replace title for pages only, otherwise it'll recursively
+               ;; replace block id refs if there're cycle references of blocks
+               refs (filter common-entity-util/page? (:block/refs e))
                result' (if (and (string? result) refs)
                          ;; FIXME: Correct namespace dependencies instead of resolve workaround
                          ((resolve 'logseq.db.frontend.content/id-ref->title-ref) result refs search?)
