@@ -16,7 +16,6 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
@@ -308,7 +307,7 @@
                                 (db-property-handler/set-block-property! (:db/id property)
                                                                          :logseq.property/icon icon)
                                 (db-property-handler/remove-block-property! (:db/id property)
-                                                                            (pu/get-pid :logseq.property/icon)))
+                                                                            :logseq.property/icon))
                               (shui/popup-hide! id))
                             :icon-value icon
                             :del-btn? (boolean icon)}))]

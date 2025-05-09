@@ -6,6 +6,7 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.db-ident :as db-ident]))
 
 ;; Main property vars
@@ -770,3 +771,9 @@
 (defn get-property-schema
   [property-m]
   (select-keys property-m schema-properties))
+
+(defn built-in-has-ref-value?
+  "Given a built-in's db-ident, determine if its property value is a ref"
+  [db-ident]
+  (contains? db-property-type/value-ref-property-types
+             (get-in built-in-properties [db-ident :schema :type])))
