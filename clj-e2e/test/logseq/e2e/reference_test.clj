@@ -19,11 +19,21 @@
     (b/copy)
     (b/paste)
     (util/exit-edit)
-    (assert/assert-selected-block-text "b2b2")))
+    (assert/assert-selected-block-text "b2")))
+
+(deftest self-tag-block-reference
+  (testing "self reference"
+    (b/new-block "b2")
+    (util/set-tag "task")
+    (b/copy)
+    (b/paste)
+    (util/exit-edit)
+    (assert/assert-selected-block-text "b2")))
 
 (deftest mutual-reference
   (testing "mutual reference"
     (b/new-blocks ["b1" "b2"])
+    (util/set-tag "task")
     (b/copy)
     (k/arrow-up)
     (b/wait-editor-text "b1")
@@ -38,6 +48,7 @@
 (deftest parent-reference
   (testing "parent reference"
     (b/new-blocks ["b1" "b2"])
+    (util/set-tag "task")
     (b/indent)
     (b/copy)
     (k/arrow-up)
@@ -53,6 +64,7 @@
 (deftest cycle-reference
   (testing "cycle reference"
     (b/new-blocks ["b1" "b2" "b3"])
+    (util/set-tag "task")
     (b/jump-to-block "b1")
     (assert/assert-editor-mode)
     (b/copy)
