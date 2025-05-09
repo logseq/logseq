@@ -100,6 +100,9 @@
 (defn- validate-multi-graph-fns-not-in-file-or-db
   []
   (let [multi-graph-fns ["/db-based-graph\\?" "\\(db-based-graph\\?"
+                         ;; from frontend.handler.property.util
+                         "/get-pid"
+                         "logseq.db.common.property-util"
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
