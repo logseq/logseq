@@ -1331,7 +1331,6 @@
         (log/warn :invalid-node block)
         (invalid-node-ref block-id)))))
 
-;; FIXME: allow cycle refs including 3 or more blocks
 (rum/defc block-reference
   [config id label]
   (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
@@ -1344,10 +1343,10 @@
                                            :skip-refresh? true})]
          (set-block! block)))
      [])
-    (if block
-      [:div.inline-flex.gap-1
-       (block-reference-aux config block label)]
-      (invalid-node-ref block-id))))
+    (when-not (= block-id (:source-block-id config)) ; self reference
+      (if block
+        (block-reference-aux config block label)
+        (invalid-node-ref block-id)))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -2875,7 +2874,7 @@
         content* (if db-based?
                    (:block/raw-title block)
                    (property-util/remove-built-in-properties format (:block/raw-title block)))
-        content (if-let [source-id (and (:block-ref? config) (:block/uuid (:block config)))]
+        content (if-let [source-id (:source-block-id config)]
                   (string/replace content* (ref/->block-ref source-id) "")
                   content*)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
@@ -3824,7 +3823,8 @@
            (set-block! block)))
        []))
     (when (or (:view? config) (:block/title block))
-      (loaded-block-container config block opts))))
+      (let [config' (assoc config :source-block-id (:block/uuid block))]
+        (loaded-block-container config' block opts)))))
 
 (defn divide-lists
   [[f & l]]
