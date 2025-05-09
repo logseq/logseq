@@ -7,13 +7,13 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
+            [frontend.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.util.block-ref :as block-ref]
             [rum.core :as rum]))
 
 (defn- action-command
@@ -64,7 +64,7 @@
         (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
         (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block))
         (action-command "registered" "Copy ref"
-                        (fn [_event] (editor-handler/copy-block-ref! uuid block-ref/->block-ref)))
+                        (fn [_event] (editor-handler/copy-block-ref! uuid ref/->block-ref)))
         (action-command "link" "Copy url"
                         (fn [_event] (let [current-repo (state/get-current-repo)
                                            tap-f (fn [block-id]

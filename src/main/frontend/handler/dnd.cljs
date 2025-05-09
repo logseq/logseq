@@ -1,15 +1,13 @@
 (ns frontend.handler.dnd
   "Provides fns for drag and drop"
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.ref :as ref]
             [frontend.state :as state]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]))
 
 (defn move-blocks
@@ -27,15 +25,15 @@
     (cond
       ;; alt pressed, make a block-ref
       (and alt-key? (= (count blocks) 1))
-      (let [->ref (if (config/db-based-graph?) page-ref/->page-ref block-ref/->block-ref)]
+      (do
         (property-handler/file-persist-block-id! (state/get-current-repo) (:block/uuid first-block))
         (editor-handler/api-insert-new-block!
-         (->ref (:block/uuid first-block))
+         (ref/->block-ref (:block/uuid first-block))
          {:block-uuid (:block/uuid target-block)
           :sibling? (not nested?)
           :before? top?}))
 
-      ;; format mismatch
+;; format mismatch
       (and current-format target-format (not= current-format target-format))
       (state/pub-event! [:notification/show
                          {:content [:div "Those two pages have different formats."]

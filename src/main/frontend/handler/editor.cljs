@@ -8,8 +8,8 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.diff :as diff]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -20,6 +20,7 @@
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.common.editor :as editor-common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
@@ -34,6 +35,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -67,8 +69,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.handler.common.editor :as editor-common-handler]))
+            [rum.core :as rum]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1007,12 +1008,12 @@
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
                                    (if (config/db-based-graph? (state/get-current-repo))
-                                     (str (string/join (repeat (dec level) "\t")) "- " (page-ref/->page-ref id))
+                                     (str (string/join (repeat (dec level) "\t")) "- " (ref/->page-ref id))
                                      (condp = (get block :block/format :markdown)
                                        :org
-                                       (str (string/join (repeat level "*")) " " (block-ref/->block-ref id))
+                                       (str (string/join (repeat level "*")) " " (ref/->block-ref id))
                                        :markdown
-                                       (str (string/join (repeat (dec level) "\t")) "- " (block-ref/->block-ref id))))))
+                                       (str (string/join (repeat (dec level) "\t")) "- " (ref/->block-ref id))))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1025,7 +1026,7 @@
                    (remove nil?))
           ids-str (if (config/db-based-graph? (state/get-current-repo))
                     (some->> ids
-                             (map (fn [id] (block-ref/->block-ref id)))
+                             (map (fn [id] (ref/->block-ref id)))
                              (string/join "\n\n"))
                     (some->> ids
                              (map (fn [id] (util/format "{{embed ((%s))}}" id)))
@@ -1390,7 +1391,7 @@
                                     {:block-id block-id})))
         text (:block/title block)
         content (if asset-block
-                  (string/replace text (page-ref/->page-ref (:block/uuid asset-block)) "")
+                  (string/replace text (ref/->page-ref (:block/uuid asset-block)) "")
                   (string/replace text full-text ""))]
     (save-block! repo block content)
     (when (and local? delete-local?)
@@ -1497,7 +1498,7 @@
            (let [entity (first entities)]
              (insert-command!
               id
-              (page-ref/->page-ref (:block/uuid entity))
+              (ref/->page-ref (:block/uuid entity))
               format
               {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                :restore?     true
@@ -1923,7 +1924,7 @@
 
       ;; block reference
       (insert-command! id
-                       (block-ref/->block-ref uuid-string)
+                       (ref/->block-ref uuid-string)
                        format
                        {:last-pattern (str block-ref/left-parens (if selected-text "" q))
                         :end-pattern block-ref/right-parens
@@ -2388,7 +2389,7 @@
               {:keys [selection-start selection-end selection]} selection]
           (if selection
             (do (delete-and-update input selection-start selection-end)
-                (insert (page-ref/->page-ref selection)))
+                (insert (ref/->page-ref selection)))
             (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
               (let [{:keys [raw-content start end]} embed-ref]
                 (delete-and-update input start end)
@@ -3194,15 +3195,15 @@
           (if db?
             (p/do!
              (save-current-block!)
-             (util/copy-to-clipboard! (page-ref/->page-ref block-id)
+             (util/copy-to-clipboard! (ref/->page-ref block-id)
                                       {:graph (state/get-current-repo)
                                        :blocks [{:block/uuid (:block/uuid current-block)}]
                                        :embed-block? true}))
             (copy-block-ref! block-id #(str "{{embed ((" % "))}}")))
           (copy-block-ref! block-id
                            (if db?
-                             page-ref/->page-ref
-                             block-ref/->block-ref)))))))
+                             ref/->page-ref
+                             ref/->block-ref)))))))
 
 (defn copy-current-block-embed []
   (copy-current-block-ref "embed"))
@@ -3848,14 +3849,16 @@
 (defn copy-current-ref
   [block-id]
   (when block-id
-    (util/copy-to-clipboard! (block-ref/->block-ref block-id))))
+    (util/copy-to-clipboard! (ref/->block-ref block-id))))
 
 (defn delete-current-ref!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (re-pattern (str "\\s?"
-                                 (string/replace (block-ref/->block-ref ref-id) #"([\(\)])" "\\$1")))
-          content (string/replace-first (:block/title block) match "")]
+    (let [content (if (config/db-based-graph?)
+                    (string/replace (:block/title block) (ref/->page-ref ref-id) "")
+                    (let [match (re-pattern (str "\\s?"
+                                                 (string/replace (ref/->block-ref ref-id) #"([\(\)])" "\\$1")))]
+                      (string/replace (:block/title block) match "")))]
       (save-block! (state/get-current-repo)
                    (:block/uuid block)
                    content))))
@@ -3864,7 +3867,7 @@
   [block ref-id]
   (when (and block ref-id)
     (let [repo (state/get-current-repo)
-          match (block-ref/->block-ref ref-id)
+          match (ref/->block-ref ref-id)
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/title ref-block) "")
                                  (property-file/remove-built-in-properties-when-file-based repo
@@ -3879,7 +3882,7 @@
 (defn replace-ref-with-embed!
   [block ref-id]
   (when (and block ref-id)
-    (let [match (block-ref/->block-ref ref-id)
+    (let [match (ref/->block-ref ref-id)
           content (string/replace-first (:block/title block) match
                                         (util/format "{{embed ((%s))}}"
                                                      (str ref-id)))]

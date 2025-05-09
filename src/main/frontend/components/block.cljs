@@ -28,8 +28,8 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as model]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
@@ -46,8 +46,8 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.export.common :as export-common-handler]
+            [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
@@ -62,6 +62,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.shortcut.utils :as shortcut-utils]
+            [frontend.ref :as ref]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -905,10 +906,8 @@
 
 (rum/defc invalid-node-ref
   [id]
-  (let [db-based? (config/db-based-graph? (state/get-current-repo))
-        ->ref (if db-based? page-ref/->page-ref block-ref/->block-ref)]
-    [:span.warning.mr-1 {:title "Node ref invalid"}
-     (->ref (str id))]))
+  [:span.warning.mr-1 {:title "Node ref invalid"}
+   (ref/->block-ref (str id))])
 
 (defn inline-text
   ([format v]
@@ -1260,9 +1259,9 @@
                          :render render})))
 
 (rum/defc block-reference-aux < rum/reactive db-mixins/query
-  [config block-id label]
-  (let [block (db/entity [:block/uuid block-id])
-        db-id (:db/id block)
+  [config block label]
+  (let [db-id (:db/id block)
+        block-id (:block/uuid block)
         block (when db-id (db/sub-block db-id))
         block-type (keyword (pu/lookup block :logseq.property/ls-type))
         hl-type (pu/lookup block :logseq.property.pdf/hl-type)
@@ -1332,6 +1331,7 @@
         (log/warn :invalid-node block)
         (invalid-node-ref block-id)))))
 
+;; FIXME: allow cycle refs including 3 or more blocks
 (rum/defc block-reference
   [config id label]
   (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
@@ -1344,11 +1344,10 @@
                                            :skip-refresh? true})]
          (set-block! block)))
      [])
-    (if (and block-id (= (:block/uuid (:block config)) block-id))
-      [:span.warning.text-sm "Self reference"]
-      (if block
-        (block-reference-aux config block-id label)
-        (invalid-node-ref block-id)))))
+    (if block
+      [:div.inline-flex.gap-1
+       (block-reference-aux config block label)]
+      (invalid-node-ref block-id))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -1533,7 +1532,7 @@
           (image-link config url page nil metadata full_text)
           (let [label* (if (seq (mldoc/plain->text label)) label nil)]
             (if (and (string? page) (string/blank? page))
-              [:span (page-ref/->page-ref page)]
+              [:span (ref/->page-ref page)]
               (page-reference (:html-export? config) page config label*)))))
 
       ["Embed_data" src]
@@ -2872,9 +2871,12 @@
         format (if db-based? :markdown (or (:block/format block) :markdown))
         pre-block? (when-not db-based? (:block/pre-block? block))
         collapsed? (:collapsed? config)
-        content (if db-based?
-                  (:block/raw-title block)
-                  (property-util/remove-built-in-properties format (:block/raw-title block)))
+        content* (if db-based?
+                   (:block/raw-title block)
+                   (property-util/remove-built-in-properties format (:block/raw-title block)))
+        content (if-let [source-id (and (:block-ref? config) (:block/uuid (:block config)))]
+                  (string/replace content* (ref/->block-ref source-id) "")
+                  content*)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
@@ -3362,8 +3364,8 @@
   [^js e block *control-show? block-id doc-mode?]
   (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))]
     (when (and mouse-moving?
-            (not @*dragging?)
-            (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
+               (not @*dragging?)
+               (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
       (.preventDefault e)
       (reset! *control-show? true)
       (when-let [parent (gdom/getElement block-id)]
@@ -3615,7 +3617,7 @@
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
          :on-mouse-move (fn [e]
-                           (reset! *block-last-mouse-event e))
+                          (reset! *block-last-mouse-event e))
          :on-mouse-leave (fn [_e]
                            (block-mouse-leave *control-show? block-id doc-mode?))}
 
