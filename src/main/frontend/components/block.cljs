@@ -1266,9 +1266,12 @@
         block-type (keyword (pu/lookup block :logseq.property/ls-type))
         hl-type (pu/lookup block :logseq.property.pdf/hl-type)
         repo (state/get-current-repo)
-        stop-inner-events? (= block-type :whiteboard-shape)]
+        stop-inner-events? (= block-type :whiteboard-shape)
+        config' (assoc config
+                       :block-ref? true
+                       :stop-events? stop-inner-events?)]
     (if (and block (:block/title block))
-      (let [content-cp (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+      (let [content-cp (block-content config'
                                       block nil (:block/uuid block)
                                       (:slide? config)
                                       nil)
@@ -1334,7 +1337,9 @@
 (rum/defc block-reference
   [config id label]
   (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
-        [block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))]
+        [block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))
+        self-reference? (when (set? (:ref-set config))
+                          (contains? (:ref-set config) block-id))]
     (hooks/use-effect!
      (fn []
        (p/let [block (db-async/<get-block (state/get-current-repo)
@@ -1343,9 +1348,10 @@
                                            :skip-refresh? true})]
          (set-block! block)))
      [])
-    (when-not (= block-id (:source-block-id config)) ; self reference
+    (when-not self-reference?
       (if block
-        (block-reference-aux config block label)
+        (let [config' (update config :ref-set (fn [s] (conj (set s) block-id)))]
+          (block-reference-aux config' block label))
         (invalid-node-ref block-id)))))
 
 (defn- render-macro
@@ -2871,24 +2877,21 @@
         format (if db-based? :markdown (or (:block/format block) :markdown))
         pre-block? (when-not db-based? (:block/pre-block? block))
         collapsed? (:collapsed? config)
-        content* (if db-based?
-                   (:block/raw-title block)
-                   (property-util/remove-built-in-properties format (:block/raw-title block)))
-        content (if-let [source-id (:source-block-id config)]
-                  (string/replace content* (ref/->block-ref source-id) "")
-                  content*)
+        content (if db-based?
+                  (:block/raw-title block)
+                  (property-util/remove-built-in-properties format (:block/raw-title block)))
+        content (if (string? content) (string/trim content) "")
+        block-ref? (:block-ref? config)
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
         block (assoc block :block/title content)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
-        block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq ast-title))
         block-type (or
                     (pu/lookup block :logseq.property/ls-type)
                     :default)
-        content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-pointer-down) ; TODO: it seems that Safari doesn't work well with on-pointer-down
@@ -3823,8 +3826,7 @@
            (set-block! block)))
        []))
     (when (or (:view? config) (:block/title block))
-      (let [config' (assoc config :source-block-id (:block/uuid block))]
-        (loaded-block-container config' block opts)))))
+      (loaded-block-container config block opts))))
 
 (defn divide-lists
   [[f & l]]
