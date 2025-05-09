@@ -7,12 +7,13 @@
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
             [frontend.mixins :as mixins]
+            [frontend.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -466,7 +467,7 @@
       (str "Search: " clause)
 
       (= (keyword f) :page-ref)
-      (page-ref/->page-ref (second clause))
+      (ref/->page-ref (second clause))
 
       (contains? #{:tags :page-tags} (keyword f))
       (cond
