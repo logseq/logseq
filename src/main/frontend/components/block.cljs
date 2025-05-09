@@ -943,10 +943,11 @@
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview? show-non-exists-page? table-view? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
-    (let [entity (or (db/sub-block (:db/id entity')) entity')]
+    (let [entity (or (db/sub-block (:db/id entity')) entity')
+          config (assoc config :block entity)]
       (cond
         entity
-        (if (or (ldb/page? entity) (:block/tags entity))
+        (if (ldb/page? entity)
           (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
                 whiteboard-page? (model/whiteboard-page? entity)
                 inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
@@ -956,11 +957,7 @@
                      (not (false? preview?))
                      (not disable-preview?)
                      (not modal?))
-              (if (ldb/page? entity)
-                (page-preview-trigger (assoc config :children inner) entity)
-                (block-reference-preview inner {:repo (state/get-current-repo)
-                                                :config config
-                                                :id (:block/uuid entity)}))
+              (page-preview-trigger (assoc config :children inner) entity)
               inner))
           (block-reference config (:block/uuid entity)
                            (if (string? label)
@@ -1091,43 +1088,45 @@
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?
                          :show-icon? true?)
-          asset? (some? (:logseq.property.asset/type block))]
-      (cond
-        (and asset? (img-audio-video? block))
-        (asset-cp config block)
+          asset? (some? (:logseq.property.asset/type block))
+          page? (ldb/page? block)
+          brackets? (and (or show-brackets? nested-link?)
+                         (not html-export?)
+                         (not contents-page?)
+                         page?)]
+      (when-not (= (:db/id block) (:db/id (:block config)))
+        (cond
+          (and asset? (img-audio-video? block))
+          (asset-cp config block)
 
-        (or (ldb/page? block) (:block/tags block))
-        [:span.page-reference
-         {:data-ref (str uuid-or-title)}
-         (when (and (or show-brackets? nested-link?)
-                    (not html-export?)
-                    (not contents-page?))
-           [:span.text-gray-500.bracket page-ref/left-brackets])
-         (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-           [:div.inline-block
-            {:style {:margin-right 1
-                     :margin-top -2
-                     :vertical-align "middle"}
-             :on-pointer-down (fn [e]
-                                (util/stop e))}
-            (block-positioned-properties config block :block-left)])
-         (page-cp config' (if (uuid? uuid-or-title)
-                            {:block/uuid uuid-or-title}
-                            {:block/name uuid-or-title}))
-         (when (and (or show-brackets? nested-link?)
-                    (not html-export?)
-                    (not contents-page?))
-           [:span.text-gray-500.bracket page-ref/right-brackets])]
+          (or page? (:block/tags block))
+          [:span.page-reference
+           {:data-ref (str uuid-or-title)}
+           (when brackets?
+             [:span.text-gray-500.bracket page-ref/left-brackets])
+           (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+             [:div.inline-block
+              {:style {:margin-right 1
+                       :margin-top -2
+                       :vertical-align "middle"}
+               :on-pointer-down (fn [e]
+                                  (util/stop e))}
+              (block-positioned-properties config block :block-left)])
+           (page-cp config' (if (uuid? uuid-or-title)
+                              {:block/uuid uuid-or-title}
+                              {:block/name uuid-or-title}))
+           (when brackets?
+             [:span.text-gray-500.bracket page-ref/right-brackets])]
 
-        (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
-        [:div.draw {:on-click (fn [e]
-                                (.stopPropagation e))}
-         (excalidraw uuid-or-title (:block/uuid config))]
+          (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
+          [:div.draw {:on-click (fn [e]
+                                  (.stopPropagation e))}
+           (excalidraw uuid-or-title (:block/uuid config))]
 
-        :else
-        (page-cp config' (if (uuid? uuid-or-title)
-                           {:block/uuid uuid-or-title}
-                           {:block/name uuid-or-title}))))))
+          :else
+          (page-cp config' (if (uuid? uuid-or-title)
+                             {:block/uuid uuid-or-title}
+                             {:block/name uuid-or-title})))))))
 
 (defn- latex-environment-content
   [name option content]

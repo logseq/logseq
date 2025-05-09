@@ -179,7 +179,7 @@
   [tag]
   (press-seq " #" {:delay 20})
   (press-seq tag)
-  (w/click (format "a.menu-link:has-text(\"%s\")" tag))
+  (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
   ;; wait tag added on ui
   (assert/assert-is-visible
    (-> ".ls-block"
