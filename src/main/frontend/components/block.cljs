@@ -1350,7 +1350,11 @@
      [])
     (when-not self-reference?
       (if block
-        (let [config' (update config :ref-set (fn [s] (conj (set s) block-id)))]
+        (let [config' (update config :ref-set (fn [s]
+                                                (let [bid (:block/uuid (:block config))]
+                                                  (if (nil? s)
+                                                    #{bid}
+                                                    (conj s bid block-id)))))]
           (block-reference-aux config' block label))
         (invalid-node-ref block-id)))))
 
