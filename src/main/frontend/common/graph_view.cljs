@@ -93,8 +93,11 @@
           (not journal?)
           (remove ldb/journal?)
           (not excluded-pages?)
-          (remove (fn [p] (true?
-                           (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))))))
+          (remove (fn [p] (true? 
+                             (if db-based?
+                               (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))
+                               (let [props (get p :block/properties)]
+                                 (get props :exclude-from-graph-view)))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
