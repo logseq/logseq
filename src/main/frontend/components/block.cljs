@@ -2712,10 +2712,11 @@
                                 :on-click #(state/sidebar-add-block! (state/get-current-repo) (:db/id tag) :page)}
                                "Open in sidebar"
                                (shui/dropdown-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))
-                              (shui/dropdown-menu-item
-                               {:key "Remove tag"
-                                :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
-                               "Remove tag")])
+                              (when-not (ldb/private-tags (:db/ident tag))
+                                (shui/dropdown-menu-item
+                                 {:key "Remove tag"
+                                  :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
+                                 "Remove tag"))])
                            popup-opts))}
       (if (and @*hover? (not (ldb/private-tags (:db/ident tag))))
         [:a.inline-flex.text-muted-foreground.mr-1
