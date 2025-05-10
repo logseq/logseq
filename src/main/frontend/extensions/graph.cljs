@@ -52,9 +52,9 @@
   {:did-update pixi/render!
    :should-update (fn [old-state new-state]
                     (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range :link-strength])
                           (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range :link-strength])))
    :will-unmount (fn [state]
                    (reset! pixi/*graph-instance nil)
                    state)}
