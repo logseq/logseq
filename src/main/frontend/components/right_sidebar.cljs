@@ -13,7 +13,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -25,7 +24,6 @@
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
 
 (rum/defc toggle
@@ -128,13 +126,6 @@
                                              (state/sidebar-replace-block! [repo db-id block-type]
                                                                            [repo new-value block-type]))})
           (str init-key))]
-
-       :page-slide-view
-       (when entity
-         [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid entity))})}
-           (:block/title entity)]
-          [:div.ml-2.slide.mt-2
-           (slide/slide entity)]])
 
        :shortcut-settings
        [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
