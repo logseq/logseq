@@ -126,10 +126,13 @@
                      props-to-rename)
         titles-tx (->> (d/datoms db :avet :block/title)
                        (keep (fn [d]
-                               (when-let [props (seq (filter (fn [[old _new]] (string/includes? (:v d) (str old))) props-to-rename))]
-                                 (let [title' (reduce (fn [title [old new]]
-                                                        (string/replace title (str old) (str new))) (:v d) props)]
-                                   [:db/add (:e d) :block/title title'])))))
+                               (let [title (:v d)]
+                                 (if (string? title)
+                                   (when-let [props (seq (filter (fn [[old _new]] (string/includes? (:v d) (str old))) props-to-rename))]
+                                     (let [title' (reduce (fn [title [old new]]
+                                                            (string/replace title (str old) (str new))) title props)]
+                                       [:db/add (:e d) :block/title title']))
+                                   [:db/retract (:e d) :block/title])))))
         sorting-tx (->> (d/datoms db :avet :logseq.property.table/sorting)
                         (keep (fn [d]
                                 (when (coll? (:v d))
@@ -1082,7 +1085,7 @@
                (fn [d]
                  (let [entity (d/entity @conn (:e d))]
                    [(when-not (:block/title entity)
-                      [:db/add (:e d) :block/title (:v d)])
+                      [:db/add (:e d) :block/title (str (:v d))])
                     (when-not (:block/uuid entity)
                       [:db/add (:e d) :block/uuid (d/squuid)])]))
                (d/datoms @conn :avet :block/name))
