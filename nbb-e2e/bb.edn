@@ -1,0 +1,3 @@
+{:tasks
+ {test {:doc "run tests"
+        :task (shell "nbb -m logseq.e2e.demo-test")}}}
