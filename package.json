@@ -6,6 +6,7 @@
     "devDependencies": {
         "@axe-core/playwright": "=4.4.4",
         "@capacitor/cli": "7.2.0",
+        "@jcesarmobile/ssl-skip": "^0.4.0",
         "@playwright/test": "=1.51.0",
         "@tailwindcss/aspect-ratio": "0.4.2",
         "@tailwindcss/forms": "0.5.3",
