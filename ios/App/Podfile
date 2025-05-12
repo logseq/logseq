@@ -26,6 +26,7 @@ def capacitor_pods
   pod 'LogseqCapacitorFileSync', :path => '../../node_modules/@logseq/capacitor-file-sync'
   pod 'CapacitorVoiceRecorder', :path => '../../node_modules/capacitor-voice-recorder'
   pod 'SendIntent', :path => '../../node_modules/send-intent'
+  pod 'JcesarmobileSslSkip', :path => '../../node_modules/@jcesarmobile/ssl-skip'
 end
 
 target 'Logseq' do
