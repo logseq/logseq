@@ -194,10 +194,6 @@
                                  {:logseq.property/description "Provides a way for a page to associate to another page i.e. backward compatible tagging."}}
      :logseq.property/background-color {:title "Background color"
                                         :schema {:type :default :hide? true}}
-     :logseq.property/background-image {:title "Background image"
-                                        :schema
-                                        {:type :default ; FIXME: asset
-                                         :view-context :block}}
    ;; number (1-6) or boolean for auto heading
      :logseq.property/heading {:title "Heading"
                                :schema {:type :any :hide? true}

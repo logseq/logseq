@@ -106,16 +106,6 @@
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
 
-          (when (and (not (mobile-util/native-platform?))
-                     (not whiteboard?)
-                     (state/get-current-page))
-            {:title (t :page/slide-view)
-             :options {:on-click (fn []
-                                   (state/sidebar-add-block!
-                                    repo
-                                    (:db/id page)
-                                    :page-slide-view))}})
-
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
           ;; this one. However this component doesn't yet exist. PRs are welcome!
