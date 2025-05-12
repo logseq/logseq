@@ -29,7 +29,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.common.property-util :as db-property-util]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -405,25 +406,23 @@
     (when (and prev-type (not= prev-type prop-type))
       {:type {:from prev-type :to prop-type}})))
 
-(def built-in-property-name-to-idents
-  "Map of all built-in keyword property names to their idents. Using in-memory property
-  names because these are legacy names already in a user's file graph"
-  (merge (->> (dissoc db-property/built-in-properties :logseq.property/publishing-public?)
-              (map (fn [[k v]]
-                     [(:name v) k]))
-              (into {}))
-         ;; TODO: Move 3 remaining :name config from built-in-properties to here
-         {:public :logseq.property/publishing-public?}))
+(def built-in-property-file-to-db-idents
+  "Map of built-in property file ids to their db graph idents"
+  (->> (keys db-property/built-in-properties)
+       (map (fn [k]
+              [(db-property-util/get-file-pid k) k]))
+       (into {})))
 
-(def all-built-in-property-names
-  "All built-in property names as a set of keywords"
-  (-> built-in-property-name-to-idents keys set
+(def all-built-in-property-file-ids
+  "All built-in property file ids as a set of keywords"
+  (-> built-in-property-file-to-db-idents keys set
       ;; built-in-properties that map to new properties
       (set/union #{:filters :query-table :query-properties :query-sort-by :query-sort-desc :hl-stamp :file :file-path})))
 
+;; TODO: Review whether this should be using :block/title instead of file graph ids
 (def all-built-in-names
   "All built-in properties and classes as a set of keywords"
-  (set/union all-built-in-property-names
+  (set/union all-built-in-property-file-ids
              (set (->> db-class/built-in-classes
                        vals
                        (map #(-> % :title string/lower-case keyword))))))
@@ -436,7 +435,7 @@
     :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
     :icon :public :exclude-from-graph-view :filters})
 
-(assert (set/subset? file-built-in-property-names all-built-in-property-names)
+(assert (set/subset? file-built-in-property-names all-built-in-property-file-ids)
         "All file-built-in properties are used in db graph")
 
 (def query-table-special-keys
@@ -518,7 +517,7 @@
                            :ls-type
                            [[:logseq.property/ls-type (keyword prop-value)]]
                            ;; else
-                           [[(built-in-property-name-to-idents prop) prop-value]]))))
+                           [[(built-in-property-file-to-db-idents prop) prop-value]]))))
              (into {}))]
     (cond-> m
       (and (contains? props :query-sort-desc) (:query-sort-by props))
