@@ -683,22 +683,6 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
-(defn- ref->property-value-content
-  "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
-  the property value of a ref type property"
-  [db ref]
-  (some->> (:db/id ref)
-           (d/entity db)
-           property-value-content))
-
-(defn ref->property-value-contents
-  "Given a ref or refs from a pulled query e.g. `{:db/id X}`, gets a readable
-  name for the property values of a ref type property"
-  [db ref]
-  (if (or (set? ref) (sequential? ref))
-    (set (map #(ref->property-value-content db %) ref))
-    (ref->property-value-content db ref)))
-
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
@@ -733,16 +717,6 @@
 (defn many?
   [property]
   (= (:db/cardinality property) :db.cardinality/many))
-
-(defn properties-by-name
-  "Given a block from a query result, returns a map of its properties indexed by
-  property names"
-  [db block]
-  (->> (properties block)
-       (map (fn [[k v]]
-              [(:block/title (d/entity db k))
-               (ref->property-value-contents db v)]))
-       (into {})))
 
 (defn public-built-in-property?
   "Indicates whether built-in property can be seen and edited by users"
