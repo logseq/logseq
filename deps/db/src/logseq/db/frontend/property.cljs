@@ -12,7 +12,7 @@
 ;; Main property vars
 ;; ==================
 
-(def ^:large-vars/data-var built-in-properties*
+(def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs with their :db/ident as keys.
    Each property has a config map with the following keys:
    TODO: Move some of these keys to :properties since :schema is a deprecated concept
@@ -26,8 +26,6 @@
        seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
-   * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident.
-      TODO: This is barely used for old properties. Deprecate this and move to gp-exporter
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :queryable? - Boolean for whether property can be queried in the query builder
    * :closed-values - Vec of closed-value maps for properties with choices. Map
@@ -241,7 +239,6 @@
                                     :schema {:type :map :hide? true}}
    ;; FIXME: :logseq.property/order-list-type should updated to closed values
      :logseq.property/order-list-type {:title "List type"
-                                       :name :logseq.order-list-type
                                        :schema {:type :default
                                                 :hide? true}}
      :logseq.property.linked-references/includes {:title "Included references"
@@ -253,10 +250,10 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
-     :logseq.property.tldraw/page {:name :logseq.tldraw.page
+     :logseq.property.tldraw/page {:title "Tldraw Page"
                                    :schema {:type :map
                                             :hide? true}}
-     :logseq.property.tldraw/shape {:name :logseq.tldraw.shape
+     :logseq.property.tldraw/shape {:title "Tldraw Shape"
                                     :schema {:type :map
                                              :hide? true}}
 
@@ -566,17 +563,6 @@
                                                     :cardinality :many
                                                     :public? true}
                                            :queryable? true})))
-
-(def built-in-properties
-  (->> built-in-properties*
-       (map (fn [[k v]]
-              (assert (and (keyword? k) (namespace k)))
-              [k
-               ;; All built-ins must have a :name
-               (if (:name v)
-                 v
-                 (assoc v :name (keyword (string/lower-case (name k)))))]))
-       (into (ordered-map))))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
