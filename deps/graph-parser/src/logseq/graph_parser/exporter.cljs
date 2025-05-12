@@ -429,7 +429,7 @@
 
 (def file-built-in-property-names
   "File-graph built-in property names that are supported. Expressed as set of keywords"
-  #{:alias :tags :background-color :background-image :heading
+  #{:alias :tags :background-color :heading
     :query-table :query-properties :query-sort-by :query-sort-desc
     :ls-type :hl-type :hl-color :hl-page :hl-stamp :hl-value :file :file-path
     :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
@@ -660,7 +660,7 @@
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting
    ;; deprecated in db graphs
-   :macros :logseq.query/nlp-date
+   :background-image :macros :logseq.query/nlp-date
    :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
    :card-ease-factor :card-last-score
    :logseq.color :logseq.table.borders :logseq.table.stripes :logseq.table.max-width
