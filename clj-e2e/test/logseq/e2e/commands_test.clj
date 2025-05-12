@@ -8,6 +8,7 @@
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.locator :as loc]
    [logseq.e2e.util :as util]
    [wally.main :as w]
    [wally.repl :as repl]))
@@ -128,6 +129,7 @@
           (util/input-command status)
           (is (= text (util/get-edit-content)))
           (util/exit-edit)
+          (k/esc)
           (w/wait-for (str ".ls-icon-" (get status->icon status status))))))))
 
 (deftest priority-test
@@ -188,6 +190,7 @@
   (testing "number list commands"
     (util/input-command "number list")
     (b/new-blocks ["a" "b" "c"])
+    (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))
     ;; double `enter` convert the next block to bullet block
     (k/enter)
@@ -201,6 +204,7 @@
   (testing "number children commands"
     (b/new-blocks ["a" "a1" "a2" "a3" "b"])
     (k/arrow-up)
+    (w/wait-for "textarea:text('a3')")
     (util/repeat-keyboard 3 "Shift+ArrowUp")
     (k/tab)
     (b/jump-to-block "a")
@@ -245,15 +249,19 @@
     (util/set-tag "Template")
     (b/new-blocks ["block 1" "block 2" "block 3" "test"])
     (k/arrow-up)
+    (w/wait-for "textarea:text('block 3')")
     (util/repeat-keyboard 3 "Shift+ArrowUp")
     (k/tab)
     (b/jump-to-block "test")
     (util/input-command "template")
     (util/input "template 1")
+    (w/wait-for "a.menu-link.chosen:has-text('template 1')")
     (k/enter)
     (doseq [text ["block 1" "block 2" "block 3"]]
-      (assert/assert-have-count (.or (w/-query (format ".ls-block .block-title-wrap:text('%s')" text))
-                                     (w/-query (format ".ls-block textarea:text('%s')" text))) 2))))
+      (assert/assert-have-count
+       (loc/or (format ".ls-block .block-title-wrap:text('%s')" text)
+               (format ".ls-block textarea:text('%s')" text))
+       2))))
 
 (deftest embed-html-test
   (testing "embed html"

@@ -48,7 +48,6 @@
  :relaunch-confirm-to-work "Sie sollten die App neu starten, damit sie funktioniert. Möchten Sie sie jetzt neu starten?"
  :remove-background "Hintergrund entfernen"
  :remove-heading "Überschrift entfernen"
- :remove-orphaned-pages "Nie referenzierte Seiten löschen?"
  :save "Speichern"
  :settings "Einstellungen"
  :settings-of-plugins "Plugins"

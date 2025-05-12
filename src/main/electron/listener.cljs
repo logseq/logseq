@@ -7,7 +7,7 @@
             [electron.ipc :as ipc]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.file-sync :as file-sync-handler]
@@ -95,7 +95,7 @@
                            (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))
 
                        file
-                       (if-let [db-page-name (db-model/get-file-page file false)]
+                       (if-let [db-page-name (file-model/get-file-page file false)]
                          (route-handler/redirect-to-page! db-page-name)
                          (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 

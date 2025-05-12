@@ -437,6 +437,9 @@
   (when-let [property (d/entity @conn property-id)]
     (let [block (d/entity @conn block-eid)]
       (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
+        (when (= property-id :block/tags)
+          (outliner-validate/validate-tags-property-deletion @conn [block-eid] property-value))
+
         (let [current-val (get block property-id)
               fv (first current-val)]
           (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))

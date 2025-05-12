@@ -13,6 +13,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property.file :as property-file]
+            [frontend.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -434,7 +435,7 @@
          ["Draw" (fn []
                    (let [file (draw/file-name)
                          path (str common-config/default-draw-directory "/" file)
-                         text (page-ref/->page-ref path)]
+                         text (ref/->page-ref path)]
                      (p/let [_ (draw/create-draw-with-default-content path)]
                        (println "draw file created, " path))
                      text)) "Draw a graph with Excalidraw"])

@@ -117,7 +117,7 @@
          (clear-overlay!)
          (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
                                  (gdom/getElement "main-content-container"))
-               icon (get block (pu/get-pid :logseq.property/icon))]
+               icon (get block :logseq.property/icon)]
            (util/schedule
             (fn []
               (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))

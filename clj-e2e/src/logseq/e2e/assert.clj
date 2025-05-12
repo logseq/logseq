@@ -14,12 +14,16 @@
   (-> (w/-query q) assert-that .isHidden)
   true)
 
+(defn assert-non-editor-mode
+  []
+  (assert-is-hidden (w/get-by-test-id "block editor")))
+
 (defn assert-in-normal-mode?
   "- not editing mode
   - no action bar
   - no search(cmdk) modal"
   []
-  (assert-is-hidden (w/get-by-test-id "block editor"))
+  (assert-non-editor-mode)
   (assert-is-hidden ".selection-action-bar")
   (assert-is-visible "#search-button")
   true)
@@ -39,3 +43,7 @@
         editor (w/-query klass)]
     (w/wait-for editor)
     editor))
+
+(defn assert-selected-block-text
+  [text]
+  (assert-is-visible (format ".ls-block.selected :text('%s')" text)))
