@@ -214,14 +214,13 @@
              (ionic/ion-menu-button)
              (ionic/ion-button {:class "opacity-90"} (ionic/tabler-icon "search" {:size 22 :stroke 2})))
 
-           (ionic/ion-button
-             {:slot "end"
-              :fill "clear"}
-             (ionic/ion-nav-link
-               {:routerDirection "forward"
-                :class "w-full"
-                :component settings/page}
-               (ionic/tabler-icon "upload" {:size 24 :class "opacity-70"})))))
+           (ionic/ion-buttons {:slot "end"}
+             (ionic/ion-button {:fill "clear"}
+               (ionic/ion-nav-link
+                 {:routerDirection "forward"
+                  :class "w-full"
+                  :component settings/page}
+                 (ionic/tabler-icon "upload" {:size 24 :class "opacity-70"}))))))
        ;; main content
        (if db-restoring?
          (ionic/ion-content
