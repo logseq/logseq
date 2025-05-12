@@ -2696,9 +2696,9 @@
   [state block tag config popup-opts]
   (let [*hover? (::hover? state)
         *hover-container? (::hover-container? state)]
-    [:div.block-tag.items-center.relative.px-1
+    [:div.block-tag.items-center.relative
      {:key (str "tag-" (:db/id tag))
-      :class (if @*hover? "bg-gray-03 rounded" "")
+      :class (if @*hover? "bg-gray-03 rounded pr-1" "px-1")
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
      [:div.flex.items-center
@@ -2727,7 +2727,7 @@
                                  "Remove tag"))])
                            popup-opts))}
       (if (and @*hover? (not (ldb/private-tags (:db/ident tag))))
-        [:a.inline-flex.text-muted-foreground.mr-1
+        [:a.inline-flex.text-muted-foreground
          {:title "Remove this tag"
           :style {:margin-top 1}
           :on-pointer-down
@@ -2989,18 +2989,19 @@
 (rum/defc block-refs-count < rum/static
   [block block-refs-count' *hide-block-refs?]
   (when (> block-refs-count' 0)
-    (shui/button {:variant :ghost
-                  :title "Open block references"
-                  :class "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100"
-                  :size  :sm
-                  :on-click (fn [e]
-                              (if (gobj/get e "shiftKey")
-                                (state/sidebar-add-block!
-                                 (state/get-current-repo)
-                                 (:db/id block)
-                                 :block-ref)
-                                (swap! *hide-block-refs? not)))}
-                 [:span.text-sm block-refs-count'])))
+    [:div.h-6
+     (shui/button {:variant :ghost
+                   :title "Open block references"
+                   :class "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100"
+                   :size  :sm
+                   :on-click (fn [e]
+                               (if (gobj/get e "shiftKey")
+                                 (state/sidebar-add-block!
+                                  (state/get-current-repo)
+                                  (:db/id block)
+                                  :block-ref)
+                                 (swap! *hide-block-refs? not)))}
+                  [:span.text-sm block-refs-count'])]))
 
 (rum/defc block-left-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
@@ -3110,14 +3111,16 @@
                 {:on-pointer-down (fn [e]
                                     (util/stop e)
                                     (editor-handler/edit-block! block :max))}
-                svg/edit])])])
+                svg/edit])])
+
+          (when-not (or (:table? config) (:property? config) (:page-title? config))
+            (block-refs-count block refs-count *hide-block-refs?))])
 
        (when-not (:table-block-title? config)
          [:div.flex.flex-row.items-center.self-start.gap-1
-          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
-
-          (when-not (or (:table? config) (:property? config) (:page-title? config))
-            (block-refs-count block refs-count *hide-block-refs?))
+          (when (and db-based? (not table?))
+            [:div.opacity-70.hover:opacity-100
+             (block-positioned-properties config block :block-right)])
 
           (when-not (or (:block-ref? config) (:table? config) (:gallery-view? config)
                         (:property? config))
