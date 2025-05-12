@@ -445,7 +445,6 @@
  :all-pages "Tüm sayfalar"
  :all-whiteboards "Tüm beyaz tahtalar"
  :all-files "Tüm dosyalar"
- :remove-orphaned-pages "Yalnız bırakılmış sayfalar kaldırılsın mı?"
  :all-journals "Bütün günlükler"
  :settings "Ayarlar"
  :settings-of-plugins "Eklenti ayarları"

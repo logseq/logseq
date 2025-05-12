@@ -243,6 +243,14 @@
           }
         }
       }
+
+      .icon-cp-container {
+        @apply pr-1;
+
+        > .ui__icon {
+          @apply mr-0;
+        }
+      }
     }
 
     .hd .more {

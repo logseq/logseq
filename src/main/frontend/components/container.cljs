@@ -248,8 +248,9 @@
              (shui/tabler-icon "filter-edit" {:size 14})]}
      [:div.sidebar-navigations.flex.flex-col.mt-1
        ;; required custom home page
-      (let [page (:page default-home)]
-        (if (and page (not (state/enable-journals? (state/get-current-repo))))
+      (let [page (:page default-home)
+            enable-journals? (state/enable-journals? (state/get-current-repo))]
+        (if (and page (not enable-journals?))
           (sidebar-item
            {:class "home-nav"
             :title page
@@ -260,17 +261,18 @@
             :icon "home"
             :shortcut :go/home})
 
-          (sidebar-item
-           {:class "journals-nav"
-            :active (and (not srs-open?)
-                         (or (= route-name :all-journals) (= route-name :home)))
-            :title (t :left-side-bar/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon "calendar"
-            :shortcut :go/journals})))
+          (when enable-journals?
+           (sidebar-item
+            {:class "journals-nav"
+             :active (and (not srs-open?)
+                          (or (= route-name :all-journals) (= route-name :home)))
+             :title (t :left-side-bar/journals)
+             :on-click-handler (fn [e]
+                                 (if (gobj/get e "shiftKey")
+                                   (route-handler/sidebar-journals!)
+                                   (route-handler/go-to-journals!)))
+             :icon "calendar"
+             :shortcut :go/journals}))))
 
       (for [nav checked-navs]
         (cond
@@ -725,10 +727,11 @@
               (:page default-home))
          (route-handler/redirect-to-page! (:page default-home))
 
-         (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
-           (and config/publishing?
-                (not default-home)
-                (empty? latest-journals)))
+         (or (not (state/enable-journals? current-repo))
+             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+               (and config/publishing?
+                    (not default-home)
+                    (empty? latest-journals))))
          (route-handler/redirect! {:to :all-pages})
 
          loading-files?

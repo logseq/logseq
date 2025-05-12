@@ -2,8 +2,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db :as db]
-            [frontend.db.model :as model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -29,11 +28,11 @@
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
+  (let [edit-block-file-path (file-model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
              (state/org-mode-file-link? (state/get-current-repo)))
-      (if-let [ref-file-path (:file/path (db/get-page-file page-name))]
+      (if-let [ref-file-path (:file/path (file-model/get-page-file page-name))]
         (util/format "[[file:%s][%s]]"
                      (util/get-relative-path edit-block-file-path ref-file-path)
                      page)

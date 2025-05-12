@@ -183,30 +183,41 @@
                        :property-value v})))))
 
 (defn- disallow-node-cant-tag-with-private-tags
-  [db block-eids v]
+  [db block-eids v & {:keys [delete?]}]
   (when (and (ldb/private-tags (:db/ident (d/entity db v)))
              ;; Allow assets to be tagged
              (not (and
                    (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
                    (= :logseq.class/Asset (:db/ident (d/entity db v))))))
-    (throw (ex-info (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+    (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
+                         " with built-in #" (:block/title (d/entity db v)))
                     {:type :notification
-                     :payload {:message (str "Can't set tag with built-in #" (:block/title (d/entity db v)))
+                     :payload {:message (str (if delete? "Can't remove tag" "Can't set tag")
+                                             " with built-in #" (:block/title (d/entity db v)))
                                :type :error}
                      :property-id :block/tags
                      :property-value v}))))
 
 (defn- disallow-tagging-a-built-in-entity
-  [db block-eids]
+  [db block-eids & {:keys [delete?]}]
   (when-let [built-in-ent (some #(when (:logseq.property/built-in? %) %)
                                 (map #(d/entity db %) block-eids))]
-    (throw (ex-info (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
+    (throw (ex-info (str (if delete? "Can't remove tag" "Can't add tag")
+                         " on built-in " (pr-str (:block/title built-in-ent)))
                     {:type :notification
-                     :payload {:message (str "Can't add tag on built-in " (pr-str (:block/title built-in-ent)))
+                     :payload {:message (str (if delete? "Can't remove tag" "Can't add tag")
+                                             " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
 (defn validate-tags-property
+  "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids)
   (disallow-node-cant-tag-with-private-tags db block-eids v)
   (disallow-node-cant-tag-with-built-in-non-tags db block-eids v))
+
+(defn validate-tags-property-deletion
+  "Validates deleting a property value from :block/tags for given blocks"
+  [db block-eids v]
+  (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
+  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true}))

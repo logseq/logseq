@@ -50,7 +50,6 @@
  :relaunch-confirm-to-work                          "Debe relanzar la aplicación para hacer que funcione. ¿Desea reiniciarla ahora?"
  :remove-background                                 "Eliminar el fondo"
  :remove-heading                                    "Eliminar encabezado"
- :remove-orphaned-pages                             "¿Eliminar páginas huérfanas?"
  :save                                              "Guardar"
  :settings                                          "Opciones"
  :settings-of-plugins                               "Opciones de Extensiones"

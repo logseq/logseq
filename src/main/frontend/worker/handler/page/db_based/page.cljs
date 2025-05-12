@@ -8,10 +8,10 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
@@ -49,7 +49,7 @@
                 (keep (fn [[k v]]
                         ;; TODO: Pass in property type in order to support property
                         ;; types other than :default
-                        (when (db-property-util/built-in-has-ref-value? k)
+                        (when (db-property/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]
       (cond-> (if class?

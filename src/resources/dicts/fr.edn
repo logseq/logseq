@@ -373,7 +373,6 @@
     :export-transparent-background "Arrière-plan transparent"
     :home "Accueil"
     :new-page "Nouvelle page :"
-    :remove-orphaned-pages "Supprimer les pages orphelines ?"
     :toggle-theme "Changer le thème"
     :whiteboards "Tableaux blancs"
     :bug-report/clipboard-inspector-title "Inspecteur du presse-papier"

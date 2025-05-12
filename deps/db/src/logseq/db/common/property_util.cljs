@@ -3,7 +3,6 @@
   (:require [datascript.core :as d]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- get-file-pid-by-ident
@@ -27,18 +26,12 @@
     db-ident
     (get-file-pid-by-ident db-ident)))
 
-(defn built-in-has-ref-value?
-  "Given a built-in's db-ident, determine if its property value is a ref"
-  [db-ident]
-  (contains? db-property-type/value-ref-property-types
-             (get-in db-property/built-in-properties [db-ident :schema :type])))
-
 (defn lookup
   "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
   [repo block db-ident]
   (if (sqlite-util/db-based-graph? repo)
     (let [val (get block db-ident)]
-      (if (built-in-has-ref-value? db-ident) (db-property/property-value-content val) val))
+      (if (db-property/built-in-has-ref-value? db-ident) (db-property/property-value-content val) val))
     (get (:block/properties block) (get-pid repo db-ident))))
 
 (defn get-block-property-value
