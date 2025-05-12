@@ -9,6 +9,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.persist :as db-persist]
+            [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -86,7 +87,7 @@
     (when url
       (search/reset-indice! url)
       (db/remove-conn! url)
-      (db/clear-query-state!)
+      (react/clear-query-state!)
       (-> (p/do! (db-persist/delete-graph! url))
           (p/catch (fn [error]
                      (prn "Delete repo failed, error: " error)))))))

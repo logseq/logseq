@@ -19,7 +19,7 @@
           blocks))
 
 (defn- get-file-page
-  "Copy of db/get-file-page. Too basic to couple to main app"
+  "Copy of file-model/get-file-page. Too basic to couple to main app"
   [db file-path]
   (ffirst
    (d/q

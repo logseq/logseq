@@ -1176,7 +1176,7 @@
                      :show-journals? show-journals-in-page-graph})))
 
 (defn batch-delete-dialog
-  [pages orphaned-pages? refresh-fn]
+  [pages refresh-fn]
   (fn [{:keys [close]}]
     [:div
      [:div.sm:flex.items-center
@@ -1185,9 +1185,7 @@
         (ui/icon "alert-triangle")]]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
        [:h3#modal-headline.text-lg.leading-6.font-medium
-        (if orphaned-pages?
-          (t :remove-orphaned-pages)
-          (t :page/delete-confirmation))]]]
+        (t :page/delete-confirmation)]]]
 
      [:ol.p-2.pt-4
       (for [page pages]

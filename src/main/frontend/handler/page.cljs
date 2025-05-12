@@ -28,6 +28,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -145,7 +146,7 @@
 (defn get-page-ref-text
   [page]
   (if (config/db-based-graph?)
-    (page-ref/->page-ref page)
+    (ref/->page-ref page)
     (file-page-handler/get-page-ref-text page)))
 
 (defn init-commands!
@@ -196,7 +197,7 @@
   (if (state/org-mode-file-link? (state/get-current-repo))
     (let [page-ref-text (get-page-ref-text q)
           value (gobj/get input "value")
-          old-page-ref (page-ref/->page-ref q)
+          old-page-ref (ref/->page-ref q)
           new-value (string/replace value
                                     old-page-ref
                                     page-ref-text)]
@@ -232,7 +233,7 @@
                              (text/get-namespace-last-part chosen)
                              chosen)
           wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
-                        (page-ref/->page-ref chosen-last-part)
+                        (ref/->page-ref chosen-last-part)
                         chosen-last-part)
           q (if (editor-handler/get-selected-text) "" q)
           last-pattern (if wrapped?
@@ -271,7 +272,7 @@
                                               [page (db/get-page page)])))
                                         [chosen' chosen-result])
             ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                       (page-ref/->page-ref (:block/uuid chosen-result))
+                       (ref/->page-ref (:block/uuid chosen-result))
                        (get-page-ref-text chosen'))
             result (when db-based?
                      (when-not (de/entity? chosen-result)
@@ -281,7 +282,7 @@
                                   :split-namespace? true})))
             ref-text' (if result
                         (let [title (:block/title result)]
-                          (page-ref/->page-ref title))
+                          (ref/->page-ref title))
                         ref-text)]
       (p/do!
        (editor-handler/insert-command! id

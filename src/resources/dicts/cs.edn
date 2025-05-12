@@ -432,7 +432,6 @@
  :all-pages                                        "Všechny stránky"
  :all-whiteboards                                  "Všechny tabule"
  :all-files                                        "Všechny soubory"
- :remove-orphaned-pages                            "Odstranit stránky bez rodičovské stránky?"
  :all-journals                                     "Všechny denníky"
  :settings                                         "Nastavení"
  :settings-of-plugins                              "Zásuvné moduly"

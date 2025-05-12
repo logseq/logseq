@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.react :as react]
             [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]
             [frontend.util :as util]
             [logseq.common.util.page-ref :as page-ref]))
@@ -72,13 +73,13 @@
 
 (defn- dsl-query
   [s]
-  (db/clear-query-state!)
+  (react/clear-query-state!)
   (when-let [result (dsl-query* test-helper/test-db (->smart-query s))]
     (map first (deref result))))
 
 (defn- custom-query
   [query]
-  (db/clear-query-state!)
+  (react/clear-query-state!)
   (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
                       (query-dsl/custom-query test-helper/test-db query {}))]
     (map first (deref result))))

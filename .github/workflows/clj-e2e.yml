@@ -2,7 +2,7 @@ name: Clojure E2E
 
 on:
   push:
-    branches: ["feat/db"]
+    branches: [master, "feat/db"]
     paths:
       - 'clj-e2e/**'
       - '.github/workflows/clj-e2e.yml'
@@ -10,7 +10,7 @@ on:
       - deps/**
       - packages/**
   pull_request:
-    branches: ["feat/db"]
+    branches: [master, "feat/db"]
     paths:
       - 'clj-e2e/**'
       - '.github/workflows/clj-e2e.yml'

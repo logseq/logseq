@@ -3,6 +3,7 @@
   (:require [clojure.test :refer [is]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [wally.main :as w]
             [wally.repl :as repl])
   (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
@@ -38,6 +39,10 @@
   []
   (let [editor (w/-query editor-q)]
     (when (w/visible? editor-q)
+      ;; ensure cursor exists
+      ;; Sometimes when the editor exists, there isn't a blinking cursor,
+      ;; causing subsequent operations (like pressing Enter) to fail.
+      (.focus editor)
       editor)))
 
 (defn get-edit-block-container
@@ -99,7 +104,8 @@
 
 (defn exit-edit
   []
-  (k/esc))
+  (k/esc)
+  (assert/assert-non-editor-mode))
 
 (defn get-text
   [locator]
@@ -116,24 +122,6 @@
   [locator]
   (let [box (.boundingBox locator)]
     [(.-x box) (.-y box)]))
-
-(defn indent-outdent
-  [indent?]
-  (let [editor (get-editor)
-        [x1 _] (bounding-xy editor)
-        _ (if indent? (k/tab) (k/shift+tab))
-        [x2 _] (bounding-xy editor)]
-    (if indent?
-      (is (< x1 x2))
-      (is (> x1 x2)))))
-
-(defn indent
-  []
-  (indent-outdent true))
-
-(defn outdent
-  []
-  (indent-outdent false))
 
 (defn repeat-keyboard
   [n shortcut]
@@ -191,14 +179,12 @@
   [tag]
   (press-seq " #" {:delay 20})
   (press-seq tag)
-  (w/click (format "a.menu-link:has-text(\"%s\")" tag))
+  (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
   ;; wait tag added on ui
   (assert/assert-is-visible
-   (-> (w/-query ".ls-block")
-       (.filter (.setHas (Locator$FilterOptions.)
-                         (w/-query ".editor-wrapper textarea")))
-       (.filter (.setHas (Locator$FilterOptions.)
-                         (w/-query (format ".block-tag :text('%s')" tag)))))))
+   (-> ".ls-block"
+       (loc/filter :has ".editor-wrapper textarea")
+       (loc/filter :has (format ".block-tag :text('%s')" tag)))))
 
 (defn -query-last
   [q]

@@ -12,6 +12,7 @@
     (w/make-page {:headless (or headless @config/*headless)
                   :persistent false
                   :slow-mo @config/*slow-mo})
+    (w/grant-permissions :clipboard-write :clipboard-read)
     (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}]
       (w/navigate (str "http://localhost:" (or port @config/*port)))
       (f))))

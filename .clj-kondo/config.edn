@@ -85,6 +85,7 @@
              frontend.config config
              frontend.date date
              frontend.db db
+             frontend.db.file-based.model file-model
              frontend.db-mixins db-mixins
              frontend.db.query-custom query-custom
              frontend.db.query-dsl query-dsl

@@ -9,8 +9,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.ref :as ref]
             [frontend.state :as state]
-            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 ;; TODO: test
@@ -48,7 +48,7 @@
 (defn handle-command-zotero
   [id page-name]
   (state/clear-editor-action!)
-  (editor-handler/insert-command! id (page-ref/->page-ref page-name) nil {}))
+  (editor-handler/insert-command! id (ref/->page-ref page-name) nil {}))
 
 (defn- create-abstract-note!
   [page-name abstract-note]

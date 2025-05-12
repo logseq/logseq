@@ -10,7 +10,7 @@
   record all playwright contexts in this dynamic var"
   nil)
 
-(defn- screenshot
+(defn screenshot
   [page test-name]
   (println :screenshot test-name)
   (.screenshot

@@ -10,6 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
@@ -1046,13 +1047,13 @@
 (defn ^:export get_pages_from_namespace
   [ns]
   (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (db-model/get-namespace-pages repo ns)]
+    (when-let [pages (file-model/get-namespace-pages repo ns)]
       (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
 
 (defn ^:export get_pages_tree_from_namespace
   [ns]
   (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
+    (when-let [pages (file-model/get-namespace-hierarchy repo ns)]
       (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
 
 (defn- first-child-of-block

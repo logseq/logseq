@@ -3,6 +3,7 @@
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [logseq.graph-parser :as graph-parser]
             [logseq.common.util :as common-util]
             [frontend.fs.diff-merge :as diff-merge]
@@ -17,7 +18,7 @@
   "Conflict of files towards same page"
   [repo-url page file]
   (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
+    (let [current-file (:file/path (file-model/get-page-file repo-url page-name))]
       (when (not= file current-file)
         current-file))))
 
