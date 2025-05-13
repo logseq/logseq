@@ -6,14 +6,14 @@
 
 .cp__file-sync, .cp__rtc-sync {
   &-indicator {
-    .ui__button.cloud {
+      a.button.cloud {
       @apply relative;
 
       &.on {
         @apply after:content-['*'];
 
         &:after {
-          @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
+          @apply absolute bottom-2.5 right-2 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
 
           background-color: var(--ls-color-file-sync-pending);
         }
