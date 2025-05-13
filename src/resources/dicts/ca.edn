@@ -603,7 +603,6 @@
  :settings-page/update-available                    "S'ha trobat una nova versió"
  :settings-page/update-error-1                      "¡⚠️ Ups, alguna cosa ha fallat!"
  :settings-page/update-error-2                      " Si us plau comprovi"
- :settings-permission/start-granting                "Permetre"
  :shortcut.category/basics                          "Bàsic"
  :shortcut.category/block-command-editing           "Ordres d'edició de bloc"
  :shortcut.category/block-editing                   "Edició de bloc general"

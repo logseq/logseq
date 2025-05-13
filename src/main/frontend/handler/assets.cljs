@@ -154,8 +154,6 @@
               css
               (map vector rel-paths blob-urls)))))
 
-(defonce *assets-url-cache (atom {}))
-
 (defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)

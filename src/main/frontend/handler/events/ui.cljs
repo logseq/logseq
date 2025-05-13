@@ -92,12 +92,6 @@
   (shui/dialog-open!
    (component-page/batch-delete-dialog selected-rows ok-handler)))
 
-(defn get-local-repo
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (config/local-file-based-graph? repo)
-      repo)))
-
 (defmethod events/handle :modal/show-cards [[_ cards-id]]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))]
     (shui/dialog-open!
