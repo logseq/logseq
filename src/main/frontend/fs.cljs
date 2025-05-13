@@ -7,7 +7,6 @@
             [frontend.config :as config]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.memory-fs :as memory-fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
             [frontend.mobile.util :as mobile-util]
@@ -18,7 +17,6 @@
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
-(defonce nfs-backend (nfs/->Nfs))
 (defonce memory-backend (memory-fs/->MemoryFs))
 (defonce node-backend (node/->Node))
 (defonce mobile-backend (capacitor-fs/->Capacitorfs))
@@ -31,10 +29,7 @@
     node-backend
 
     (mobile-util/native-platform?)
-    mobile-backend
-
-    :else
-    nfs-backend))
+    mobile-backend))
 
 (defn get-fs
   [dir & {:keys [repo rpath]}]
@@ -62,11 +57,8 @@
       (and (util/electron?) (not bfs-local?))
       node-backend
 
-      (mobile-util/native-platform?)
-      mobile-backend
-
       :else
-      nfs-backend)))
+      mobile-backend)))
 
 (defn mkdir!
   [dir]

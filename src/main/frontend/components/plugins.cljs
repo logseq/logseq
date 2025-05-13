@@ -586,13 +586,13 @@
       (when (and develop-mode? (util/electron?) (not market?))
         [:div
          (ui/tooltip
-           (ui/button
-             (t :plugin/load-unpacked)
-             {:icon "upload"
-              :intent "link"
-              :class "load-unpacked"
-              :on-click plugin-handler/load-unpacked-plugin})
-           [:div (t :plugin/unpacked-tips)])
+          (ui/button
+           (t :plugin/load-unpacked)
+           {:icon "upload"
+            :intent "link"
+            :class "load-unpacked"
+            :on-click plugin-handler/load-unpacked-plugin})
+          [:div (t :plugin/unpacked-tips)])
 
          (when (util/electron?)
            (unpacked-plugin-loader selected-unpacked-pkg))])]
@@ -1524,13 +1524,13 @@
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
 (rum/defc custom-js-installer
-  [{:keys [t current-repo db-restoring? nfs-granted?]}]
+  [{:keys [t current-repo db-restoring?]}]
   (hooks/use-effect!
    (fn []
      (when (and (not db-restoring?)
-                (or (not util/nfs?) nfs-granted?))
+                (not util/nfs?))
        (ui-handler/exec-js-if-exists-&-allowed! t)))
-   [current-repo db-restoring? nfs-granted?])
+   [current-repo db-restoring?])
   nil)
 
 (rum/defc perf-tip-content
