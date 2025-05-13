@@ -7,7 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

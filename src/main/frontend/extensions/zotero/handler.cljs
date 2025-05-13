@@ -9,7 +9,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [promesa.core :as p]))
 

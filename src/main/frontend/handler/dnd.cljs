@@ -6,7 +6,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [logseq.db :as ldb]))
 

@@ -1,5 +1,5 @@
-(ns frontend.ref
-  "Reference-related fns"
+(ns frontend.util.ref
+  "Reference-related util fns"
   (:require [frontend.config :as config]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]))

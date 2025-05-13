@@ -28,7 +28,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
