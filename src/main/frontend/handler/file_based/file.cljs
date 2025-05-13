@@ -6,13 +6,11 @@
             [frontend.db :as db]
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
@@ -78,15 +76,8 @@
 (defn backup-file!
   "Backup db content to bak directory"
   [repo-url path db-content content]
-  (cond
-    (util/electron?)
-    (ipc/ipc "backupDbFile" repo-url path db-content content)
-
-    (mobile-util/native-platform?)
-    (capacitor-fs/backup-file-handle-changed! repo-url path db-content)
-
-    :else
-    nil))
+  (when (util/electron?)
+    (ipc/ipc "backupDbFile" repo-url path db-content content)))
 
 (defn- detect-deprecations
   [path content]

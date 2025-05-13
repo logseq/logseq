@@ -19,7 +19,6 @@
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.srs :as srs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.sync :as sync]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
@@ -98,12 +97,6 @@
      (if db-based? (fn [] (fsrs/cards-view cards-id)) srs/global-cards)
      {:id :srs
       :label "flashcards__cp"})))
-
-(defmethod events/handle :modal/show-instruction [_]
-  (shui/dialog-open!
-   capacitor-fs/instruction
-   {:id :instruction
-    :label "instruction__cp"}))
 
 (defmethod events/handle :modal/show-themes-modal [[_ classic?]]
   (if classic?
