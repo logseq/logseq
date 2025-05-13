@@ -3,6 +3,9 @@
     "version": "0.0.1",
     "private": true,
     "main": "static/electron.js",
+    "engines" : {
+      "node" : ">=22.15.0"
+    },
     "devDependencies": {
         "@axe-core/playwright": "=4.4.4",
         "@capacitor/cli": "7.2.0",
