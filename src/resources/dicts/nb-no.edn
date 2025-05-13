@@ -669,7 +669,6 @@
  :bug-report/clipboard-inspector-title "Utklippstavle datainspektør"
  :query/config-property-settings "Egenskapsinnstillinger for denne spørringen:"
  :search-item/no-result "Ingen matchende resultat"
- :settings-permission/start-granting "Gi tillatelse"
  :whiteboard/edit-pdf "Rediger PDF"
  :right-side-bar/pane-close-all "Lukk alle"
  :right-side-bar/pane-close-others "Lukk andre"
