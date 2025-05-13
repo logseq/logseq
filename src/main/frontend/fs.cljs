@@ -5,11 +5,9 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.memory-fs :as memory-fs]
             [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -19,17 +17,12 @@
 
 (defonce memory-backend (memory-fs/->MemoryFs))
 (defonce node-backend (node/->Node))
-(defonce mobile-backend (capacitor-fs/->Capacitorfs))
 
 (defn- get-native-backend
   "Native FS backend of current platform"
   []
-  (cond
-    (util/electron?)
-    node-backend
-
-    (mobile-util/native-platform?)
-    mobile-backend))
+  (when (util/electron?)
+    node-backend))
 
 (defn get-fs
   [dir & {:keys [repo rpath]}]
@@ -58,7 +51,7 @@
       node-backend
 
       :else
-      mobile-backend)))
+      nil)))
 
 (defn mkdir!
   [dir]
@@ -166,7 +159,7 @@
 
     :else
     (let [[old-path new-path]
-          (map #(if (or (util/electron?) (mobile-util/native-platform?))
+          (map #(if (util/electron?)
                   %
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])
@@ -246,9 +239,6 @@
     (util/electron?)
     (path/url-to-path path)
 
-    (mobile-util/native-platform?)
-    path
-
     :else
     path))
 
@@ -258,12 +248,5 @@
 
 (defn backup-db-file!
   [repo path db-content disk-content]
-  (cond
-    (util/electron?)
-    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)
-
-    (mobile-util/native-platform?)
-    (capacitor-fs/backup-file repo :backup-dir path db-content)
-
-    ;; TODO: nfs
-    ))
+  (when (util/electron?)
+    (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content disk-content)))

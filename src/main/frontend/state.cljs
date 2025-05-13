@@ -218,10 +218,6 @@
       :mobile/show-toolbar?                  false
       :mobile/show-recording-bar?            false
       :mobile/show-tabbar?                   false
-;;; Used to monitor mobile app status,
-;;; value spec:
-;;; {:is-active? bool, :timestamp int}
-      :mobile/app-state-change                 (atom nil)
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?
@@ -2227,12 +2223,6 @@ Similar to re-frame subscriptions"
     (when (and  (not (contains? #{"system"} type))
                 (every? not-empty (vals agent-opts)))
       (str protocol "://" host ":" port))))
-
-(defn set-mobile-app-state-change
-  [is-active?]
-  (set-state! :mobile/app-state-change
-              {:is-active? is-active?
-               :timestamp (inst-ms (js/Date.))}))
 
 (defn get-sync-graph-by-id
   [graph-uuid]

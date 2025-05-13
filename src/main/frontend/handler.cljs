@@ -30,7 +30,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -167,8 +166,6 @@
   (events/run!)
 
   (p/do!
-   (when (mobile-util/native-platform?)
-     (mobile/mobile-preinit))
    (-> (p/let [_ (db-browser/start-db-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
