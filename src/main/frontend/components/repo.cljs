@@ -105,7 +105,7 @@
 
                      :else
                      "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-         (when-not (and only-cloud? (not manager?))
+         (when-not (and db-graph? only-cloud? (not manager?))
            [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
             {:title title
              :on-click (fn []
