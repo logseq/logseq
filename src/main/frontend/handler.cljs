@@ -92,8 +92,6 @@
          (fn []
            (js/console.log "db restored, setting up repo hooks")
 
-           (state/pub-event! [:modal/nfs-ask-permission])
-
            (page-handler/init-commands!)
 
            (watch-for-date!)
