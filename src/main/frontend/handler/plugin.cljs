@@ -67,6 +67,13 @@
   (invoke-exported-api :unlink_installed_web_plugin key)
   (invoke-exported-api :unlink_plugin_user_settings key))
 
+(defn assets-theme-to-file
+  [theme]
+  (when theme
+    (cond-> theme
+      (util/electron?)
+      (update :url #(some-> % (string/replace-first "assets://" "file://"))))))
+
 (defn load-plugin-preferences
   []
   (-> (invoke-exported-api :load_user_preferences)
@@ -211,7 +218,6 @@
                    (let [e (or evt ctx)]
                      (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                        (case (keyword status)
-
                          :completed
                          (let [{:keys [id dst name title theme web-pkg]} payload
                                name (or title name "Untitled")]
@@ -333,6 +339,7 @@
                      :action (fn []
                                (state/pub-event!
                                 [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
+
     palette-cmd))
 
 (defn simple-cmd-keybinding->shortcut-args
@@ -483,7 +490,7 @@
 (defn select-a-plugin-theme
   [pid]
   (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
-    (when-let [theme (first themes)]
+    (when-let [theme (assets-theme-to-file (first themes))]
       (js/LSPluginCore.selectTheme (bean/->js theme)))))
 
 (defn update-plugin-settings-state
@@ -642,7 +649,7 @@
             dotroot (get-ls-dotdir-root)
             filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)
-          (fs/write-file! repo nil filepath (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (fs/write-plain-text-file! repo nil filepath (js/JSON.stringify data nil 2) {:skip-compare? true})
           (idb/set-item! filepath data))))))
 
 (defn make-fn-to-unlink-dotdir-json
@@ -882,9 +889,16 @@
                                     (clear-commands! pid)
                                     (unregister-plugin-themes pid)))
 
-                  (.on "themes-changed" (fn [^js themes]
-                                          (swap! state/state assoc :plugin/installed-themes
-                                                 (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                  (.on "theme-selected" (fn [^js theme]
+                                          (let [theme (bean/->clj theme)
+                                                theme (assets-theme-to-file theme)
+                                                url   (:url theme)
+                                                mode  (:mode theme)]
+                                            (when mode
+                                              (state/set-custom-theme! mode theme)
+                                              (state/set-theme-mode! mode))
+                                            (state/set-state! :plugin/selected-theme url)
+                                            (hook-plugin-app :theme-changed theme))))
 
                   (.on "theme-selected" (fn [^js theme ^js opts]
                                           (let [theme (bean/->clj theme)
@@ -939,16 +953,16 @@
         plugins-async)
 
       (p/then
-        (fn [plugins-async]
+       (fn [plugins-async]
           ;; true indicate for preboot finished
-          (state/set-state! :plugin/indicator-text true)
+         (state/set-state! :plugin/indicator-text true)
           ;; wait for the plugin register async messages
-          (js/setTimeout
-            (fn [] (callback)
-              (some-> (seq plugins-async)
-                (p/delay 16)
-                (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
-            (if (util/electron?) 64 0))))
+         (js/setTimeout
+          (fn [] (callback)
+            (some-> (seq plugins-async)
+                    (p/delay 16)
+                    (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
+          (if (util/electron?) 64 0))))
       (p/catch
        (fn [^js e]
          (log/error :setup-plugin-system-error e)

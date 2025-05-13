@@ -1,28 +1,28 @@
 (ns frontend.handler.file-based.file
   "Provides util handler fns for file graph files"
   (:refer-clojure :exclude [load-file])
-  (:require [frontend.config :as config]
+  (:require [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.handler.file-based.reset-file :as reset-file-handler]
+            [frontend.fs.nfs :as nfs]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
+            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.schema.handler.global-config :as global-config-schema]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.common.util :as common-util]
-            [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
-            [frontend.mobile.util :as mobile-util]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
-            [logseq.common.config :as common-config]))
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -32,9 +32,9 @@
    (p/let [content (fs/read-file (config/get-repo-dir repo-url) path)]
      content)
    (p/catch
-       (fn [e]
-         (println "Load file failed: " path)
-         (js/console.error e)))))
+    (fn [e]
+      (println "Load file failed: " path)
+      (js/console.error e)))))
 
 (defn- load-multiple-files
   [repo-url paths]
@@ -64,7 +64,7 @@
     (-> (p/all (load-multiple-files repo-url files))
         (p/then (fn [contents]
                   (let [file-contents (cond->
-                                        (zipmap files contents)
+                                       (zipmap files contents)
 
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
@@ -115,7 +115,7 @@
         path-dir (config/get-repo-dir repo)
         write-file-options' (merge write-file-options
                                    (when original-content {:old-content original-content}))]
-    (fs/write-file! repo path-dir path content write-file-options')))
+    (fs/write-plain-text-file! repo path-dir path content write-file-options')))
 
 (defn alter-global-file
   "Does pre-checks on a global file, writes if it's not already written
@@ -126,18 +126,18 @@
     (do
       (detect-deprecations path content)
       (when (validate-file path content)
-       (-> (p/let [_ (when-not from-disk?
-                       (fs/write-file! "" nil path content {:skip-compare? true}))]
-                  (p/do! (global-config-handler/restore-global-config!)
-                         (state/pub-event! [:shortcut/refresh])))
-           (p/catch (fn [error]
-                      (state/pub-event! [:notification/show
-                                         {:content (str "Failed to write to file " path ", error: " error)
-                                          :status :error}])
-                      (log/error :write/failed error)
-                      (state/pub-event! [:capture-error
-                                         {:error error
-                                          :payload {:type :write-file/failed-for-alter-file}}]))))))
+        (-> (p/let [_ (when-not from-disk?
+                        (fs/write-plain-text-file! "" nil path content {:skip-compare? true}))]
+              (p/do! (global-config-handler/restore-global-config!)
+                     (state/pub-event! [:shortcut/refresh])))
+            (p/catch (fn [error]
+                       (state/pub-event! [:notification/show
+                                          {:content (str "Failed to write to file " path ", error: " error)
+                                           :status :error}])
+                       (log/error :write/failed error)
+                       (state/pub-event! [:capture-error
+                                          {:error error
+                                           :payload {:type :write-file/failed-for-alter-file}}]))))))
     (log/error :msg "alter-global-file does not support this file" :file path)))
 
 (defn alter-file
@@ -209,23 +209,23 @@
                        (when path
                          (let [path (common-util/path-normalize path)
                                original-content (get file->content path)]
-                          (-> (p/let [_ (or
-                                         (util/electron?)
-                                         (nfs/check-directory-permission! repo))]
-                                (fs/write-file! repo (config/get-repo-dir repo) path content
-                                                {:old-content original-content}))
-                              (p/catch (fn [error]
-                                         (state/pub-event! [:notification/show
-                                                            {:content (str "Failed to save the file " path ". Error: "
-                                                                           (str error))
-                                                             :status :error
-                                                             :clear? false}])
-                                         (state/pub-event! [:capture-error
-                                                            {:error error
-                                                             :payload {:type :write-file/failed}}])
-                                         (log/error :write-file/failed {:path path
-                                                                        :content content
-                                                                        :error error})))))))
+                           (-> (p/let [_ (or
+                                          (util/electron?)
+                                          (nfs/check-directory-permission! repo))]
+                                 (fs/write-plain-text-file! repo (config/get-repo-dir repo) path content
+                                                            {:old-content original-content}))
+                               (p/catch (fn [error]
+                                          (state/pub-event! [:notification/show
+                                                             {:content (str "Failed to save the file " path ". Error: "
+                                                                            (str error))
+                                                              :status :error
+                                                              :clear? false}])
+                                          (state/pub-event! [:capture-error
+                                                             {:error error
+                                                              :payload {:type :write-file/failed}}])
+                                          (log/error :write-file/failed {:path path
+                                                                         :content content
+                                                                         :error error})))))))
         finish-handler (fn []
                          (when finish-handler
                            (finish-handler)))]

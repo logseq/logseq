@@ -289,11 +289,11 @@
                                  (let [dir (config/get-repo-dir repo)]
                                    (p/let [content (fs/read-file dir file)]
                                      (let [new-content (string/replace content (str id) (str (random-uuid)))]
-                                       (p/let [_ (fs/write-file! repo
-                                                                 dir
-                                                                 file
-                                                                 new-content
-                                                                 {})]
+                                       (p/let [_ (fs/write-plain-text-file! repo
+                                                                            dir
+                                                                            file
+                                                                            new-content
+                                                                            {})]
                                          (reset! resolved? true))))))
                      :class "inline mx-1")
           "it."]])]]))

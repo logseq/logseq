@@ -216,7 +216,7 @@
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
           data     (with-out-str (pprint {:highlights highlights :extra extra}))]
-      (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
+      (fs/write-plain-text-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn file-based-resolve-hls-data-by-key$
   [target-key]
@@ -242,7 +242,7 @@
           new-fpath  (str fdir "/" fname "_" fstamp ".png")
           old-fpath  (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
           _          (and old-fpath (fs/rename! repo-url old-fpath new-fpath))
-          _          (fs/write-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
+          _          (fs/write-plain-text-file! repo-url repo-dir new-fpath png {:skip-compare? true})]
 
     (js/console.timeEnd :write-area-image)))
 
