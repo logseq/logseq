@@ -602,7 +602,6 @@
  :settings-page/update-available                    "Se encontró nuevo lanzamiento"
  :settings-page/update-error-1                      "¡⚠️ Ups, algo malió sal!"
  :settings-page/update-error-2                      " Por favor comprueba"
- :settings-permission/start-granting                "Permitir"
  :shortcut.category/basics                          "Básico"
  :shortcut.category/block-command-editing           "Comandos edición de bloque"
  :shortcut.category/block-editing                   "Edición de bloque general"

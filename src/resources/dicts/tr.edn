@@ -285,8 +285,6 @@
  :settings-page/update-available "Yeni sürüm bulundu: "
  :settings-page/update-error-1 "⚠️ Ne yazık ki bir sorun oluştu!"
  :settings-page/update-error-2 " Lütfen bu bağlantıyı denetleyin: "
- :settings-permission/start-granting "İzin ver"
-
  :settings-page/auto-chmod "Dosya izinlerini otomatik olarak değiştir"
  :settings-page/auto-chmod-desc "Grup üyeliği tarafından verilen izinlere sahip birden fazla kullanıcının düzenleme yapmasına izin vermek için devre dışı bırakın."
  :yes "Evet"

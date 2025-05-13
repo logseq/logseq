@@ -275,8 +275,6 @@
  :settings-page/update-available                   "Nalezena nová verze "
  :settings-page/update-error-1                     "⚠️ Ups, něco se pokazilo!"
  :settings-page/update-error-2                     " Podívejte se prosím na "
- :settings-permission/start-granting               "Povolit"
-
  :settings-page/auto-chmod                         "Automatická změna oprávnění k souborům"
  :settings-page/auto-chmod-desc                    "Zakázat, abyste umožnili úpravy více uživatelům s oprávněními udělenými na základě členství ve skupině."
  :yes                                              "Ano"

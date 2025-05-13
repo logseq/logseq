@@ -289,8 +289,6 @@
  :settings-page/update-available "新しいリリースがみつかりました "
  :settings-page/update-error-1 "⚠️ なにか問題が発生しました"
  :settings-page/update-error-2 "次のリンクをご確認ください："
- :settings-permission/start-granting "認証"
-
  :settings-page/auto-chmod "ファイルの権限を自動で変更する"
  :settings-page/auto-chmod-desc "グループ メンバーシップを用いて、複数人のユーザに編集を許可する権限を与えたい場合、この機能を無効にしてください。"
  :yes "はい"

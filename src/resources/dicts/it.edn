@@ -604,7 +604,6 @@
  :settings-page/update-available "Trovato una nuova versione "
  :settings-page/update-error-1 "⚠️ Ops, qualcosa è andato storto!"
  :settings-page/update-error-2 " Per favore, controlla il "
- :settings-permission/start-granting "Concessione"
  :shortcut.category/plugins "Plugin"
  :shortcut.category/whiteboard "Lavagna"
  :tips/all-done "Tutto fatto!"
