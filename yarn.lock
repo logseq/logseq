@@ -587,12 +587,7 @@
   resolved "https://registry.yarnpkg.com/@js-joda/timezone/-/timezone-2.5.0.tgz#b422ff400c25ae311384239c62724eecee2e442b"
   integrity sha512-HHFVhGUKIOtITiT+sbQRdYuO5Q+a8FDj/vQSGUSxe6+5w2in5JsavfRsAN2tU/NCdBeFx/6q8evHMtOrXfdn2g==
 
-"@logseq/capacitor-file-sync@5.0.2":
-  version "5.0.2"
-  resolved "https://registry.yarnpkg.com/@logseq/capacitor-file-sync/-/capacitor-file-sync-5.0.2.tgz#10c56e35b41b1a0afd293c9b045fbcfe150c3477"
-  integrity sha512-FymsTeRtF66zG+oeO+ohZxWICMQMC8An4n9pdI0zz1WaGLer4oWC/lUghlC2DpztRLA32p0CH28tEzF5+2jARg==
-
-"@logseq/diff-merge@0.2.2":
+"@logseq/diff-merge@^0.2.2":
   version "0.2.2"
   resolved "https://registry.yarnpkg.com/@logseq/diff-merge/-/diff-merge-0.2.2.tgz#583bd8c8c66d5ff05ea70906475efaa078e839a3"
   integrity sha512-0WeKNhq8PsjvunOqNEd9aSM4tgiClwhonXgXzrQ4KYj8VoyLaEAyEWWGOAoE7mwR+aqwM+bMB4MxuNFywnUb8A==
@@ -9001,6 +8996,11 @@ undertaker@^1.2.1:
     object.defaults "^1.0.0"
     object.reduce "^1.0.0"
     undertaker-registry "^1.0.0"
+
+undici-types@~6.20.0:
+  version "6.20.0"
+  resolved "https://registry.yarnpkg.com/undici-types/-/undici-types-6.20.0.tgz#8171bf22c1f588d1554d55bf204bc624af388433"
+  integrity sha512-Ny6QZ2Nju20vw1SRHe3d9jVu6gJ+4e3+MMpqu7pqE5HT6WsTSlce++GQmK5UXS8mzV8DSYHrQH+Xrf2jVcuKNg==
 
 undici-types@~6.21.0:
   version "6.21.0"
