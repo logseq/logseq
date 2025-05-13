@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]

@@ -122,15 +122,8 @@
 
 (defn <export-db!
   [repo data]
-  (cond
-    (util/electron?)
-    (ipc/ipc :db-export repo data)
-
-    ;; TODO: browser nfs-supported? auto backup
-
-    ;;
-    :else
-    nil))
+  (when (util/electron?)
+    (ipc/ipc :db-export repo data)))
 
 (defn- sqlite-error-handler
   [error]

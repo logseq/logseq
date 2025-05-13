@@ -71,7 +71,6 @@
       :notification/show?                    false
       :notification/content                  nil
       :repo/loading-files?                   {}
-      :nfs/user-granted?                     {}
       :nfs/refreshing?                       nil
       :instrument/disabled?                  (storage/get "instrument-disabled")
       ;; TODO: how to detect the network reliably?
@@ -2279,10 +2278,6 @@ Similar to re-frame subscriptions"
 (defn get-current-pdf
   []
   (:pdf/current @state))
-
-(defn nfs-user-granted?
-  [repo]
-  (get-in @state [:nfs/user-granted? repo]))
 
 (defn set-current-pdf!
   [inflated-file]

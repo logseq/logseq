@@ -7,7 +7,6 @@
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -73,7 +72,7 @@
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
-                   (log/error :nfs/load-files-error repo-url)
+                   (log/error :fs/load-files-error repo-url)
                    (log/error :exception error))))))
 
 (defn backup-file!
@@ -209,11 +208,8 @@
                        (when path
                          (let [path (common-util/path-normalize path)
                                original-content (get file->content path)]
-                           (-> (p/let [_ (or
-                                          (util/electron?)
-                                          (nfs/check-directory-permission! repo))]
-                                 (fs/write-plain-text-file! repo (config/get-repo-dir repo) path content
-                                                            {:old-content original-content}))
+                           (-> (fs/write-plain-text-file! repo (config/get-repo-dir repo) path content
+                                                          {:old-content original-content})
                                (p/catch (fn [error]
                                           (state/pub-event! [:notification/show
                                                              {:content (str "Failed to save the file " path ". Error: "

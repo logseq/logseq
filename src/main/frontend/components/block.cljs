@@ -467,11 +467,9 @@
   [state config title href metadata full_text]
   (let [src (::src state)
         repo (state/get-current-repo)
-        granted? (state/sub [:nfs/user-granted? repo])
         href (config/get-local-asset-absolute-path href)
         db-based? (config/db-based-graph? repo)]
     (when (and (or db-based?
-                   granted?
                    (util/electron?)
                    (mobile-util/native-platform?))
                (nil? @src))

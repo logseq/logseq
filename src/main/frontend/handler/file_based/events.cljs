@@ -17,7 +17,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.file-based.file :as file-handler]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]

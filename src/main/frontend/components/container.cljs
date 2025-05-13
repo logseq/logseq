@@ -262,17 +262,17 @@
             :shortcut :go/home})
 
           (when enable-journals?
-           (sidebar-item
-            {:class "journals-nav"
-             :active (and (not srs-open?)
-                          (or (= route-name :all-journals) (= route-name :home)))
-             :title (t :left-side-bar/journals)
-             :on-click-handler (fn [e]
-                                 (if (gobj/get e "shiftKey")
-                                   (route-handler/sidebar-journals!)
-                                   (route-handler/go-to-journals!)))
-             :icon "calendar"
-             :shortcut :go/journals}))))
+            (sidebar-item
+             {:class "journals-nav"
+              :active (and (not srs-open?)
+                           (or (= route-name :all-journals) (= route-name :home)))
+              :title (t :left-side-bar/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon "calendar"
+              :shortcut :go/journals}))))
 
       (for [nav checked-navs]
         (cond
@@ -955,7 +955,6 @@
                       (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content']
   (let [current-repo (state/sub :git/current-repo)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
         editor-font (some-> (state/sub :ui/editor-font) (name))
@@ -992,7 +991,7 @@
       :route route-match
       :current-repo current-repo
       :edit? edit?
-      :nfs-granted? granted?
+
       :db-restoring? db-restoring?
       :sidebar-open? sidebar-open?
       :settings-open? settings-open?
@@ -1067,7 +1066,6 @@
       (plugins/custom-js-installer
        {:t t
         :current-repo current-repo
-        :nfs-granted? granted?
         :db-restoring? db-restoring?})
       (app-context-menu-observer)
 
