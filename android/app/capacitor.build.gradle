@@ -24,6 +24,7 @@ dependencies {
     implementation project(':logseq-capacitor-file-sync')
     implementation project(':capacitor-voice-recorder')
     implementation project(':send-intent')
+    implementation project(':jcesarmobile-ssl-skip')
 
 }
 
