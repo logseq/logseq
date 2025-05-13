@@ -63,7 +63,6 @@
                 (re-find #"(?i)^(COM[0-9]|CON|LPT[0-9]|NUL|PRN|AUX|com[0-9]|con|lpt[0-9]|nul|prn|aux)\..+" fname)
                 (re-find #"[\u0000-\u001f\u0080-\u009f]" fname)))))
 
-
 (defn- path-join-internal
   "Joins the given path segments into a single path, handling relative paths,
   '..' and '.' normalization."
@@ -153,7 +152,6 @@
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
 
-
 (defn path-join
   "Join path segments, or URL base and path segments"
   [base & segments]
@@ -191,12 +189,10 @@
     :else
     (path-join (str protocol "//") path)))
 
-
 (defn- path-normalize-internal
   "Normalize path using path-join, break into segment and re-join"
   [path]
   (path-join path))
-
 
 (defn url-normalize
   [origin-url]
@@ -223,7 +219,13 @@
   (if (is-file-url? original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
-    (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
+    (let [^js url (try
+                    (js/URL. (string/replace (safe-decode-uri-component original-url) "assets://" "file://"))
+                    (catch :default e
+                      (js/console.error "invalid URL:"
+                                        (str "original-url: " original-url
+                                             " url: " (string/replace (safe-decode-uri-component original-url) "assets://" "file://")))
+                      (throw e)))
           path (safe-decode-uri-component (.-pathname url))
           host (.-host url)
           path (if (string/starts-with? path "///")
@@ -276,7 +278,6 @@
           (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
           (str base-prefix (string/join "/" remain-segs)))))))
 
-
 (defn parent
   "Parent, containing directory"
   [path]
@@ -284,7 +285,6 @@
     ;; ugly but works
     (path-normalize (str path "/.."))
     nil))
-
 
 (defn resolve-relative-path
   "Assume current-path is a file"
