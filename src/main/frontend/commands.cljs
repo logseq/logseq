@@ -426,8 +426,7 @@
        ["Advanced Query" (advanced-query-steps) "Create an advanced query block" :icon/query]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
-       (when-not db?
-         ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode])
+       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
        ["Calculator"
         (calc-steps)
         "Insert a calculator" :icon/calculator]
@@ -474,7 +473,7 @@
         commands)
 
 ;; Allow user to modify or extend, should specify how to extend.
-
+      
       (state/get-commands)
       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
                                                (mapv #(vec (concat % [nil :icon/puzzle])))))]

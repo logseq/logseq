@@ -79,8 +79,6 @@
  :help/title-terms "条款"
  :linked-references/filter-search "在链接的页面内搜索"
  :page/copy-page-url "复制页面 URL"
- :page/slide-view "幻灯片视图"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "小技巧: 按 "] [:code "f"] [:span.opacity-70 " 进入全屏"]])
  :plugin/contribute "✨编写和提交新插件"
  :right-side-bar/show-journals "显示日记"
  :select/default-prompt "请选择"

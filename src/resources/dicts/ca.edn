@@ -428,8 +428,6 @@
  :page/open-in-finder                               "Obrir ubicació del arxiu"
  :page/open-with-default-app                        "Obrir amb la aplicació preestablerta"
  :page/page-already-exists                          "¡La pàgina “{1}” ja existeix!"
- :page/slide-view                                   "Veure com diapositives"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Consell: pressiona "] [:code "f"] [:span.opacity-70 " per anar a pantalla completa"]])
  :page/something-went-wrong                         "Alguna cosa ha sortit malament"
  :page/step                                         "Pas {1}"
  :page/try                                          "Intentar"
