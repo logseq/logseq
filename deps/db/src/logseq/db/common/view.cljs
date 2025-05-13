@@ -506,7 +506,7 @@
      (common-util/distinct-by :label))))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
-  [db view-id {:keys [journals? _view-for-id view-feature-type input query-entity-ids filters sorting]
+  [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
                :as opts}]
   ;; TODO: create a view for journals maybe?
   (cond
@@ -519,7 +519,7 @@
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
           list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
-          group-by-property-ident (:db/ident group-by-property)
+          group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
           filters (or (:logseq.property.table/filters view) filters)
