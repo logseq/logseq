@@ -137,8 +137,6 @@
  :page/logseq-is-having-a-problem "Logseq is having a problem. To try to get it back to a working state, please try the following safe steps in order:"
  :page/step "Step {1}"
  :page/try "Try"
- :page/slide-view "View as slides"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Tip: press "] [:code "f"] [:span.opacity-70 " to go fullscreen"]])
  :page/delete-confirmation "Are you sure you want to delete this page and its file?"
  :page/db-delete-confirmation "Are you sure you want to delete this page?"
  :page/open-in-finder "Open in directory"

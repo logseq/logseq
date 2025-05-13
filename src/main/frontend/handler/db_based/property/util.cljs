@@ -5,11 +5,6 @@
             [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]))
 
-(defn get-property-name
-  "Get a property's name given its id"
-  [id]
-  (:block/title (db-utils/entity id)))
-
 (defn get-property-value
   "Get a property's name given its id"
   [e]
@@ -17,16 +12,10 @@
     (db-property/property-value-content e)
     e))
 
-(defn properties-by-name
-  "Given a block from a query result, returns a map of its properties indexed by property names"
-  [repo block]
-  (let [db (conn/get-db repo)]
-    (db-property/properties-by-name db block)))
-
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. Has some
-  overlap with db-property/properties-by-name"
+  overlap with block-macros/properties-by-name"
   ([properties] (readable-properties properties {:original-key? true}))
   ([properties {:keys [original-key? key-fn]
                 :or {key-fn identity}}]

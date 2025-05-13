@@ -963,6 +963,10 @@ html.is-mac {
   .block-title-wrap {
     @apply overflow-hidden h-6 whitespace-nowrap text-ellipsis;
   }
+
+  .jtrigger {
+    @apply px-1;
+  }
 }
 
 .positioned-properties.block-below {

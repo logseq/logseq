@@ -51,20 +51,19 @@
   "Given a properties map in the format of db-property/built-in-properties, builds their properties tx"
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
+   (fn [[db-ident {:keys [attribute schema title closed-values properties]}]]
      (let [db-ident (or attribute db-ident)
-           prop-name (or title (name (:name m)))
            schema' (schema->qualified-property-keyword schema)
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident
-                                  prop-name
+                                  title
                                   {:db/ident db-ident :schema schema' :closed-values closed-values}
                                   {})
                                  [(sqlite-util/build-new-property
                                    db-ident
                                    schema'
-                                   {:title prop-name})])
+                                   {:title title})])
            pvalue-tx-m (->property-value-tx-m
                         (merge property
                                ;; This config is for :logseq.property/default-value and may need to

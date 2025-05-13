@@ -534,8 +534,6 @@
  :page/illegal-page-name                          "Nieprawidłowa nazwa strony!"
  :page/logseq-is-having-a-problem                 "Logseq ma problem. Żeby przywrócić go do działającego stanu wykonaj po kolei następujące bezpieczne kroki:"
  :page/page-already-exists                        "Strona “{1}” już istnieje!"
- :page/slide-view                                 "Pokaż jako slajdy"
- :page/slide-view-tip-go-fullscreen               (fn [] [[:span.opacity-70 "Wskazówka: wciśnij "] [:code "f"] [:span.opacity-70 " żeby otworzyć na pełnym ekranie"]])
  :page/something-went-wrong                       "Coś poszło nie tak"
  :page/step                                       "Step (1)"
  :page/try                                        "Spróbuj"

@@ -5,7 +5,6 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
@@ -85,7 +84,7 @@
         db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
 
-            ;; build up nodes
+        ;; build up nodes
         full-pages'
         (cond->> full-pages
           created-at-filter
@@ -94,7 +93,9 @@
           (remove ldb/journal?)
           (not excluded-pages?)
           (remove (fn [p] (true?
-                           (get p (db-property-util/get-pid-2 db :logseq.property/exclude-from-graph-view))))))
+                           (if db-based?
+                             (get p :logseq.property/exclude-from-graph-view)
+                             (get-in p [:block/properties :exclude-from-graph-view]))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
