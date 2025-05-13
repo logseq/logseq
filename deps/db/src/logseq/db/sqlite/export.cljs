@@ -863,6 +863,24 @@
         (assoc m :block/uuid (:block/uuid ent)))
       m)))
 
+(defn- update-existing-properties
+  "Updates existing properties by ident. Also check imported and existing properties have
+   the same cardinality and type to avoid failure after import"
+  [db property-conflicts properties]
+  (->> properties
+       (map (fn [[k v]]
+              (if-let [ent (d/entity db k)]
+                (do
+                  (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                              (select-keys v [:logseq.property/type :db/cardinality]))
+                    (swap! property-conflicts conj
+                           {:property-id k
+                            :actual (select-keys v [:logseq.property/type :db/cardinality])
+                            :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                  [k (assoc v :block/uuid (:block/uuid ent))])
+                [k v])))
+       (into {})))
+
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
@@ -885,20 +903,7 @@
                                [k v])))
                       (into {})))
           (seq properties)
-          (assoc :properties
-                 (->> properties
-                      (map (fn [[k v]]
-                             (if-let [ent (d/entity db k)]
-                               (do
-                                 (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
-                                             (select-keys v [:logseq.property/type :db/cardinality]))
-                                   (swap! property-conflicts conj
-                                          {:property-id k
-                                           :actual (select-keys v [:logseq.property/type :db/cardinality])
-                                           :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
-                                 [k (assoc v :block/uuid (:block/uuid ent))])
-                               [k v])))
-                      (into {})))
+          (assoc :properties (update-existing-properties db property-conflicts properties))
           ;; Graph export doesn't use :build/page so this speeds up build
           (= :graph export-type)
           (assoc :translate-property-values? false)
