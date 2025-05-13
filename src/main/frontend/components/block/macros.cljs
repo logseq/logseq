@@ -13,16 +13,18 @@
 
 (defn- properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by
-  property names"
+  property idents and titles"
   [db block]
   (->> (db-property/properties block)
-       (map (fn [[k v]]
-              [(:block/title (d/entity db k))
-               ;; For now just support cardinality :one
-               (when-not (set? v)
-                 (some->> (:db/id v)
-                          (d/entity db)
-                          db-property/property-value-content))]))
+       (mapcat (fn [[k v]]
+                 ;; For now just support cardinality :one
+                 (when-not (set? v)
+                   (let [prop-val (some->> (:db/id v)
+                                           (d/entity db)
+                                           db-property/property-value-content)
+                         property (d/entity db k)]
+                     [[(keyword (:block/title property)) prop-val]
+                      [(:db/ident property) prop-val]]))))
        (into {})))
 
 (defn- normalize-query-function
@@ -55,11 +57,10 @@
          (keyword? f)
          (if-let [kw (and (not db-based-graph?) (get special-file-graph-keywords f))]
            kw
-           (let [prop-key (if db-based-graph? (name f) f)
-                 vals (map #(get-in % [:block/properties prop-key]) result)
+           (let [vals (map #(get-in % [:block/properties f]) result)
                  int? (some integer? vals)]
              `(~'fn [~'b]
-                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
+                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
                             ~'result-num (~'parseFloat ~'result-str)
                             ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
                            (~'or ~'result (~'when ~int? 0))))))
