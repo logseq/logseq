@@ -29,8 +29,7 @@
   get-block-immediate-children get-block-page
   get-file file-exists?  get-files-full
   get-latest-journals get-page get-case-page get-page-alias-names
-  get-page-blocks-no-cache get-page-format
-  journal-page? page? sub-block
+  get-page-format journal-page? page? sub-block
   page-empty? page-exists? get-alias-source-page
   has-children? whiteboard-page?])
 

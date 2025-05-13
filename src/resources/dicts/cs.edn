@@ -130,8 +130,6 @@
  :page/logseq-is-having-a-problem                  "Logseq má problém. Chcete-li se pokusit uvést jej zpět do funkčního stavu, vyzkoušejte prosím následující bezpečné kroky v uvedeném pořadí:"
  :page/step                                        "Krok {1}"
  :page/try                                         "Zkusit"
- :page/slide-view                                  "Zobrazit jjako snímky"
- :page/slide-view-tip-go-fullscreen                (fn [] [[:span.opacity-70 "Tip: stiskněte "] [:code "f"] [:span.opacity-70 " pro celou obrazovku"]])
  :page/delete-confirmation                         "Jste si jisti, že chcete tuto stránku a její soubor odstranit?"
  :page/open-in-finder                              "Otevřít v adresáři"
  :page/open-with-default-app                       "Otevřít pomocí výchozí aplikace"

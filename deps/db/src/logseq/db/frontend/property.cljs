@@ -12,7 +12,7 @@
 ;; Main property vars
 ;; ==================
 
-(def ^:large-vars/data-var built-in-properties*
+(def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs with their :db/ident as keys.
    Each property has a config map with the following keys:
    TODO: Move some of these keys to :properties since :schema is a deprecated concept
@@ -26,8 +26,6 @@
        seen in when :public? is set. Valid values are :page, :block and :never. Property can
        be viewed in any context if not set
    * :title - Property's :block/title
-   * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident.
-      TODO: This is barely used for old properties. Deprecate this and move to gp-exporter
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :queryable? - Boolean for whether property can be queried in the query builder
    * :closed-values - Vec of closed-value maps for properties with choices. Map
@@ -196,10 +194,6 @@
                                  {:logseq.property/description "Provides a way for a page to associate to another page i.e. backward compatible tagging."}}
      :logseq.property/background-color {:title "Background color"
                                         :schema {:type :default :hide? true}}
-     :logseq.property/background-image {:title "Background image"
-                                        :schema
-                                        {:type :default ; FIXME: asset
-                                         :view-context :block}}
    ;; number (1-6) or boolean for auto heading
      :logseq.property/heading {:title "Heading"
                                :schema {:type :any :hide? true}
@@ -241,7 +235,6 @@
                                     :schema {:type :map :hide? true}}
    ;; FIXME: :logseq.property/order-list-type should updated to closed values
      :logseq.property/order-list-type {:title "List type"
-                                       :name :logseq.order-list-type
                                        :schema {:type :default
                                                 :hide? true}}
      :logseq.property.linked-references/includes {:title "Included references"
@@ -253,10 +246,10 @@
                                                   :schema {:type :node
                                                            :cardinality :many
                                                            :hide? true}}
-     :logseq.property.tldraw/page {:name :logseq.tldraw.page
+     :logseq.property.tldraw/page {:title "Tldraw Page"
                                    :schema {:type :map
                                             :hide? true}}
-     :logseq.property.tldraw/shape {:name :logseq.tldraw.shape
+     :logseq.property.tldraw/shape {:title "Tldraw Shape"
                                     :schema {:type :map
                                              :hide? true}}
 
@@ -567,17 +560,6 @@
                                                     :public? true}
                                            :queryable? true})))
 
-(def built-in-properties
-  (->> built-in-properties*
-       (map (fn [[k v]]
-              (assert (and (keyword? k) (namespace k)))
-              [k
-               ;; All built-ins must have a :name
-               (if (:name v)
-                 v
-                 (assoc v :name (keyword (string/lower-case (name k)))))]))
-       (into (ordered-map))))
-
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
   #{:block/alias :block/tags :block/parent
@@ -701,22 +683,6 @@
   (or (:block/title ent)
       (:logseq.property/value ent)))
 
-(defn- ref->property-value-content
-  "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
-  the property value of a ref type property"
-  [db ref]
-  (some->> (:db/id ref)
-           (d/entity db)
-           property-value-content))
-
-(defn ref->property-value-contents
-  "Given a ref or refs from a pulled query e.g. `{:db/id X}`, gets a readable
-  name for the property values of a ref type property"
-  [db ref]
-  (if (or (set? ref) (sequential? ref))
-    (set (map #(ref->property-value-content db %) ref))
-    (ref->property-value-content db ref)))
-
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
@@ -751,16 +717,6 @@
 (defn many?
   [property]
   (= (:db/cardinality property) :db.cardinality/many))
-
-(defn properties-by-name
-  "Given a block from a query result, returns a map of its properties indexed by
-  property names"
-  [db block]
-  (->> (properties block)
-       (map (fn [[k v]]
-              [(:block/title (d/entity db k))
-               (ref->property-value-contents db v)]))
-       (into {})))
 
 (defn public-built-in-property?
   "Indicates whether built-in property can be seen and edited by users"
