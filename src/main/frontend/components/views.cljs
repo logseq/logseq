@@ -1942,7 +1942,7 @@
                    (rum/with-key
                      (ui/foldable
                       [:div
-                       {:class (if list-view? "mt-4 mb-1" "my-4")}
+                       {:class (when-not list-view? "my-4")}
                        (cond
                          group-by-page?
                          (if value
