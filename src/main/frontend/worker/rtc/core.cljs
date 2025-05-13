@@ -24,6 +24,7 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]
             [malli.core :as ma]
             [missionary.core :as m])
   (:import [missionary Cancelled]))
@@ -379,7 +380,9 @@
     (let [repo (worker-state/get-current-repo)
           token (worker-state/get-id-token)
           conn (worker-state/get-datascript-conn repo)]
-      (when (and repo token conn)
+      (when (and repo
+                 (sqlite-util/db-based-graph? repo)
+                 token conn)
         (when stop-before-start? (rtc-stop))
         (let [ex (m/? (new-task--rtc-start* repo token))]
           (when-let [ex-data* (ex-data ex)]
