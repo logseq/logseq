@@ -25,7 +25,7 @@
               (.focus input)
               (let [len (.-length (.-value input))]
                 (.setSelectionRange input len len))))
-          100)
+          500)
         #())
       [])
 

@@ -10,6 +10,10 @@
 
 html.plt-capacitor.plt-iphone {
   --ion-safe-area-top: 40px;
+
+  ion-toolbar {
+    @apply my-1 py-1;
+  }
 }
 
 html.plt-capacitor.plt-android {
@@ -29,10 +33,6 @@ html.plt-capacitor.plt-android {
       border-bottom: .5px solid rgba(0, 0, 0, .15);
     }
   }
-}
-
-ion-toolbar {
-  @apply my-1 py-1;
 }
 
 ul {
