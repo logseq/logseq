@@ -35,7 +35,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
