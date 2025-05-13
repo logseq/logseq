@@ -46,3 +46,6 @@ project(':capacitor-voice-recorder').projectDir = new File('../node_modules/capa
 
 include ':send-intent'
 project(':send-intent').projectDir = new File('../node_modules/send-intent/android')
+
+include ':jcesarmobile-ssl-skip'
+project(':jcesarmobile-ssl-skip').projectDir = new File('../node_modules/@jcesarmobile/ssl-skip/android')

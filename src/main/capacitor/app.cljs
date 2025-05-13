@@ -13,6 +13,7 @@
             [capacitor.handler :as handler]
             [capacitor.pages.utils :as pages-util]
             [capacitor.components.ui :as ui]
+            [frontend.db.conn :as db-conn]
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as fstate]
             [frontend.db.utils :as db-util]
@@ -21,6 +22,38 @@
             [goog.date :as gdate]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
+
+(rum/defc app-graphs-select
+  []
+  (let [current-repo (fstate/get-current-repo)
+        graphs (fstate/get-repos)
+        short-repo-name (if current-repo
+                          (db-conn/get-short-repo-name current-repo)
+                          "Select a Graph")]
+    [:<>
+     (ionic/ion-button
+       {:fill "clear" :mode "ios"
+        :class "border-none w-full rounded-lg font-semibold"
+        :on-click (fn []
+                    (ui/open-modal! "Switch graph"
+                      {:type :action-sheet
+                       :buttons (for [repo graphs]
+                                  {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
+                                   :role (:url repo)})
+                       :inputs []
+                       :on-action (fn [e]
+                                    (when-let [url (:role e)]
+                                      (when (string/starts-with? url "logseq_db_")
+                                        (fstate/pub-event! [:graph/switch url]))))}))}
+       short-repo-name)
+
+     (ionic/ion-button
+       {:on-click (fn []
+                    (when-let [db-name (js/prompt "Create new db")]
+                      (when-not (string/blank? db-name)
+                        (-> (repo-handler/new-db! db-name)
+                          (p/then #())))))}
+       (ionic/tabler-icon "plus"))]))
 
 (rum/defc app-sidebar []
   (ionic/ion-menu {:content-id "app-main-content"
@@ -31,6 +64,19 @@
     (ionic/ion-content
       [:div.p-4
        [:strong "hello, logseq?"]])))
+
+(rum/defc app-tabbar []
+  (ionic/ion-tab-bar {:color "light"
+                      :class "w-full fixed bottom-4"}
+    (ionic/ion-tab-button {:tab "tab1"
+                           :selected true
+                           :on-click #(js/alert "home")}
+      (ionic/tabler-icon "home" {:size 22}) "Journals")
+    (ionic/ion-tab-button {:tab "tab0"
+                           :selected false}
+      (ionic/tabler-icon "circle-plus" {:size 24}) "Capture New")
+    (ionic/ion-tab-button {:tab "tab2"}
+      (ionic/tabler-icon "settings" {:size 22}) "Settings")))
 
 (rum/defc journals-list < rum/reactive db-mixins/query
   []
@@ -105,56 +151,9 @@
         (create-page-input {:close! #(set-page-input-open? false)
                             :reload-pages! #(set-reload! (inc reload))}))
       [:div.pt-6.px-6
-       [:div.flex.justify-between.items-center
-        [:h1.text-3xl.font-mono.font-bold.py-2 "Current graph"]
-
-        (ionic/ion-button {:size "small"
-                           :fill "clear"
-                           :on-click (fn []
-                                       (when-let [db-name (js/prompt "Create new db")]
-                                         (when-not (string/blank? db-name)
-                                           (-> (repo-handler/new-db! db-name)
-                                             (p/then #(set-reload! (inc reload)))))))}
-          [:span {:slot "icon-only"} (ionic/tabler-icon "plus" {:size 22})])]
-
-       [:h2.py-1.text-lg
-        (let [graphs (fstate/get-repos)]
-          (ionic/ion-button
-            {:fill "clear" :mode "ios"
-             :class "border w-full rounded-lg"
-             :on-click (fn []
-                         (ui/open-modal! "Switch graph"
-                           {:type :action-sheet
-                            :buttons (for [repo graphs]
-                                       {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
-                                        :role (:url repo)})
-                            :inputs []
-                            :on-action (fn [e]
-                                         (when-let [url (:role e)]
-                                           (when (string/starts-with? url "logseq_db_")
-                                             (fstate/pub-event! [:graph/switch url]))))}))}
-            (fstate/get-current-repo)))]
-
        [:div.flex.justify-between.items-center.mt-4
         [:h1.text-3xl.font-mono.font-bold.py-2 "Journals"]
-        [:flex.gap-1
-         (ionic/ion-button
-           {:size "small" :fill "clear"
-            :on-click (fn []
-                        (ui/open-modal!
-                          (fn [{:keys [close!]}]
-                            (ionic/ion-datetime
-                              {:presentation "date"
-                               :onIonChange (fn [^js e]
-                                              (let [val (.-value (.-detail e))]
-                                                (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
-                                                      nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
-                                                  (if-let [journal (handler/local-page page-name)]
-                                                    (nav-to-journal! journal)
-                                                    (-> (handler/<create-page! page-name)
-                                                      (p/then #(nav-to-journal! (handler/local-page page-name)))))
-                                                  (close!))))}))))}
-           [:span {:slot "icon-only"} (ionic/tabler-icon "calendar" {:size 22})])]]
+        [:flex.gap-1]]
 
        (journals-list)
 
@@ -186,17 +185,7 @@
              [:code.opacity-30.scale-75 (.toLocaleDateString (js/Date. (:block/created-at page)))]]))]]
 
       ;; tabbar
-      ;(ionic/ion-tab-bar {:color "light"
-      ;                    :class "w-full fixed bottom-4"}
-      ;  (ionic/ion-tab-button {:tab "tab1"
-      ;                         :selected true
-      ;                         :on-click #(js/alert "home")}
-      ;    (ionic/tabler-icon "home" {:size 22}) "Home")
-      ;  (ionic/ion-tab-button {:tab "tab0"
-      ;                         :selected false}
-      ;    (ionic/tabler-icon "circle-plus" {:size 24}) "Capture New")
-      ;  (ionic/ion-tab-button {:tab "tab2"}
-      ;    (ionic/tabler-icon "settings" {:size 22}) "Settings"))
+      ;(app-tabbar)
       )
     ))
 
@@ -204,23 +193,39 @@
   []
   (let [db-restoring? (fstate/sub :db/restoring?)]
     [:<>
-     (app-sidebar)
-
      (ionic/ion-page
        {:id "app-main-content"}
        (ionic/ion-header
          (ionic/ion-toolbar
            (ionic/ion-buttons {:slot "start"}
-             (ionic/ion-menu-button)
-             (ionic/ion-button {:class "opacity-90"} (ionic/tabler-icon "search" {:size 22 :stroke 2})))
+             (app-graphs-select))
 
            (ionic/ion-buttons {:slot "end"}
+             (ionic/ion-button
+               {:size "small" :fill "clear"
+                :on-click (fn []
+                            (ui/open-modal!
+                              (fn [{:keys [close!]}]
+                                (ionic/ion-datetime
+                                  {:presentation "date"
+                                   :onIonChange (fn [^js e]
+                                                  (let [val (.-value (.-detail e))]
+                                                    (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
+                                                          nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                      (if-let [journal (handler/local-page page-name)]
+                                                        (nav-to-journal! journal)
+                                                        (-> (handler/<create-page! page-name)
+                                                          (p/then #(nav-to-journal! (handler/local-page page-name)))))
+                                                      (close!))))}))))}
+               [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 22})])
+
              (ionic/ion-button {:fill "clear"}
                (ionic/ion-nav-link
                  {:routerDirection "forward"
                   :class "w-full"
                   :component settings/page}
-                 (ionic/tabler-icon "upload" {:size 24 :class "opacity-70"}))))))
+                 (ionic/tabler-icon "dots-circle-horizontal" {:size 24}))))))
+
        ;; main content
        (if db-restoring?
          (ionic/ion-content
