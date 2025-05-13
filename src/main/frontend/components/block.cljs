@@ -458,7 +458,7 @@
                  (let [repo (state/get-current-repo)
                        file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
                        dir (config/get-repo-dir repo)]
-                   (-> (fs/write-file! repo dir file-rpath content nil)
+                   (-> (fs/write-plain-text-file! repo dir file-rpath content nil)
                        (p/then load$)))))
              (js/console.error _e)))))))
 

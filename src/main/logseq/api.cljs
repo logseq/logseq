@@ -9,8 +9,8 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
-            [frontend.db.model :as db-model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
@@ -223,7 +223,7 @@
   (fn [path ^js data]
     (let [repo ""
           path (util/node-path.join path "package.json")]
-      (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+      (fs/write-plain-text-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
 (def ^:export save_focused_code_editor_content
   (fn []
@@ -243,7 +243,7 @@
           user-path-root (util/node-path.dirname user-path)
           exist?         (fs/file-exists? user-path-root "")
           _              (when-not exist? (fs/mkdir-recur! user-path-root))
-          _              (fs/write-file! repo nil user-path content {:skip-compare? true})]
+          _              (fs/write-plain-text-file! repo nil user-path content {:skip-compare? true})]
     user-path))
 
 (defn ^:export write_dotdir_file
@@ -379,7 +379,7 @@
             path (plugin-handler/get-ls-dotdir-root)
             path (util/node-path.join path "preferences.json")]
         (if (util/electron?)
-          (fs/write-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
+          (fs/write-plain-text-file! repo nil path (js/JSON.stringify data nil 2) {:skip-compare? true})
           (idb/set-item! path data))))))
 
 (def ^:export load_plugin_user_settings
@@ -666,7 +666,6 @@
                           :journal? journal
                           :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                           :format format}
-
                           (not db-base?)
                           (assoc :properties properties))))
             _ (when (and db-base? (seq properties))

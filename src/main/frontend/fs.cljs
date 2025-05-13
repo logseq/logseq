@@ -2,21 +2,21 @@
   "System-component-like ns that provides common file operations for all
   platforms by delegating to implementations of the fs protocol"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
-            [frontend.fs.nfs :as nfs]
-            [frontend.fs.node :as node]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.memory-fs :as memory-fs]
-            [frontend.mobile.util :as mobile-util]
+            [frontend.fs.nfs :as nfs]
+            [frontend.fs.node :as node]
             [frontend.fs.protocol :as protocol]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]
             [logseq.common.path :as path]
-            [clojure.string :as string]
-            [frontend.state :as state]
             [logseq.common.util :as common-util]
-            [electron.ipc :as ipc]))
+            [promesa.core :as p]))
 
 (defonce nfs-backend (nfs/->Nfs))
 (defonce memory-backend (memory-fs/->MemoryFs))
@@ -99,8 +99,8 @@
     (when (= fs memory-backend)
       (protocol/rmdir! fs dir))))
 
-;; TODO(andelf): distinguish from graph file writing and global file write
-(defn write-file!
+(defn write-plain-text-file!
+  "Use it only for plain-text files, not binary"
   [repo dir rpath content opts]
   (when content
     (let [path (common-util/path-normalize rpath)
@@ -182,8 +182,6 @@
       (p/let [_ (mkdir-if-not-exists new-dir)]
         (protocol/copy! (get-fs old-path) repo old-path new-path)))))
 
-
-
 (defn open-dir
   [dir]
   (let [record (get-native-backend)]
@@ -227,7 +225,7 @@
          true)
        (p/catch
         (fn [_error]
-          (p/let [_ (write-file! repo dir path initial-content nil)]
+          (p/let [_ (write-plain-text-file! repo dir path initial-content nil)]
             false))))))
 
 (defn file-exists?
