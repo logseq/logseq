@@ -13,7 +13,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
             [frontend.mixins :as mixins]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]

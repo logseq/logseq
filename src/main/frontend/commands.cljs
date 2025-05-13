@@ -13,7 +13,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property.file :as property-file]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]

@@ -62,7 +62,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
