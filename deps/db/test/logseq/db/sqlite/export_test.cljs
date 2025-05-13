@@ -825,3 +825,55 @@
     (is (= (expand-classes (:classes original-data))
            (-> (:classes imported-graph)
                (medley/dissoc-in [:user.property/p1 :build/properties]))))))
+
+(deftest build-import-can-import-existing-page-with-different-uuid
+  (let [original-data
+        {:properties {:user.property/node {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+         :pages-and-blocks
+         [{:page {:block/title "page1"
+                  :build/properties {:user.property/node #{[:build/page {:block/title "node1"}]}}}}]}
+        conn (db-test/create-conn-with-blocks original-data)
+        page-uuid (:block/uuid (db-test/find-page-by-title @conn "node1"))
+        _ (validate-db @conn)
+        ;; This is just a temp uuid used to link to the page during import
+        temp-uuid (random-uuid)
+        existing-data
+        {:properties {:user.property/node {:logseq.property/type :node
+                                           :db/cardinality :db.cardinality/many}}
+         :pages-and-blocks
+         [{:page {:block/title "node1"
+                  :block/uuid temp-uuid
+                  :build/keep-uuid? true}}
+          {:page {:block/title "page2"
+                  :build/properties {:user.property/node #{[:block/uuid temp-uuid]}}}}]}
+        {:keys [init-tx block-props-tx] :as _txs}
+        (sqlite-export/build-import existing-data @conn {})
+        ;; _ (cljs.pprint/pprint _txs)
+        _ (d/transact! conn init-tx)
+        _ (d/transact! conn block-props-tx)
+        _ (validate-db @conn)
+        expected-pages-and-blocks
+        [{:page
+          {:block/uuid page-uuid
+           :build/keep-uuid? true,
+           :block/title "node1"},
+          :blocks []}
+         {:page
+          {:build/properties
+           {:user.property/node
+            #{[:block/uuid page-uuid]}},
+           :block/title "page1"},
+          :blocks []}
+         {:page
+          {:build/properties
+           {:user.property/node
+            #{[:block/uuid page-uuid]}},
+           :block/title "page2"},
+          :blocks []}],
+        exported-graph (sqlite-export/build-export @conn {:export-type :graph
+                                                          :graph-options {:exclude-built-in-pages? true}})]
+    (is (= expected-pages-and-blocks
+           (:pages-and-blocks exported-graph))
+        "page uuid ('node1') is preserved across imports even when its assigned a temporary
+         uuid to relate it to other nodes")))
