@@ -785,25 +785,27 @@
   (let [*el-trigger (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when (true? visible?)
-         (shui/popup-show!
-          (hooks/deref *el-trigger) render
-          {:root-props {:onOpenChange (fn [v] (set-visible! v))
-                        :modal false}
-           :content-props {:class "ls-preview-popup"
-                           :onInteractOutside (fn [^js e] (.preventDefault e))
-                           :onEscapeKeyDown (fn [^js e]
-                                              (when (state/editing?)
-                                                (.preventDefault e)
-                                                (some-> (hooks/deref *el-popup) (.focus))))}
-           :as-dropdown? false}))
+       (when-not (state/editing?)
+         (when (true? visible?)
+           (shui/popup-show!
+            (hooks/deref *el-trigger) render
+            {:root-props {:onOpenChange (fn [v] (set-visible! v))
+                          :modal false}
+             :content-props {:class "ls-preview-popup"
+                             :onInteractOutside (fn [^js e] (.preventDefault e))
+                             :onEscapeKeyDown (fn [^js e]
+                                                (when (state/editing?)
+                                                  (.preventDefault e)
+                                                  (some-> (hooks/deref *el-popup) (.focus))))}
+             :as-dropdown? false}))
 
-       (when (false? visible?)
-         (shui/popup-hide!)
-         (when (state/get-edit-block)
-           (state/clear-edit!)))
-       (hooks/set-ref! *timer nil)
-       (hooks/set-ref! *timer1 nil)
+         (when (false? visible?)
+           (shui/popup-hide!)
+           (when (state/get-edit-block)
+             (state/clear-edit!)))
+         (hooks/set-ref! *timer nil)
+         (hooks/set-ref! *timer1 nil))
+
         ;; teardown
        (fn []
          (when visible?
