@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.exporter
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
-  (:require [cljs-time.coerce :as tc]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs-time.coerce :as tc]
             [cljs.pprint]
             [clojure.edn :as edn]
             [clojure.set :as set]
@@ -17,6 +18,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
@@ -29,8 +31,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [logseq.db.common.property-util :as db-property-util]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -762,6 +763,23 @@
         block'' (replace-namespace-with-parent block' page-names-to-uuids)]
     {:block block'' :properties-tx properties-tx}))
 
+(defn- pretty-print-dissoc
+  [s dissoc-keys]
+  (-> (reduce rewrite/dissoc
+              (rewrite/parse-string s)
+              dissoc-keys)
+      str))
+
+(defn- migrate-advanced-query-string [query-str]
+  (try
+    (pretty-print-dissoc query-str [:title :group-by-page? :collapsed?])
+    (catch :default _e
+      ;; rewrite/parse-string can fail on some queries in Advanced Queries in docs graph
+      (js/console.error "Failed to parse advanced query string. Falling back to full query string: " (pr-str query-str))
+      (if-let [query-map (not-empty (common-util/safe-read-map-string query-str))]
+        (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+        query-str))))
+
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
   [{:block/keys [title] :as block*}
@@ -777,10 +795,7 @@
                                                string/trim)
                                       title))
                            (seq advanced-query)
-                           (assoc :logseq.property/query
-                                  (if-let [query-map (not-empty (common-util/safe-read-map-string advanced-query))]
-                                    (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
-                                    advanced-query)))
+                           (assoc :logseq.property/query (migrate-advanced-query-string advanced-query)))
         {:keys [block-properties pvalues-tx]}
         (when (seq additional-props)
           (build-properties-and-values additional-props db page-names-to-uuids
