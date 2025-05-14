@@ -101,6 +101,15 @@
    first
    (d/entity db)))
 
+(defn- page-with-parent-and-order
+  [db page & {:keys [parent]}]
+  (let [library (ldb/get-page db "Library")]
+    (when (nil? library)
+      (throw (ex-info "Library page doesn't exist" {})))
+    (assoc page
+           :block/parent (or parent (:db/id library))
+           :block/order (db-order/gen-key))))
+
 (defn- split-namespace-pages
   [db page date-formatter]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
@@ -112,20 +121,19 @@
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
-             pages (doall
-                    (map-indexed
-                     (fn [idx part]
-                       (let [last-part? (= idx (dec (count parts)))
-                             page (if (zero? idx)
-                                    (ldb/get-page db part)
-                                    (get-page-by-parent-name db (nth parts (dec idx)) part))
-                             result (or page
-                                        (gp-block/page-name->map part db true date-formatter
-                                                                 {:page-uuid (when last-part? block-uuid)
-                                                                  :skip-existing-page-check? true
-                                                                  :class? class?}))]
-                         result))
-                     parts))]
+             pages (map-indexed
+                    (fn [idx part]
+                      (let [last-part? (= idx (dec (count parts)))
+                            page (if (zero? idx)
+                                   (ldb/get-page db part)
+                                   (get-page-by-parent-name db (nth parts (dec idx)) part))
+                            result (or page
+                                       (gp-block/page-name->map part db true date-formatter
+                                                                {:page-uuid (when last-part? block-uuid)
+                                                                 :skip-existing-page-check? true
+                                                                 :class? class?}))]
+                        result))
+                    parts)]
          (cond
            (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
@@ -158,27 +166,18 @@
 
                     :else
                     (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
-                  (if (or (de/entity? page) (zero? idx))
+                  (if (de/entity? page)
                     page
-                    (assoc page :logseq.property.class/extends parent-eid)))))
+                    (page-with-parent-and-order db page {:parent parent-eid})))))
             pages)))
        [page])
      (remove nil?))))
-
-(defn- page-with-parent-and-order
-  [db page]
-  (let [library (ldb/get-page db "Library")]
-    (when (nil? library)
-      (throw (ex-info "Library page doesn't exist" {})))
-    (assoc page
-           :block/parent (:db/id library)
-           :block/order (db-order/gen-key nil nil))))
 
 (defn create
   "Pure function without side effects"
   [db title*
    {:keys [create-first-block? tags properties uuid persist-op? whiteboard?
-           class? today-journal? split-namespace? reference?]
+           class? today-journal? split-namespace?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
@@ -210,16 +209,14 @@
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
-      (let [page      (->>
-                       (gp-block/page-name->map title db true date-formatter
-                                                {:class? class?
-                                                 :page-uuid (when (uuid? uuid) uuid)
-                                                 :skip-existing-page-check? true})
-                       (page-with-parent-and-order db))
+      (let [page           (gp-block/page-name->map title db true date-formatter
+                                                    {:class? class?
+                                                     :page-uuid (when (uuid? uuid) uuid)
+                                                     :skip-existing-page-check? true})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
-                             [page nil])]
+                             [(page-with-parent-and-order db page) nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
