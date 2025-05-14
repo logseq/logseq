@@ -49,8 +49,9 @@
         url       (if blob-res? href
                       (assets-handler/normalize-asset-resource-url original-path))
         filename' (if (or asset-res? web-link? blob-res?) filename
-                      (some-> (get-in-repo-assets-full-filename url)
-                              (js/decodeURIComponent) (string/replace '"/" "_")))
+                    (some-> url (js/decodeURIComponent)
+                      (get-in-repo-assets-full-filename)
+                      (string/replace '"/" "_")))
         filekey   (util/safe-sanitize-file-name
                    (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
