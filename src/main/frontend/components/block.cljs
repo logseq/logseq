@@ -3174,7 +3174,7 @@
 (rum/defc breadcrumb-separator
   []
   (ui/icon "chevron-right" {:style {:font-size 20}
-                            :class "opacity-50 mx-1"}))
+                            :class "opacity-50"}))
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
