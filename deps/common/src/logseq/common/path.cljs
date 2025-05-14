@@ -146,8 +146,9 @@
   [base-url & segments]
   (let [^js url (js/URL. (safe-decode-uri-component base-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "/")
         path (.-pathname url)
+        domain (or (not-empty (.-host url))
+                 (if (string/starts-with? path "/") "" "/"))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
 
