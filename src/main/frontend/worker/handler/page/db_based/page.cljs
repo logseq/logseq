@@ -92,7 +92,7 @@
     '[:find [?b ...]
       :in $ ?parent-name ?child-name
       :where
-      [?b :logseq.property/parent ?p]
+      [?b :logseq.property.class/extends ?p]
       [?b :block/name ?child-name]
       [?p :block/name ?parent-name]]
     db
@@ -148,7 +148,7 @@
                 (if class?
                   (cond
                     (and (de/entity? page) (ldb/class? page))
-                    (assoc page :logseq.property/parent parent-eid)
+                    (assoc page :logseq.property.class/extends parent-eid)
 
                     (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
                     nil
@@ -157,10 +157,10 @@
                     (db-class/build-new-class db page)
 
                     :else
-                    (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
+                    (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
                   (if (or (de/entity? page) (zero? idx))
                     page
-                    (assoc page :logseq.property/parent parent-eid)))))
+                    (assoc page :logseq.property.class/extends parent-eid)))))
             pages)))
        [page])
      (remove nil?))))

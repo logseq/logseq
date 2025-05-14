@@ -17,6 +17,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.property-util :as db-property-util]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
@@ -29,8 +30,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [logseq.db.common.property-util :as db-property-util]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -62,7 +62,7 @@
 (defn- replace-namespace-with-parent [block page-names-to-uuids]
   (if (:block/namespace block)
     (-> (dissoc block :block/namespace)
-        (assoc :logseq.property/parent
+        (assoc :logseq.property.class/extends
                {:block/uuid (get-page-uuid page-names-to-uuids
                                            (get-in block [:block/namespace :block/name])
                                            {:block block :block/namespace (:block/namespace block)})}))
@@ -735,7 +735,7 @@
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
-  "Adds page properties including special handling for :logseq.property/parent"
+  "Adds page properties including special handling for :logseq.property.class/extends"
   [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids classes-tx]} refs
    {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
@@ -748,7 +748,7 @@
                 class-m (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block)
                 class-m' (-> block
                              (merge class-m)
-                             (assoc :logseq.property/parent
+                             (assoc :logseq.property.class/extends
                                     (let [new-class (first parent-classes-from-properties)
                                           class-m (find-or-create-class db new-class (:all-idents import-state))
                                           class-m' (merge class-m
@@ -921,9 +921,9 @@
   "Like ldb/get-page-parents but using all-existing-page-uuids"
   [node all-existing-page-uuids]
   (let [get-parent (fn get-parent [n]
-                     (when (:block/uuid (:logseq.property/parent n))
-                       (or (get all-existing-page-uuids (:block/uuid (:logseq.property/parent n)))
-                           (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property/parent n))))
+                     (when (:block/uuid (:logseq.property.class/extends n))
+                       (or (get all-existing-page-uuids (:block/uuid (:logseq.property.class/extends n)))
+                           (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property.class/extends n))))
                                            {:node n})))))]
     (when-let [parent (get-parent node)]
       (loop [current-parent parent
@@ -959,7 +959,7 @@
   (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :db/ident]
+        allowed-attributes (into [:block/tags :block/alias :logseq.property.class/extends :db/ident]
                                  (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                        m))
         block-changes (select-keys m allowed-attributes)]

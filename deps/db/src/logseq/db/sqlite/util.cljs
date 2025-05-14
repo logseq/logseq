@@ -99,8 +99,8 @@
    (cond-> (merge block
                   {:block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
      (and (not= (:db/ident block) :logseq.class/Root)
-          (nil? (:logseq.property/parent block)))
-     (assoc :logseq.property/parent :logseq.class/Root))))
+          (nil? (:logseq.property.class/extends block)))
+     (assoc :logseq.property.class/extends :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"

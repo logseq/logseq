@@ -50,11 +50,11 @@
                               :in $ ?eid ?type ?title
                               :where
                               [?b :block/title ?title]
-                              [?b :logseq.property/parent ?type]
+                              [?b :logseq.property.class/extends ?type]
                               [(not= ?b ?eid)]]
                             db
                             (:db/id entity)
-                            (:db/id (:logseq.property/parent entity))
+                            (:db/id (:logseq.property.class/extends entity))
                             new-title))]
     (throw (ex-info "Duplicate page by parent"
                     {:type :notification
@@ -80,7 +80,7 @@
                                     [?b :block/tags ?tag-id]
                                     [(missing? $ ?b :logseq.property/built-in?)]
                                     [(not= ?b ?eid)]]
-                                  (:logseq.property/parent entity)
+                                  (:logseq.property.class/extends entity)
                                   '[:find [?b ...]
                                     :in $ ?eid ?title [?tag-id ...]
                                     :where
@@ -88,8 +88,8 @@
                                     [?b :block/tags ?tag-id]
                                     [(not= ?b ?eid)]
                                     ;; same parent
-                                    [?b :logseq.property/parent ?bp]
-                                    [?eid :logseq.property/parent ?ep]
+                                    [?b :logseq.property.class/extends ?bp]
+                                    [?eid :logseq.property.class/extends ?ep]
                                     [(= ?bp ?ep)]]
                                   :else
                                   '[:find [?b ...]
@@ -116,13 +116,13 @@
                                                                 (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
                                      :type :warning}})))))
 
-    (:logseq.property/parent entity)
+    (:logseq.property.class/extends entity)
     (validate-unique-by-parent-and-name db entity new-title)))
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of nodes for the following cases:
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique for a :logseq.property/parent"
+   - Page names are unique for a :logseq.property.class/extends"
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
