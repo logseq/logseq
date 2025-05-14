@@ -609,7 +609,7 @@
 
                              :else
                              [block sibling?])
-          sibling? (if (ldb/page? block) false sibling?)
+          ;; sibling? (if (ldb/page? block) false sibling?)
           block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
 
@@ -683,7 +683,7 @@
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
-        sibling? (if (ldb/page? target-block) false sibling?)
+        ;; sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
                                        (:block/title target-block)
                                        (string/blank? (:block/title target-block)))
@@ -984,7 +984,8 @@
                                                                           :sibling? true
                                                                           :indent? false})))
 
-            (when (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
+            (when parent
+                ;; (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))
