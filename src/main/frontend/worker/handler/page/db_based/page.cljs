@@ -165,11 +165,20 @@
        [page])
      (remove nil?))))
 
+(defn- page-with-parent-and-order
+  [db page]
+  (let [library (ldb/get-page db "Library")]
+    (when (nil? library)
+      (throw (ex-info "Library page doesn't exist" {})))
+    (assoc page
+           :block/parent (:db/id library)
+           :block/order (db-order/gen-key nil nil))))
+
 (defn create
   "Pure function without side effects"
   [db title*
    {:keys [create-first-block? tags properties uuid persist-op? whiteboard?
-           class? today-journal? split-namespace?]
+           class? today-journal? split-namespace? reference?]
     :or   {create-first-block?      true
            properties               nil
            uuid                     nil
@@ -201,10 +210,12 @@
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
-      (let [page      (gp-block/page-name->map title db true date-formatter
-                                               {:class? class?
-                                                :page-uuid (when (uuid? uuid) uuid)
-                                                :skip-existing-page-check? true})
+      (let [page      (->>
+                       (gp-block/page-name->map title db true date-formatter
+                                                {:class? class?
+                                                 :page-uuid (when (uuid? uuid) uuid)
+                                                 :skip-existing-page-check? true})
+                       (page-with-parent-and-order db))
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
