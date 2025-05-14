@@ -649,7 +649,8 @@
             (when (and (:block/parent page) (not sidebar?) (not whiteboard?))
               (let [config (merge config {:id "block-parent"
                                           :block? true})]
-                (component-block/breadcrumb config repo block-id {:level-limit 3})))
+                [:div.ml-1
+                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
             (when-not (or block? sidebar?)
               [:div.flex.flex-row.space-between
