@@ -839,7 +839,7 @@
                                    (:db/id (:block/parent target-block))
                                    (:db/id target-block))
                    :block/order block-order}
-                   not-same-page?
+                   (and not-same-page? (not (or (ldb/page? block) (ldb/page? target-block))))
                    (assoc :block/page target-page))]
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]

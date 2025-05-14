@@ -62,7 +62,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.util.ref :as ref]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -70,6 +69,7 @@
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
+            [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
@@ -3230,7 +3230,7 @@
                                         (rum/with-key (breadcrumb-fragment config block label opts)
                                           (str (:block/uuid block))))
                                       [:span.opacity-70 {:key "dots"} "⋯"])))
-                             (interpose (rum/with-key (breadcrumb-separator) "icon")))]
+                             (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
            {:class (when (seq breadcrumbs)

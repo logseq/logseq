@@ -156,7 +156,7 @@
         unpushed-block-update-count (:pending-local-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
     [:div.cp__rtc-sync
-     [:div.hidden {:data-testid "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
+     [:div.hidden {"data-testid" "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
       (when downloading?'
         (shui/button
