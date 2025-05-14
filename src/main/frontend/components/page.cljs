@@ -646,6 +646,11 @@
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
            [:div.relative.grid.gap-8.page-inner
+            (when (and (:block/parent page) (not sidebar?) (not whiteboard?))
+              (let [config (merge config {:id "block-parent"
+                                          :block? true})]
+                (component-block/breadcrumb config repo block-id {:level-limit 3})))
+
             (when-not (or block? sidebar?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
@@ -667,12 +672,6 @@
             (when (and db-based? sidebar? (ldb/page? page))
               [:div.-mb-8
                (sidebar-page-properties config page)])
-
-            (when (and block? (not sidebar?) (not whiteboard?))
-              (let [config (merge config {:id "block-parent"
-                                          :block? true})]
-                [:div.mb-4
-                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
             (when show-tabs?
               (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))

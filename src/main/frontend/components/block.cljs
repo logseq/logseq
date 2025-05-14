@@ -3200,14 +3200,14 @@
                       :disable-preview? true
                       :stop-click-event? false)]
     (when show?
-      (let [page-name-props (when show-page?
+      (let [page-name-props (when (and show-page? (not (= (:block/uuid page) block-id)))
                               [page
                                (page-cp (dissoc config :breadcrumb? true) page)
                                {:block/name (or page-title page-name)}])
             parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
-                               [block (page-cp {} block)]
+                               [block (page-cp {:disable-preview? true} block)]
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
@@ -3222,7 +3222,8 @@
                                       (->elem :span (map-inline config ast-title))
                                       (->elem :div (markup-elements-cp config ast-body))))]))))
             breadcrumbs (->> (into [] parents-props)
-                             (concat [page-name-props] (when more? [:more]))
+                             (concat [page-name-props]
+                                     (when more? [:more]))
                              (filterv identity)
                              (map (fn [x]
                                     (if (and (vector? x) (second x))
