@@ -192,13 +192,13 @@
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
                  (when-not (config/db-based-graph?)
-                  (let [page-e (first (:rum/args state))
-                        page-name (:block/name page-e)]
-                    (when (and page-name
-                               (db/journal-page? page-name)
-                               (>= (date/journal-title->int page-name)
-                                   (date/journal-title->int (date/today))))
-                      (state/pub-event! [:journal/insert-template page-name]))))
+                   (let [page-e (first (:rum/args state))
+                         page-name (:block/name page-e)]
+                     (when (and page-name
+                                (db/journal-page? page-name)
+                                (>= (date/journal-title->int page-name)
+                                    (date/journal-title->int (date/today))))
+                       (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
   [state block* {:keys [sidebar? whiteboard?] :as config}]
   (when-let [id (:db/id block*)]
@@ -447,7 +447,7 @@
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
-      :data-testid "page title"
+      "data-testid" "page title"
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)

@@ -3,9 +3,9 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -277,7 +277,9 @@
    (concat
     [:map
      ;; journal-day is only set for journal pages
-     [:block/journal-day {:optional true} :int]]
+     [:block/journal-day {:optional true} :int]
+     [:block/parent {:optional true} :int]
+     [:block/order {:optional true} block-order]]
     page-attrs
     page-or-block-attrs)))
 

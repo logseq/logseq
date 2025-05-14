@@ -364,6 +364,18 @@
   [s]
   (string/replace s "#" "HashTag-"))
 
+(defn page-with-parent-and-order
+  "Apply to namespace pages"
+  [db page & {:keys [parent]}]
+  ;; FIXME: using db/ident instead of page title because users can create pages
+  ;; with the same name
+  (let [library (ldb/get-page db "Library")]
+    (when (nil? library)
+      (throw (ex-info "Library page doesn't exist" {})))
+    (assoc page
+           :block/parent (or parent (:db/id library))
+           :block/order (db-order/gen-key))))
+
 ;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
@@ -411,7 +423,8 @@
 
 (defn- ref->map
   [db *col {:keys [date-formatter db-based? *name->id tag?]}]
-  (let [col (remove string/blank? @*col)
+  (let [db-based? (or (and db (ldb/db-based-graph? db)) db-based?)
+        col (remove string/blank? @*col)
         children-pages (when-not db-based?
                          (->> (mapcat (fn [p]
                                         (let [p (if (map? p)
