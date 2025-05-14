@@ -3202,7 +3202,7 @@
                       :disable-preview? true
                       :stop-click-event? false)]
     (when show?
-      (let [page-name-props (when (and show-page? (not (= (:block/uuid page) block-id)))
+      (let [page-name-props (when (and show-page? (not (ldb/page? (db/entity [:block/uuid block-id]))))
                               [page
                                (page-cp (dissoc config :breadcrumb? true) page)
                                {:block/name (or page-title page-name)}])
