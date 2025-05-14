@@ -889,22 +889,15 @@
                                     (clear-commands! pid)
                                     (unregister-plugin-themes pid)))
 
+                  (.on "themes-changed" (fn [^js themes]
+                                          (swap! state/state assoc :plugin/installed-themes
+                                            (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+
                   (.on "theme-selected" (fn [^js theme]
                                           (let [theme (bean/->clj theme)
                                                 theme (assets-theme-to-file theme)
                                                 url   (:url theme)
-                                                mode  (:mode theme)]
-                                            (when mode
-                                              (state/set-custom-theme! mode theme)
-                                              (state/set-theme-mode! mode))
-                                            (state/set-state! :plugin/selected-theme url)
-                                            (hook-plugin-app :theme-changed theme))))
-
-                  (.on "theme-selected" (fn [^js theme ^js opts]
-                                          (let [theme (bean/->clj theme)
-                                                _opts (bean/->clj opts)
-                                                url (:url theme)
-                                                mode (or (:mode theme) (state/sub :ui/theme))]
+                                                mode  (or (:mode theme) (state/sub :ui/theme))]
                                             (when mode
                                               (state/set-custom-theme! mode theme)
                                               (state/set-theme-mode! mode))
