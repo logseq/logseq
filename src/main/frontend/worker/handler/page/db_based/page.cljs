@@ -101,15 +101,6 @@
    first
    (d/entity db)))
 
-(defn- page-with-parent-and-order
-  [db page & {:keys [parent]}]
-  (let [library (ldb/get-page db "Library")]
-    (when (nil? library)
-      (throw (ex-info "Library page doesn't exist" {})))
-    (assoc page
-           :block/parent (or parent (:db/id library))
-           :block/order (db-order/gen-key))))
-
 (defn- split-namespace-pages
   [db page date-formatter]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
@@ -168,7 +159,7 @@
                     (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
                   (if (de/entity? page)
                     page
-                    (page-with-parent-and-order db page {:parent parent-eid})))))
+                    (gp-block/page-with-parent-and-order db page {:parent parent-eid})))))
             pages)))
        [page])
      (remove nil?))))
@@ -216,7 +207,7 @@
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
                              (let [pages (split-namespace-pages db page date-formatter)]
                                [(last pages) (butlast pages)])
-                             [(page-with-parent-and-order db page) nil])]
+                             [page nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
