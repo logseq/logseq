@@ -1460,7 +1460,8 @@
                   (and (:db/id block)
                        (= p-block (:db/id block))
                        (= p-property (:db/id property))))
-              (not= :logseq.class/Tag (:db/ident block)))
+              (not= :logseq.class/Tag
+                    (:db/ident (db/entity (:db/id block)))))
        [:div.flex.flex-row.items-center.gap-1
         [:div.warning "Self reference"]
         (shui/button {:variant :outline
