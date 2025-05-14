@@ -52,8 +52,8 @@
       (let [_ (worker-db-page/create! conn "vim/keys" {:split-namespace? true})
             _ (worker-db-page/create! conn "emacs/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
-               (->> (d/q '[:find [(pull ?b [{:logseq.property/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
-                    (map #(get-in % [:logseq.property/parent :block/title]))
+               (->> (d/q '[:find [(pull ?b [{:logseq.property.class/extends [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:logseq.property.class/extends :block/title]))
                     set))
             "Two child pages with same name exist and have different parents")))
 

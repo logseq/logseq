@@ -358,7 +358,7 @@
               (fn [id]
                 (let [value (:db/id (:class/parent (d/entity db id)))]
                   [[:db/retract id :class/parent]
-                   [:db/add id :logseq.property/parent value]]))))))))
+                   [:db/add id :logseq.property.class/extends value]]))))))))
 
 (defn- deprecate-class-schema-properties
   [conn _search-db]
@@ -884,7 +884,7 @@
    [12 {:fix update-block-type-many->one}]
    [13 {:classes [:logseq.class/Journal]
         :properties [:logseq.property.journal/title-format]}]
-   [14 {:properties [:logseq.property/parent]
+   [14 {:properties [:logseq.property.class/extends]
         :fix deprecate-class-parent}]
    [15 {:properties [:logseq.property.class/properties]
         :fix deprecate-class-schema-properties}]

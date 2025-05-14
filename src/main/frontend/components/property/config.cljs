@@ -602,16 +602,16 @@
                                   :title "Property type"
                                   :desc (if disabled?'
                                           (ui/tooltip
-                                            [:span (str property-type-label')]
-                                            [:div.w-96
-                                             "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
+                                           [:span (str property-type-label')]
+                                           [:div.w-96
+                                            "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
                                           (str property-type-label'))
                                   :disabled? disabled?'
                                   :submenu-content (fn [ops]
                                                      (property-type-sub-pane property ops))}))
 
      (when (and (= property-type :node)
-             (not (contains? #{:logseq.property/parent} (:db/ident property))))
+                (not (contains? #{:logseq.property.class/extends} (:db/ident property))))
        (dropdown-editor-menuitem {:icon :hash
                                   :disabled? disabled?
                                   :title "Specify node tags"
@@ -661,7 +661,7 @@
 
      (when (not= :logseq.property/enable-history? (:db/ident property))
        (let [property-type (:logseq.property/type property)
-             group' (->> [(when (and (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+             group' (->> [(when (and (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                                      (contains? #{:default :number :date :checkbox :node} property-type)
                                      (not
                                       (and (= :default property-type)
@@ -673,13 +673,13 @@
                                                          :disabled? config/publishing?
                                                          :submenu-content (fn [ops] (ui-position-sub-pane property (assoc ops :ui-position position)))})))
 
-                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                          (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                             (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? (boolean (:logseq.property/hide? property))
                                                        :disabled? config/publishing?
                                                        :on-toggle-checked-change #(db-property-handler/set-block-property! (:db/id property)
                                                                                                                            :logseq.property/hide?
                                                                                                                            %)}))
-                          (when (not (contains? #{:logseq.property/parent :logseq.property.class/properties} (:db/ident property)))
+                          (when (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))
                             (dropdown-editor-menuitem
                              {:icon :eye-off :title "Hide empty value"
                               :toggle-checked? (boolean (:logseq.property/hide-empty-value property))
@@ -727,7 +727,7 @@
                 (or class-schema?
                     (not (and
                           (ldb/class? owner-block)
-                          (contains? #{:logseq.property/parent} (:db/ident property))))))
+                          (contains? #{:logseq.property.class/extends} (:db/ident property))))))
        (dropdown-editor-menuitem
         {:id :delete-property :icon :x
          :title (if class-schema? "Delete property from tag" "Delete property from node")

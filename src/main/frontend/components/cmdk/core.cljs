@@ -115,7 +115,7 @@
                          (or (let [page (some-> (text/get-namespace-last-part input)
                                                 string/trim
                                                 db/get-page)
-                                   parent-title (:block/title (:logseq.property/parent page))
+                                   parent-title (:block/title (:block/parent page))
                                    namespace? (string/includes? input "/")]
                                (and page
                                     (or (not namespace?)
