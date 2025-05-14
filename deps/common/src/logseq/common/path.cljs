@@ -14,12 +14,11 @@
 (defn is-file-url?
   [s]
   (and (string? s)
-       (or (string/starts-with? s "file://") ;; mobile platform
-           (string/starts-with? s "content://") ;; android only
-           (string/starts-with? s "assets://") ;; Electron asset, urlencoded
-           (string/starts-with? s "logseq://") ;; reserved for future fs protocol
-           (string/starts-with? s "memory://") ;; special memory fs
-           (string/starts-with? s "s3://"))))
+       (or
+        (string/starts-with? s "memory://") ;; special memory fs
+        (string/starts-with? s "assets://") ;; Electron asset, urlencoded
+        (string/starts-with? s "file://") ;; Electron files
+        )))
 
 (defn filename
   "File name of a path or URL.
