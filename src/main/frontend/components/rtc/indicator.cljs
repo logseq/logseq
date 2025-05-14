@@ -4,10 +4,12 @@
             [clojure.pprint :as pprint]
             [frontend.common.missionary :as c.m]
             [frontend.db :as db]
+            [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [rum.core :as rum]))
@@ -55,10 +57,17 @@
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)
 
-(rum/defc assets-progressing < rum/reactive
+(defn- asset-upload-download-progress-flow
+  [repo]
+  (->> (m/watch (get @state/state :rtc/asset-upload-download-progress))
+       (m/eduction
+        (keep #(get % repo))
+        (dedupe))))
+
+(rum/defc assets-progressing
   []
   (let [repo (state/get-current-repo)
-        progress (state/sub :rtc/asset-upload-download-progress {:path-in-sub-atom [repo]})
+        progress (hooks/use-flow-state (asset-upload-download-progress-flow repo))
         downloading (->>
                      (keep (fn [[id {:keys [direction loaded total]}]]
                              (when (and (= direction :download)
@@ -96,13 +105,12 @@
             (ui/indicator-progress-pie percent)
             (:block/title block)])]])]))
 
-(rum/defcs details < rum/reactive
-  (rum/local false ::expand-debug-info?)
-  [state online?]
-  (let [*expand-debug? (::expand-debug-info? state)
+(rum/defc details
+  [online?]
+  (let [[expand-debug? set-expand-debug!] (hooks/use-state false)
         {:keys [graph-uuid local-tx remote-tx rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
-        (rum/react *detail-info)]
+        (hooks/use-flow-state (m/watch *detail-info))]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (if online? "Online" "Offline")]
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] "pending local changes"]
@@ -115,9 +123,9 @@
        (when-let [time (:created-at latest-log)]
          [:div.text-sm "Last synced time: "
           (.toLocaleString time)]))
-     [:a.fade-link.text-sm {:on-click #(swap! *expand-debug? not)}
+     [:a.fade-link.text-sm {:on-click #(set-expand-debug! (not expand-debug?))}
       "More debug info"]
-     (when @*expand-debug?
+     (when expand-debug?
        [:div.rtc-info-debug
         [:pre.select-text
          (-> (cond-> {:pending-local-ops pending-local-ops}
@@ -145,13 +153,13 @@
          (> 600
             (/ (- (t/now) created-at) 1000)))))
 
-(rum/defc indicator < rum/reactive
+(rum/defc indicator
   []
-  (let [detail-info                 (rum/react *detail-info)
-        _                           (state/sub :auth/id-token)
-        online?                     (state/sub :network/online?)
-        uploading?'                  (uploading? detail-info)
-        downloading?'                (downloading? detail-info)
+  (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
+        _                           (hooks/use-flow-state flows/current-login-user-flow)
+        online?                     (hooks/use-flow-state flows/network-online-event-flow)
+        uploading?'                 (uploading? detail-info)
+        downloading?'               (downloading? detail-info)
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
