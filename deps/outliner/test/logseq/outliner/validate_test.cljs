@@ -168,7 +168,7 @@
 
     (testing "Validate property relationships"
       (let [parent-child-pairs (d/q '[:find ?parent ?child
-                                      :where [?child :logseq.property/parent ?parent]] @conn)]
+                                      :where [?child :logseq.property.class/extends ?parent]] @conn)]
         (doseq [[parent-id child-id] parent-child-pairs]
           (let [parent (d/entity @conn parent-id)
                 child (d/entity @conn child-id)]

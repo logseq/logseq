@@ -8,10 +8,17 @@
   ;; rule "parent" is optimized for parent node -> child node nesting queries
   {:parent
    '[[(parent ?p ?c)
-      [?c :logseq.property/parent ?p]]
+      [?c :block/parent ?p]]
      [(parent ?p ?c)
-      [?t :logseq.property/parent ?p]
+      [?t :block/parent ?p]
       (parent ?t ?c)]]
+
+   :class-extends
+   '[[(class-extends ?p ?c)
+      [?c :logseq.property.class/extends ?p]]
+     [(class-extends ?p ?c)
+      [?t :logseq.property.class/extends ?p]
+      (class-extends ?t ?c)]]
 
    :alias
    '[[(alias ?e2 ?e1)

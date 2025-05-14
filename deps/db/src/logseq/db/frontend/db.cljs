@@ -50,14 +50,14 @@
 
 (defn get-page-parents
   [node & {:keys [node-class?]}]
-  (when-let [parent (:logseq.property/parent node)]
+  (when-let [parent (:logseq.property.class/extends node)]
     (loop [current-parent parent
            parents' []]
       (if (and
            current-parent
            (if node-class? (entity-util/class? current-parent) true)
            (not (contains? parents' current-parent)))
-        (recur (:logseq.property/parent current-parent)
+        (recur (:logseq.property.class/extends current-parent)
                (conj parents' current-parent))
         (vec (reverse parents'))))))
 

@@ -365,14 +365,14 @@
                      (d/q '[:find [(pull ?b [*
                                              {:logseq.property.class/properties [:block/title]}
                                              {:logseq.property/classes [:block/title]}
-                                             {:logseq.property/parent [:block/title]}
+                                             {:logseq.property.class/extends [:block/title]}
                                              {:block/tags [:block/title]}
                                              {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
                           db))
         top-level-properties [:logseq.property/type :logseq.property.class/properties :logseq.property/classes
-                              :logseq.property/parent :block/tags]
+                              :logseq.property.class/extends :block/tags]
         debug-attributes (into [:block/name :block/title :db/cardinality :db/ident :block/refs]
                                top-level-properties)]
     (fs/writeFileSync "schema-org.edn"
@@ -389,8 +389,8 @@
                                                                                      v)))))
                                        (seq (:logseq.property.class/properties m))
                                        (update :logseq.property.class/properties #(set (map :block/title %)))
-                                       (some? (:logseq.property/parent m))
-                                       (update :logseq.property/parent :block/title)
+                                       (some? (:logseq.property.class/extends m))
+                                       (update :logseq.property.class/extends :block/title)
                                        (seq (:logseq.property/classes m))
                                        (update :logseq.property/classes #(set (map :block/title %)))
                                        (seq (:block/tags m))

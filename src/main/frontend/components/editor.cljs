@@ -123,7 +123,8 @@
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)
                 _ (when-not page (page-handler/<create! chosen-item {:redirect? false
-                                                                     :create-first-block? false}))
+                                                                     :create-first-block? false
+                                                                     :reference? true}))
                 page' (db/get-page chosen-item)
                 current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
