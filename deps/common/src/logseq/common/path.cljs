@@ -145,9 +145,9 @@
 (defn url-join
   "Segments are not URL-ecoded"
   [base-url & segments]
-  (let [^js url (js/URL. base-url)
+  (let [^js url (js/URL. (safe-decode-uri-component base-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "")
+        domain (or (not-empty (.-host url)) "/")
         path (safe-decode-uri-component (.-pathname url))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
