@@ -261,6 +261,9 @@
     (hash-map :icon icon
               :icon-theme :gray
               :text title'
+              :header (when (:block/parent entity)
+                        (block/breadcrumb {:disable-preview? true
+                                           :search? true} repo (:block/uuid page) {}))
               :source-page (or source-page page))))
 
 (defn- block-item
@@ -271,7 +274,8 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
-     :header (when-not (db/page? block) (block/breadcrumb {:search? true} repo id {}))
+     :header (when (:block/parent block) (block/breadcrumb {:disable-preview? true
+                                                            :search? true} repo id {}))
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))

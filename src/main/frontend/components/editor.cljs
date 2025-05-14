@@ -187,8 +187,7 @@
                                        (or (db/entity [:block/uuid id]) block)
                                        block)]
                           [:div.flex.flex-col
-                           (when (and (not (or db-tag? (:page? block) (ldb/page? block)))
-                                      (:block/uuid block'))
+                           (when (and (:block/uuid block') (:block/parent block'))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
