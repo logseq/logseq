@@ -158,7 +158,7 @@
                                             :bind #js [addr]}))))))))
 
 (defn- find-missing-addresses
-  [^Object db & {:keys [delete-addrs]}]
+  [^Object db & {:keys [delete-addrs upsert-addr-content? open-db?]}]
   (worker-util/profile
    "find-missing-addresses"
    (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
@@ -181,8 +181,10 @@
        (if worker-util/dev?
          (throw (ex-info "Found missing addresses that shouldn't happen" {:missing-addresses missing-addresses}))
          (worker-util/post-message :capture-error
-                                   {:error "db-missing-addresses"
-                                    :payload {:missing-addresses missing-addresses}})))
+                                   {:error "v2-db-missing-addresses"
+                                    :payload {:missing-addresses missing-addresses
+                                              :upsert-addr-content upsert-addr-content?
+                                              :open-db open-db?}})))
      missing-addresses)))
 
 (defn upsert-addr-content!
@@ -197,7 +199,8 @@
                                         :bind item}))))
     (when (seq delete-addrs)
       (let [missing-addrs (when worker-util/dev?
-                            (seq (find-missing-addresses db {:delete-addrs delete-addrs})))
+                            (seq (find-missing-addresses db {:delete-addrs delete-addrs
+                                                             :upsert-addr-content? true})))
             delete-addrs' (if missing-addrs
                             (remove (set missing-addrs) delete-addrs)
                             delete-addrs)]
@@ -376,7 +379,7 @@
           ;; TODO: remove this once we can ensure there's no bug for missing addresses
           ;; because it's slow for large graphs
           (when-not import-type
-            (when-let [missing-addresses (seq (find-missing-addresses db))]
+            (when-let [missing-addresses (seq (find-missing-addresses db {:open-db? true}))]
               (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
 
           (db-migrate/migrate conn search-db)
