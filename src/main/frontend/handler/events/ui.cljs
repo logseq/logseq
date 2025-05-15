@@ -19,13 +19,11 @@
             [frontend.db :as db]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.srs :as srs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.fs.sync :as sync]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -93,47 +91,12 @@
   (shui/dialog-open!
    (component-page/batch-delete-dialog selected-rows ok-handler)))
 
-(defn ask-permission
-  [repo]
-  (when
-   (and (not (util/electron?))
-        (not (mobile-util/native-platform?)))
-    (fn [{:keys [close]}]
-      [:div
-       ;; TODO: fn translation with args
-       [:p
-        "Grant native filesystem permission for directory: "
-        [:b (config/get-local-dir repo)]]
-       (ui/button
-        (t :settings-permission/start-granting)
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close)))])))
-
-(defn get-local-repo
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (config/local-file-based-graph? repo)
-      repo)))
-
-(defmethod events/handle :modal/nfs-ask-permission []
-  (when-let [repo (get-local-repo)]
-    (some-> (ask-permission repo)
-            (shui/dialog-open! {:align :top}))))
-
 (defmethod events/handle :modal/show-cards [[_ cards-id]]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))]
     (shui/dialog-open!
      (if db-based? (fn [] (fsrs/cards-view cards-id)) srs/global-cards)
      {:id :srs
       :label "flashcards__cp"})))
-
-(defmethod events/handle :modal/show-instruction [_]
-  (shui/dialog-open!
-   capacitor-fs/instruction
-   {:id :instruction
-    :label "instruction__cp"}))
 
 (defmethod events/handle :modal/show-themes-modal [[_ classic?]]
   (if classic?

@@ -481,7 +481,6 @@
     :tips/all-done "Tout est complété !"
     :shortcut.category/whiteboard "Tableau blanc"
     :shortcut.category/plugins "Plugins"
-    :settings-permission/start-granting "Permettre"
     :settings-page/update-error-2 "Vérifiez le/la"
     :settings-page/update-error-1 "⚠️ Oups, quelque chose s'est mal passé !"
     :settings-page/update-available "Nouvelle mise à jour trouvée"

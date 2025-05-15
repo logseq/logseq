@@ -624,7 +624,6 @@
  :settings-page/update-available                  "Znaleziono nowe wydanie"
  :settings-page/update-error-1                    "⚠️ Oops, coś poszło nie tak!"
  :settings-page/update-error-2                    "Sprawdź proszę "
- :settings-permission/start-granting              "Nadanie"
  :shortcut.category/plugins                       "Pluginy"
  :shortcut.category/whiteboard                    "Tablice"
  :tips/all-done                                   "Wszystko zrobione!"

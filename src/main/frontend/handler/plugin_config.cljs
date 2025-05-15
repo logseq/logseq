@@ -40,14 +40,14 @@ when a plugin is installed, updated or removed"
                               str)]
          ;; fs protocols require repo and dir when they aren't necessary. For this component,
          ;; neither is needed so these are blank and nil respectively
-    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn remove-plugin
   "Removes a plugin from plugin.edn"
   [plugin-id]
   (p/let [content (fs/read-file "" (plugin-config-path))
           updated-content (-> content rewrite/parse-string (rewrite/dissoc (keyword plugin-id)) str)]
-    (fs/write-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
+    (fs/write-plain-text-file! "" nil (plugin-config-path) updated-content {:skip-compare? true})))
 
 (defn- create-plugin-config-file-if-not-exists
   []

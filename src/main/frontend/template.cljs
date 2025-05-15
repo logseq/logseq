@@ -4,7 +4,7 @@
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [logseq.db :as ldb]))
 

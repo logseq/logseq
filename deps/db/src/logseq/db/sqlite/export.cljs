@@ -847,29 +847,52 @@
 ;; Import fns
 ;; ==========
 (defn- add-uuid-to-page-if-exists
-  [db m]
+  [db import-to-existing-page-uuids m]
   (if-let [ent (some->> (:build/journal m)
                         (d/datoms db :avet :block/journal-day)
                         first
                         :e
                         (d/entity db))]
-    (assoc m :block/uuid (:block/uuid ent))
+    (do
+      (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
+      (assoc m :block/uuid (:block/uuid ent)))
     ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
     (if-let [ent (some->> (:block/title m) (ldb/get-case-page db))]
-      (assoc m :block/uuid (:block/uuid ent))
+      (do
+        (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
+        (assoc m :block/uuid (:block/uuid ent)))
       m)))
+
+(defn- update-existing-properties
+  "Updates existing properties by ident. Also check imported and existing properties have
+   the same cardinality and type to avoid failure after import"
+  [db property-conflicts properties]
+  (->> properties
+       (map (fn [[k v]]
+              (if-let [ent (d/entity db k)]
+                (do
+                  (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
+                              (select-keys v [:logseq.property/type :db/cardinality]))
+                    (swap! property-conflicts conj
+                           {:property-id k
+                            :actual (select-keys v [:logseq.property/type :db/cardinality])
+                            :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
+                  [k (assoc v :block/uuid (:block/uuid ent))])
+                [k v])))
+       (into {})))
 
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
   [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map} property-conflicts]
-  (let [export-map
+  (let [import-to-existing-page-uuids (atom {})
+        export-map
         (cond-> {:build-existing-tx? true
                  :extract-content-refs? false}
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db)))
+                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids)))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -880,20 +903,7 @@
                                [k v])))
                       (into {})))
           (seq properties)
-          (assoc :properties
-                 (->> properties
-                      (map (fn [[k v]]
-                             (if-let [ent (d/entity db k)]
-                               (do
-                                 (when (not= (select-keys ent [:logseq.property/type :db/cardinality])
-                                             (select-keys v [:logseq.property/type :db/cardinality]))
-                                   (swap! property-conflicts conj
-                                          {:property-id k
-                                           :actual (select-keys v [:logseq.property/type :db/cardinality])
-                                           :expected (select-keys ent [:logseq.property/type :db/cardinality])}))
-                                 [k (assoc v :block/uuid (:block/uuid ent))])
-                               [k v])))
-                      (into {})))
+          (assoc :properties (update-existing-properties db property-conflicts properties))
           ;; Graph export doesn't use :build/page so this speeds up build
           (= :graph export-type)
           (assoc :translate-property-values? false)
@@ -904,10 +914,19 @@
                       export-map
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
-                                         [:build/page (add-uuid-to-page-if-exists db (second f))]
+                                         [:build/page
+                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids (second f))]
                                          f))
-                                     export-map))]
-    export-map'))
+                                     export-map))
+        ;; Update uuid references of all pages that had their uuids updated to reference an existing page
+        export-map''
+        (walk/postwalk (fn [f]
+                         (if-let [new-uuid (and (vector? f) (= :block/uuid (first f))
+                                                (get @import-to-existing-page-uuids (second f)))]
+                           [:block/uuid new-uuid]
+                           f))
+                       export-map')]
+    export-map''))
 
 (defn- build-block-import-options
   "Builds options for sqlite-build to import into current-block"

@@ -353,8 +353,6 @@
  :settings-page/update-error-1 "⚠️ Ups, Etwas ist schiefgelaufen!"
  :settings-page/update-error-2 " Überprüfen Sie den "
 
- :settings-permission/start-granting "Erlauben"
-
  :tips/all-done "Alles erledigt!"
 
  :whiteboard/add-block-or-page "Block oder Seite hinzufügen"

@@ -6,7 +6,7 @@
             [frontend.db :as db]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.graph :as graph]
             [frontend.handler.notification :as notification]
@@ -105,7 +105,7 @@
 
                      :else
                      "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-         (when-not (and only-cloud? (not manager?))
+         (when-not (and db-graph? only-cloud? (not manager?))
            [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
             {:title title
              :on-click (fn []
