@@ -693,7 +693,7 @@
 
 (deftest-async export-config-file-sets-title-format
   (p/let [conn (db-test/create-conn)
-          read-file #(p/do! (pr-str {:journal/page-title-format "yyyy-MM-dd"}))
+          read-file #(p/do! "{:journal/page-title-format \"yyyy-MM-dd\"}")
           _ (gp-exporter/export-config-file conn "logseq/config.edn" read-file {})]
     (is (= "yyyy-MM-dd"
            (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal)))
