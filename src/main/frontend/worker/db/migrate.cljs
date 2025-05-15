@@ -1200,7 +1200,8 @@
     (= #{:block/tx-id} (set (keys entity)))
     [[:db/retractEntity (:db/id entity)]]
 
-    (and (seq (:block/refs entity))
+    (and (or (seq (:block/refs entity))
+             (:logseq.property.table/filters entity))
          (not (or (:block/title entity) (:block/content entity) (:property.value/content entity))))
     [[:db/retractEntity (:db/id entity)]]
 
