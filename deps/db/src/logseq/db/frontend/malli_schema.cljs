@@ -3,9 +3,9 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -482,14 +482,10 @@
                        :file-block
                        (:logseq.property.history/block d)
                        :property-history-block
-
                        (:block/closed-value-property d)
                        :closed-value-block
-
-                       (and (:logseq.property/created-from-property d)
-                            (:logseq.property/value d))
+                       (and (:logseq.property/created-from-property d) (:logseq.property/value d))
                        :property-value-block
-
                        (:block/uuid d)
                        :block
                        (= (:db/ident d) :logseq.property/empty-placeholder)
