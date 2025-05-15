@@ -193,7 +193,6 @@
  :settings-page/custom-global-configuration "自定义全局配置"
  :settings-page/edit-global-config-edn "编辑全局 config.edn"
  :settings-page/sync "同步"
- :settings-permission/start-granting "开始授权"
  :settings-page/auto-chmod "自动更改文件权限"
  :settings-page/auto-chmod-desc "禁用此功能可以允许多个用户在拥有用户组权限的情况下编辑文件。"
  :yes "是"

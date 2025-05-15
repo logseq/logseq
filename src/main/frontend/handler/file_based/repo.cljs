@@ -1,25 +1,25 @@
 (ns frontend.handler.file-based.repo
   "Repo fns for creating, loading and parsing file graphs"
-  (:require [frontend.config :as config]
+  (:require [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.handler.file-based.file :as file-handler]
-            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.file-based.reset-file :as reset-file-handler]
+            [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.util :as util]
-            [promesa.core :as p]
-            [shadow.resource :as rc]
-            [logseq.graph-parser :as graph-parser]
             [logseq.common.config :as common-config]
-            [clojure.core.async :as async]
-            [medley.core :as medley]
             [logseq.common.path :as path]
-            [clojure.core.async.interop :refer [p->c]]))
+            [logseq.graph-parser :as graph-parser]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [shadow.resource :as rc]))
 
 (defn- create-contents-file
   [repo-url]
@@ -54,49 +54,13 @@
 
 (comment
   (defn- create-dummy-notes-page
-   [repo-url content]
-   (spec/validate :repos/url repo-url)
-   (let [repo-dir (config/get-repo-dir repo-url)
-         file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
-     (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
-             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
-       (reset-file-handler/reset-file! repo-url file-rpath content)))))
-
-(comment
-  (defn- create-today-journal-if-not-exists
-   [repo-url {:keys [content]}]
-   (spec/validate :repos/url repo-url)
-   (when (state/enable-journals? repo-url)
-     (let [repo-dir (config/get-repo-dir repo-url)
-           format (state/get-preferred-format repo-url)
-           title (date/today)
-           file-name (date/journal-title->default title)
-           default-content (util/default-content-with-title format)
-           template (state/get-default-journal-template)
-           template (when (and template
-                               (not (string/blank? template)))
-                      template)
-           content (cond
-                     content
-                     content
-
-                     template
-                     (str default-content template)
-
-                     :else
-                     default-content)
-           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
-                                                                           (config/get-file-extension format)))
-           page-exists? (ldb/get-page (db/get-db) title)
-           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
-       (when (or empty-blocks? (not page-exists?))
-         (p/let [_ (nfs/check-directory-permission! repo-url)
-                 _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
-                 file-exists? (fs/file-exists? repo-dir file-rpath)]
-           (when-not file-exists?
-             (p/let [_ (reset-file-handler/reset-file! repo-url file-rpath content)]
-               (fs/create-if-not-exists repo-url repo-dir file-rpath content)))))))))
-
+    [repo-url content]
+    (spec/validate :repos/url repo-url)
+    (let [repo-dir (config/get-repo-dir repo-url)
+          file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
+      (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
+              _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
+        (reset-file-handler/reset-file! repo-url file-rpath content)))))
 
 (defn create-config-file-if-not-exists
   "Creates a default logseq/config.edn if it doesn't exist"

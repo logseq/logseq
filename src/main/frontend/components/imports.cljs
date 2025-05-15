@@ -345,7 +345,7 @@
                       parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
                   (p/do!
                    (fs/mkdir-if-not-exists parent-dir)
-                   (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
+                   (fs/write-plain-text-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
   [*files

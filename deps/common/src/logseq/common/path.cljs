@@ -14,12 +14,11 @@
 (defn is-file-url?
   [s]
   (and (string? s)
-       (or (string/starts-with? s "file://") ;; mobile platform
-           (string/starts-with? s "content://") ;; android only
-           (string/starts-with? s "assets://") ;; Electron asset, urlencoded
-           (string/starts-with? s "logseq://") ;; reserved for future fs protocol
-           (string/starts-with? s "memory://") ;; special memory fs
-           (string/starts-with? s "s3://"))))
+       (or
+        (string/starts-with? s "memory://") ;; special memory fs
+        (string/starts-with? s "assets://") ;; Electron asset, urlencoded
+        (string/starts-with? s "file://") ;; Electron files
+        )))
 
 (defn filename
   "File name of a path or URL.
@@ -62,7 +61,6 @@
                 (re-find #"[\. ]$" fname)
                 (re-find #"(?i)^(COM[0-9]|CON|LPT[0-9]|NUL|PRN|AUX|com[0-9]|con|lpt[0-9]|nul|prn|aux)\..+" fname)
                 (re-find #"[\u0000-\u001f\u0080-\u009f]" fname)))))
-
 
 (defn- path-join-internal
   "Joins the given path segments into a single path, handling relative paths,
@@ -144,15 +142,15 @@
          (join-fn))))
 
 (defn url-join
-  "Segments are not URL-ecoded"
+  "Segments are not URL-encoded"
   [base-url & segments]
-  (let [^js url (js/URL. base-url)
+  (let [^js url (js/URL. (safe-decode-uri-component base-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "")
-        path (safe-decode-uri-component (.-pathname url))
+        path (.-pathname url)
+        domain (or (not-empty (.-host url))
+                 (if (string/starts-with? path "/") "" "/"))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
-
 
 (defn path-join
   "Join path segments, or URL base and path segments"
@@ -191,19 +189,17 @@
     :else
     (path-join (str protocol "//") path)))
 
-
 (defn- path-normalize-internal
   "Normalize path using path-join, break into segment and re-join"
   [path]
   (path-join path))
 
-
 (defn url-normalize
   [origin-url]
-  (let [^js url (js/URL. origin-url)
+  (let [^js url (js/URL. (safe-decode-uri-component origin-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "")
-        path (safe-decode-uri-component (.-pathname url))
+        domain (or (not-empty (.-host url)) "/")
+        path (.-pathname url)
         encoded-new-path (uri-path-join-internal path)]
     (str scheme "//" domain encoded-new-path)))
 
@@ -223,8 +219,14 @@
   (if (is-file-url? original-url)
     ;; NOTE: URL type is not consistent across all protocols
     ;; Check file:// and assets://, pathname behavior is different
-    (let [^js url (js/URL. (string/replace original-url "assets://" "file://"))
-          path (safe-decode-uri-component (.-pathname url))
+    (let [^js url (try
+                    (js/URL. (string/replace (safe-decode-uri-component original-url) "assets://" "file://"))
+                    (catch :default e
+                      (js/console.error "invalid URL:"
+                                        (str "original-url: " original-url
+                                             " url: " (string/replace (safe-decode-uri-component original-url) "assets://" "file://")))
+                      (throw e)))
+          path (.-pathname url)
           host (.-host url)
           path (if (string/starts-with? path "///")
                  (subs path 2)
@@ -276,7 +278,6 @@
           (safe-decode-uri-component (str base-prefix (string/join "/" remain-segs)))
           (str base-prefix (string/join "/" remain-segs)))))))
 
-
 (defn parent
   "Parent, containing directory"
   [path]
@@ -284,7 +285,6 @@
     ;; ugly but works
     (path-normalize (str path "/.."))
     nil))
-
 
 (defn resolve-relative-path
   "Assume current-path is a file"

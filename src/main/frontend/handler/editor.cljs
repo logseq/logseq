@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -16,7 +17,6 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
@@ -35,7 +35,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -46,7 +46,6 @@
             [frontend.util.list :as list]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
-            [goog.crypt.base64 :as base64]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -1054,6 +1053,8 @@
   (state/set-block-op-type! :cut)
   (when-let [blocks (->> (get-selected-blocks)
                          (remove #(dom/has-class? % "property-value-container"))
+                         (remove (fn [block] (or (= "true" (dom/attr block "data-query"))
+                                                 (= "true" (dom/attr block "data-transclude")))))
                          seq)]
     ;; remove queries
     (let [dom-blocks (remove (fn [block] (= "true" (dom/attr block "data-query"))) blocks)]
@@ -1382,8 +1383,6 @@
              (property-file/remove-properties-when-file-based repo format)
              string/trim)))
 
-(def insert-command! editor-common-handler/insert-command!)
-
 (defn delete-asset-of-block!
   [{:keys [repo asset-block href full-text block-id local? delete-local?] :as _opts}]
   (let [block (db-model/query-block-by-uuid block-id)
@@ -1407,36 +1406,16 @@
                                (path/resolve-relative-path block-file-rpath href)))]
             (fs/unlink! repo asset-fpath nil)))))))
 
-(defn- write-file!
-  [repo dir file file-rpath file-name]
-  (if (util/electron?)
-    (if-let [from (not-empty (.-path file))]
-      (-> (js/window.apis.copyFileToAssets dir file-rpath from)
-          (p/catch #(js/console.error "Debug: Copy Asset Error#" %)))
-      (-> (p/let [buffer (.arrayBuffer file)]
-            (fs/write-file! repo dir file-rpath buffer {:skip-compare? false}))
-          (p/catch #(js/console.error "Debug: Writing Asset #" %))))
-    (->
-     (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-            (cond
-              (mobile-util/native-platform?)
-                          ;; capacitor fs accepts Blob, File implements Blob
-              (p/let [buffer (.arrayBuffer file)
-                      content (base64/encodeByteArray (js/Uint8Array. buffer))
-                      fpath (path/path-join dir file-rpath)]
-                (capacitor-fs/<write-file-with-base64 fpath content))
-
-              (config/db-based-graph? repo) ;; memory-fs
-              (p/let [buffer (.arrayBuffer file)
-                      content (js/Uint8Array. buffer)]
-                (fs/write-file! repo dir file-rpath content nil))
-
-              :else
-              (throw (ex-info "Paste failed"
-                              {:file-name file-name}))))
-     (p/catch (fn [error]
-                (prn :paste-file-error)
-                (js/console.error error))))))
+(defn db-based-save-asset!
+  [repo dir file file-rpath]
+  (p/let [buffer (.arrayBuffer file)]
+    (if (util/electron?)
+      (ipc/ipc "writeFile" repo (path/path-join dir file-rpath) buffer)
+      ;; web
+      (p/let [buffer (.arrayBuffer file)
+              content (js/Uint8Array. buffer)]
+        ;; actually, writing binary using memory fs
+        (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
@@ -1470,7 +1449,7 @@
                    insert-opts {:custom-uuid block-id
                                 :edit-block? false
                                 :properties properties}
-                   _ (write-file! repo dir file file-rpath file-name)
+                   _ (db-based-save-asset! repo dir file file-rpath)
                    edit-block (state/get-edit-block)
                    insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
                    insert-opts' (if insert-to-current-block-page?
@@ -1485,6 +1464,8 @@
                (state/clear-edit!))
              (or new-entity
                  (throw (ex-info "Can't save asset" {:files files}))))))))))
+
+(def insert-command! editor-common-handler/insert-command!)
 
 (defn db-upload-assets!
   "Paste asset for db graph and insert link to current editing block"

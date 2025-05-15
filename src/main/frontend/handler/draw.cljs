@@ -25,16 +25,18 @@
   (let [path file
         repo (state/get-current-repo)]
     (when repo
-      (->
-       (p/do!
-        (create-draws-directory! repo)
-        (db/transact! repo
-                      [{:file/path path
-                        :block/name (util/page-name-sanity-lc file)
-                        :block/file {:file/path path}}]))
-       (p/catch (fn [error]
-                  (prn "Write file failed, path: " path ", data: " data)
-                  (js/console.dir error)))))))
+      (let [repo-dir (config/get-repo-dir repo)]
+        (->
+         (p/do!
+          (create-draws-directory! repo)
+          (fs/write-plain-text-file! repo repo-dir path data nil)
+          (db/transact! repo
+                        [{:file/path path
+                          :block/name (util/page-name-sanity-lc file)
+                          :block/file {:file/path path}}]))
+         (p/catch (fn [error]
+                    (prn "Write file failed, path: " path ", data: " data)
+                    (js/console.dir error))))))))
 
 (defn load-excalidraw-file
   [file ok-handler]

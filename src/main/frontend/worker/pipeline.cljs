@@ -223,7 +223,8 @@
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
-    (let [tx-before-refs (compute-extra-tx-data repo tx-report)
+    (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
+                           (compute-extra-tx-data repo tx-report))
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke

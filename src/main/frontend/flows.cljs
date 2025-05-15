@@ -46,5 +46,4 @@
        (m/relieve)))
 
 (def network-online-event-flow
-  (->> (m/watch *network-online?)
-       (m/eduction (filter true?))))
+  (m/watch *network-online?))

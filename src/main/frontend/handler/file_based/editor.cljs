@@ -1,6 +1,7 @@
 (ns frontend.handler.file-based.editor
   "File-based graph implementation"
   (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -9,8 +10,6 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common.editor :as editor-common-handler]
@@ -19,14 +18,12 @@
             [frontend.handler.file-based.repeated :as repeated]
             [frontend.handler.file-based.status :as status]
             [frontend.handler.property.file :as property-file]
-            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
-            [goog.crypt.base64 :as base64]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
@@ -302,51 +299,28 @@
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
-      (p/let [file-name (util/node-path.basename (.-name file))
-              [file-stem ext-full ext-base] (if file-name
-                                              (let [ext-base (util/node-path.extname file-name)
-                                                    ext-full (if-not (config/extname-of-supported? ext-base)
-                                                               (util/full-path-extname file-name) ext-base)]
-                                                [(subs file-name 0 (- (count file-name)
-                                                                      (count ext-full))) ext-full ext-base])
-                                              ["" "" ""])
-              filename  (str (gen-filename index file-stem) ext-full)
-              file-rpath  (str asset-dir-rpath "/" filename)
-              matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
-              file-rpath (cond-> file-rpath
-                           (not (nil? matched-alias))
-                           (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
-              dir (or (:dir matched-alias) repo-dir)]
-        (if (util/electron?)
-          (do (js/console.debug "Debug: Copy Asset #" dir file-rpath)
-              (-> (if-let [from (not-empty (.-path file))]
-                    (js/window.apis.copyFileToAssets dir file-rpath from)
-                    (p/let [content (.arrayBuffer file)]
-                      (fs/write-file! repo repo-dir file-rpath content {:skip-compare? true})))
-                  (p/then
-                   (fn [dest]
-                     [file-rpath
-                      (if (string? dest) (js/File. #js[] dest) file)
-                      (path/path-join dir file-rpath)
-                      matched-alias]))
-                  (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
+      (let [file-name (util/node-path.basename (.-name file))
+            [file-stem ext-full ext-base] (if file-name
+                                            (let [ext-base (util/node-path.extname file-name)
+                                                  ext-full (if-not (config/extname-of-supported? ext-base)
+                                                             (util/full-path-extname file-name) ext-base)]
+                                              [(subs file-name 0 (- (count file-name)
+                                                                    (count ext-full))) ext-full ext-base])
+                                            ["" "" ""])
+            filename  (str (gen-filename index file-stem) ext-full)
+            file-rpath  (str asset-dir-rpath "/" filename)
+            matched-alias (assets-handler/get-matched-alias-by-ext ext-base)
+            file-rpath (cond-> file-rpath
+                         (not (nil? matched-alias))
+                         (string/replace #"^[.\/\\]*assets[\/\\]+" ""))
+            dir (or (:dir matched-alias) repo-dir)]
 
-          (->
-           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                  (cond
-                    (mobile-util/native-platform?)
-                   ;; capacitor fs accepts Blob, File implements Blob
-                    (p/let [buffer (.arrayBuffer file)
-                            content (base64/encodeByteArray (js/Uint8Array. buffer))
-                            fpath (path/path-join dir file-rpath)]
-                      (capacitor-fs/<write-file-with-base64 fpath content))
-
-                    :else                ; nfs
-                    (fs/write-file! repo dir file-rpath (.stream file) nil))
-                  [file-rpath file (path/path-join dir file-rpath) matched-alias])
-           (p/catch (fn [error]
-                      (prn :paste-file-error)
-                      (js/console.error error))))))))))
+        (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+               (p/let [content (.arrayBuffer file)
+                       file-fpath (path/path-join dir file-rpath)]
+                 ;; file based version support electron only
+                 (ipc/ipc "writeFile" repo file-fpath content))
+               [file-rpath file (path/path-join dir file-rpath) matched-alias]))))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path

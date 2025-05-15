@@ -7,7 +7,7 @@
             [babashka.cli :as cli]
             [babashka.process :refer [shell]]
             [babashka.fs :as fs]
-            [borkdude.rewrite-edn :as r]))
+            [borkdude.rewrite-edn :as rewrite]))
 
 (defn- get-dicts
   []
@@ -78,10 +78,10 @@
   [invalid-keys-by-lang]
   (doseq [[lang invalid-keys] invalid-keys-by-lang]
     (let [path (fs/path "src/resources/dicts" (str (name lang) ".edn"))
-          result (r/parse-string (String. (fs/read-all-bytes path)))
+          result (rewrite/parse-string (String. (fs/read-all-bytes path)))
           new-content (str (reduce
                             (fn [result k]
-                              (r/dissoc result k))
+                              (rewrite/dissoc result k))
                             result invalid-keys))]
       (spit (fs/file path) new-content))))
 
@@ -148,10 +148,10 @@
   [invalid-keys]
   (let [paths (fs/list-dir "src/resources/dicts")]
     (doseq [path paths]
-      (let [result (r/parse-string (String. (fs/read-all-bytes path)))
+      (let [result (rewrite/parse-string (String. (fs/read-all-bytes path)))
             new-content (str (reduce
                               (fn [result k]
-                                (r/dissoc result k))
+                                (rewrite/dissoc result k))
                               result invalid-keys))]
         (spit (fs/file path) new-content)))))
 

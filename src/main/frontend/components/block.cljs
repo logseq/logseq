@@ -62,7 +62,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.ref :as ref]
+            [frontend.util.ref :as ref]
             [frontend.security :as security]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -458,7 +458,7 @@
                  (let [repo (state/get-current-repo)
                        file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
                        dir (config/get-repo-dir repo)]
-                   (-> (fs/write-file! repo dir file-rpath content nil)
+                   (-> (fs/write-plain-text-file! repo dir file-rpath content nil)
                        (p/then load$)))))
              (js/console.error _e)))))))
 
@@ -467,11 +467,9 @@
   [state config title href metadata full_text]
   (let [src (::src state)
         repo (state/get-current-repo)
-        granted? (state/sub [:nfs/user-granted? repo])
         href (config/get-local-asset-absolute-path href)
         db-based? (config/db-based-graph? repo)]
     (when (and (or db-based?
-                   granted?
                    (util/electron?)
                    (mobile-util/native-platform?))
                (nil? @src))
