@@ -158,42 +158,54 @@
                                             :bind #js [addr]}))))))))
 
 (defn- find-missing-addresses
-  [^Object db]
-  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
-                                       :rowMode "array"})
-                        bean/->clj
-                        ffirst
-                        sqlite-util/transit-read)
-        result (->> (.exec db #js {:sql "select addr, addresses from kvs"
-                                   :rowMode "array"})
-                    bean/->clj
-                    (map (fn [[addr addresses]]
-                           [addr (bean/->clj (js/JSON.parse addresses))])))
-        used-addresses (set (concat (mapcat second result)
-                                    [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
-        missing-addresses (clojure.set/difference used-addresses (set (map first result)))]
-    (when (seq missing-addresses)
-      (worker-util/post-message :capture-error
-                                {:error "db-missing-addresses"
-                                 :payload {:missing-addresses missing-addresses}})
-      (prn :error :missing-addresses missing-addresses))
-    missing-addresses))
+  [^Object db & {:keys [delete-addrs]}]
+  (worker-util/profile
+   "find-missing-addresses"
+   (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                        :rowMode "array"})
+                         bean/->clj
+                         ffirst
+                         sqlite-util/transit-read)
+         result (->> (.exec db #js {:sql "select addr, addresses from kvs"
+                                    :rowMode "array"})
+                     bean/->clj
+                     (keep (fn [[addr addresses]]
+                             (when-not (and delete-addrs (delete-addrs addr))
+                               [addr (bean/->clj (js/JSON.parse addresses))]))))
+         used-addresses (-> (set (concat (mapcat second result)
+                                         [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
+                            (clojure.set/difference delete-addrs))
+         missing-addresses (clojure.set/difference used-addresses (set (map first result)))]
+     (when (seq missing-addresses)
+       (prn :error :missing-addresses missing-addresses)
+       (if worker-util/dev?
+         (throw (ex-info "Found missing addresses that shouldn't happen" {:missing-addresses missing-addresses}))
+         (worker-util/post-message :capture-error
+                                   {:error "db-missing-addresses"
+                                    :payload {:missing-addresses missing-addresses}})))
+     missing-addresses)))
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
-  [repo data delete-addrs & {:keys [client-ops-db?] :or {client-ops-db? false}}]
-  (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))]
+  [repo data delete-addrs* & {:keys [client-ops-db?] :or {client-ops-db? false}}]
+  (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))
+        delete-addrs (set delete-addrs*)]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                                         :bind item}))))
     (when (seq delete-addrs)
-      (.transaction db (fn [tx]
-                         ;; (prn :debug :delete-addrs delete-addrs)
-                         (doseq [addr delete-addrs]
-                           (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                          :bind #js [addr]})))))))
+      (let [missing-addrs (when worker-util/dev?
+                            (seq (find-missing-addresses db {:delete-addrs delete-addrs})))
+            delete-addrs' (if missing-addrs
+                            (remove (set missing-addrs) delete-addrs)
+                            delete-addrs)]
+        (when (seq delete-addrs')
+          (.transaction db (fn [tx]
+                             (doseq [addr delete-addrs']
+                               (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
+                                              :bind #js [addr]})))))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -366,8 +378,9 @@
 
           (db-migrate/migrate conn search-db)
 
+          ;; TODO: Remove this once we can ensure there's no bug for missing addresses
           (catch :default e
-            (log/error "DB migrate failed, error: " e)
+            (log/error (str "DB migrate failed for " repo ", error:") e)
             (if (= (.-message e) "DB missing addresses")
               (do
                 (rebuild-db-from-datoms! conn db import-type)
