@@ -5,7 +5,6 @@
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -155,8 +154,6 @@
               css
               (map vector rel-paths blob-urls)))))
 
-(defonce *assets-url-cache (atom {}))
-
 (defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
@@ -187,21 +184,7 @@
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
         (p/let [binary (fs/read-file repo-dir path {})
                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-          (when blob (js/URL.createObjectURL blob)))
-
-        :else ;; nfs
-        (let [handle-path (str "handle/" full-path)
-              cached-url  (get @*assets-url-cache (keyword handle-path))]
-          (if cached-url
-            (p/resolved cached-url)
-            ;; Loading File from handle cache
-            ;; Use await file handle, to ensure all handles are loaded.
-            (p/let [handle (nfs/await-get-nfs-file-handle repo handle-path)
-                    file   (and handle (.getFile handle))]
-              (when file
-                (p/let [url (js/URL.createObjectURL file)]
-                  (swap! *assets-url-cache assoc (keyword handle-path) url)
-                  url)))))))))
+          (when blob (js/URL.createObjectURL blob)))))))
 
 (defn- decode-digest
   [^js/Uint8Array digest]
@@ -266,7 +249,7 @@
         repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
-    (fs/write-file! repo repo-dir file-path data {})))
+    (fs/write-plain-text-file! repo repo-dir file-path data {})))
 
 (defn <unlink-asset
   [repo asset-block-id asset-type]

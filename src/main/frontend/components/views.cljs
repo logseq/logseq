@@ -406,7 +406,7 @@
     columns))
 
 (rum/defc more-actions
-  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]}]
+  [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
         table? (= display-type :logseq.property.view/type.table)
         group-by-columns (concat (when (or
@@ -455,7 +455,7 @@
              (shui/dropdown-menu-checkbox-item
               {:key (str (:id column))
                :className "capitalize"
-               :checked (= (:id column) (:db/ident (:logseq.property.view/group-by-property view-entity)))
+               :checked (= (:id column) group-by-property-ident)
                :onCheckedChange (fn [result]
                                   (if result
                                     (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/group-by-property
@@ -1828,12 +1828,12 @@
         [:div.text-muted-foreground.text-sm
          (pv/property-value view-entity (db/entity :logseq.property.view/type) {})])
 
-      (when db-based? (more-actions view-entity columns table))
+      (when db-based? (more-actions view-entity columns table option))
 
       (when (and db-based? add-new-object!) (new-record-button table view-entity))]]))
 
 (rum/defc ^:large-vars/cleanup-todo view-inner < rum/static
-  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! view-feature-type] :as option*}
+  [view-entity {:keys [view-parent data full-data set-data! columns add-new-object! foldable-options input set-input! sorting set-sorting! filters set-filters! display-type group-by-property-ident] :as option*}
    *scroller-ref]
   (let [db-based? (config/db-based-graph?)
         option (assoc option* :properties
@@ -1875,7 +1875,8 @@
                                                (remove (fn [column]
                                                          (false? (get visible-columns (:id column))))
                                                        columns))
-        group-by-property (:logseq.property.view/group-by-property view-entity)
+        group-by-property (or (:logseq.property.view/group-by-property view-entity)
+                              (db/entity group-by-property-ident))
         table-map {:view-entity view-entity
                    :data data
                    :full-data full-data
@@ -1901,21 +1902,8 @@
                               :set-last-selected-idx! set-last-selected-idx!}}
         table (shui/table-option table-map)
         *view-ref (rum/use-ref nil)
-        display-type (if (config/db-based-graph?)
-                       (or (:db/ident (get view-entity :logseq.property.view/type))
-                           (when (= (:view-type option) :linked-references)
-                             :logseq.property.view/type.list)
-                           :logseq.property.view/type.table)
-                       (if (= view-feature-type :all-pages)
-                         :logseq.property.view/type.table
-                         :logseq.property.view/type.list))
         gallery? (= display-type :logseq.property.view/type.gallery)
-        list-view? (= display-type :logseq.property.view/type.list)
-        group-by-property-ident (or (:db/ident group-by-property)
-                                    (when (and list-view? (nil? group-by-property))
-                                      :block/page)
-                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
-                                      :block/page))]
+        list-view? (= display-type :logseq.property.view/type.list)]
 
     (run-effects! option table-map *scroller-ref gallery?)
 
@@ -1954,6 +1942,7 @@
                    (rum/with-key
                      (ui/foldable
                       [:div
+                       {:class (when-not list-view? "my-4")}
                        (cond
                          group-by-page?
                          (if value
@@ -1974,7 +1963,9 @@
                       {:title-trigger? false})
                      (str (:db/id view-entity) "-group-idx-" idx))))
                (:rows table))])
-           (view-cp view-entity table option view-opts)))]
+           (view-cp view-entity table
+                    (assoc option :group-by-property-ident group-by-property-ident)
+                    view-opts)))]
       (merge {:title-trigger? false} foldable-options))]))
 
 (rum/defcs view-container
@@ -2005,6 +1996,22 @@
 (rum/defc view-aux
   [view-entity {:keys [view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
+        db-based? (config/db-based-graph?)
+        group-by-property (:logseq.property.view/group-by-property view-entity)
+        display-type (if (config/db-based-graph?)
+                       (or (:db/ident (get view-entity :logseq.property.view/type))
+                           (when (= (:view-type option) :linked-references)
+                             :logseq.property.view/type.list)
+                           :logseq.property.view/type.table)
+                       (if (= view-feature-type :all-pages)
+                         :logseq.property.view/type.table
+                         :logseq.property.view/type.list))
+        list-view? (= display-type :logseq.property.view/type.list)
+        group-by-property-ident (or (:db/ident group-by-property)
+                                    (when (and list-view? (nil? group-by-property))
+                                      :block/page)
+                                    (when (and (not db-based?) (contains? #{:linked-references :unlinked-references} view-feature-type))
+                                      :block/page))
         sorting* (:logseq.property.table/sorting view-entity)
         sorting (if (or (= sorting* :logseq.property/empty-placeholder) (empty? sorting*))
                   [{:id :block/updated-at, :asc? false}]
@@ -2035,6 +2042,7 @@
                                                              {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
                                                                                (:db/id view-parent))
                                                               :view-feature-type view-feature-type
+                                                              :group-by-property-ident group-by-property-ident
                                                               :input input
                                                               :filters filters
                                                               :sorting sorting}
@@ -2052,7 +2060,7 @@
        [(:db/id view-entity)
         (hooks/use-debounced-value input 300)
         sorting-filters
-        (:db/id (:logseq.property.view/group-by-property view-entity))
+        group-by-property-ident
         (:db/id (:logseq.property.view/type view-entity))
         ;; page filters
         (:logseq.property.linked-references/includes view-parent)
@@ -2079,7 +2087,9 @@
                                                          ;; grouped
                                                          (reduce (fn [total [_ col]]
                                                                    (+ total (count col))) 0 data))
+                                          :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
+                                          :display-type display-type
                                           :load-view-data load-view-data
                                           :set-view-entity! set-view-entity!))])))
 

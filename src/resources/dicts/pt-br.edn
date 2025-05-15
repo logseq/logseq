@@ -274,8 +274,6 @@
  :settings-page/update-available "Nova versão encontrada "
  :settings-page/update-error-1 "⚠️ Ops, algo deu errado!"
  :settings-page/update-error-2 " Por favor, verifique o "
- :settings-permission/start-granting "Conceder"
-
  :settings-page/auto-chmod "Alterar automaticamente as permissões do arquivo"
  :settings-page/auto-chmod-desc "Desabilite para permitir edição por vários usuários com permissões concedidas por associação a um grupo."
  :yes "Sim"

@@ -1,12 +1,11 @@
-(ns frontend.handler.file-based.nfs
-  "The File System Access API, https://web.dev/file-system-access/."
+(ns frontend.handler.file-based.native-fs
+  "Native fs including Electron and mobile"
   (:require ["/frontend/utils" :as utils]
             [clojure.set :as set]
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -142,7 +141,7 @@
                                      (state/set-loading-files! repo false)
                                      (when ok-handler (ok-handler {:url repo})))))))
                 (p/catch (fn [error]
-                           (log/error :nfs/load-files-error repo)
+                           (log/error :fs/load-files-error repo)
                            (log/error :exception error)))))))
       (p/catch (fn [error]
                  (log/error :exception error)
@@ -253,8 +252,7 @@
       (->
        (p/let [handle (when-not electron? (idb/get-item handle-path))]
          (when (or handle electron? mobile-native?)
-           (p/let [_ (when nfs? (nfs/verify-permission repo true))
-                   local-files-result (fs/get-files repo-dir)
+           (p/let [local-files-result (fs/get-files repo-dir)
                    _ (when (config/global-config-enabled?)
                        ;; reload global config into state
                        (global-config-handler/restore-global-config!))
@@ -262,7 +260,7 @@
                                  (remove-ignore-files repo-dir nfs?))]
              (handle-diffs! repo nfs? old-files new-files re-index? ok-handler))))
        (p/catch (fn [error]
-                  (log/error :nfs/load-files-error repo)
+                  (log/error :fs/load-files-error repo)
                   (log/error :exception error)))
        (p/finally (fn [_]
                     (state/set-graph-syncing? false)))))))

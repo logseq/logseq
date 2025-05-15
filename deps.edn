@@ -8,7 +8,7 @@
                                          :sha     "4b1f15f05a6b4a718a62c247956206480e361ea6"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
-  borkdude/rewrite-edn                  {:mvn/version "0.4.7"}
+  borkdude/rewrite-edn                  {:mvn/version "0.4.9"}
   funcool/promesa                       {:mvn/version "11.0.678"}
   medley/medley                         {:mvn/version "1.4.0"}
   metosin/reitit-frontend               {:mvn/version "0.3.10"}

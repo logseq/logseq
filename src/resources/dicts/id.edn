@@ -271,7 +271,6 @@
  :settings-page/update-available "Ditemukan rilis baru "
  :settings-page/update-error-1 "⚠️ Ups, Ada Sesuatu yang Salah!"
  :settings-page/update-error-2 " Silakan cek "
- :settings-permission/start-granting "Berikan"
 
  :yes "Ya"
 

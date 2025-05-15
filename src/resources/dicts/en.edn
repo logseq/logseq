@@ -297,7 +297,6 @@
  :settings-page/update-available "Found new release "
  :settings-page/update-error-1 "⚠️ Oops, Something Went Wrong!"
  :settings-page/update-error-2 " Please check out the "
- :settings-permission/start-granting "Grant"
 
  :settings-page/auto-chmod "Automatically change file permissions"
  :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."

@@ -275,7 +275,6 @@
  :settings-page/update-available                   "Nájdená nová verzia "
  :settings-page/update-error-1                     "⚠️ Ups, niečo sa pokazilo!"
  :settings-page/update-error-2                     " Prosím, pozrite si "
- :settings-permission/start-granting               "Udeliť"
 
  :settings-page/auto-chmod                         "Automaticky meniť oprávnenia súborov"
  :settings-page/auto-chmod-desc                    "Zakázať umožňuje editáciu viacerými používateľmi s oprávneniami udelenými členstvom v skupine."

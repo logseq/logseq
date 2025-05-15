@@ -3,8 +3,7 @@
   core.async channel to handle them. Any part of the system can dispatch
   one of these events using state/pub-event!"
   (:refer-clojure :exclude [run!])
-  (:require ["@capacitor/filesystem" :refer [Directory Filesystem]]
-            ["@sentry/react" :as Sentry]
+  (:require ["@sentry/react" :as Sentry]
             [cljs-bean.core :as bean]
             [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
@@ -14,9 +13,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
-            [frontend.db.persist :as db-persist]
             [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
@@ -30,7 +27,6 @@
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -49,7 +45,6 @@
             [frontend.modules.shortcut.core :as st]
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
@@ -85,29 +80,22 @@
   (when (= (:url repo) current-repo)
     (file-sync-restart!)))
 
-;; FIXME(andelf): awful multi-arty function.
-;; Should use a `-impl` function instead of the awful `skip-ios-check?` param with nested callback.
 (defn- graph-switch
-  ([graph]
-   (graph-switch graph false))
-  ([graph skip-ios-check?]
-   (let [db-based? (config/db-based-graph? graph)]
-     (if (and (mobile-util/native-ios?) (not skip-ios-check?))
-       (state/pub-event! [:validate-appId graph-switch graph])
-       (do
-         (state/set-current-repo! graph)
-         (page-handler/init-commands!)
+  [graph]
+  (let [db-based? (config/db-based-graph? graph)]
+    (state/set-current-repo! graph)
+    (page-handler/init-commands!)
          ;; load config
-         (repo-config-handler/restore-repo-config! graph)
-         (when-not (= :draw (state/get-current-route))
-           (route-handler/redirect-to-home!))
-         (when-not db-based?
+    (repo-config-handler/restore-repo-config! graph)
+    (when-not (= :draw (state/get-current-route))
+      (route-handler/redirect-to-home!))
+    (when-not db-based?
            ;; graph-switch will trigger a rtc-start automatically
            ;; (rtc-handler/<rtc-start! graph)
-           (file-sync-restart!))
-         (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-           (fs/watch-dir! dir-name))
-         (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))))))
+      (file-sync-restart!))
+    (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
+      (fs/watch-dir! dir-name))
+    (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)})))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
@@ -271,71 +259,11 @@
       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
         (set! (.. toolbar -style -bottom) 0)))))
 
-(defn- get-ios-app-id
-  [repo-url]
-  (when repo-url
-    (let [app-id (-> (first (string/split repo-url "/Documents"))
-                     (string/split "/")
-                     last)]
-      app-id)))
-
-(defmethod handle :validate-appId [[_ graph-switch-f graph]]
-  (when-let [deprecated-repo (or graph (state/get-current-repo))]
-    (if (mobile-util/in-iCloud-container-path? deprecated-repo)
-      ;; Installation is not changed for iCloud
-      (when graph-switch-f
-        (graph-switch-f graph true)
-        (state/pub-event! [:graph/ready (state/get-current-repo)]))
-      ;; Installation is changed for App Documents directory
-      (p/let [deprecated-app-id (get-ios-app-id deprecated-repo)
-              current-document-url (.getUri Filesystem #js {:path ""
-                                                            :directory (.-Documents Directory)})
-              current-app-id (-> (js->clj current-document-url :keywordize-keys true)
-                                 get-ios-app-id)]
-        (if (= deprecated-app-id current-app-id)
-          (when graph-switch-f (graph-switch-f graph true))
-          (do
-            (notification/show! [:div "Migrating from previous App installation..."]
-                                :warning
-                                true)
-            (prn ::migrate-app-id :from deprecated-app-id :to current-app-id)
-            (file-sync-stop!)
-            (.unwatch mobile-util/fs-watcher)
-            (let [current-repo (string/replace deprecated-repo deprecated-app-id current-app-id)
-                  current-repo-dir (config/get-repo-dir current-repo)]
-              (try
-                ;; replace app-id part of repo url
-                (reset! conn/conns
-                        (update-keys @conn/conns
-                                     (fn [key]
-                                       (if (string/includes? key deprecated-app-id)
-                                         (string/replace key deprecated-app-id current-app-id)
-                                         key))))
-                (db-persist/rename-graph! deprecated-repo current-repo)
-                (search/remove-db! deprecated-repo)
-                (state/add-repo! {:url current-repo :nfs? true})
-                (state/delete-repo! {:url deprecated-repo})
-                (catch :default e
-                  (js/console.error e)))
-              (state/set-current-repo! current-repo)
-              (repo-config-handler/restore-repo-config! current-repo)
-              (when graph-switch-f (graph-switch-f current-repo true))
-              (.watch mobile-util/fs-watcher #js {:path current-repo-dir})
-              (file-sync-restart!))))
-        (state/pub-event! [:graph/ready (state/get-current-repo)])))))
-
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
                           (merge payload {:tx-data (map #(into [] %) tx-data)}))]
     (plugin-handler/hook-plugin-db :changed payload)
     (plugin-handler/hook-plugin-block-changes payload)))
-
-(defmethod handle :mobile-file-watcher/changed [[_ ^js event]]
-  (let [type (.-event event)
-        payload (js->clj event :keywordize-keys true)]
-    (fs-watcher/handle-changed! type payload)
-    (when (file-sync-handler/enable-sync?)
-      (sync/file-watch-handler type payload))))
 
 (defmethod handle :rebuild-slash-commands-list [[_]]
   (page-handler/rebuild-slash-commands-list!))
