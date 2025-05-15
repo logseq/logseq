@@ -1,7 +1,6 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [borkdude.rewrite-edn :as rewrite]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [frontend.components.onboarding.setups :as setups]
@@ -35,8 +34,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.common.config :as common-config]))
+            [rum.core :as rum]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -349,15 +347,6 @@
                    (fs/mkdir-if-not-exists parent-dir)
                    (fs/write-plain-text-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
-(defn- convert-file-config-for-db-graph
-  "Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
-   have to manually dissoc deprecated keys for config to be valid"
-  [content]
-  (-> (reduce rewrite/dissoc
-              (rewrite/parse-string (str content))
-              (keys common-config/file-only-config))
-      str))
-
 (defn- import-file-graph
   [*files
    {:keys [graph-name tag-classes property-classes property-parent-classes] :as user-options}
@@ -381,8 +370,7 @@
                    ;; config file options
                    :default-config config/config-default-content
                    :<save-config-file (fn save-config-file [_ path content]
-                                        (let [migrated-content (convert-file-config-for-db-graph content)]
-                                          (db-editor-handler/save-file! path migrated-content)))
+                                        (db-editor-handler/save-file! path content))
                    ;; logseq file options
                    :<save-logseq-file (fn save-logseq-file [_ path content]
                                         (db-editor-handler/save-file! path content))
