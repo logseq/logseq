@@ -764,6 +764,7 @@
     {:block block'' :properties-tx properties-tx}))
 
 (defn- pretty-print-dissoc
+  "Remove list of keys from a given map string while preserving whitespace"
   [s dissoc-keys]
   (-> (reduce rewrite/dissoc
               (rewrite/parse-string s)
@@ -1496,7 +1497,11 @@
                                              <save-file default-save-file}}]
   (-> (<read-file config-file)
       (p/then #(p/do!
-                (<save-file repo-or-conn "logseq/config.edn" %)
+                (<save-file repo-or-conn
+                            "logseq/config.edn"
+                            ;; Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
+                            ;; manually dissoc deprecated keys for config to be valid
+                            (pretty-print-dissoc % (keys common-config/file-only-config)))
                 (let [config (edn/read-string %)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
