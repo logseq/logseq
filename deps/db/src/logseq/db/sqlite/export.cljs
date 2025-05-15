@@ -803,21 +803,29 @@
              set)]
     (set/difference ref-uuids known-uuids)))
 
+(defn- remove-namespaced-keys
+  "Removes keys from this ns for maps passed sqlite.build fns as they don't need to validate or use them"
+  [m]
+  (->> m
+       (remove (fn [[k _v]] (= "logseq.db.sqlite.export" (namespace k))))
+       (into {})))
+
 (defn- ensure-export-is-valid
   "Checks that export map is usable by sqlite.build including checking that
    all referenced properties and classes are defined. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
-  [export-map {:keys [graph-options]}]
-  (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-  (let [undefined-uuids (find-undefined-uuids export-map)
-        undefined (cond-> {}
-                    (empty? (:exclude-namespaces graph-options))
-                    (merge (find-undefined-classes-and-properties export-map))
-                    (seq undefined-uuids)
-                    (assoc :uuids undefined-uuids))]
-    (when (seq undefined)
-      (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
-                      undefined)))))
+  [export-map* {:keys [graph-options]}]
+  (let [export-map (remove-namespaced-keys export-map*)]
+    (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
+    (let [undefined-uuids (find-undefined-uuids export-map)
+          undefined (cond-> {}
+                      (empty? (:exclude-namespaces graph-options))
+                      (merge (find-undefined-classes-and-properties export-map))
+                      (seq undefined-uuids)
+                      (assoc :uuids undefined-uuids))]
+      (when (seq undefined)
+        (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
+                        undefined))))))
 
 (defn build-export
   "Handles exporting db by given export-type"
@@ -838,10 +846,10 @@
           (build-graph-export db (:graph-options options)))]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options)
+        (ensure-export-is-valid export-map options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options))
+      (ensure-export-is-valid export-map options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
@@ -974,7 +982,7 @@
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
       (if (= :graph (::export-type export-map''))
-        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values ::export-type ::schema-version))
+        (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
             (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                          (::kv-values export-map'')))))
-        (sqlite-build/build-blocks-tx export-map'')))))
+        (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))
