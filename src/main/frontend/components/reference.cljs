@@ -43,6 +43,7 @@
     (views/view
      {:view-parent page-entity
       :view-feature-type :linked-references
+      :show-items-count? true
       :additional-actions [reference-filter]
       :columns (views/build-columns config [] {})
       :config config})))
