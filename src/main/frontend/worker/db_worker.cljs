@@ -185,9 +185,8 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
-  [repo data delete-addrs* & {:keys [client-ops-db?] :or {client-ops-db? false}}]
-  (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))
-        delete-addrs (clojure.set/difference (set delete-addrs*) #{0 1})]
+  [db data delete-addrs*]
+  (let [delete-addrs (clojure.set/difference (set delete-addrs*) #{0 1})]
     (assert (some? db) "sqlite db not exists")
     (.transaction db (fn [tx]
                        (doseq [item data]
@@ -197,28 +196,36 @@
       (.transaction db (fn [tx]
                          (doseq [addr delete-addrs]
                            (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                          :bind #js [addr]})))))))
+                                          :bind #js [addr]}))))
+      (let [missing-addrs (when worker-util/dev?
+                            (seq (find-missing-addresses nil db {:delete-addrs delete-addrs})))]
+        (if (seq missing-addrs)
+          (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false])
+          (when (seq delete-addrs)
+            (.transaction db (fn [tx]
+                               (doseq [addr delete-addrs]
+                                 (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
+                                                :bind #js [addr]}))))))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
-  [repo addr & {:keys [client-ops-db?] :or {client-ops-db? false}}]
-  (let [^Object db (worker-state/get-sqlite-conn repo (if client-ops-db? :client-ops :db))]
-    (assert (some? db) "sqlite db not exists")
-    (when-let [result (-> (.exec db #js {:sql "select content, addresses from kvs where addr = ?"
-                                         :bind #js [addr]
-                                         :rowMode "array"})
-                          first)]
-      (let [[content addresses] (bean/->clj result)
-            addresses (when addresses
-                        (js/JSON.parse addresses))
-            data (sqlite-util/transit-read content)]
-        (if (and addresses (map? data))
-          (assoc data :addresses addresses)
-          data)))))
+  [db addr]
+  (assert (some? db) "sqlite db not exists")
+  (when-let [result (-> (.exec db #js {:sql "select content, addresses from kvs where addr = ?"
+                                       :bind #js [addr]
+                                       :rowMode "array"})
+                        first)]
+    (let [[content addresses] (bean/->clj result)
+          addresses (when addresses
+                      (js/JSON.parse addresses))
+          data (sqlite-util/transit-read content)]
+      (if (and addresses (map? data))
+        (assoc data :addresses addresses)
+        data))))
 
 (defn new-sqlite-storage
   "Update sqlite-cli/new-sqlite-storage when making changes"
-  [repo _opts]
+  [^Object db]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
       (let [used-addrs (set (mapcat
@@ -238,36 +245,10 @@
                            :$content (sqlite-util/transit-write data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs)))
+        (upsert-addr-content! db data delete-addrs)))
 
     (-restore [_ addr]
-      (restore-data-from-addr repo addr))))
-
-(defn new-sqlite-client-ops-storage
-  [repo]
-  (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
-      (let [used-addrs (set (mapcat
-                             (fn [[addr data]]
-                               (cons addr
-                                     (when (map? data)
-                                       (:addresses data))))
-                             addr+data-seq))
-            delete-addrs (remove used-addrs delete-addrs)
-            data (map
-                  (fn [[addr data]]
-                    (let [data' (if (map? data) (dissoc data :addresses) data)
-                          addresses (when (map? data)
-                                      (when-let [addresses (:addresses data)]
-                                        (js/JSON.stringify (bean/->js addresses))))]
-                      #js {:$addr addr
-                           :$content (sqlite-util/transit-write data')
-                           :$addresses addresses}))
-                  addr+data-seq)]
-        (upsert-addr-content! repo data delete-addrs :client-ops-db? true)))
-
-    (-restore [_ addr]
-      (restore-data-from-addr repo addr :client-ops-db? true))))
+      (restore-data-from-addr db addr))))
 
 (defn- close-db-aux!
   [repo ^Object db ^Object search ^Object client-ops]
@@ -327,8 +308,9 @@
   [repo {:keys [config import-type datoms]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
-            storage (new-sqlite-storage repo {})
-            client-ops-storage (when-not @*publishing? (new-sqlite-client-ops-storage repo))
+            storage (new-sqlite-storage db)
+            client-ops-storage (when-not @*publishing?
+                                 (new-sqlite-storage client-ops-db))
             db-based? (sqlite-util/db-based-graph? repo)]
       (swap! *sqlite-conns assoc repo {:db db
                                        :search search-db
