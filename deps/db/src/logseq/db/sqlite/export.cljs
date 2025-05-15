@@ -847,21 +847,24 @@
 ;; Import fns
 ;; ==========
 (defn- add-uuid-to-page-if-exists
-  [db import-to-existing-page-uuids m]
-  (if-let [ent (some->> (:build/journal m)
-                        (d/datoms db :avet :block/journal-day)
-                        first
-                        :e
-                        (d/entity db))]
+  [db import-to-existing-page-uuids {:keys [existing-pages-keep-properties?]} m]
+  (if-let [ent (if (:build/journal m)
+                 (some->> (:build/journal m)
+                          (d/datoms db :avet :block/journal-day)
+                          first
+                          :e
+                          (d/entity db))
+                 ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
+                 (some->> (:block/title m) (ldb/get-case-page db)))]
     (do
       (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-      (assoc m :block/uuid (:block/uuid ent)))
-    ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-    (if-let [ent (some->> (:block/title m) (ldb/get-case-page db))]
-      (do
-        (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-        (assoc m :block/uuid (:block/uuid ent)))
-      m)))
+      (cond-> (assoc m :block/uuid (:block/uuid ent))
+        (and (:build/properties m) existing-pages-keep-properties?)
+        (update :build/properties (fn [props]
+                                    (->> props
+                                         (remove (fn [[k _v]] (get ent k)))
+                                         (into {}))))))
+    m))
 
 (defn- update-existing-properties
   "Updates existing properties by ident. Also check imported and existing properties have
@@ -884,7 +887,7 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
   (let [import-to-existing-page-uuids (atom {})
         export-map
         (cond-> {:build-existing-tx? true
@@ -892,7 +895,7 @@
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids)))
+                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options)))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -915,7 +918,7 @@
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
                                          [:build/page
-                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids (second f))]
+                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options (second f))]
                                          f))
                                      export-map))
         ;; Update uuid references of all pages that had their uuids updated to reference an existing page
@@ -948,6 +951,8 @@
    * ::kv-values - Vec of :kv/value maps for a :graph export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
      for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
+   * ::import-options - A map of options that alters importing behavior. Has the following keys:
+     * :existing-pages-keep-properties? - Boolean which disables upsert of :build/properties on
 
    This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
