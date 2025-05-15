@@ -372,6 +372,9 @@
             (d/transact! conn initial-data {:initial-db? true})))
 
         (try
+
+          ;; TODO: remove this once we can ensure there's no bug for missing addresses
+          ;; because it's slow for large graphs
           (when-not import-type
             (when-let [missing-addresses (seq (find-missing-addresses db))]
               (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
