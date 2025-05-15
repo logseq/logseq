@@ -294,10 +294,13 @@
   (.postMessage common-channel #js {:type "master-changed"
                                     :master-client-id master-client-id
                                     :serviceName service-name})
-  (p/do!
-   (on-become-master-handler service-name)
-   (<re-requests-in-flight-on-master! target)
-   (p/resolve! status-ready-deferred-p)))
+  (->
+   (p/do!
+    (on-become-master-handler service-name)
+    (<re-requests-in-flight-on-master! target))
+   (p/finally
+     (fn []
+       (p/resolve! status-ready-deferred-p)))))
 
 (defn <create-service
   "broadcast-data-types - For data matching these types,
