@@ -368,7 +368,7 @@
 
           (catch :default e
             (log/error "DB migrate failed, error: " e)
-            (if (and db-based? (= (.-message e) "DB missing addresses"))
+            (if (= (.-message e) "DB missing addresses")
               (do
                 (rebuild-db-from-datoms! conn db import-type)
                 (db-migrate/migrate conn search-db))
