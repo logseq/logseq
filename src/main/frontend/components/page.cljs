@@ -611,7 +611,6 @@
   (let [current-repo (state/sub :git/current-repo)
         *tabs-rendered? (::tabs-rendered? state)
         repo (or repo current-repo)
-        block-id (:block/uuid page)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
         property-page? (ldb/property? page)
@@ -673,7 +672,9 @@
 
             (when (or (not show-tabs?) tabs-rendered?)
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}}
+               {:style {:margin-left (if whiteboard? 0 -20)}
+                :class (when-not sidebar?
+                         "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
