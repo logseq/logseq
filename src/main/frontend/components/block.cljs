@@ -666,7 +666,6 @@
         tag? (:tag? config)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
-        breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
         show-icon? (:show-icon? config)]
@@ -695,9 +694,6 @@
 
                             (and other-position? (not (util/shift-key? e)))
                             (some-> (.-target e) (.closest ".jtrigger") (.click))
-
-                            breadcrumb?
-                            (.preventDefault e)
 
                             :else
                             (do
@@ -3173,8 +3169,8 @@
 
 (rum/defc breadcrumb-separator
   []
-  (ui/icon "chevron-right" {:style {:font-size 20}
-                            :class "opacity-50"}))
+  [:span.opacity-50.px-1
+   "/"])
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
@@ -3204,12 +3200,12 @@
     (when show?
       (let [page-name-props (when (and show-page? (not (ldb/page? (db/entity [:block/uuid block-id]))))
                               [page
-                               (page-cp (dissoc config :breadcrumb? true) page)
+                               (page-cp {:disable-preview? true} page)
                                {:block/name (or page-title page-name)}])
             parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
-                               [block (page-cp {:disable-preview? true} block)]
+                               [block (page-cp {:disable-preview? true} block) true]
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
@@ -3222,16 +3218,19 @@
                                   (when ast-title
                                     (if (seq ast-title)
                                       (->elem :span (map-inline config ast-title))
-                                      (->elem :div (markup-elements-cp config ast-body))))]))))
+                                      (->elem :div (markup-elements-cp config ast-body))))
+                                  false]))))
             breadcrumbs (->> (into [] parents-props)
                              (concat [page-name-props]
                                      (when more? [:more]))
                              (filterv identity)
                              (map (fn [x]
                                     (if (and (vector? x) (second x))
-                                      (let [[block label] x]
-                                        (rum/with-key (breadcrumb-fragment config block label opts)
-                                          (str (:block/uuid block))))
+                                      (let [[block label page?] x
+                                            label' (if page?
+                                                     label
+                                                     (breadcrumb-fragment config block label opts))]
+                                        (rum/with-key label' (str (:block/uuid block))))
                                       [:span.opacity-70 {:key "dots"} "⋯"])))
                              (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
