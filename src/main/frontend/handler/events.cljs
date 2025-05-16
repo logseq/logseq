@@ -201,9 +201,9 @@
                        :graph-id graph-uuid
                        :tx-id tx-id
                        :db-based (config/db-based-graph? (state/get-current-repo))
-                       :schema-version db-schema/version
+                       :schema-version (str db-schema/version)
                        :db-schema-version (when-let [db (frontend.db/get-db)]
-                                            (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))]
+                                            (str (:kv/value (frontend.db/entity db :logseq.kv/schema-version)))))]
     (Sentry/captureException error
                              (bean/->js {:tags payload}))))
 
