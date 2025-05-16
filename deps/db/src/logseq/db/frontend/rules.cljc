@@ -143,7 +143,7 @@
       [?b :block/tags ?tc]
       (or
        [(= ?t ?tc)]
-       (parent ?t ?tc))]
+       (class-extends ?t ?tc))]
 
     :has-property-or-object-property
     '[(has-property-or-object-property? ?b ?prop)
@@ -243,7 +243,7 @@
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-object-property #{:object-has-class-property}
-   :object-has-class-property #{:parent}
+   :object-has-class-property #{:class-extends}
    :has-simple-query-property #{:has-property-or-object-property}
    :has-private-simple-query-property #{:has-property-or-object-property}
    :property-default-value #{:existing-property-value :property-missing-value}
