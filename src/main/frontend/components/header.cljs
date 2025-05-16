@@ -335,7 +335,7 @@
 
 (rum/defc block-breadcrumb
   [page-name]
-  [:div.ls-block-breadcrumb.text-base.pl-2
+  [:div.ls-block-breadcrumb
    (when-let [page (when (and page-name (common-util/uuid-string? page-name))
                      (db/entity [:block/uuid (uuid page-name)]))]
      (when (:block/parent page)
@@ -343,8 +343,7 @@
         (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
-                                    {:level-limit 2
-                                     :header? true})]))])
+                                    {:header? true})]))])
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]

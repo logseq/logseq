@@ -3174,35 +3174,22 @@
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
-  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
-                         :or {show-page? true
-                              level-limit 3}
+  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block]
+                         :or {show-page? true}
                          :as opts}]
   (let [from-property (when (and block-id (config/db-based-graph? repo))
                         (:logseq.property/created-from-property (db/entity [:block/uuid block-id])))
-        parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
-        parents (remove nil? (concat parents [from-property]))
-        page (or (db/get-block-page repo block-id) ;; only return for block uuid
-                 (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
-        page-name (:block/name page)
-        page-title (:block/title page)
-        show? (or (seq parents) show-page? page-name)
-        parents (if (= page-name (:block/name (first parents)))
-                  (rest parents)
-                  parents)
-        more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)
+        parents (db/get-block-parents repo block-id {:depth 1000})
+        parents (cond-> (remove nil? (concat parents [from-property]))
+                  (not show-page?)
+                  rest)
         config (assoc config
                       :breadcrumb? true
                       :disable-redirect? true
                       :disable-preview? true
                       :stop-click-event? false)]
-    (when show?
-      (let [page-name-props (when (and show-page? (not (ldb/page? (db/entity [:block/uuid block-id]))))
-                              [page
-                               (page-cp {:disable-preview? true} page)
-                               {:block/name (or page-title page-name)}])
-            parents-props (doall
+    (when (seq parents)
+      (let [parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
                                [block (page-cp {:disable-preview? true} block) true]
@@ -3220,18 +3207,13 @@
                                       (->elem :span (map-inline config ast-title))
                                       (->elem :div (markup-elements-cp config ast-body))))
                                   false]))))
-            breadcrumbs (->> (into [] parents-props)
-                             (concat [page-name-props]
-                                     (when more? [:more]))
-                             (filterv identity)
+            breadcrumbs (->> parents-props
                              (map (fn [x]
-                                    (if (and (vector? x) (second x))
-                                      (let [[block label page?] x
-                                            label' (if page?
-                                                     label
-                                                     (breadcrumb-fragment config block label opts))]
-                                        (rum/with-key label' (str (:block/uuid block))))
-                                      [:span.opacity-70 {:key "dots"} "⋯"])))
+                                    (let [[block label page?] x
+                                          label' (if page?
+                                                   label
+                                                   (breadcrumb-fragment config block label opts))]
+                                      (rum/with-key label' (str (:block/uuid block))))))
                              (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
@@ -3247,8 +3229,7 @@
            (when end-separator? (breadcrumb-separator))])))))
 
 (rum/defc breadcrumb
-  [config repo block-id {:keys [_show-page? _indent? _end-separator? level-limit _navigating-block]
-                         :or {level-limit 3}
+  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block]
                          :as opts}]
   (let [[block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))]
     (hooks/use-effect!
@@ -3258,7 +3239,7 @@
                                           {:children? false
                                            :skip-refresh? true})
                _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id level-limit))]
+                   (db-async/<get-block-parents (state/get-current-repo) id 1000))]
          (set-block! block)))
      [])
     (when block

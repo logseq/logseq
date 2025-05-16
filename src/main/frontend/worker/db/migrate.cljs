@@ -777,7 +777,7 @@
      (remove nil?))))
 
 (defn- rename-repeated-properties
-  [conn search-db]
+  [conn _search-db]
   (when (ldb/db-based-graph? @conn)
     (let [closed-values-tx (mapv (fn [[old new]]
                                    {:db/id (:db/id (d/entity @conn old))
@@ -799,7 +799,7 @@
    conn))
 
 (defn- rename-task-properties
-  [conn search-db]
+  [conn _search-db]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           new-idents {:logseq.task/status.backlog :logseq.property/status.backlog
