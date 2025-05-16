@@ -370,8 +370,7 @@
                    ;; config file options
                    :default-config config/config-default-content
                    :<save-config-file (fn save-config-file [_ path content]
-                                        (let [migrated-content (repo-handler/migrate-db-config content)]
-                                          (db-editor-handler/save-file! path migrated-content)))
+                                        (db-editor-handler/save-file! path content))
                    ;; logseq file options
                    :<save-logseq-file (fn save-logseq-file [_ path content]
                                         (db-editor-handler/save-file! path content))

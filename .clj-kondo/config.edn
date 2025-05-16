@@ -59,6 +59,7 @@
   :consistent-alias
   {:aliases {"/electron/utils" js-utils
              "path" node-path
+             borkdude.rewrite-edn rewrite
              cljs-time.coerce tc
              cljs-time.core t
              cljs.reader reader

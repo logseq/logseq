@@ -937,13 +937,13 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview? show-non-exists-page? table-view? tag? _skip-async-load?] :as config} page]
+  [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
   (when-let [entity' (rum/react (:*entity state))]
     (let [entity (or (db/sub-block (:db/id entity')) entity')
           config (assoc config :block entity)]
       (cond
         entity
-        (if (ldb/page? entity)
+        (if (or (ldb/page? entity) (not (:block/page entity)))
           (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
                 whiteboard-page? (model/whiteboard-page? entity)
                 inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
@@ -960,10 +960,7 @@
                              (gp-mldoc/inline->edn label (mldoc/get-default-config :markdown))
                              label)))
 
-        (and (:block/name page) (util/uuid-string? (:block/name page)))
-        (invalid-node-ref (:block/name page))
-
-        (and (:block/name page) (or show-non-exists-page? table-view?))
+        (and (:block/name page) show-non-exists-page?)
         (page-inner config (merge
                             {:block/title (:block/name page)
                              :block/name (:block/name page)}

@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.exporter
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
-  (:require [cljs-time.coerce :as tc]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs-time.coerce :as tc]
             [cljs.pprint]
             [clojure.edn :as edn]
             [clojure.set :as set]
@@ -762,6 +763,24 @@
         block'' (replace-namespace-with-parent block' page-names-to-uuids)]
     {:block block'' :properties-tx properties-tx}))
 
+(defn- pretty-print-dissoc
+  "Remove list of keys from a given map string while preserving whitespace"
+  [s dissoc-keys]
+  (-> (reduce rewrite/dissoc
+              (rewrite/parse-string s)
+              dissoc-keys)
+      str))
+
+(defn- migrate-advanced-query-string [query-str]
+  (try
+    (pretty-print-dissoc query-str [:title :group-by-page? :collapsed?])
+    (catch :default _e
+      ;; rewrite/parse-string can fail on some queries in Advanced Queries in docs graph
+      (js/console.error "Failed to parse advanced query string. Falling back to full query string: " (pr-str query-str))
+      (if-let [query-map (not-empty (common-util/safe-read-map-string query-str))]
+        (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
+        query-str))))
+
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
   [{:block/keys [title] :as block*}
@@ -777,10 +796,7 @@
                                                string/trim)
                                       title))
                            (seq advanced-query)
-                           (assoc :logseq.property/query
-                                  (if-let [query-map (not-empty (common-util/safe-read-map-string advanced-query))]
-                                    (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
-                                    advanced-query)))
+                           (assoc :logseq.property/query (migrate-advanced-query-string advanced-query)))
         {:keys [block-properties pvalues-tx]}
         (when (seq additional-props)
           (build-properties-and-values additional-props db page-names-to-uuids
@@ -1481,7 +1497,11 @@
                                              <save-file default-save-file}}]
   (-> (<read-file config-file)
       (p/then #(p/do!
-                (<save-file repo-or-conn "logseq/config.edn" %)
+                (<save-file repo-or-conn
+                            "logseq/config.edn"
+                            ;; Converts a file graph config.edn for use with DB graphs. Unlike common-config/create-config-for-db-graph,
+                            ;; manually dissoc deprecated keys for config to be valid
+                            (pretty-print-dissoc % (keys common-config/file-only-config)))
                 (let [config (edn/read-string %)]
                   (when-let [title-format (or (:journal/page-title-format config) (:date-formatter config))]
                     (ldb/transact! repo-or-conn [{:db/ident :logseq.class/Journal
