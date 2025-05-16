@@ -387,7 +387,7 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region.justify-between.items-center.gap-2
+     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
       [:div.flex.flex-1
        (block-breadcrumb (state/get-current-page))]
       [:div.flex

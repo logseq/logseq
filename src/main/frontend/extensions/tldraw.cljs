@@ -54,7 +54,7 @@
   (block/breadcrumb {:preview? true}
                     (state/get-current-repo)
                     (uuid (gobj/get props "blockId"))
-                    {:end-separator? (gobj/get props "endSeparator")}))
+                    {:end-separator? (gobj/get props "endSeparator")})) -
 
 (rum/defc tweet
   [props]
