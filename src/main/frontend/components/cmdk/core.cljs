@@ -122,7 +122,8 @@
                                         (and
                                          parent-title
                                          (= (util/page-name-sanity-lc parent-title)
-                                            (util/page-name-sanity-lc (nth (reverse (string/split input "/")) 1)))))))
+                                            (some-> (util/nth-safe (reverse (string/split input "/")) 1)
+                                                    util/page-name-sanity-lc))))))
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
