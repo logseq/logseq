@@ -16,6 +16,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.schema :as db-schema]
@@ -1172,8 +1173,11 @@
             (js/console.error e)
             (throw e)))))))
 
-(defn- build-invalid-tx [entity eid]
+(defn- build-invalid-tx [db entity eid]
   (cond
+    (nil? (db-malli-schema/entity-dispatch-key db entity))
+    [[:db/retractEntity eid]]
+
     (:block/schema entity)
     [[:db/retract eid :block/schema]]
 
@@ -1200,7 +1204,8 @@
     (= #{:block/tx-id} (set (keys entity)))
     [[:db/retractEntity (:db/id entity)]]
 
-    (and (seq (:block/refs entity))
+    (and (or (seq (:block/refs entity))
+             (:logseq.property.table/filters entity))
          (not (or (:block/title entity) (:block/content entity) (:property.value/content entity))))
     [[:db/retractEntity (:db/id entity)]]
 
@@ -1285,7 +1290,7 @@
                                                     [:db/retract (:db/id entity) k]))))))
                                         (into {} entity))
                           eid (:db/id entity)
-                          fix (build-invalid-tx entity eid)]
+                          fix (build-invalid-tx db entity eid)]
                       (into fix wrong-choice)))
                   invalid-entity-ids)
                  distinct)]

@@ -1,4 +1,5 @@
 {:paths ["src" "resources"]
  :deps
- {io.github.nextjournal/nbb-test-runner
-  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}}}
+ ;; TODO: Remove fork when https://github.com/nextjournal/nbb-test-runner/pull/2 is merged
+ {io.github.colin-p-hill/nbb-test-runner
+  {:git/sha "def2cbdb5b3a0e1612b28bf64f5d869c27c733d3"}}}

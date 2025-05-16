@@ -1,19 +1,30 @@
 (ns ^:node-only logseq.outliner.cli
   "Primary ns for outliner CLI fns"
-  (:require [clojure.string :as string]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.outliner.db-pipeline :as db-pipeline]
             ["fs" :as fs]
-            ["path" :as node-path]))
+            ["path" :as node-path]
+            [logseq.common.config :as common-config]))
 
 (defn- find-on-classpath [classpath rel-path]
   (some (fn [dir]
           (let [f (node-path/join dir rel-path)]
             (when (fs/existsSync f) f)))
         (string/split classpath #":")))
+
+(defn- pretty-print-merge
+  "Merge map into string while preversing whitespace"
+  [s m]
+  (-> (reduce (fn [acc [k v]]
+                (rewrite/assoc acc k v))
+              (rewrite/parse-string s)
+              m)
+      str))
 
 (defn- setup-init-data
   "Setup initial data same as frontend.handler.repo/create-db"
@@ -23,11 +34,10 @@
         (cond-> (or (some-> (find-on-classpath classpath "templates/config.edn") fs/readFileSync str)
                     (do (println "Setting graph's config to empty since no templates/config.edn was found.")
                         "{}"))
+          true
+          (common-config/create-config-for-db-graph)
           additional-config
-          ;; TODO: Replace with rewrite-clj when it's available
-          (string/replace-first #"(:file/name-format :triple-lowbar)"
-                                (str "$1 "
-                                     (string/replace-first (str additional-config) #"^\{(.*)\}$" "$1"))))]
+          (pretty-print-merge additional-config))]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content {:import-type import-type}))))
 
 (defn init-conn
