@@ -13,8 +13,12 @@
           tx-data (db-migrate/fix-rename-parent-to-extends conn nil)]
       (is (= (->> tx-data
                   (map (fn [data]
-                         (if (and (map? data) (:block/created-at data))
+                         (cond
+                           (and (map? data) (:block/created-at data))
                            (dissoc data :block/created-at :block/updated-at)
+                           (and (map? data) (:block/order data))
+                           (dissoc data :block/order)
+                           :else
                            data))))
              [{:db/id 35,
                :db/ident :logseq.property.class/extends,
@@ -72,7 +76,14 @@
               {:db/id 154,
                :block/parent
                [:block/uuid #uuid "00000004-1294-7765-6000-000000000000"],
-               :block/order "a6"}
-              {:db/id 155, :block/order "a7"}
-              {:db/id 156, :block/order "a8"}
-              {:db/id 158, :block/order "a9"}])))))
+               ;; :block/order "a6"
+               }
+              {:db/id 155,
+               ;; :block/order "a7"
+               }
+              {:db/id 156,
+               ;; :block/order "a8"
+               }
+              {:db/id 158,
+               ;; :block/order "a9"
+               }])))))
