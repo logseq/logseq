@@ -18,7 +18,7 @@
 
 (deftest create-namespace-pages
   (let [conn (db-test/create-conn-with-blocks
-              {:properties {:property1 {:logseq.property/type :default}}
+              {:properties {:user.property/property1 {:logseq.property/type :default}}
                :classes {:class1 {}}
                :pages-and-blocks [{:page {:block/title "page1"}}]})]
 
