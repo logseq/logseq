@@ -56,7 +56,7 @@ $ yarn test -i focus
 
 ClojureScript tests use https://github.com/Olical/cljs-test-runner. To run tests:
 ```
-clojure -M:test
+REPEATABLE_IDENTS=true clojure -M:test
 ```
 
 To see available options that can run specific tests or namespaces: `clojure -M:test --help`
