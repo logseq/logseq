@@ -390,7 +390,7 @@
 
     (testing "namespaces"
       (let [expand-children (fn expand-children [ent parent]
-                              (if-let [children (:logseq.property/_parent ent)]
+                              (if-let [children (:block/_parent ent)]
                                 (cons {:parent (:block/title parent) :child (:block/title ent)}
                                       (mapcat #(expand-children % ent) children))
                                 [{:parent (:block/title parent) :child (:block/title ent)}]))]

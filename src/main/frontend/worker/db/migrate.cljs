@@ -208,20 +208,20 @@
             filters-tx)))
 
 (defn- rename-properties
-  [props-to-rename]
-  (fn [conn _search-db]
+  [props-to-rename & {:keys [replace-fn]}]
+  (fn [conn]
     (when (ldb/db-based-graph? @conn)
-      (let [props-tx (rename-properties-aux @conn props-to-rename)]
-        ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
-        (ldb/transact! conn props-tx {:db-migrate? true})
-
-        (mapcat (fn [[old new]]
-                 ;; can't use datoms b/c user properties aren't indexed
-                  (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
-                       (mapcat (fn [[id prop-value]]
-                                 [[:db/retract id old]
-                                  [:db/add id new prop-value]]))))
-                props-to-rename)))))
+      (let [props-tx (rename-properties-aux @conn props-to-rename)
+            fix-tx (mapcat (fn [[old new]]
+                             ;; can't use datoms b/c user properties aren't indexed
+                             (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
+                                  (mapcat (fn [[id prop-value]]
+                                            (if (fn? replace-fn)
+                                              (replace-fn id prop-value)
+                                              [[:db/retract id old]
+                                               [:db/add id new prop-value]])))))
+                           props-to-rename)]
+        (concat props-tx fix-tx)))))
 
 (defn- rename-classes
   [classes-to-rename]
@@ -796,7 +796,7 @@
                        :logseq.task/repeated? :logseq.property.repeat/repeated?
                        :logseq.task/scheduled-on-property :logseq.property.repeat/temporal-property
                        :logseq.task/recur-status-property :logseq.property.repeat/checked-property})
-   conn search-db))
+   conn))
 
 (defn- rename-task-properties
   [conn search-db]
@@ -856,7 +856,54 @@
                        :logseq.task/priority :logseq.property/priority
                        :logseq.task/deadline :logseq.property/deadline
                        :logseq.task/scheduled :logseq.property/scheduled})
-   conn search-db))
+   conn))
+
+(defn- fix-rename-parent-to-extends
+  [conn _search-db]
+  (let [db @conn
+        parent-entity (d/entity db :logseq.property/parent)]
+    (when parent-entity
+      (let [old-p :logseq.property/parent
+            new-p :logseq.property.class/extends
+            f (rename-properties
+               {old-p new-p}
+               {:replace-fn (fn [id prop-value]
+                              (let [page (d/entity db id)
+                                    new-p' (if (ldb/class? page) new-p :block/parent)]
+                                [[:db/retract id old-p]
+                                 [:db/add id new-p' prop-value]]))})
+            rename-property-tx (f conn)
+            library-page (if-let [page (ldb/get-built-in-page db "Library")]
+                           page
+                           (-> (sqlite-util/build-new-page "Library")
+                               sqlite-create-graph/mark-block-as-built-in))
+            library-id (:block/uuid library-page)
+            library-page-tx (when-not (de/entity? library-page)
+                              [library-page])
+            pages-with-parent (->> (d/datoms db :avet :logseq.property/parent)
+                                   (keep (fn [d]
+                                           (let [e (d/entity db (:e d))]
+                                             (when-not (ldb/class? e)
+                                               e)))))
+            parents (->> pages-with-parent
+                         (map :logseq.property/parent)
+                         (common-util/distinct-by :db/id))
+            top-parents (remove :logseq.property/parent parents)
+            top-parent-ids (set (map :db/id top-parents))
+            move-top-parents-to-library (map (fn [parent]
+                                               {:db/id (:db/id parent)
+                                                :block/parent [:block/uuid library-id]
+                                                :block/order (db-order/gen-key)}) top-parents)
+            update-children-parent-and-order (->> pages-with-parent
+                                                  (remove (fn [page] (top-parent-ids (:db/id page))))
+                                                  (map (fn [page]
+                                                         {:db/id (:db/id page)
+                                                          :block/order (db-order/gen-key)})))]
+        (concat
+         rename-property-tx
+         library-page-tx
+         move-top-parents-to-library
+         update-children-parent-and-order)))))
 
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
@@ -969,7 +1016,8 @@
    ["64.5" {:fix add-group-by-property-for-list-views}]
    ["64.6" {:fix cardinality-one-multiple-values}]
    ["64.7" {:fix rename-repeated-properties}]
-   ["64.8" {:fix rename-task-properties}]])
+   ["64.8" {:fix rename-task-properties}]
+   ["64.9" {:fix fix-rename-parent-to-extends}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))
