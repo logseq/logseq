@@ -59,7 +59,7 @@
     (throw (ex-info "Duplicate page by parent"
                     {:type :notification
                      :payload {:message (str "Another page named " (pr-str new-title) " already exists for parents "
-                                             (pr-str (->> (ldb/get-page-parents entity)
+                                             (pr-str (->> (ldb/get-class-extends entity)
                                                           (map :block/title)
                                                           (string/join ns-util/parent-char))))
                                :type :warning}}))))

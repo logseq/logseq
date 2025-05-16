@@ -126,7 +126,7 @@
               db
               (ns-util/get-last-part full-name))
          (map #(d/entity db %))
-         (some #(let [parents (->> (ldb/get-page-parents %)
+         (some #(let [parents (->> (ldb/get-class-extends %)
                                    (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                                    vec)]
                   (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))

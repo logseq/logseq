@@ -121,7 +121,7 @@
   [db eid]
   (->>
    (d/q '[:find [?c ...]
-          :in $ ?class-extends %
+          :in $ ?p %
           :where
           (class-extends ?p ?c)]
         db
