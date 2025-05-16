@@ -48,7 +48,7 @@
   (let [conn (db-test/create-conn)]
     (d/transact! conn class-parents-data)
     (is (= #{"x" "y"}
-           (->> (ldb/get-class-parents (ldb/get-page @conn "z") {:node-class? true})
+           (->> (ldb/get-class-extends (ldb/get-page @conn "z") {:node-class? true})
                 (map :block/title)
                 set)))))
 
