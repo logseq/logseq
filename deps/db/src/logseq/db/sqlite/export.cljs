@@ -16,7 +16,8 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.db-ident :as db-ident]))
 
 ;; Export fns
 ;; ==========
@@ -810,6 +811,23 @@
        (remove (fn [[k _v]] (= "logseq.db.sqlite.export" (namespace k))))
        (into {})))
 
+;; Remove if DB graphs are migrated to no longer have invalid keywords
+(defn- patch-invalid-keywords
+  "Fixes invalids keywords whose name start with a number e.g. :user.property/2ndsomething"
+  [m]
+  (walk/postwalk
+   (fn [e]
+     (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
+       ;; Copied from create-db-ident-from-name since this may be shortlived
+       (let [sanitized-kw (keyword (namespace e)
+                                   (->> (string/replace-first (name e) #"^(\d)" "NUM-$1")
+                                        (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
+                                        (apply str)))]
+        ;;  (when (not= sanitized-kw e) (prn :sanitize e :-> sanitized-kw))
+         (if (not= sanitized-kw e) sanitized-kw e))
+       e))
+   m))
+
 (defn- ensure-export-is-valid
   "Checks that export map is usable by sqlite.build including checking that
    all referenced properties and classes are defined. Checks related to properties and
@@ -830,7 +848,7 @@
 (defn build-export
   "Handles exporting db by given export-type"
   [db {:keys [export-type] :as options}]
-  (let [export-map
+  (let [export-map*
         (case export-type
           :block
           (build-block-export db (:block-id options))
@@ -843,7 +861,8 @@
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph
-          (build-graph-export db (:graph-options options)))]
+          (build-graph-export db (:graph-options options)))
+        export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
         (ensure-export-is-valid export-map options)
