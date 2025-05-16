@@ -534,9 +534,9 @@
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
 (def get-all-properties db-db/get-all-properties)
-(def get-page-parents db-db/get-page-parents)
+(def get-class-extends db-db/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
-(def get-title-with-parents db-db/get-title-with-parents)
+(def get-class-title-with-extends db-db/get-class-title-with-extends)
 (def class-instance? db-db/class-instance?)
 (def inline-tag? db-db/inline-tag?)
 (def node-display-type-classes db-db/node-display-type-classes)
