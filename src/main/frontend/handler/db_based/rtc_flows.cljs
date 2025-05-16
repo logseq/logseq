@@ -142,5 +142,6 @@ conditions:
      (map vector)
      network-online&rtc-not-running-flow)]
    (apply c.m/mix)
-   (m/eduction (filter (fn [_] (some? (state/get-auth-id-token)))))
+   (m/latest vector flows/current-login-user-flow)
+   (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))
    (c.m/debounce 200)))

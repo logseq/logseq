@@ -803,21 +803,29 @@
              set)]
     (set/difference ref-uuids known-uuids)))
 
+(defn- remove-namespaced-keys
+  "Removes keys from this ns for maps passed sqlite.build fns as they don't need to validate or use them"
+  [m]
+  (->> m
+       (remove (fn [[k _v]] (= "logseq.db.sqlite.export" (namespace k))))
+       (into {})))
+
 (defn- ensure-export-is-valid
   "Checks that export map is usable by sqlite.build including checking that
    all referenced properties and classes are defined. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
-  [export-map {:keys [graph-options]}]
-  (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-  (let [undefined-uuids (find-undefined-uuids export-map)
-        undefined (cond-> {}
-                    (empty? (:exclude-namespaces graph-options))
-                    (merge (find-undefined-classes-and-properties export-map))
-                    (seq undefined-uuids)
-                    (assoc :uuids undefined-uuids))]
-    (when (seq undefined)
-      (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
-                      undefined)))))
+  [export-map* {:keys [graph-options]}]
+  (let [export-map (remove-namespaced-keys export-map*)]
+    (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
+    (let [undefined-uuids (find-undefined-uuids export-map)
+          undefined (cond-> {}
+                      (empty? (:exclude-namespaces graph-options))
+                      (merge (find-undefined-classes-and-properties export-map))
+                      (seq undefined-uuids)
+                      (assoc :uuids undefined-uuids))]
+      (when (seq undefined)
+        (throw (ex-info (str "The following classes, uuids and properties are not defined: " (pr-str undefined))
+                        undefined))))))
 
 (defn build-export
   "Handles exporting db by given export-type"
@@ -838,30 +846,33 @@
           (build-graph-export db (:graph-options options)))]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options)
+        (ensure-export-is-valid export-map options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid (dissoc export-map ::block ::graph-files ::kv-values ::schema-version) options))
+      (ensure-export-is-valid export-map options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
 ;; ==========
 (defn- add-uuid-to-page-if-exists
-  [db import-to-existing-page-uuids m]
-  (if-let [ent (some->> (:build/journal m)
-                        (d/datoms db :avet :block/journal-day)
-                        first
-                        :e
-                        (d/entity db))]
+  [db import-to-existing-page-uuids {:keys [existing-pages-keep-properties?]} m]
+  (if-let [ent (if (:build/journal m)
+                 (some->> (:build/journal m)
+                          (d/datoms db :avet :block/journal-day)
+                          first
+                          :e
+                          (d/entity db))
+                 ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
+                 (some->> (:block/title m) (ldb/get-case-page db)))]
     (do
       (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-      (assoc m :block/uuid (:block/uuid ent)))
-    ;; TODO: For now only check page uniqueness by title. Could handle more uniqueness checks later
-    (if-let [ent (some->> (:block/title m) (ldb/get-case-page db))]
-      (do
-        (swap! import-to-existing-page-uuids assoc (:block/uuid m) (:block/uuid ent))
-        (assoc m :block/uuid (:block/uuid ent)))
-      m)))
+      (cond-> (assoc m :block/uuid (:block/uuid ent))
+        (and (:build/properties m) existing-pages-keep-properties?)
+        (update :build/properties (fn [props]
+                                    (->> props
+                                         (remove (fn [[k _v]] (get ent k)))
+                                         (into {}))))))
+    m))
 
 (defn- update-existing-properties
   "Updates existing properties by ident. Also check imported and existing properties have
@@ -884,7 +895,7 @@
 (defn- check-for-existing-entities
   "Checks export map for existing entities and adds :block/uuid to them if they exist in graph to import.
    Also checks for property conflicts between existing properties and properties to be imported"
-  [db {:keys [pages-and-blocks classes properties] ::keys [export-type] :as export-map} property-conflicts]
+  [db {:keys [pages-and-blocks classes properties] ::keys [export-type import-options] :as export-map} property-conflicts]
   (let [import-to-existing-page-uuids (atom {})
         export-map
         (cond-> {:build-existing-tx? true
@@ -892,7 +903,7 @@
           (seq pages-and-blocks)
           (assoc :pages-and-blocks
                  (mapv (fn [m]
-                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids)))
+                         (update m :page (partial add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options)))
                        pages-and-blocks))
           (seq classes)
           (assoc :classes
@@ -915,7 +926,7 @@
                       (walk/postwalk (fn [f]
                                        (if (and (vector? f) (= :build/page (first f)))
                                          [:build/page
-                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids (second f))]
+                                          (add-uuid-to-page-if-exists db import-to-existing-page-uuids import-options (second f))]
                                          f))
                                      export-map))
         ;; Update uuid references of all pages that had their uuids updated to reference an existing page
@@ -948,6 +959,8 @@
    * ::kv-values - Vec of :kv/value maps for a :graph export
    * ::auto-include-namespaces - A set of parent namespaces to include from properties and classes
      for a :graph export. See :exclude-namespaces in build-graph-export for a similar option
+   * ::import-options - A map of options that alters importing behavior. Has the following keys:
+     * :existing-pages-keep-properties? - Boolean which disables upsert of :build/properties on
 
    This fn then returns a map of txs to transact with the following keys:
    * :init-tx - Txs that must be transacted first, usually because they define new properties
@@ -969,7 +982,7 @@
         {:error (str "The following imported properties conflict with the current graph: "
                      (pr-str (mapv :property-id @property-conflicts)))})
       (if (= :graph (::export-type export-map''))
-        (-> (sqlite-build/build-blocks-tx (dissoc export-map'' ::graph-files ::kv-values ::export-type ::schema-version))
+        (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
             (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                          (::kv-values export-map'')))))
-        (sqlite-build/build-blocks-tx export-map'')))))
+        (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))))))

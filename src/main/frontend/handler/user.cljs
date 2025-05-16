@@ -127,12 +127,16 @@
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (set-token-to-localstorage! id-token access-token))
+   (set-token-to-localstorage! id-token access-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
-   (set-token-to-localstorage! id-token access-token refresh-token)))
+   (set-token-to-localstorage! id-token access-token refresh-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -201,7 +205,6 @@
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
-  (reset! flows/*current-login-user (parse-jwt (state/get-auth-id-token)))
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e

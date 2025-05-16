@@ -22,6 +22,9 @@
         (do ~@body))))
 
 #?(:cljs
+   (def dev? js/goog.DEBUG))
+
+#?(:cljs
    (do
      (def post-message wfu/post-message)
 

@@ -2376,7 +2376,6 @@ Similar to re-frame subscriptions"
 
 (defn set-highlight-recent-days!
   [days]
-  (prn :debug :set :days days)
   (reset! (:ui/highlight-recent-days @state) days)
   (storage/set :ui/highlight-recent-days days))
 
