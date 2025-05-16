@@ -260,7 +260,7 @@
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"
-              :block/tags [:logseq.class/Page :user.class/Some---Namespace]}
+              :block/tags [:logseq.class/Page :user.class/SomeNamespace]}
              (db-test/readable-properties (db-test/find-page-by-title @conn "some page")))
           "Existing page has correct properties")
 
