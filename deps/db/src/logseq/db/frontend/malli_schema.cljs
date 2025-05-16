@@ -287,7 +287,8 @@
   (vec
    (concat
     [:map
-     [:db/ident class-ident]]
+     [:db/ident class-ident]
+     [:logseq.property.class/extends {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
 
