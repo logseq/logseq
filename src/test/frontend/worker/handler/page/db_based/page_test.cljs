@@ -31,10 +31,11 @@
             ;; Create a child page for a class
             [_ child-uuid3] (worker-db-page/create! conn "c1/c2" {:split-namespace? true :class? true})
             child-page3 (d/entity @conn [:block/uuid child-uuid3])]
-        (is (= ["foo" "bar"] (map :block/title (ldb/get-page-parents child-page)))
+        (is (= ["foo" "bar"] (map :block/title [(:block/parent (:block/parent child-page))
+                                                (:block/parent child-page)]))
             "Child page with new parent has correct parents")
-        (is (= (map :block/uuid (ldb/get-page-parents child-page))
-               (map :block/uuid (ldb/get-page-parents child-page2)))
+        (is (= (map :block/uuid (ldb/get-class-extends child-page))
+               (map :block/uuid (ldb/get-class-extends child-page2)))
             "Child page with existing parents has correct parents")
         (is (= ["Root Tag" "c1"] (map :block/title (ldb/get-classes-parents [child-page3])))
             "Child class with new parent has correct parents")
@@ -52,8 +53,8 @@
       (let [_ (worker-db-page/create! conn "vim/keys" {:split-namespace? true})
             _ (worker-db-page/create! conn "emacs/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
-               (->> (d/q '[:find [(pull ?b [{:logseq.property.class/extends [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
-                    (map #(get-in % [:logseq.property.class/extends :block/title]))
+               (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:block/parent :block/title]))
                     set))
             "Two child pages with same name exist and have different parents")))
 
