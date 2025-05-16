@@ -114,26 +114,8 @@
                    :auto-focus true}]}))
 
 (rum/defc home []
-  (let [[all-pages set-all-pages!] (rum/use-state [])
-        [reload set-reload!] (rum/use-state 0)
-        [page-input-open? set-page-input-open?] (rum/use-state false)
-        [filtered-pages set-filtered-pages!] (rum/use-state [])]
-
-    (rum/use-effect!
-      (fn []
-        (set-all-pages! (handler/local-all-pages))
-        #())
-      [reload])
-
-    (rum/use-effect!
-      (fn []
-        (let [pages (filterv (fn [page]
-                               (let [ident (some-> (:block/tags page) first :db/ident)]
-                                 (not (contains? #{:logseq.class/Journal :logseq.class/Property} ident))))
-                      all-pages)]
-          (set-filtered-pages! pages))
-        #())
-      [all-pages])
+  (let [[reload set-reload!] (rum/use-state 0)
+        [page-input-open? set-page-input-open?] (rum/use-state false)]
 
     (ionic/ion-content
       (ionic/ion-refresher
@@ -161,29 +143,7 @@
        ;(when journal-calendar-open?
        ;  (journals-calendar-modal {:close! #(set-journal-calendar-open? false)}))
 
-       [:div.flex.justify-between.items-center.pt-4
-        [:h1.text-3xl.font-mono.font-bold.py-2
-         "All pages"
-         [:small.text-xs.pl-2.opacity-50 (count filtered-pages)]]
-
-        [:div.flex.gap-1
-         (ionic/ion-button {:size "small" :fill "clear" :on-click #(set-page-input-open? true)}
-           [:span {:slot "icon-only"} (ionic/tabler-icon "file-plus" {:size 22})])
-         ;(ionic/ion-button {:size "small" :fill "clear" :on-click #(set-reload! (inc reload))}
-         ;  [:span {:slot "icon-only"} (ionic/tabler-icon "refresh")])
-         ]]
-       [:ul.mb-24.pt-2
-        (for [page filtered-pages]
-          (let [ident (some-> (:block/tags page) first :db/ident)]
-            [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
-             {:on-click #(pages-util/nav-to-block! page {:reload-pages! (fn [] (set-reload! (inc reload)))})}
-             (case ident
-               :logseq.class/Property (ionic/tabler-icon "letter-t")
-               :logseq.class/Page (ionic/tabler-icon "file")
-               :logseq.class/Journal (ionic/tabler-icon "calendar")
-               (ionic/tabler-icon "hash"))
-             [:span.pl-1 (:block/title page)]
-             [:code.opacity-30.scale-75 (.toLocaleDateString (js/Date. (:block/created-at page)))]]))]]
+       ]
 
       ;; tabbar
       ;(app-tabbar)
@@ -270,8 +230,10 @@
 
     [:> (.-IonApp ionic/ionic-react)
      [:<>
-      (ionic/ion-nav {:ref nav-ref :root root
-                      :animated true :swipeGesture false})
+      (ionic/ion-nav {:ref nav-ref
+                      :root root                                ;;settings/page
+                      :animated true
+                      :swipeGesture false})
 
       (ui/install-notifications)
       (ui/install-modals)]]))
