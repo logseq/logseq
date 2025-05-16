@@ -326,7 +326,7 @@
              (:block/alias (db-test/readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
           "alias set correctly")
       (is (= ["y"]
-             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :logseq.property.class/extends]]
+             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :block/parent]]
                        @conn)
                   first
                   (d/entity @conn)
@@ -396,7 +396,8 @@
                                 [{:parent (:block/title parent) :child (:block/title ent)}]))]
         (is (= [{:parent "n1" :child "x"}
                 {:parent "x" :child "z"}
-                {:parent "x" :child "y"}]
+                {:parent "x" :child "y"}
+                {:parent "y", :child "some content"}]
                (rest (expand-children (db-test/find-page-by-title @conn "n1") nil)))
             "First namespace tests duplicate parent page name")
         (is (= [{:parent "n2" :child "x"}

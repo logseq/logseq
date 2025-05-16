@@ -411,8 +411,7 @@
 
 (defn- ref->map
   [db *col {:keys [date-formatter db-based? *name->id tag?]}]
-  (let [db-based? (or (and db (ldb/db-based-graph? db)) db-based?)
-        col (remove string/blank? @*col)
+  (let [col (remove string/blank? @*col)
         children-pages (when-not db-based?
                          (->> (mapcat (fn [p]
                                         (let [p (if (map? p)
