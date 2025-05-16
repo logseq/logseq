@@ -60,10 +60,10 @@
                       (merge ex-data' {:page-name page-name
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
-(defn- replace-namespace-with-parent [block page-names-to-uuids]
+(defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
   (if (:block/namespace block)
     (-> (dissoc block :block/namespace)
-        (assoc :logseq.property.class/extends
+        (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
                                            (get-in block [:block/namespace :block/name])
                                            {:block block :block/namespace (:block/namespace block)})}))
@@ -172,7 +172,7 @@
                              (dissoc :block/created-at :block/updated-at)
                              (merge (add-missing-timestamps
                                      (select-keys tag-block [:block/created-at :block/updated-at])))
-                             (replace-namespace-with-parent page-names-to-uuids))]
+                             (replace-namespace-with-parent page-names-to-uuids :logseq.property.class/extends))]
             (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
             (assert (:block/uuid class-m') "Class must have a :block/uuid")
             [:block/uuid (:block/uuid class-m')]))))))
@@ -736,7 +736,7 @@
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
-  "Adds page properties including special handling for :logseq.property.class/extends"
+  "Adds page properties including special handling for :block/parent"
   [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids classes-tx]} refs
    {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
@@ -749,7 +749,8 @@
                 class-m (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block)
                 class-m' (-> block
                              (merge class-m)
-                             (assoc :logseq.property.class/extends
+                             (dissoc :block/namespace)
+                             (assoc :logseq.class.property/extends
                                     (let [new-class (first parent-classes-from-properties)
                                           class-m (find-or-create-class db new-class (:all-idents import-state))
                                           class-m' (merge class-m
@@ -759,9 +760,8 @@
                                       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
                                       [:block/uuid (:block/uuid class-m')])))]
             class-m')
-          block)
-        block'' (replace-namespace-with-parent block' page-names-to-uuids)]
-    {:block block'' :properties-tx properties-tx}))
+          (replace-namespace-with-parent block page-names-to-uuids :block/parent))]
+    {:block block' :properties-tx properties-tx}))
 
 (defn- pretty-print-dissoc
   "Remove list of keys from a given map string while preserving whitespace"
@@ -937,10 +937,11 @@
   "Like ldb/get-page-parents but using all-existing-page-uuids"
   [node all-existing-page-uuids]
   (let [get-parent (fn get-parent [n]
-                     (when (:block/uuid (:logseq.property.class/extends n))
-                       (or (get all-existing-page-uuids (:block/uuid (:logseq.property.class/extends n)))
-                           (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property.class/extends n))))
-                                           {:node n})))))]
+                     (let [parent (or (:logseq.property.class/extends n) (:block/parent n))]
+                       (when-let [parent-id (:block/uuid parent)]
+                         (or (get all-existing-page-uuids parent-id)
+                             (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid parent)))
+                                             {:node n}))))))]
     (when-let [parent (get-parent node)]
       (loop [current-parent parent
              parents' []]
@@ -975,7 +976,7 @@
   (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :logseq.property.class/extends :db/ident]
+        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.class.property/extends :db/ident]
                                  (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                        m))
         block-changes (select-keys m allowed-attributes)]
