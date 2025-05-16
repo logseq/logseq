@@ -666,7 +666,6 @@
         tag? (:tag? config)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
-        breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
         show-icon? (:show-icon? config)]
@@ -695,9 +694,6 @@
 
                             (and other-position? (not (util/shift-key? e)))
                             (some-> (.-target e) (.closest ".jtrigger") (.click))
-
-                            breadcrumb?
-                            (.preventDefault e)
 
                             :else
                             (do
@@ -785,25 +781,27 @@
   (let [*el-trigger (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when (true? visible?)
-         (shui/popup-show!
-          (hooks/deref *el-trigger) render
-          {:root-props {:onOpenChange (fn [v] (set-visible! v))
-                        :modal false}
-           :content-props {:class "ls-preview-popup"
-                           :onInteractOutside (fn [^js e] (.preventDefault e))
-                           :onEscapeKeyDown (fn [^js e]
-                                              (when (state/editing?)
-                                                (.preventDefault e)
-                                                (some-> (hooks/deref *el-popup) (.focus))))}
-           :as-dropdown? false}))
+       (when-not (state/editing?)
+         (when (true? visible?)
+           (shui/popup-show!
+            (hooks/deref *el-trigger) render
+            {:root-props {:onOpenChange (fn [v] (set-visible! v))
+                          :modal false}
+             :content-props {:class "ls-preview-popup"
+                             :onInteractOutside (fn [^js e] (.preventDefault e))
+                             :onEscapeKeyDown (fn [^js e]
+                                                (when (state/editing?)
+                                                  (.preventDefault e)
+                                                  (some-> (hooks/deref *el-popup) (.focus))))}
+             :as-dropdown? false}))
 
-       (when (false? visible?)
-         (shui/popup-hide!)
-         (when (state/get-edit-block)
-           (state/clear-edit!)))
-       (hooks/set-ref! *timer nil)
-       (hooks/set-ref! *timer1 nil)
+         (when (false? visible?)
+           (shui/popup-hide!)
+           (when (state/get-edit-block)
+             (state/clear-edit!)))
+         (hooks/set-ref! *timer nil)
+         (hooks/set-ref! *timer1 nil))
+
         ;; teardown
        (fn []
          (when visible?
@@ -3168,43 +3166,30 @@
 
 (rum/defc breadcrumb-separator
   []
-  (ui/icon "chevron-right" {:style {:font-size 20}
-                            :class "opacity-50 mx-1"}))
+  [:span.opacity-50.px-1
+   "/"])
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
-  [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
-                         :or {show-page? true
-                              level-limit 3}
+  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block]
+                         :or {show-page? true}
                          :as opts}]
   (let [from-property (when (and block-id (config/db-based-graph? repo))
                         (:logseq.property/created-from-property (db/entity [:block/uuid block-id])))
-        parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
-        parents (remove nil? (concat parents [from-property]))
-        page (or (db/get-block-page repo block-id) ;; only return for block uuid
-                 (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
-        page-name (:block/name page)
-        page-title (:block/title page)
-        show? (or (seq parents) show-page? page-name)
-        parents (if (= page-name (:block/name (first parents)))
-                  (rest parents)
-                  parents)
-        more? (> (count parents) level-limit)
-        parents (if more? (take-last level-limit parents) parents)
+        parents (db/get-block-parents repo block-id {:depth 1000})
+        parents (cond-> (remove nil? (concat parents [from-property]))
+                  (not show-page?)
+                  rest)
         config (assoc config
                       :breadcrumb? true
                       :disable-redirect? true
                       :disable-preview? true
                       :stop-click-event? false)]
-    (when show?
-      (let [page-name-props (when show-page?
-                              [page
-                               (page-cp (dissoc config :breadcrumb? true) page)
-                               {:block/name (or page-title page-name)}])
-            parents-props (doall
+    (when (seq parents)
+      (let [parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
-                               [block (page-cp {} block)]
+                               [block (page-cp {:disable-preview? true} block) true]
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
@@ -3217,17 +3202,16 @@
                                   (when ast-title
                                     (if (seq ast-title)
                                       (->elem :span (map-inline config ast-title))
-                                      (->elem :div (markup-elements-cp config ast-body))))]))))
-            breadcrumbs (->> (into [] parents-props)
-                             (concat [page-name-props] (when more? [:more]))
-                             (filterv identity)
+                                      (->elem :div (markup-elements-cp config ast-body))))
+                                  false]))))
+            breadcrumbs (->> parents-props
                              (map (fn [x]
-                                    (if (and (vector? x) (second x))
-                                      (let [[block label] x]
-                                        (rum/with-key (breadcrumb-fragment config block label opts)
-                                          (str (:block/uuid block))))
-                                      [:span.opacity-70 {:key "dots"} "⋯"])))
-                             (interpose (rum/with-key (breadcrumb-separator) "icon")))]
+                                    (let [[block label page?] x
+                                          label' (if page?
+                                                   label
+                                                   (breadcrumb-fragment config block label opts))]
+                                      (rum/with-key label' (str (:block/uuid block))))))
+                             (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
            {:class (when (seq breadcrumbs)
@@ -3242,8 +3226,7 @@
            (when end-separator? (breadcrumb-separator))])))))
 
 (rum/defc breadcrumb
-  [config repo block-id {:keys [_show-page? _indent? _end-separator? level-limit _navigating-block]
-                         :or {level-limit 3}
+  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block]
                          :as opts}]
   (let [[block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))]
     (hooks/use-effect!
@@ -3253,7 +3236,7 @@
                                           {:children? false
                                            :skip-refresh? true})
                _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id level-limit))]
+                   (db-async/<get-block-parents (state/get-current-repo) id 1000))]
          (set-block! block)))
      [])
     (when block

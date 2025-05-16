@@ -25,8 +25,8 @@
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
-            [promesa.core :as p]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [promesa.core :as p]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)

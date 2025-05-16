@@ -43,23 +43,23 @@
        (map (fn [d]
               (d/entity db (:e d))))))
 
-(defn get-page-parents
+(defn get-class-extends
   [node & {:keys [node-class?]}]
-  (when-let [parent (:logseq.property/parent node)]
+  (when-let [parent (:logseq.property.class/extends node)]
     (loop [current-parent parent
            parents' []]
       (if (and
            current-parent
            (if node-class? (entity-util/class? current-parent) true)
            (not (contains? parents' current-parent)))
-        (recur (:logseq.property/parent current-parent)
+        (recur (:logseq.property.class/extends current-parent)
                (conj parents' current-parent))
         (vec (reverse parents'))))))
 
-(defn get-title-with-parents
+(defn get-class-title-with-extends
   [entity]
-  (if (or (entity-util/class? entity) (entity-util/internal-page? entity))
-    (let [parents' (->> (get-page-parents entity)
+  (if (entity-util/class? entity)
+    (let [parents' (->> (get-class-extends entity)
                         (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                         vec)]
       (string/join
@@ -70,7 +70,7 @@
 (defn get-classes-parents
   [tags]
   (let [tags' (filter entity-util/class? tags)
-        result (mapcat #(get-page-parents % {:node-class? true}) tags')]
+        result (mapcat #(get-class-extends % {:node-class? true}) tags')]
     (set result)))
 
 (defn class-instance?
