@@ -364,16 +364,6 @@
   [s]
   (string/replace s "#" "HashTag-"))
 
-(defn page-with-parent-and-order
-  "Apply to namespace pages"
-  [db page & {:keys [parent]}]
-  (let [library (ldb/get-built-in-page db "Library")]
-    (when (nil? library)
-      (throw (ex-info "Library page doesn't exist" {})))
-    (assoc page
-           :block/parent (or parent (:db/id library))
-           :block/order (db-order/gen-key))))
-
 ;; TODO: refactor
 (defn page-name->map
   "Create a page's map structure given a original page name (string).

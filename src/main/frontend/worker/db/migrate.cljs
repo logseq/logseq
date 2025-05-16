@@ -859,7 +859,7 @@
                        :logseq.task/scheduled :logseq.property/scheduled})
    conn))
 
-(defn- fix-rename-parent-to-extends
+(defn fix-rename-parent-to-extends
   [conn _search-db]
   (let [db @conn
         parent-entity (d/entity db :logseq.property/parent)]

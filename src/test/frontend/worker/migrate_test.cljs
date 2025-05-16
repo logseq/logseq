@@ -5,7 +5,7 @@
             [frontend.worker.db.migrate :as db-migrate]
             [logseq.db :as ldb]))
 
-(deftest ^:focus test-fix-rename-parent-to-extends
+(deftest test-fix-rename-parent-to-extends
   (testing "Rename parent to extends"
     (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
           db (ldb/read-transit-str db-transit)
