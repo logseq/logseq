@@ -68,7 +68,7 @@
   (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
           "New ident is not allowed to use an internal namespace")
   (if #?(:org.babashka/nbb true
-         :cljs (or js/process.env.REPEATABLE_IDENTS js/process.env.DB_GRAPH)
+         :cljs (and (exists? js/process) (or js/process.env.REPEATABLE_IDENTS js/process.env.DB_GRAPH))
          :default false)
     ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
     (keyword user-namespace (-> name-string (string/replace #"[/()]|\s+" "-") (string/replace-first #"^(\d)" "NUM-$1")))
