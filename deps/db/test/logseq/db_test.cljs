@@ -83,13 +83,3 @@
     (is (= nil
            (ldb/page-exists? @conn "movie" #{:logseq.class/Property}))
         "Class pages correctly not found for given class")))
-
-(deftest get-classes-with-property-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:logseq.property/type :default}}
-               :classes
-               {:Class1 {:build/class-properties [:prop1]}
-                :Class2 {:build/class-properties [:prop1]}}})
-        classes (ldb/get-classes-with-property @conn :user.property/prop1)]
-    (is (= ["Class1" "Class2"]
-           (map :block/title classes)))))

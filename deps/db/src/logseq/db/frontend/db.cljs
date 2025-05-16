@@ -9,11 +9,6 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
-(defn get-classes-with-property
-  "Get classes which have given property as a class property"
-  [db property-id]
-  (:logseq.property.class/_properties (d/entity db property-id)))
-
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
   [class-entity property-entity]
