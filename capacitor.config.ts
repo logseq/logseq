@@ -1,16 +1,14 @@
 import { CapacitorConfig } from '@capacitor/cli'
-import fs from 'fs'
+import * as fs from 'fs'
 
 const version = fs.readFileSync('static/package.json', 'utf8').match(/"version": "(.*?)"/)?.at(1) ?? '0.0.0'
 
 const config: CapacitorConfig = {
   appId: 'com.logseq.app',
   appName: 'Logseq',
-  bundledWebRuntime: false,
   webDir: 'public',
   loggingBehavior: 'debug',
   server: {
-    // https://capacitorjs.com/docs/updating/5-0#update-androidscheme
     androidScheme: 'http',
   },
   plugins: {
@@ -38,11 +36,6 @@ const config: CapacitorConfig = {
   ios: {
     scheme: 'Logseq',
     appendUserAgent: `Logseq/${version} (iOS)`
-  },
-  cordova: {
-    staticPlugins: [
-      '@logseq/capacitor-file-sync', // AgeEncryption requires static link
-    ]
   }
 }
 
