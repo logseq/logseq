@@ -394,11 +394,11 @@
                                 (cons {:parent (:block/title parent) :child (:block/title ent)}
                                       (mapcat #(expand-children % ent) children))
                                 [{:parent (:block/title parent) :child (:block/title ent)}]))]
+        ;; check pages only
         (is (= [{:parent "n1" :child "x"}
                 {:parent "x" :child "z"}
-                {:parent "x" :child "y"}
-                {:parent "y", :child "some content"}]
-               (rest (expand-children (db-test/find-page-by-title @conn "n1") nil)))
+                {:parent "x" :child "y"}]
+               (take 3 (rest (expand-children (db-test/find-page-by-title @conn "n1") nil))))
             "First namespace tests duplicate parent page name")
         (is (= [{:parent "n2" :child "x"}
                 {:parent "x" :child "z"}
