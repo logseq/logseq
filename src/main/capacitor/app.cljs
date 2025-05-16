@@ -19,6 +19,7 @@
             [frontend.db.utils :as db-util]
             [frontend.date :as frontend-date]
             [frontend.handler.repo :as repo-handler]
+            [frontend.mobile.util :as mobile-util]
             [goog.date :as gdate]
             [logseq.db :as ldb]
             [capacitor.pages.settings :as settings]))
@@ -204,19 +205,26 @@
              (ionic/ion-button
                {:size "small" :fill "clear"
                 :on-click (fn []
-                            (ui/open-modal!
-                              (fn [{:keys [close!]}]
-                                (ionic/ion-datetime
-                                  {:presentation "date"
-                                   :onIonChange (fn [^js e]
-                                                  (let [val (.-value (.-detail e))]
-                                                    (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. val)))
-                                                          nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
-                                                      (if-let [journal (handler/local-page page-name)]
-                                                        (nav-to-journal! journal)
-                                                        (-> (handler/<create-page! page-name)
-                                                          (p/then #(nav-to-journal! (handler/local-page page-name)))))
-                                                      (close!))))}))))}
+                            (let [apply-date! (fn [date]
+                                                (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. date)))
+                                                      nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                  (if-let [journal (handler/local-page page-name)]
+                                                    (nav-to-journal! journal)
+                                                    (-> (handler/<create-page! page-name)
+                                                      (p/then #(nav-to-journal! (handler/local-page page-name)))))))]
+
+                              (if (mobile-util/native-android?)
+                                (-> (.showDatePicker mobile-util/ui-local)
+                                  (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
+
+                                (ui/open-modal!
+                                  (fn [{:keys [close!]}]
+                                    (ionic/ion-datetime
+                                      {:presentation "date"
+                                       :onIonChange (fn [^js e]
+                                                      (let [val (.-value (.-detail e))]
+                                                        (apply-date! val)
+                                                        (close!)))}))))))}
                [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 22})])
 
              (ionic/ion-button {:fill "clear"}
@@ -224,7 +232,7 @@
                  {:routerDirection "forward"
                   :class "w-full"
                   :component settings/page}
-                 (ionic/tabler-icon "dots-circle-horizontal" {:size 24}))))))
+                 [:span {:slot "icon-only"} (ionic/tabler-icon "dots-circle-horizontal" {:size 24})])))))
 
        ;; main content
        (if db-restoring?
