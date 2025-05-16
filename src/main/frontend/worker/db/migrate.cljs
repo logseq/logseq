@@ -207,7 +207,7 @@
             ordered-columns-tx
             filters-tx)))
 
-(defn- rename-properties
+(defn rename-properties
   [props-to-rename & {:keys [replace-fn]}]
   (fn [conn]
     (when (ldb/db-based-graph? @conn)
