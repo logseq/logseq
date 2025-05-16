@@ -243,6 +243,12 @@
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
+(defn get-built-in-page
+  [db title]
+  (when db
+    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
+      (d/entity db [:block/uuid id]))))
+
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
   [db page-name-or-uuid]
