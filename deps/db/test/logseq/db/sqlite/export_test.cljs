@@ -826,54 +826,65 @@
            (-> (:classes imported-graph)
                (medley/dissoc-in [:user.property/p1 :build/properties]))))))
 
-(deftest build-import-can-import-existing-page-with-different-uuid
+(defn- test-import-existing-page [import-options expected-page-properties]
   (let [original-data
         {:properties {:user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many}}
          :pages-and-blocks
          [{:page {:block/title "page1"
-                  :build/properties {:user.property/node #{[:build/page {:block/title "node1"}]}}}}]}
+                  :build/properties {:user.property/node
+                                     #{[:build/page {:block/title "existing page"
+                                                     :build/properties {:logseq.property/description "first description"}}]}}}}]}
         conn (db-test/create-conn-with-blocks original-data)
-        page-uuid (:block/uuid (db-test/find-page-by-title @conn "node1"))
+        page-uuid (:block/uuid (db-test/find-page-by-title @conn "existing page"))
         _ (validate-db @conn)
         ;; This is just a temp uuid used to link to the page during import
         temp-uuid (random-uuid)
-        existing-data
+        import-data
         {:properties {:user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many}}
          :pages-and-blocks
-         [{:page {:block/title "node1"
+         [{:page {:block/title "existing page"
                   :block/uuid temp-uuid
-                  :build/keep-uuid? true}}
+                  :build/keep-uuid? true
+                  :build/properties {:logseq.property/description "second description"
+                                     :logseq.property/exclude-from-graph-view true}}}
           {:page {:block/title "page2"
-                  :build/properties {:user.property/node #{[:block/uuid temp-uuid]}}}}]}
+                  :build/properties {:user.property/node #{[:block/uuid temp-uuid]}}}}]
+         ::sqlite-export/import-options import-options}
         {:keys [init-tx block-props-tx] :as _txs}
-        (sqlite-export/build-import existing-data @conn {})
+        (sqlite-export/build-import import-data @conn {})
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn init-tx)
         _ (d/transact! conn block-props-tx)
         _ (validate-db @conn)
         expected-pages-and-blocks
-        [{:page
-          {:block/uuid page-uuid
-           :build/keep-uuid? true,
-           :block/title "node1"},
-          :blocks []}
-         {:page
-          {:build/properties
-           {:user.property/node
-            #{[:block/uuid page-uuid]}},
-           :block/title "page1"},
-          :blocks []}
-         {:page
-          {:build/properties
-           {:user.property/node
-            #{[:block/uuid page-uuid]}},
-           :block/title "page2"},
-          :blocks []}],
+        [{:block/uuid page-uuid
+          :build/keep-uuid? true,
+          :block/title "existing page"
+          :build/properties
+          expected-page-properties}
+         {:build/properties
+          {:user.property/node
+           #{[:block/uuid page-uuid]}},
+          :block/title "page1"}
+         {:build/properties
+          {:user.property/node
+           #{[:block/uuid page-uuid]}},
+          :block/title "page2"}]
         exported-graph (sqlite-export/build-export @conn {:export-type :graph
                                                           :graph-options {:exclude-built-in-pages? true}})]
     (is (= expected-pages-and-blocks
-           (:pages-and-blocks exported-graph))
-        "page uuid ('node1') is preserved across imports even when its assigned a temporary
+           (map :page (:pages-and-blocks exported-graph)))
+        "page uuid of 'existing page' is preserved across imports even when its assigned a temporary
          uuid to relate it to other nodes")))
+
+(deftest build-import-can-import-existing-page-with-different-uuid
+  (testing "By default any properties passed to an existing page are upserted"
+    (test-import-existing-page {}
+                              {:logseq.property/description "second description"
+                               :logseq.property/exclude-from-graph-view true}))
+  (testing "With ::existing-pages-keep-properties?, existing properties on existing pages are not overwritten by imported data"
+    (test-import-existing-page {:existing-pages-keep-properties? true}
+                               {:logseq.property/description "first description"
+                                :logseq.property/exclude-from-graph-view true})))

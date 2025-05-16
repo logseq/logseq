@@ -7,7 +7,8 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.notification :as notification]
             [goog.string :as gstring]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [logseq.common.config :as common-config]))
 
 (defn- humanize-more
   "Make error maps from me/humanize more readable for users. Doesn't try to handle
@@ -86,40 +87,6 @@ nested keys or positional errors e.g. tuples"
       :else
       (validate-config-map parsed-body schema path))))
 
-(def file-only-config
-  "File only config that is deprecated in DB graphs"
-  (merge
-   (zipmap
-    [:file/name-format
-     :file-sync/ignore-files
-     :hidden
-     :ignored-page-references-keywords
-     :journal/file-name-format
-     :journal/page-title-format
-     :journals-directory
-     :logbook/settings
-     :org-mode/insert-file-link?
-     :pages-directory
-     :preferred-workflow
-     :property/separated-by-commas
-     :property-pages/excludelist
-     :srs/learning-fraction
-     :srs/initial-interval
-     :whiteboards-directory]
-    (repeat "is not used in DB graphs"))
-   {:preferred-format
-    "is not used in DB graphs as there is only markdown mode."
-    :property-pages/enabled?
-    "is not used in DB graphs as all properties have pages"
-    :block-hidden-properties
-    "is not used in DB graphs as hiding a property is done in its configuration"
-    :feature/enable-block-timestamps?
-    "is not used in DB graphs as it is always enabled"
-    :favorites
-    "is not stored in config for DB graphs"
-    :default-templates
-    "is replaced by #Template and the `Apply template to tags` property"}))
-
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
   [path content {:keys [db-graph?]}]
@@ -132,7 +99,7 @@ nested keys or positional errors e.g. tuples"
                    "is no longer supported."}
                    db-graph?
                    (merge
-                    file-only-config))]
+                    common-config/file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

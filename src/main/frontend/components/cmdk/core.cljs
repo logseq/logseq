@@ -81,7 +81,9 @@
   (string/replace input #"^#+" ""))
 
 (defn create-items [q]
-  (when (and (not (string/blank? q)) (not config/publishing?))
+  (when (and (not (string/blank? q))
+             (not (#{"config.edn" "custom.js" "custom.css"} q))
+             (not config/publishing?))
     (let [class? (string/starts-with? q "#")]
       (->> [{:text (if class? "Create tag" "Create page")       :icon "new-page"
              :icon-theme :gray
@@ -233,6 +235,25 @@
                            :text (translate t %)
                            :shortcut (:shortcut %)
                            :source-command %))
+           (hash-map :status :success :items)
+           (swap! !results update group merge)))))
+
+(defmethod load-results :recently-updated-pages [group state]
+  (let [!input (::input state)
+        !results (::results state)]
+    (swap! !results assoc-in [group :status] :loading)
+    (let [recent-pages (ldb/get-recent-updated-pages (db/get-db))
+          search-results (if (string/blank? @!input)
+                           recent-pages
+                           (search/fuzzy-search recent-pages @!input {:extract-fn :block/title}))]
+      (->> search-results
+           (map (fn [block]
+                  (let [text (block-handler/block-unique-title block)
+                        icon (get-page-icon block)]
+                    {:icon icon
+                     :icon-theme :gray
+                     :text text
+                     :source-block block})))
            (hash-map :status :success :items)
            (swap! !results update group merge)))))
 
@@ -396,6 +417,7 @@
           (load-results :nodes state)
           (load-results :filters state)
           (load-results :files state)
+          (load-results :recently-updated-pages state)
           ;; (load-results :recents state)
           )))))
 
