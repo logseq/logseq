@@ -128,7 +128,7 @@
      :properties (filter entity-util/property? properties-tx)}))
 
 (def built-in-pages-names
-  #{"Library"})
+  #{"Library" "Contents"})
 
 (defn- validate-tx-for-duplicate-idents [tx]
   (when-let [conflicting-idents

@@ -102,6 +102,16 @@
    first
    (d/entity db)))
 
+(defn- page-with-parent-and-order
+  "Apply to namespace pages"
+  [db page & {:keys [parent]}]
+  (let [library (ldb/get-built-in-page db "Library")]
+    (when (nil? library)
+      (throw (ex-info "Library page doesn't exist" {})))
+    (assoc page
+           :block/parent (or parent (:db/id library))
+           :block/order (db-order/gen-key))))
+
 (defn- split-namespace-pages
   [db page date-formatter create-class?]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
@@ -160,7 +170,7 @@
                     (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
                   (if (de/entity? page)
                     page
-                    (gp-block/page-with-parent-and-order db page {:parent parent-eid})))))
+                    (page-with-parent-and-order db page {:parent parent-eid})))))
             pages)))
        [page])
      (remove nil?))))
