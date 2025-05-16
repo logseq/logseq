@@ -104,11 +104,11 @@
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
-  [page-name]
+  [title]
   (block-with-timestamps
-   {:block/name (common-util/page-name-sanity-lc page-name)
-    :block/title page-name
-    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid page-name)
+   {:block/name (common-util/page-name-sanity-lc title)
+    :block/title title
+    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid title)
     :block/tags #{:logseq.class/Page}}))
 
 (defn kv

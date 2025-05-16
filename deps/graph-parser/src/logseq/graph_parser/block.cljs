@@ -367,9 +367,7 @@
 (defn page-with-parent-and-order
   "Apply to namespace pages"
   [db page & {:keys [parent]}]
-  ;; FIXME: using db/ident instead of page title because users can create pages
-  ;; with the same name
-  (let [library (ldb/get-page db "Library")]
+  (let [library (ldb/get-built-in-page db "Library")]
     (when (nil? library)
       (throw (ex-info "Library page doesn't exist" {})))
     (assoc page
