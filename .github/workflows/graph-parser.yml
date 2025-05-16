@@ -76,7 +76,7 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Run ClojureScript tests
-        run: clojure -M:test
+        run: REPEATABLE_IDENTS=true clojure -M:test
 
       - name: Run nbb-logseq tests
         run: yarn test
