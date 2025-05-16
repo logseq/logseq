@@ -13,7 +13,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(FolderPicker.class);
-        registerPlugin(FsWatcher.class);
+        registerPlugin(UILocal.class);
+
         super.onCreate(savedInstanceState);
 
         new Timer().schedule(new TimerTask() {
@@ -27,7 +28,6 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         }, 5000);
-
     }
 
     @Override
@@ -51,6 +51,4 @@ public class MainActivity extends BridgeActivity {
             });
         }
     }
-
-
 }
