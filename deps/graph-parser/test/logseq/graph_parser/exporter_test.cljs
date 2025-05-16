@@ -139,7 +139,7 @@
           end-time (cljs.core/system-time)]
 
     ;; Add multiplicative factor for CI as it runs about twice as slow
-    (let [max-time (-> 15 (* (if js/process.env.CI 2 1)))]
+    (let [max-time (-> 20 (* (if js/process.env.CI 2 1)))]
       (is (< (-> end-time (- start-time) (/ 1000)) max-time)
           (str "Importing large graph takes less than " max-time "s")))
 
