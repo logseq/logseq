@@ -327,6 +327,9 @@ html.is-zoomed-native-ios {
 }
 
 .cp__header {
+    .ls-block-breadcrumb {
+        @apply text-sm pl-2;
+    }
     .breadcrumb {
         @apply flex items-center;
     }
