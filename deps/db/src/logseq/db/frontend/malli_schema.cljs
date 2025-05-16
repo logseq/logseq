@@ -484,14 +484,10 @@
                        :file-block
                        (:logseq.property.history/block d)
                        :property-history-block
-
                        (:block/closed-value-property d)
                        :closed-value-block
-
-                       (and (:logseq.property/created-from-property d)
-                            (:logseq.property/value d))
+                       (and (:logseq.property/created-from-property d) (:logseq.property/value d))
                        :property-value-block
-
                        (:block/uuid d)
                        :block
                        (= (:db/ident d) :logseq.property/empty-placeholder)

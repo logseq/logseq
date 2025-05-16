@@ -107,9 +107,11 @@
     (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
                    true
                    (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
-      (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
-        (shared-service/broadcast-to-clients! :notification
-                                              [["Invalid DB!"] :error]))))
+      (when-not valid?
+        (when (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
+          (shared-service/broadcast-to-clients! :notification
+                                                [["Invalid DB!"] :error]))
+        (throw (ex-info "Invalid data" {:graph repo})))))
 
   ;; Ensure :block/order is unique for any block that has :block/parent
   (when (or (:dev? context) (exists? js/process))

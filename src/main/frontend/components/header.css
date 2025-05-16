@@ -318,7 +318,7 @@ html.is-zoomed-native-ios {
 
 .cp__header {
     > .r > div:not(.ui__dropdown-trigger) a, button {
-        @apply opacity-70;
+        @apply opacity-70 text-[inherit];
 
         &:hover {
             @apply opacity-100;

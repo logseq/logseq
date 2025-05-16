@@ -1,8 +1,7 @@
 (ns frontend.handler.repo
   "System-component-like ns that manages user's repos/graphs"
   (:refer-clojure :exclude [clone])
-  (:require [borkdude.rewrite-edn :as rewrite]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -11,7 +10,6 @@
             [frontend.db.persist :as db-persist]
             [frontend.db.react :as react]
             [frontend.db.restore :as db-restore]
-            [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -27,6 +25,7 @@
             [frontend.util :as util]
             [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 ;; Project settings should be checked in two situations:
@@ -177,16 +176,9 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn migrate-db-config
-  [content]
-  (-> (reduce rewrite/dissoc
-              (rewrite/parse-string (str content))
-              (keys config-edn-common-handler/file-only-config))
-      str))
-
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
-   (p/let [config (migrate-db-config config/config-default-content)
+   (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config}
                                 file-graph-import? (assoc :import-type :file-graph)))
