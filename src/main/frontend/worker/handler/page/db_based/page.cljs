@@ -86,23 +86,24 @@
        :block/title ""})]))
 
 (defn- get-page-by-parent-name
-  [db parent-title child-title]
+  [db parent-title child-title class?]
   (some->>
    (d/q
     '[:find [?b ...]
-      :in $ ?parent-name ?child-name
+      :in $ ?attribute ?parent-name ?child-name
       :where
-      [?b :logseq.property.class/extends ?p]
+      [?b ?attribute ?p]
       [?b :block/name ?child-name]
       [?p :block/name ?parent-name]]
     db
+    (if class? :logseq.property.class/extends :block/parent)
     (common-util/page-name-sanity-lc parent-title)
     (common-util/page-name-sanity-lc child-title))
    first
    (d/entity db)))
 
 (defn- split-namespace-pages
-  [db page date-formatter]
+  [db page date-formatter create-class?]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
     (->>
      (if (and (or (entity-util/class? page)
@@ -117,7 +118,7 @@
                       (let [last-part? (= idx (dec (count parts)))
                             page (if (zero? idx)
                                    (ldb/get-page db part)
-                                   (get-page-by-parent-name db (nth parts (dec idx)) part))
+                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
                             result (or page
                                        (gp-block/page-name->map part db true date-formatter
                                                                 {:page-uuid (when last-part? block-uuid)
@@ -205,7 +206,7 @@
                                                      :page-uuid (when (uuid? uuid) uuid)
                                                      :skip-existing-page-check? true})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
-                             (let [pages (split-namespace-pages db page date-formatter)]
+                             (let [pages (split-namespace-pages db page date-formatter class?)]
                                [(last pages) (butlast pages)])
                              [page nil])]
         (when (and page (or (nil? (:db/ident page))
