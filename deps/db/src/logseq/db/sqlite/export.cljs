@@ -16,8 +16,7 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.db-ident :as db-ident]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 ;; Export fns
 ;; ==========
