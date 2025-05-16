@@ -2,12 +2,10 @@
   (:require [cljs.test :refer [use-fixtures deftest is testing]]
             [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.test.helper :as test-helper]
             [logseq.db :as ldb]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.frontend.class :as db-class]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -53,18 +51,6 @@
       (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
              [(:db/id (db/entity [:block/uuid fbid]))
               (:db/id (db/entity [:block/uuid sbid]))])))))
-
-(deftest get-classes-with-property-test
-  (let [conn (db-test/create-conn-with-blocks
-              {:properties {:prop1 {:logseq.property/type :default}}
-               :classes
-               {:Class1 {:build/class-properties [:prop1]}
-                :Class2 {:build/class-properties [:prop1]}}})
-        property (d/entity @conn :user.property/prop1)
-        classes (with-redefs [conn/get-db (constantly @conn)]
-                  (model/get-classes-with-property (:db/ident property)))]
-    (is (= ["Class1" "Class2"]
-           (map :block/title classes)))))
 
 (deftest hidden-page-test
   (let [opts {:redirect? false :create-first-block? false}
