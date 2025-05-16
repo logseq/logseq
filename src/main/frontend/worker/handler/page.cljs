@@ -95,7 +95,7 @@
                                        delete-property-tx
                                        [[:db.fn/retractEntity (:db/id page)]])
                 restore-class-parent-tx (when db-based?
-                                          (->> (filter (fn [p] (ldb/class? p)) (:logseq.property/_parent page))
+                                          (->> (filter ldb/class? (:logseq.property.class/_extends page))
                                                (map (fn [p]
                                                       {:db/id (:db/id p)
                                                        :logseq.property.class/extends :logseq.class/Root}))))

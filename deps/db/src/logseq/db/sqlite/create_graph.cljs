@@ -13,7 +13,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-(defn- mark-block-as-built-in [block]
+(defn mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
 
 (defn- schema->qualified-property-keyword

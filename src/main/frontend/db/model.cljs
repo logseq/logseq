@@ -549,7 +549,7 @@ independent of format as format specific heading characters are stripped"
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
     (->>
-     (if (first (:logseq.property/_parent class))        ; has children classes
+     (if (first (:logseq.property.class/_extends class))        ; has children classes
        (let [all-classes (conj (->> (get-structured-children repo class-id)
                                     (map #(db-utils/entity repo %)))
                                class)]
