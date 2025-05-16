@@ -30,7 +30,13 @@
             child-page2 (d/entity @conn [:block/uuid child-uuid2])
             ;; Create a child page for a class
             [_ child-uuid3] (worker-db-page/create! conn "c1/c2" {:split-namespace? true :class? true})
-            child-page3 (d/entity @conn [:block/uuid child-uuid3])]
+            child-page3 (d/entity @conn [:block/uuid child-uuid3])
+            library (ldb/get-built-in-page @conn "Library")
+            bar (ldb/get-page @conn "bar")]
+        (is (= ["foo"] (map :block/title (:block/_parent library)))
+            "Namespace (non-class) pages are added to the Library page")
+        (is (= ["baz" "baz2"] (map :block/title (:block/_parent bar)))
+            "Child pages are created under the same parent")
         (is (= ["foo" "bar"] (map :block/title [(:block/parent (:block/parent child-page))
                                                 (:block/parent child-page)]))
             "Child page with new parent has correct parents")
