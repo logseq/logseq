@@ -44,7 +44,7 @@
     :block/uuid #uuid "d95f2912-a7af-41b9-8ed5-28861f7fc0be"
     :logseq.property.class/extends [:block/uuid #uuid "7008db08-ba0c-4aa9-afc6-7e4783e40a99"]}])
 
-(deftest get-page-parents
+(deftest get-class-extends
   (let [conn (db-test/create-conn)]
     (d/transact! conn class-parents-data)
     (is (= #{"x" "y"}
