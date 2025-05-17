@@ -1,5 +1,6 @@
 (ns capacitor.pages.blocks
   (:require [capacitor.state :as state]
+            [frontend.db.model :as db-model]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.db.async :as db-async]
@@ -79,12 +80,66 @@
   (some-> @state/*nav-root
     (.push #(edit-block-modal block opts))))
 
+(rum/defc block-editor
+  [])
+
+(rum/defc block-content
+  [])
+
+(rum/defc block-item
+  [block]
+  (when block
+    [:li.text-xl.pr-1 {:on-click #()}
+     [:span (:block/title block)]]))
+
+(rum/defc blocks-list
+  [blocks]
+  (when (seq blocks)
+    [:ul.app-blocks-list
+     (for [block blocks]
+       (block-item block))]))
+
+(rum/defc blocks-container
+  [root]
+  [:div.app-blocks-container
+   (let [block? (not (db-model/page? root))
+         children (:block/_parent root)
+         blocks (if block? [root] (db-model/sort-by-order children))]
+     ;(js/console.log "==>> blocks:" (:block/title root) (count blocks))
+     (blocks-list blocks))])
+
+(rum/defc page-blocks
+  [page-name-or-entity]
+  (let [[page set-page!] (rum/use-state
+                           (if (:db/id page-name-or-entity) page-name-or-entity
+                             (db-model/get-page page-name-or-entity)))
+        [p] (state/use-app-state [:last-modified-page-uuid (:block/uuid page)])
+        [_loading? set-loading!] (rum/use-state false)]
+
+    (rum/use-effect!
+      ;; sync page blocks
+      (fn []
+        (-> (db-async/<get-block (fstate/get-current-repo) (:block/uuid page))
+          (p/then (fn [page]
+                    (set-page! (db-utils/entity (:db/id page)))))
+          (p/finally #()))
+        #())
+      [p])
+
+    (when page
+      [:div.app-page-blocks.mb-4
+       (blocks-container page)])))
+
 (rum/defc page [block {:keys [reload-pages!]}]
   (let [[^js nav] (state/use-nav-root)
         [page set-page!] (rum/use-state (db-utils/entity (:db/id block)))
         title (or (:block/title block) (:block.temp/cached-title block))
         [loading? set-loading!] (rum/use-state true)
-        rerender! #(set-page! (db-utils/entity (:db/id block)))]
+        rerender! (fn []
+                    (set-page! (db-utils/entity (:db/id block)))
+                    (swap! state/*state assoc
+                      :last-modified-page-uuid
+                      {(:block/uuid block) (js/Date.now)}))]
 
     (rum/use-effect!
       ;; sync page blocks
