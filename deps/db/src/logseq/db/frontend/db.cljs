@@ -56,6 +56,18 @@
                (conj parents' current-parent))
         (vec (reverse parents'))))))
 
+(defn get-page-parents
+  [node]
+  (when-let [parent (:block/parent node)]
+    (loop [current-parent parent
+           parents' []]
+      (if (and
+           current-parent
+           (not (contains? parents' current-parent)))
+        (recur (:block/parent current-parent)
+               (conj parents' current-parent))
+        (vec (reverse parents'))))))
+
 (defn get-class-title-with-extends
   [entity]
   (if (entity-util/class? entity)
@@ -65,6 +77,23 @@
       (string/join
        ns-util/parent-char
        (map :block/title (conj (vec parents') entity))))
+    (:block/title entity)))
+
+(defn get-title-with-parents
+  [entity]
+  (cond
+    (entity-util/class? entity)
+    (get-class-title-with-extends entity)
+
+    (entity-util/page? entity)
+    (let [parents' (->> (get-page-parents entity)
+                        (remove (fn [e]
+                                  (and (:logseq.property/built-in? e) (= "Library" (:block/title e))))))]
+      (string/join
+       ns-util/parent-char
+       (map :block/title (conj (vec parents') entity))))
+
+    :else
     (:block/title entity)))
 
 (defn get-classes-parents
