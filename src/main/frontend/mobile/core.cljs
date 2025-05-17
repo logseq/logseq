@@ -3,17 +3,12 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             [clojure.string :as string]
-            [promesa.core :as p]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [cljs-bean.core :as bean]
-            [frontend.config :as config]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.util :as util]))
 
 (def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -21,14 +16,6 @@
 ;; they are from the same intent share.
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
-
-(defn mobile-preinit
-  "preinit logic of mobile platforms: setup document folder permission"
-  []
-  (when (mobile-util/native-ios?)
-    ;; Caution: This must be called before any file accessing
-    (capacitor-fs/ios-ensure-documents!)))
-
 
 (defn mobile-postinit
   "postinit logic of mobile platforms: handle deeplink and intent"
@@ -41,30 +28,7 @@
 (defn- ios-init
   "Initialize iOS-specified event listeners"
   []
-  (p/let [^js paths (capacitor-fs/ios-ensure-documents!)]
-    (when paths
-      (let [paths (-> paths
-                      bean/->clj
-                      (update-vals capacitor-fs/ios-force-include-private))]
-        (state/set-state! :mobile/container-urls paths)
-        (println "iOS container path: " paths))))
-
-  ;; Fix iOS App directory change across installation
-  (when (not (config/demo-graph?))
-    (state/pub-event! [:validate-appId]))
-
-  (mobile-util/check-ios-zoomed-display)
-
-  ;; keep this the same logic as src/main/electron/listener.cljs
-  (.addListener mobile-util/file-sync "debug"
-                (fn [event]
-                  (let [event (js->clj event :keywordize-keys true)
-                        payload (:data event)]
-                    (when (or (= (:event event) "download:progress")
-                              (= (:event event) "upload:progress"))
-                      (state/set-state! [:file-sync/graph-state (:graphUUID payload) :file-sync/progress (:file payload)] payload))))))
-
-
+  (mobile-util/check-ios-zoomed-display))
 
 (defn- android-init
   "Initialize Android-specified event listeners"
@@ -99,13 +63,7 @@
                        (js/window.history.back)))))
 
   (.addEventListener js/window "sendIntentReceived"
-                     #(intent/handle-received))
-
-  (.addListener mobile-util/file-sync "progress"
-                (fn [event]
-                  (js/console.log "🔄" event)
-                  (let [event (js->clj event :keywordize-keys true)]
-                    (state/set-state! [:file-sync/graph-state (:graphUUID event) :file-sync/progress (:file event)] event)))))
+                     #(intent/handle-received)))
 
 (defn- app-state-change-handler
   [^js state]
@@ -113,9 +71,7 @@
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (when-not is-active?
-        (editor-handler/save-current-block!)
-        (repo-handler/persist-db!))
-      (state/set-mobile-app-state-change is-active?))))
+        (editor-handler/save-current-block!)))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
@@ -131,10 +87,6 @@
                         (reset! *last-shared-seconds (.getSeconds (js/Date.)))
                         (deeplink/deeplink url))))))
 
-  (.addListener mobile-util/fs-watcher "watcher"
-                (fn [event]
-                  (state/pub-event! [:mobile-file-watcher/changed event])))
-
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]
                   (let [keyboard-height (.-keyboardHeight info)]
@@ -148,7 +100,6 @@
                      #(util/scroll-to-top true))
 
   (.addListener App "appStateChange" app-state-change-handler))
-
 
 (defn init! []
   (when (mobile-util/native-android?)

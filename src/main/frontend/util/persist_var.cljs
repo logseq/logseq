@@ -1,11 +1,11 @@
 (ns frontend.util.persist-var
   "System-component-like ns that provides an atom-like abstraction over an edn
   file"
-  (:require [frontend.config :as config]
-            [frontend.state :as state]
+  (:require [cljs.reader :as reader]
+            [frontend.config :as config]
             [frontend.fs :as fs]
+            [frontend.state :as state]
             [frontend.util :as util]
-            [cljs.reader :as reader]
             [promesa.core :as p]))
 
 (defn- load-rpath

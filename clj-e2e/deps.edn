@@ -1,0 +1,20 @@
+{:paths ["src" "resources"]
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}
+        ;; io.github.pfeodrippe/wally {:local/root "../../../wally"}
+        io.github.pfeodrippe/wally {:git/url "https://github.com/logseq/wally"
+                                    :sha "8571fae7c51400ac61c8b1026cbfba68279bc461"}
+        ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
+        org.clj-commons/claypoole          {:mvn/version "1.2.2"}
+        clj-time/clj-time                  {:mvn/version "0.15.2"}}
+ :aliases
+ {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+          :ns-default build}
+  :serve {:deps {org.babashka/http-server {:mvn/version "0.1.13"}}
+          :main-opts ["-m" "babashka.http-server"]
+          :exec-fn babashka.http-server/exec}
+  :test {:extra-paths ["test"]
+         :main-opts ["-m" "cognitect.test-runner"]
+         :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}
+                      io.github.cognitect-labs/test-runner
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}}
+  :dev {:extra-paths ["dev" "test"]}}}
