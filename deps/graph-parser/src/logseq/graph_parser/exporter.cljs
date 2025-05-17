@@ -1630,6 +1630,26 @@
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
 
+(defn- move-top-parent-pages-to-library
+  [conn repo-or-conn]
+  (let [db @conn
+        library-page (ldb/get-built-in-page db "Library")
+        library-id (:block/uuid library-page)
+        top-parent-pages (->> (d/datoms db :avet :block/parent)
+                              (keep (fn [d]
+                                      (let [child (d/entity db (:e d))
+                                            parent (d/entity db (:v d))]
+                                        (when (and (nil? (:block/parent parent)) (ldb/page? child) (ldb/page? parent))
+                                          parent))))
+                              (common-util/distinct-by :block/uuid))
+        tx-data (map
+                 (fn [parent]
+                   {:db/id (:db/id parent)
+                    :block/parent [:block/uuid library-id]
+                    :block/order (db-order/gen-key)})
+                 top-parent-pages)]
+    (ldb/transact! repo-or-conn tx-data)))
+
 (defn export-file-graph
   "Main fn which exports a file graph given its files and imports them
    into a DB graph. Files is expected to be a seq of maps with a :path key.
@@ -1674,6 +1694,7 @@
         (export-doc-files conn doc-files <read-file doc-options)
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
+        (move-top-parent-pages-to-library conn repo-or-conn)
         {:import-state (:import-state doc-options)
          :files files})))
    (p/finally (fn [_]
