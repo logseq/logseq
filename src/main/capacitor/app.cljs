@@ -12,6 +12,7 @@
             [capacitor.state :as state]
             [capacitor.handler :as handler]
             [capacitor.pages.utils :as pages-util]
+            [capacitor.pages.blocks :as blocks]
             [capacitor.components.ui :as ui]
             [frontend.db.conn :as db-conn]
             [frontend.db-mixins :as db-mixins]
@@ -85,37 +86,15 @@
     [:ul
      (for [journal-id journals]
        (let [journal (db-util/entity journal-id)]
-         [::li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
+         [:li.flex.py-1.active:opacity-50.flex-col.w-full
           {:on-click #(pages-util/nav-to-block! journal {:reload-pages! (fn [] ())})}
-          (ionic/tabler-icon "calendar")
-          [:span.pl-1 (:block/title journal)]]))]))
-
-(rum/defc create-page-input
-  [{:keys [close! reload-pages!]}]
-  (ionic/ion-alert
-    {:is-open true
-     :header "Create new page"
-     :onWillDismiss (fn [^js e]
-                      (let [^js detail (.-detail e)]
-                        (when-let [val (and (= "confirm" (.-role detail))
-                                         (aget (.-values (.-data detail)) 0))]
-                          (-> (handler/<create-page! val)
-                            (p/finally reload-pages!)))
-                        (close!)))
-     :onDidPresent (fn [^js e]
-                     (let [^js target (.-target e)]
-                       (when-let [input (.querySelector target "input")]
-                         (js/setTimeout #(.focus input)))))
-     :buttons [#js {:text "Cancel"
-                    :role "cancel"}
-               #js {:text "Confirm"
-                    :role "confirm"}]
-     :inputs [#js {:placeholder "page name"
-                   :auto-focus true}]}))
+          [:h1.text-2xl.font-semibold.opacity-90 (:block/title journal)]
+          ;; blocks editor
+          (blocks/page-blocks journal)
+          ]))]))
 
 (rum/defc home []
-  (let [[reload set-reload!] (rum/use-state 0)
-        [page-input-open? set-page-input-open?] (rum/use-state false)]
+  (let [[reload set-reload!] (rum/use-state 0)]
 
     (ionic/ion-content
       (ionic/ion-refresher
@@ -130,19 +109,8 @@
                              1000))}
         (ionic/ion-refresher-content))
 
-      (when page-input-open?
-        (create-page-input {:close! #(set-page-input-open? false)
-                            :reload-pages! #(set-reload! (inc reload))}))
-      [:div.pt-6.px-6
-       [:div.flex.justify-between.items-center.mt-4
-        [:h1.text-3xl.font-mono.font-bold.py-2 "Journals"]
-        [:flex.gap-1]]
-
+      [:div.pt-4.px-4
        (journals-list)
-
-       ;(when journal-calendar-open?
-       ;  (journals-calendar-modal {:close! #(set-journal-calendar-open? false)}))
-
        ]
 
       ;; tabbar
@@ -231,7 +199,7 @@
     [:> (.-IonApp ionic/ionic-react)
      [:<>
       (ionic/ion-nav {:ref nav-ref
-                      :root root                                ;;settings/page
+                      :root root                            ;;settings/page
                       :animated true
                       :swipeGesture false})
 
