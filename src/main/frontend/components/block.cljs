@@ -3455,9 +3455,7 @@
         show-query? (rum/react *show-query?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
-        refs-count (if (seq (:block/_refs block))
-                     (count (remove :logseq.property/view-for (:block/_refs block)))
-                     (rum/react *refs-count))
+        refs-count (rum/react *refs-count)
         [original-block block] (build-block config* block {:navigating-block navigating-block :navigated? navigated?})
         config* (if original-block
                   (assoc config* :original-block original-block)
