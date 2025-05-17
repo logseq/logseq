@@ -72,3 +72,13 @@ ion-textarea {
 [multiple]:focus, textarea:focus, select:focus {
   box-shadow: none;
 }
+
+.app-journals-list {
+  @apply min-h-screen;
+
+  > li {
+    > h1 {
+      @apply text-3xl font-serif mb-4;
+    }
+  }
+}

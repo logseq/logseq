@@ -35,7 +35,7 @@
     [:<>
      (ionic/ion-button
        {:fill "clear" :mode "ios"
-        :class "border-none w-full rounded-lg font-semibold"
+        :class "border-none w-full rounded-lg font-semibold pt-2"
         :on-click (fn []
                     (ui/open-modal! "Switch graph"
                       {:type :action-sheet
@@ -50,12 +50,13 @@
        short-repo-name)
 
      (ionic/ion-button
-       {:on-click (fn []
+       {:class "relative -left-2 pt-1.5 opacity-50"
+        :on-click (fn []
                     (when-let [db-name (js/prompt "Create new db")]
                       (when-not (string/blank? db-name)
                         (-> (repo-handler/new-db! db-name)
                           (p/then #())))))}
-       (ionic/tabler-icon "plus"))]))
+       (ionic/tabler-icon "plus" {:size 24}))]))
 
 (rum/defc app-sidebar []
   (ionic/ion-menu {:content-id "app-main-content"
@@ -83,12 +84,12 @@
 (rum/defc journals-list < rum/reactive db-mixins/query
   []
   (let [journals (handler/sub-journals)]
-    [:ul
+    [:ul.app-journals-list
      (for [journal-id journals]
        (let [journal (db-util/entity journal-id)]
          [:li.flex.py-1.active:opacity-50.flex-col.w-full
           {:on-click #(pages-util/nav-to-block! journal {:reload-pages! (fn [] ())})}
-          [:h1.text-2xl.font-semibold.opacity-90 (:block/title journal)]
+          [:h1.font-semibold.opacity-90 (:block/title journal)]
           ;; blocks editor
           (blocks/page-blocks journal)
           ]))]))
@@ -153,14 +154,14 @@
                                                       (let [val (.-value (.-detail e))]
                                                         (apply-date! val)
                                                         (close!)))}))))))}
-               [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 22})])
+               [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 26})])
 
              (ionic/ion-button {:fill "clear"}
                (ionic/ion-nav-link
                  {:routerDirection "forward"
                   :class "w-full"
                   :component settings/page}
-                 [:span {:slot "icon-only"} (ionic/tabler-icon "dots-circle-horizontal" {:size 24})])))))
+                 [:span {:slot "icon-only"} (ionic/tabler-icon "dots-circle-horizontal" {:size 26})])))))
 
        ;; main content
        (if db-restoring?
