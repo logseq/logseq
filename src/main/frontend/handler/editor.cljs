@@ -35,7 +35,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -44,6 +43,7 @@
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
@@ -1062,14 +1062,24 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (->> (map db/entity lookup-refs)
-                          (remove ldb/page?))
-              top-level-blocks (when (seq blocks) (block-handler/get-top-level-blocks blocks))
-              sorted-blocks (mapcat (fn [block]
-                                      (tree/get-sorted-block-and-children repo (:db/id block)))
-                                    top-level-blocks)]
-          (when (seq sorted-blocks)
-            (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))
+              blocks (map db/entity lookup-refs)
+              non-page-blocks (remove ldb/page? blocks)
+              pages (filter ldb/page? blocks)
+              library-page (ldb/get-built-in-page (db/get-db) "Library")
+              library-pages (when library-page
+                              (filter #(= (:db/id (:block/parent %)) (:db/id library-page)) pages))]
+          (if (seq library-pages)
+            (ui-outliner-tx/transact!
+             {:outliner-op :save-blocks}
+             (doseq [page library-pages]
+               (outliner-op/remove-block-property! (:db/id page) :block/parent)))
+            (when (seq non-page-blocks)
+              (let [top-level-blocks (when (seq blocks) (block-handler/get-top-level-blocks non-page-blocks))
+                    sorted-blocks (mapcat (fn [block]
+                                            (tree/get-sorted-block-and-children repo (:db/id block)))
+                                          top-level-blocks)]
+                (when (seq sorted-blocks)
+                  (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."

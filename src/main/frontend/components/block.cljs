@@ -2130,7 +2130,7 @@
                                                               :ignore-children? (:page-title? config)})
         link?              (boolean (:original-block config))
         icon-size          (if collapsed? 12 14)
-        icon               (icon-component/get-node-icon-cp block {:size icon-size :color? true})
+        icon               (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon?          (and (some? icon)
                                  (or (db/page? block)
                                      (:logseq.property/icon block)
