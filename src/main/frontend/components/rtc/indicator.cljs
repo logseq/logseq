@@ -117,7 +117,6 @@
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
      (assets-progressing)
-
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
@@ -153,6 +152,35 @@
          (> 600
             (/ (- (t/now) created-at) 1000)))))
 
+(def ^:private *accumulated-download-logs (atom []))
+(c.m/run-background-task
+ ::update-accumulated-download-logs
+ (m/reduce
+  (fn [_ log]
+    (when log
+      (if (= :download-completed (:sub-type log))
+        (reset! *accumulated-download-logs [])
+        (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))
+  rtc-flows/rtc-download-log-flow))
+
+(defn- accumulated-logs-flow
+  [*acc-logs]
+  (->> (m/watch *acc-logs)
+       (m/eduction
+        (map (fn [logs]
+               (when-let [first-log (first logs)]
+                 (let [graph-uuid (:graph-uuid first-log)]
+                   (take-while (fn [log] (= graph-uuid (:graph-uuid log))) logs))))))))
+
+(rum/defc downloading-logs
+  []
+  (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
+        download-logs (hooks/use-flow-state download-logs-flow)]
+    (when (seq download-logs)
+      [:div
+       (for [log download-logs]
+         [:div (:message log)])])))
+
 (rum/defc indicator
   []
   (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
@@ -186,3 +214,20 @@
                                                          :on (and online? (= :open rtc-state))
                                                          :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
                                                          :queuing (pos? unpushed-block-update-count)}])})]]))
+
+(def ^:private downloading?-flow
+  (->> rtc-flows/rtc-download-log-flow
+       (m/eduction (map (fn [log] (not= :download-completed (:sub-type log)))))
+       (c.m/continue-flow false)))
+
+(rum/defc downloading-detail
+  []
+  (when (true? (hooks/use-flow-state downloading?-flow))
+    (shui/button
+     {:class   "opacity-50"
+      :variant :ghost
+      :size    :sm
+      :on-click #(shui/popup-show! (.-target %)
+                                   (downloading-logs)
+                                   {:align "end"})}
+     "Downloading...")))
