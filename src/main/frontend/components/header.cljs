@@ -68,7 +68,7 @@
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users @(::online-users state)]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-1.text-sm.py-2.bg-gray-01.items-center
+      [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
                                {:on-click #(shui/dialog-open!
                                             (fn []
