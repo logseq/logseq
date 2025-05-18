@@ -15,7 +15,7 @@
 
 (defn save-block
   [text]
-  (util/wait-timeout 100)
+  (w/click util/editor-q)
   (w/fill util/editor-q text)
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
