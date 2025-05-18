@@ -184,7 +184,8 @@
         (when (and compare-result (not (neg? compare-result))) ; >= 64.8
           (worker-util/post-message :capture-error
                                     {:error "db-missing-addresses-v2"
-                                     :payload {:missing-addresses missing-addresses}}))))
+                                     :payload {:missing-addresses (str missing-addresses)
+                                               :db-schema-version (str version-in-db)}}))))
     missing-addresses))
 
 (defn upsert-addr-content!
