@@ -1,7 +1,6 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
-  (:require [cljs-time.core :as t]
-            [clojure.pprint :as pprint]
+  (:require [clojure.pprint :as pprint]
             [frontend.common.missionary :as c.m]
             [frontend.db :as db]
             [frontend.flows :as flows]
