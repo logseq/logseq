@@ -1,4 +1,4 @@
-(ns logseq.e2e.multi-tabs-test
+(ns logseq.e2e.multi-tabs-basic-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
