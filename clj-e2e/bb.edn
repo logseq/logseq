@@ -13,10 +13,12 @@
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
 
   test {:doc "run tests (ns'es ending in '-basic-test')"
-        :task (clojure "-M:test -r \".*\\-basic\\-test$\"")}
+        :task (do (clojure "-M:test -r \".*\\-basic\\-test$\"")
+                  (System/exit 0))}
 
   extra-test {:doc "run tests (ns'es ending in '-extra-test')"
-              :task (clojure "-M:test -r \".*\\-extra\\-test$\"")}
+              :task (do (clojure "-M:test -r \".*\\-extra\\-test$\"")
+                        (System/exit 0))}
 
   -dev {:depends [serve prn test]}
 
