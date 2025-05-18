@@ -2,15 +2,15 @@
   "fns used on repl"
   (:require [clojure.test :refer [run-tests run-test]]
             [logseq.e2e.block :as b]
-            [logseq.e2e.commands-test]
+            [logseq.e2e.commands-basic-test]
             [logseq.e2e.config :as config]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
-            [logseq.e2e.multi-tabs-test]
-            [logseq.e2e.outliner-test]
-            [logseq.e2e.plugins-test]
-            [logseq.e2e.reference-test]
+            [logseq.e2e.multi-tabs-basic-test]
+            [logseq.e2e.outliner-basic-test]
+            [logseq.e2e.plugins-basic-test]
+            [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
@@ -31,12 +31,12 @@
 
 (defn run-commands-test
   []
-  (->> (future (run-tests 'logseq.e2e.commands-test))
+  (->> (future (run-tests 'logseq.e2e.commands-basic-test))
        (swap! *futures assoc :commands-test)))
 
 (defn run-outliner-test
   []
-  (->> (future (run-tests 'logseq.e2e.outliner-test))
+  (->> (future (run-tests 'logseq.e2e.outliner-basic-test))
        (swap! *futures assoc :outliner-test)))
 
 (defn run-rtc-basic-test
@@ -46,27 +46,27 @@
 
 (defn run-multi-tabs-test
   []
-  (->> (future (run-tests 'logseq.e2e.multi-tabs-test))
+  (->> (future (run-tests 'logseq.e2e.multi-tabs-basic-test))
        (swap! *futures assoc :multi-tabs-test)))
 
 (defn run-reference-test
   []
-  (->> (future (run-tests 'logseq.e2e.reference-test))
+  (->> (future (run-tests 'logseq.e2e.reference-basic-test))
        (swap! *futures assoc :reference-test)))
 
 (defn run-plugins-test
   []
-  (->> (future (run-tests 'logseq.e2e.plugins-test))
+  (->> (future (run-tests 'logseq.e2e.plugins-basic-test))
        (swap! *futures assoc :plugins-test)))
 
-(defn run-all-test
+(defn run-all-basic-test
   []
-  (run-tests 'logseq.e2e.commands-test
-             'logseq.e2e.multi-tabs-test
-             'logseq.e2e.outliner-test
+  (run-tests 'logseq.e2e.commands-basic-test
+             'logseq.e2e.multi-tabs-basic-test
+             'logseq.e2e.outliner-basic-test
              'logseq.e2e.rtc-basic-test
-             'logseq.e2e.plugins-test
-             'logseq.e2e.reference-test))
+             'logseq.e2e.plugins-basic-test
+             'logseq.e2e.reference-basic-test))
 
 (defn start
   []
@@ -92,17 +92,17 @@
     (w/wait-for (first (util/get-edit-block-container))
                 {:state :detached}))
 
-  (run-tests 'logseq.e2e.commands-test
-             'logseq.e2e.multi-tabs-test
-             'logseq.e2e.outliner-test
+  (run-tests 'logseq.e2e.commands-basic-test
+             'logseq.e2e.multi-tabs-basic-test
+             'logseq.e2e.outliner-basic-test
              'logseq.e2e.rtc-basic-test)
 
   (do
     (reset! config/*headless true)
     (reset! config/*slow-mo 10)
-    (run-tests 'logseq.e2e.reference-test)
+    (run-tests 'logseq.e2e.reference-basic-test)
     (dotimes [i 10]
-      (run-tests 'logseq.e2e.reference-test)))
+      (run-tests 'logseq.e2e.reference-basic-test)))
 
   ;;
   )

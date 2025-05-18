@@ -1,4 +1,4 @@
-(ns logseq.e2e.plugins-test
+(ns logseq.e2e.plugins-basic-test
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
