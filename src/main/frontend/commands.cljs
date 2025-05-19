@@ -748,7 +748,11 @@
                            (string/replace-first (subs edit-content pos)
                                                  (file-based-status/marker-pattern format)
                                                  (str marker " ")))]
-        (state/set-edit-content! input-id new-value)))))
+        (state/set-edit-content! input-id new-value)
+        (let [new-pos (compute-pos-delta-when-change-marker
+                       edit-content marker (dec slash-pos))]
+          ;; TODO: any performance issue?
+          (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
 (defn- db-based-set-status
   [status]
