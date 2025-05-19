@@ -196,14 +196,15 @@
 
 (defmethod handle :capture-error [[_ {:keys [error payload]}]]
   (let [[user-uuid graph-uuid tx-id] @sync/graphs-txid
-        payload (assoc payload
-                       :user-id user-uuid
-                       :graph-id graph-uuid
-                       :tx-id tx-id
-                       :db-based (config/db-based-graph? (state/get-current-repo))
-                       :schema-version db-schema/version
-                       :db-schema-version (when-let [db (frontend.db/get-db)]
-                                            (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))]
+        payload (merge
+                 {:schema-version (str db-schema/version)
+                  :db-schema-version (when-let [db (frontend.db/get-db)]
+                                       (str (:kv/value (frontend.db/entity db :logseq.kv/schema-version))))
+                  :user-id user-uuid
+                  :graph-id graph-uuid
+                  :tx-id tx-id
+                  :db-based (config/db-based-graph? (state/get-current-repo))}
+                 payload)]
     (Sentry/captureException error
                              (bean/->js {:tags payload}))))
 

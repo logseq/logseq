@@ -100,39 +100,43 @@
   [^js pool data]
   (.importDb ^js pool repo-path data))
 
-(comment
-  (defn- get-all-datoms-from-sqlite-db
-    [db]
-    (some->> (.exec db #js {:sql "select * from kvs"
-                            :rowMode "array"})
-             bean/->clj
-             (mapcat
-              (fn [[_addr content _addresses]]
-                (let [content' (sqlite-util/transit-read content)
-                      datoms (when (map? content')
-                               (:keys content'))]
-                  datoms)))
-             distinct
-             (map (fn [[e a v t]]
-                    (d/datom e a v t)))))
+(defn- get-all-datoms-from-sqlite-db
+  [db]
+  (some->> (.exec db #js {:sql "select * from kvs"
+                          :rowMode "array"})
+           bean/->clj
+           (mapcat
+            (fn [[_addr content _addresses]]
+              (let [content' (sqlite-util/transit-read content)
+                    datoms (when (map? content')
+                             (:keys content'))]
+                datoms)))
+           distinct
+           (map (fn [[e a v t]]
+                  (d/datom e a v t)))))
 
-  (defn- rebuild-db-from-datoms!
-    "Persistent-sorted-set has been broken, used addresses can't be found"
-    [datascript-conn sqlite-db import-type]
-    (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
-          db (d/init-db [] db-schema/schema
-                        {:storage (storage/storage @datascript-conn)})
-          db (d/db-with db
-                        (map (fn [d]
-                               [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
-      (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
-    ;; export db first
-      (when-not import-type
-        (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-        (worker-util/post-message :export-current-db []))
-      (.exec sqlite-db #js {:sql "delete from kvs"})
-      (d/reset-conn! datascript-conn db)
-      (db-migrate/fix-db! datascript-conn))))
+(defn- rebuild-db-from-datoms!
+  "Persistent-sorted-set has been broken, used addresses can't be found"
+  [datascript-conn sqlite-db]
+  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
+        db (d/init-db [] db-schema/schema
+                      {:storage (storage/storage @datascript-conn)})
+        db (d/db-with db
+                      (map (fn [d]
+                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
+    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
+    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+    (worker-util/post-message :export-current-db [])
+    (.exec sqlite-db #js {:sql "delete from kvs"})
+    (d/reset-conn! datascript-conn db)
+    (db-migrate/fix-db! datascript-conn)))
+
+(defn- fix-broken-graph
+  [graph]
+  (let [conn (worker-state/get-datascript-conn graph)
+        sqlite-db (worker-state/get-sqlite-conn graph)]
+    (when (and conn sqlite-db)
+      (rebuild-db-from-datoms! conn sqlite-db))))
 
 (comment
   (defn- gc-kvs-table!
@@ -180,7 +184,8 @@
         (when (and compare-result (not (neg? compare-result))) ; >= 64.8
           (worker-util/post-message :capture-error
                                     {:error "db-missing-addresses-v2"
-                                     :payload {:missing-addresses missing-addresses}}))))
+                                     :payload {:missing-addresses (str missing-addresses)
+                                               :db-schema-version (str version-in-db)}}))))
     missing-addresses))
 
 (defn upsert-addr-content!
@@ -770,6 +775,10 @@
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
   (get-all-page-titles-with-cache repo))
+
+(def-thread-api :thread-api/fix-broken-graph
+  [graph]
+  (fix-broken-graph graph))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs

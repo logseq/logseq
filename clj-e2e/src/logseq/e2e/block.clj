@@ -15,6 +15,7 @@
 
 (defn save-block
   [text]
+  (w/click util/editor-q)
   (w/fill util/editor-q text)
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 

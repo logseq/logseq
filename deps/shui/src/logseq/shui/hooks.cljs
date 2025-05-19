@@ -74,13 +74,14 @@
 
 (defn use-flow-state
   "Return values from `flow`, default init-value is nil"
-  ([flow] (use-flow-state nil flow))
-  ([init-value flow]
+  ([flow] (use-flow-state nil flow []))
+  ([init-value flow] (use-flow-state init-value flow []))
+  ([init-value flow deps]
    (let [[value set-value!] (use-state init-value)]
      (use-effect!
       #(c.m/run-task*
         (m/reduce
          (constantly nil)
          (m/ap (set-value! (m/?> flow)))))
-      [])
+      deps)
      value)))

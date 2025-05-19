@@ -1,4 +1,4 @@
-(ns logseq.e2e.reference-test
+(ns logseq.e2e.reference-basic-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.assert :as assert]

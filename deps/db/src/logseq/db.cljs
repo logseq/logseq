@@ -505,7 +505,6 @@
                e))))))
 
 (def built-in? entity-util/built-in?)
-(def get-classes-with-property db-db/get-classes-with-property)
 (def built-in-class-property? db-db/built-in-class-property?)
 (def private-built-in-page? db-db/private-built-in-page?)
 
