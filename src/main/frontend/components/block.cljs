@@ -656,7 +656,7 @@
 
    All page-names are sanitized except page-name-in-block"
   [state
-   {:keys [contents-page? whiteboard-page? html-export? other-position? show-unique-title? stop-click-event?
+   {:keys [contents-page? whiteboard-page? other-position? show-unique-title? stop-click-event?
            on-context-menu]
     :or {stop-click-event? true}
     :as config}
@@ -705,12 +705,14 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when @*mouse-down?
+                          (util/stop e)
                           (state/clear-edit!)
                           (when-not (or (:disable-click? config)
                                         (:disable-redirect? config))
                             (open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
+                            (util/stop e)
                             (state/clear-edit!)
                             (open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
@@ -730,7 +732,7 @@
             (last child)
             (let [{:keys [content children]} (last child)
                   page-name (subs content 2 (- (count content) 2))]
-              (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
+              (rum/with-key (page-reference (assoc config :children children) page-name nil) page-name))))
         (let [page-component (cond
                                (and label
                                     (string? label)
@@ -945,26 +947,22 @@
           config (assoc config :block entity)]
       (cond
         entity
-        (if (or (ldb/page? entity) (not (:block/page entity)))
-          (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-                whiteboard-page? (model/whiteboard-page? entity)
-                inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
-                modal? (shui-dialog/has-modal?)]
-            (if (and (not (util/mobile?))
-                     (not= page-name (:id config))
-                     (not (false? preview?))
-                     (not disable-preview?)
-                     (not modal?))
-              (page-preview-trigger (assoc config :children inner) entity)
-              inner))
-          (block-reference config (:block/uuid entity)
-                           (if (string? label)
-                             (gp-mldoc/inline->edn label (mldoc/get-default-config :markdown))
-                             label)))
+        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+              whiteboard-page? (model/whiteboard-page? entity)
+              inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
+              modal? (shui-dialog/has-modal?)]
+          (if (and (not (util/mobile?))
+                   (not= page-name (:id config))
+                   (not (false? preview?))
+                   (not disable-preview?)
+                   (not modal?))
+            (page-preview-trigger (assoc config :children inner) entity)
+            inner))
 
         (and (:block/name page) show-non-exists-page?)
         (page-inner config (merge
-                            {:block/title (:block/name page)
+                            {:block/title (or (:block/title page)
+                                              (:block/name page))
                              :block/name (:block/name page)}
                             page) children label)
 
@@ -1070,7 +1068,7 @@
 (declare block-positioned-properties)
 (rum/defc page-reference < rum/reactive db-mixins/query
   "Component for page reference"
-  [html-export? uuid-or-title* {:keys [nested-link? show-brackets? id] :as config} label]
+  [{:keys [html-export? nested-link? show-brackets? id] :as config} uuid-or-title* label]
   (when uuid-or-title*
     (let [uuid-or-title (if (string? uuid-or-title*)
                           (string/trim uuid-or-title*)
@@ -1084,17 +1082,20 @@
                          :contents-page? contents-page?
                          :show-icon? true?)
           asset? (some? (:logseq.property.asset/type block))
-          page? (ldb/page? block)
           brackets? (and (or show-brackets? nested-link?)
                          (not html-export?)
-                         (not contents-page?)
-                         page?)]
+                         (not contents-page?))]
       (when-not (= (:db/id block) (:db/id (:block config)))
         (cond
           (and asset? (img-audio-video? block))
           (asset-cp config block)
 
-          (or page? (:block/tags block))
+          (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
+          [:div.draw {:on-click (fn [e]
+                                  (.stopPropagation e))}
+           (excalidraw uuid-or-title (:block/uuid config))]
+
+          :else
           [:span.page-reference
            {:data-ref (str uuid-or-title)}
            (when brackets?
@@ -1111,17 +1112,7 @@
                               {:block/uuid uuid-or-title}
                               {:block/name uuid-or-title}))
            (when brackets?
-             [:span.text-gray-500.bracket page-ref/right-brackets])]
-
-          (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
-          [:div.draw {:on-click (fn [e]
-                                  (.stopPropagation e))}
-           (excalidraw uuid-or-title (:block/uuid config))]
-
-          :else
-          (page-cp config' (if (uuid? uuid-or-title)
-                             {:block/uuid uuid-or-title}
-                             {:block/name uuid-or-title})))))))
+             [:span.text-gray-500.bracket page-ref/right-brackets])])))))
 
 (defn- latex-environment-content
   [name option content]
@@ -1329,27 +1320,29 @@
 
 (rum/defc block-reference
   [config id label]
-  (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
-        [block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))
-        self-reference? (when (set? (:ref-set config))
-                          (contains? (:ref-set config) block-id))]
-    (hooks/use-effect!
-     (fn []
-       (p/let [block (db-async/<get-block (state/get-current-repo)
-                                          block-id
-                                          {:children? false
-                                           :skip-refresh? true})]
-         (set-block! block)))
-     [])
-    (when-not self-reference?
-      (if block
-        (let [config' (update config :ref-set (fn [s]
-                                                (let [bid (:block/uuid (:block config))]
-                                                  (if (nil? s)
-                                                    #{bid}
-                                                    (conj s bid block-id)))))]
-          (block-reference-aux config' block label))
-        (invalid-node-ref block-id)))))
+  (if (config/db-based-graph?)
+    (page-reference config id label)
+    (let [block-id (and id (if (uuid? id) id (parse-uuid id)))
+          [block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))
+          self-reference? (when (set? (:ref-set config))
+                            (contains? (:ref-set config) block-id))]
+      (hooks/use-effect!
+       (fn []
+         (p/let [block (db-async/<get-block (state/get-current-repo)
+                                            block-id
+                                            {:children? false
+                                             :skip-refresh? true})]
+           (set-block! block)))
+       [])
+      (when-not self-reference?
+        (if block
+          (let [config' (update config :ref-set (fn [s]
+                                                  (let [bid (:block/uuid (:block config))]
+                                                    (if (nil? s)
+                                                      #{bid}
+                                                      (conj s bid block-id)))))]
+            (block-reference-aux config' block label))
+          (invalid-node-ref block-id))))))
 
 (defn- render-macro
   [config name arguments macro-content format]
@@ -1477,7 +1470,7 @@
       (block-reference config id label))
 
     (not (string/includes? s "."))
-    (page-reference (:html-export? config) s config label)
+    (page-reference config s label)
 
     (path/protocol-url? s)
     (->elem :a {:href s
@@ -1509,9 +1502,9 @@
        (map-inline config label)))
 
     :else
-    (page-reference (:html-export? config) s config label)))
+    (page-reference config s label)))
 
-(defn- link-cp [config html-export? link]
+(defn- link-cp [config link]
   (let [{:keys [url label title metadata full_text]} link]
     (match url
       ["Block_ref" id]
@@ -1535,7 +1528,7 @@
           (let [label* (if (seq (mldoc/plain->text label)) label nil)]
             (if (and (string? page) (string/blank? page))
               [:span (ref/->page-ref page)]
-              (page-reference (:html-export? config) page config label*)))))
+              (page-reference config page label*)))))
 
       ["Embed_data" src]
       (image-link config url src nil metadata full_text)
@@ -1557,7 +1550,7 @@
                 block (db/entity [:block/uuid id])]
             (if (:block/pre-block? block)
               (let [page (:block/page block)]
-                (page-reference html-export? (:block/name page) config label))
+                (page-reference config (:block/name page) label))
               (block-reference config (:link path) label)))
 
           (= protocol "file")
@@ -1979,7 +1972,7 @@
     (nested-link config html-export? link)
 
     ["Link" link]
-    (link-cp config html-export? link)
+    (link-cp config link)
 
     [(:or "Verbatim" "Code") s]
     [:code s]

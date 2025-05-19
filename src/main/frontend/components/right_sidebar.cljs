@@ -38,10 +38,11 @@
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
-    (page/page-cp {:parameters  {:path {:name (str id)}}
-                   :sidebar?    true
-                   :sidebar/idx idx
-                   :repo        repo})))
+    [:div.mt-2
+     (page/page-cp {:parameters  {:path {:name (str id)}}
+                    :sidebar?    true
+                    :sidebar/idx idx
+                    :repo        repo})]))
 
 (defn get-scrollable-container
   []
