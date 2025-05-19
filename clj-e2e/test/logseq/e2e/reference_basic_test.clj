@@ -43,7 +43,7 @@
     (b/wait-editor-text "b2")
     (b/paste)
     (util/exit-edit)
-    (b/assert-blocks-visible ["b1b2" "b2b1"])))
+    (b/assert-blocks-visible ["b1[[b2]]" "b2[[b1]]"])))
 
 (deftest parent-reference
   (testing "parent reference"
@@ -59,7 +59,7 @@
     (b/wait-editor-text "b2")
     (b/paste)
     (util/exit-edit)
-    (b/assert-blocks-visible ["b1b2" "b2b1"])))
+    (b/assert-blocks-visible ["b1[[b2]]" "b2[[b1]]"])))
 
 (deftest cycle-reference
   (testing "cycle reference"
@@ -80,6 +80,6 @@
     (assert/assert-editor-mode)
     (b/paste)
     (util/exit-edit)
-    (b/assert-blocks-visible ["b1b3b2" "b2b1b3" "b3b2b1"])))
+    (b/assert-blocks-visible ["b1[[b3[[b2]]]]" "b2[[b1[[b3]]]]" "b3[[b2[[b1]]]]"])))
 
 ;; TODO: page references
