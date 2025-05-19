@@ -10,6 +10,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]))
 
@@ -222,13 +223,9 @@ DROP TRIGGER IF EXISTS blocks_au;
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
-      ;; Should properties be included in the search indice?
-      ;; It could slow down the search indexing, also it can be confusing
-      ;; if the showing properties are not useful to users.
-      ;; (let [content (if (and db-based? (seq (:block/properties block)))
-      ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
-      ;;                 content)])
-    (let [title (ldb/get-title-with-parents (assoc block :block.temp/search? true))]
+    (let [title (-> block
+                    (update :block/title ldb/get-title-with-parents)
+                    db-content/recur-replace-uuid-in-block-title)]
       (when uuid
         {:id (str uuid)
          :page (str (or (:block/uuid page) uuid))

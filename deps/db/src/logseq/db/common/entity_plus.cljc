@@ -21,7 +21,7 @@
     ;; File graph only attributes. Can these be removed if this is only called in db graphs?
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
-    :block.temp/ast-title :block.temp/search?
+    :block.temp/ast-title
     :block.temp/fully-loaded? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
@@ -91,18 +91,16 @@
         db-based? (db-based-graph? db)]
     (if (and db-based? (entity-util/journal? e))
       (get-journal-title db e)
-      (let [search? (get (.-kv e) :block.temp/search?)]
-        (or
-         (when-not (and search? (keyword-identical? k :block/title))
-           (get (.-kv e) k))
-         (let [result (lookup-entity e k default-value)
-               ;; Replace title for pages only, otherwise it'll recursively
-               ;; replace block id refs if there're cycle references of blocks
-               refs (:block/refs e)
-               result' (if (and (string? result) refs)
-                         (db-content/id-ref->title-ref result refs search?)
-                         result)]
-           (or result' default-value)))))))
+      (or
+       (get (.-kv e) k)
+       (let [result (lookup-entity e k default-value)
+             ;; Replace title for pages only, otherwise it'll recursively
+             ;; replace block id refs if there're cycle references of blocks
+             refs (:block/refs e)
+             result' (if (and (string? result) refs)
+                       (db-content/id-ref->title-ref result refs)
+                       result)]
+         (or result' default-value))))))
 
 (defn- lookup-kv-with-default-value
   [db ^Entity e k default-value]
@@ -162,12 +160,12 @@
 
            ;; cache :block/title
            :block/title
-           (or (when-not (get (.-kv e) :block.temp/search?)
-                 (:block.temp/cached-title @(.-cache e)))
-               (let [title (get-block-title e k default-value)]
-                 (vreset! (.-cache e) (assoc @(.-cache e)
-                                             :block.temp/cached-title title))
-                 title))
+           (or
+            (:block.temp/cached-title @(.-cache e))
+            (let [title (get-block-title e k default-value)]
+              (vreset! (.-cache e) (assoc @(.-cache e)
+                                          :block.temp/cached-title title))
+              title))
 
            :block/_parent
            (->> (lookup-entity e k default-value)
@@ -191,7 +189,7 @@
   (let [v @(.-cache this)
         v' (if (:block/title v)
              (assoc v :block/title
-                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this) (:block.temp/search? this)))
+                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
              v)]
     (concat (seq v')
             (seq (.-kv this)))))
