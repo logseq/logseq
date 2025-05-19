@@ -2046,7 +2046,6 @@
         selected? (contains? selected block-id)]
     (when-not selected?
       (util/clear-selection!)
-      (state/conj-selection-block! (gdom/getElement block-id) :down)
       (editor-handler/highlight-block! uuid)))
 
   (editor-handler/block->data-transfer! uuid event false)
@@ -2165,7 +2164,7 @@
                                         (reset! *bullet-dragging? true)
                                         (util/stop-propagation event)
                                         (bullet-drag-start event block uuid block-id))
-                       :on-drag-end (fn [_]
+                       :on-drag-end (fn [_e]
                                       (reset! *bullet-dragging? false))
                        :blockid (str uuid)
                        :class (str (when collapsed? "bullet-closed")
