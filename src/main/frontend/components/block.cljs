@@ -1071,7 +1071,10 @@
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
   (when uuid-or-title*
     (let [uuid-or-title (if (string? uuid-or-title*)
-                          (string/trim uuid-or-title*)
+                          (let [str-id (string/trim uuid-or-title*)]
+                            (if (util/uuid-string? str-id)
+                              (parse-uuid str-id)
+                              str-id))
                           uuid-or-title*)
           self-reference? (when (set? (:ref-set config*))
                             (contains? (:ref-set config*) uuid-or-title))]
@@ -1079,8 +1082,8 @@
         (let [config (update config* :ref-set (fn [s]
                                                 (let [bid (:block/uuid (:block config*))]
                                                   (if (nil? s)
-                                                    #{uuid-or-title*}
-                                                    (conj s bid uuid-or-title*)))))
+                                                    #{bid}
+                                                    (conj s bid uuid-or-title)))))
               show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
               contents-page? (= "contents" (string/lower-case (str id)))
               block* (db/get-page uuid-or-title)
