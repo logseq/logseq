@@ -47,10 +47,8 @@
   "graph: the target graph to switch to"
   [graph opts]
   (p/do!
-    (repo-handler/restore-and-setup-repo! graph)
-    ;(graph-switch graph)
-    (state/set-current-repo! graph)
-    (state/set-state! :sync-graph/init? false)))
+    (repo-handler/restore-and-setup-repo! graph {:ignore-style? true})
+    (state/set-current-repo! graph)))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (state/set-state! :db/async-queries {})

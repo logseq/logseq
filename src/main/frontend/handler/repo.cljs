@@ -76,7 +76,8 @@
    (when (config/global-config-enabled?)
      (global-config-handler/restore-global-config!))
     ;; Don't have to unlisten the old listener, as it will be destroyed with the conn
-   (ui-handler/add-style-if-exists!)
+   (when-not (true? (:ignore-style? opts))
+     (ui-handler/add-style-if-exists!))
    (when-not config/publishing?
      (state/set-db-restoring! false))))
 
