@@ -707,8 +707,7 @@
                         (when @*mouse-down?
                           (util/stop e)
                           (state/clear-edit!)
-                          (when-not (or (:disable-click? config)
-                                        (:disable-redirect? config))
+                          (when-not (:disable-click? config)
                             (open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
@@ -3186,7 +3185,6 @@
         parents (if more? (take-last level-limit parents) parents)
         config (assoc config
                       :breadcrumb? true
-                      :disable-redirect? true
                       :disable-preview? true
                       :stop-click-event? false)]
     (when show?
