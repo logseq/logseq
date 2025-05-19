@@ -133,7 +133,7 @@
                                                  :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id pos format)))
 
-(rum/defc page-search-aux
+(rum/defc ^:large-vars/cleanup-todo page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)

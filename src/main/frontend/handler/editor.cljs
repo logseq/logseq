@@ -35,7 +35,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -44,6 +43,7 @@
             [frontend.util.file-based.drawer :as drawer]
             [frontend.util.keycode :as keycode]
             [frontend.util.list :as list]
+            [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
@@ -1249,8 +1249,10 @@
     (when-let [timeout @*action-bar-timeout]
       (js/clearTimeout timeout))
     (state/pub-event! [:editor/hide-action-bar])
-    (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
-      (reset! *action-bar-timeout timeout))))
+
+    (when (seq (state/get-selection-blocks))
+      (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
+        (reset! *action-bar-timeout timeout)))))
 
 (defn- select-block-up-down
   [direction]
