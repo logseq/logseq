@@ -31,7 +31,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.property :as gp-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]

@@ -4,8 +4,7 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-util :as common-entity-util]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.common.entity-util :as common-entity-util]))
 
 ;; [[uuid]]
 (def id-ref-pattern
