@@ -211,7 +211,6 @@
        (p/let [item (<build-sidebar-item repo idx db-id block-type *db-id init-key)]
          (set-item! item)))
      [])
-    (prn :debug :item item)
     (when item
       [:<>
        (when (zero? idx) (drop-indicator (dec idx) drag-to))
