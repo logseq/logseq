@@ -269,7 +269,7 @@
       ;; ask user to choose a folder again when access expires
       (p/let [handle (try
                        (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
-                       (catch :defult _e
+                       (catch :default _e
                          (throw (ex-info "Backup file handle no longer exists" {:repo repo}))))
               [_folder handle] (try
                                  (utils/verifyPermission handle true)
