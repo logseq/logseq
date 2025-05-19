@@ -1,7 +1,7 @@
 {:deps
  ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {datascript/datascript {:git/url "https://github.com/logseq/datascript" ;; fork
-                         :sha     "94b68a02ad8e7354c84c1b3cf3a1b33e19258f41"}
+                         :sha     "4b1f15f05a6b4a718a62c247956206480e361ea6"}
   com.cognitect/transit-cljs {:mvn/version "0.8.280"}
 
   ;; Any other deps should be added here and to nbb.edn
