@@ -133,7 +133,21 @@
                                                  :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id pos format)))
 
-(rum/defc ^:large-vars/cleanup-todo page-search-aux
+(defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
+  (if (or (db/page-exists? q (if db-tag?
+                               #{:logseq.class/Tag}
+                               ;; Page existence here should be the same as entity-util/page?.
+                                ;; Don't show 'New page' if a page has any of these tags
+                               db-class/page-classes))
+          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+    partial-matched-pages
+    (if db-tag?
+      (concat [{:block/title (str (t :new-tag) " " q)}]
+              partial-matched-pages)
+      (cons {:block/title (str (t :new-page) " " q)}
+            partial-matched-pages))))
+
+(rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
@@ -156,25 +170,11 @@
                                          date/nlp-pages)
                                     (take 10))))
                            ;; reorder, shortest and starts-with first.
-                           (let [matched-pages-with-new-page
-                                 (fn [partial-matched-pages]
-                                   (if (or (db/page-exists? q (if db-tag?
-                                                                #{:logseq.class/Tag}
-                                                                ;; Page existence here should be the same as entity-util/page?.
-                                                                ;; Don't show 'New page' if a page has any of these tags
-                                                                db-class/page-classes))
-                                           (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
-                                     partial-matched-pages
-                                     (if db-tag?
-                                       (concat [{:block/title (str (t :new-tag) " " q)}]
-                                               partial-matched-pages)
-                                       (cons {:block/title (str (t :new-page) " " q)}
-                                             partial-matched-pages))))]
-                             (if (and (seq matched-pages)
-                                      (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
-                               (cons (first matched-pages)
-                                     (matched-pages-with-new-page (rest matched-pages)))
-                               (matched-pages-with-new-page matched-pages))))]
+                           (if (and (seq matched-pages)
+                                    (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
+                             (cons (first matched-pages)
+                                   (matched-pages-with-new-page (rest matched-pages) db-tag? q))
+                             (matched-pages-with-new-page matched-pages db-tag? q)))]
       [:<>
        (ui/auto-complete
         matched-pages'
