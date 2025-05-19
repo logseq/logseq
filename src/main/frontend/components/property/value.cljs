@@ -33,6 +33,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -748,7 +749,7 @@
                              id (:db/id node)
                              [header label] (if (integer? id)
                                               (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (:block/title node)
+                                                                 (db-content/recur-replace-uuid-in-block-title node)
                                                                  (block-handler/block-unique-title node))
                                                     title (subs node-title 0 256)
                                                     node (or (db/entity id) node)
@@ -1092,10 +1093,7 @@
        (closed-value-item value opts)
 
        (or (entity-util/page? value)
-           (and (seq (:block/tags value))
-                ;; FIXME: page-cp should be renamed to node-cp and
-                ;; support this case and maybe other complex cases.
-                (not (string/includes? (:block/title value) "[["))))
+           (seq (:block/tags value)))
        (when value
          (let [opts {:disable-preview? true
                      :tag? tag?

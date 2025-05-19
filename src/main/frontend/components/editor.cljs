@@ -31,6 +31,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.graph-parser.property :as gp-property]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -183,7 +184,9 @@
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
                         (let [block' (if-let [id (:block/uuid block)]
-                                       (or (db/entity [:block/uuid id]) block)
+                                       (if-let [e (db/entity [:block/uuid id])]
+                                         (assoc e :block/title (:block/title block))
+                                         block)
                                        block)]
                           [:div.flex.flex-col
                            (when (and (not (or db-tag? (:page? block) (ldb/page? block)))
@@ -218,10 +221,11 @@
                                  (ui/icon "letter-n" {:size 14}))])
 
                             (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block'))]
+                                          (let [target (first (:block/_alias block'))
+                                                title (:block/title block)]
                                             (if (ldb/class? target)
-                                              (str (:block/title block') " -> alias: " (:block/title target))
-                                              (:block/title block')))
+                                              (str title " -> alias: " (:block/title target))
+                                              title))
                                           (block-handler/block-unique-title block'))]
                               (search-handler/highlight-exact-query title q))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?

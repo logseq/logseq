@@ -182,11 +182,12 @@
                            result-refs' (apply conj result-refs next-refs)]
                        (if (= (count result-refs') (count result-refs))
                          result-refs
-                         (recur (apply conj result-refs next-refs) next-refs (inc depth))))))]
-     (loop [result (id-ref->title-ref (:block/title ent) ref-set {:replace-block-id? true})
+                         (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
+         opts {:replace-block-id? true}]
+     (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
             last-result nil
             depth 0]
        (if (or (>= depth max-depth)
                (= last-result result))
          result
-         (recur (id-ref->title-ref result ref-set) result (inc depth)))))))
+         (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))))
