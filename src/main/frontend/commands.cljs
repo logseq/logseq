@@ -13,12 +13,12 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property.file :as property-file]
-            [frontend.util.ref :as ref]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.file-based.priority :as priority]
+            [frontend.util.ref :as ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
@@ -473,7 +473,7 @@
         commands)
 
 ;; Allow user to modify or extend, should specify how to extend.
-      
+
       (state/get-commands)
       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
                                                (mapv #(vec (concat % [nil :icon/puzzle])))))]
@@ -748,11 +748,7 @@
                            (string/replace-first (subs edit-content pos)
                                                  (file-based-status/marker-pattern format)
                                                  (str marker " ")))]
-        (state/set-edit-content! input-id new-value)
-        (let [new-pos (compute-pos-delta-when-change-marker
-                       edit-content marker (dec slash-pos))]
-          ;; TODO: any performance issue?
-          (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
+        (state/set-edit-content! input-id new-value)))))
 
 (defn- db-based-set-status
   [status]
