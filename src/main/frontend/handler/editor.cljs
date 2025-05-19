@@ -1816,9 +1816,13 @@
                             (not (and
                                   (config/db-based-graph? repo)
                                   (re-find #"#\S+" value))))
-                   ;; don't auto-save for page's properties block
+                 ; don't auto-save for page's properties block
                    (save-current-block! {:skip-properties? true})))
                450)))))
+
+(defn- start-of-new-word?
+  [input pos]
+  (contains? #{" " "\t"} (get (.-value input) (- pos 2))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)
@@ -1840,8 +1844,12 @@
       (p/let [_ (state/pub-event! [:editor/toggle-own-number-list edit-block])]
         (state/set-edit-content! input-id ""))
 
-      (= last-prev-input-char last-input-char commands/command-trigger)
-      (state/clear-editor-action!)
+      (and (= last-input-char commands/command-trigger)
+           (or (re-find #"(?m)^/" (str (.-value input))) (start-of-new-word? input pos)))
+      (do
+        (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
+        (commands/reinit-matched-commands!)
+        (state/set-editor-show-commands!))
 
       (and (= last-input-char last-prev-input-char commands/colon)
            (or (nil? prev-prev-input-char)
@@ -1872,7 +1880,11 @@
       (state/clear-editor-action!)
 
       ;; Open "Search page or New page" auto-complete
-      (= last-input-char commands/hashtag)
+      (and (= last-input-char commands/hashtag)
+             ;; Only trigger at beginning of a line, before whitespace or after a reference
+           (or (re-find #"(?m)^#" (str (.-value input)))
+               (start-of-new-word? input pos)
+               (and db-based? (= page-ref/right-brackets (common-util/safe-subs (str (.-value input)) (- pos 3) (dec pos))))))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (state/set-editor-last-pos! pos)
@@ -2884,15 +2896,6 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
-        (and (= key commands/command-trigger)
-             ;; FIXME: surround-by? doesn't work on `handle-last-input`
-             (not (or (surround-by? input "http:" "")
-                      (surround-by? input "https:" ""))))
-        (do
-          (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
-          (commands/reinit-matched-commands!)
-          (state/set-editor-show-commands!))
-
         (and (= :page-search (state/get-editor-action))
              (= key commands/hashtag))
         (do
@@ -3011,7 +3014,7 @@
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)}))
       (when (and (not editor-action) (not non-enter-processed?))
         (cond
-          ;; When you type text inside square brackets
+         ;; When you type text inside square brackets
           (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp" "Escape"} k))
                (wrapped-by? input page-ref/left-brackets page-ref/right-brackets))
           (let [orig-pos (cursor/get-caret-pos input)
