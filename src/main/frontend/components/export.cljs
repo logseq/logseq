@@ -12,7 +12,6 @@
             [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
-            [frontend.idb :as idb]
             [frontend.image :as image]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -33,51 +32,55 @@
     [:div.flex.flex-col.gap-4
      [:div.font-medium.opacity-50
       "Schedule backup"]
-     (if backup-folder
-       [:div.flex.flex-row.items-center.gap-1.text-sm
-        [:div.opacity-50 (str "Backup folder:")]
-        backup-folder
-        (shui/button
-         {:variant :ghost
-          :class "!px-1 !py-1"
-          :title "Change backup folder"
-          :on-click (fn []
-                      (p/do!
-                       (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
-                       (reset! *backup-folder nil)))
-          :size :sm}
-         (ui/icon "edit"))]
-       (shui/button
-        {:variant :default
-         :on-click (fn []
-                     (p/let [result (utils/openDirectory #js {:mode "readwrite"})
-                             handle (first result)
-                             folder-name (.-name handle)]
-                       (idb/set-item!
-                        (str "handle/" (js/btoa repo) "/" folder-name) handle)
-                       (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
-                       (reset! *backup-folder folder-name)))}
-        "Set backup folder first"))
-     [:div.opacity-50.text-sm
-      "Backup will be created every hour."]
+     (if (utils/nfsSupported)
+       [:<>
+        (if backup-folder
+          [:div.flex.flex-row.items-center.gap-1.text-sm
+           [:div.opacity-50 (str "Backup folder:")]
+           backup-folder
+           (shui/button
+            {:variant :ghost
+             :class "!px-1 !py-1"
+             :title "Change backup folder"
+             :on-click (fn []
+                         (p/do!
+                          (db/transact! [[:db/retractEntity :logseq.kv/graph-backup-folder]])
+                          (reset! *backup-folder nil)))
+             :size :sm}
+            (ui/icon "edit"))]
+          (shui/button
+           {:variant :default
+            :on-click (fn []
+                        (p/let [[folder-name _handle] (export/choose-backup-folder repo)]
+                          (reset! *backup-folder folder-name)))}
+           "Set backup folder first"))
+        [:div.opacity-50.text-sm
+         "Backup will be created every hour."]
 
-     (when backup-folder
-       (shui/button
-        {:variant :default
-         :on-click (fn []
-                     (->
-                      (p/let [result (export/backup-db-graph repo)]
-                        (case result
-                          true
-                          (notification/show! "Backup successful!" :success)
-                          :graph-not-changed
-                          (notification/show! "Graph has not been updated since last export." :success)
-                          nil)
-                        (export/auto-db-backup! repo {:backup-now? false}))
-                      (p/catch (fn [error]
-                                 (println "Failed to backup.")
-                                 (js/console.error error)))))}
-        "Backup now"))]))
+        (when backup-folder
+          (shui/button
+           {:variant :default
+            :on-click (fn []
+                        (->
+                         (p/let [result (export/backup-db-graph repo :set-folder)]
+                           (case result
+                             true
+                             (notification/show! "Backup successful!" :success)
+                             :graph-not-changed
+                             (notification/show! "Graph has not been updated since last export." :success)
+                             nil)
+                           (export/auto-db-backup! repo {:backup-now? false}))
+                         (p/catch (fn [error]
+                                    (println "Failed to backup.")
+                                    (js/console.error error)))))}
+           "Backup now"))]
+       [:div
+        [:span "Your browser doesn't support "]
+        [:a
+         {:href "https://developer.chrome.com/docs/capabilities/web-apis/file-system-access"
+          :target "_blank"}
+         "The File System Access API"]
+        [:span ", please switch to a Chromium-based browser."]])]))
 
 (rum/defc export
   []
@@ -133,7 +136,7 @@
             "Export debug transit file"]
            [:p.text-sm.opacity-70.mb-0 "Any sensitive data will be removed in the exported transit file, you can send it to us for debugging."]])
 
-        (when (and db-based? util/web-platform? (utils/nfsSupported))
+        (when (and db-based? util/web-platform?)
           [:div
            [:hr]
            (auto-backup)])]])))
