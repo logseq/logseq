@@ -445,11 +445,6 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (ldb/journal? (ldb/get-page (conn/get-db) page-name)))
 
-(defn get-classes-with-property
-  "Get classes which have given property as a class property"
-  [property-id]
-  (ldb/get-classes-with-property (conn/get-db) property-id))
-
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   []

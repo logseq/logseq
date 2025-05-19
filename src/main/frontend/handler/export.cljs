@@ -250,11 +250,33 @@
                (.remove (.-handle file))))
            old-versioned-files)))
 
-(defn backup-db-graph
+(defn choose-backup-folder
   [repo]
+  (p/let [result (utils/openDirectory #js {:mode "readwrite"})
+          handle (first result)
+          folder-name (.-name handle)]
+    (js/console.dir handle)
+    (idb/set-item!
+     (str "handle/" (js/btoa repo) "/" folder-name) handle)
+    (db/transact! [(ldb/kv :logseq.kv/graph-backup-folder folder-name)])
+    [folder-name handle]))
+
+(defn backup-db-graph
+  [repo _backup-type]
   (when (and repo (= repo (state/get-current-repo)))
     (when-let [backup-folder (ldb/get-key-value (db/get-db repo) :logseq.kv/graph-backup-folder)]
-      (p/let [handle (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
+      ;; ensure file handle exists
+      ;; ask user to choose a folder again when access expires
+      (p/let [handle (try
+                       (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
+                       (catch :defult _e
+                         (throw (ex-info "Backup file handle no longer exists" {:repo repo}))))
+              [_folder handle] (try
+                                 (utils/verifyPermission handle true)
+                                 [backup-folder handle]
+                                 (catch :default e
+                                   (js/console.error e)
+                                   (choose-backup-folder repo)))
               repo-name (common-sqlite/sanitize-db-name repo)]
         (if handle
           (->
@@ -297,9 +319,9 @@
     (when (and (config/db-based-graph? repo) util/web-platform? (utils/nfsSupported))
       (cancel-db-backup!)
 
-      (when backup-now? (backup-db-graph repo))
+      (when backup-now? (backup-db-graph repo :backup-now))
 
     ;; run backup every hour
-      (let [interval (js/setInterval #(backup-db-graph repo)
+      (let [interval (js/setInterval #(backup-db-graph repo :auto)
                                      (* 1 60 60 1000))]
         (reset! *backup-interval interval)))))

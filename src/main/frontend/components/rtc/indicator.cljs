@@ -1,7 +1,6 @@
 (ns frontend.components.rtc.indicator
   "RTC state indicator"
-  (:require [cljs-time.core :as t]
-            [clojure.pprint :as pprint]
+  (:require [clojure.pprint :as pprint]
             [frontend.common.missionary :as c.m]
             [frontend.db :as db]
             [frontend.flows :as flows]
@@ -117,7 +116,6 @@
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
      (assets-progressing)
-
      ;; FIXME: What's the type for downloaded log?
      (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
        (when-let [time (:created-at latest-log)]
@@ -139,45 +137,17 @@
              pprint/pprint
              with-out-str)]])]))
 
-(defn- downloading?
-  [detail-info]
-  (when-let [{:keys [created-at sub-type]} (first (:download-logs detail-info))]
-    (and (not= :download-completed sub-type)
-         (> 600 ;; 10min
-            (/ (- (t/now) created-at) 1000)))))
-
-(defn- uploading?
-  [detail-info]
-  (when-let [{:keys [created-at sub-type]} (first (:upload-logs detail-info))]
-    (and (not= :upload-completed sub-type)
-         (> 600
-            (/ (- (t/now) created-at) 1000)))))
-
 (rum/defc indicator
   []
   (let [detail-info                 (hooks/use-flow-state (m/watch *detail-info))
         _                           (hooks/use-flow-state flows/current-login-user-flow)
         online?                     (hooks/use-flow-state flows/network-online-event-flow)
-        uploading?'                 (uploading? detail-info)
-        downloading?'               (downloading? detail-info)
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
     [:div.cp__rtc-sync
      [:div.hidden {:data-testid "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
-      (when downloading?'
-        (shui/button
-         {:class   "opacity-50"
-          :variant :ghost
-          :size    :sm}
-         "Downloading..."))
-      (when uploading?'
-        (shui/button
-         {:class   "opacity-50"
-          :variant :ghost
-          :size    :sm}
-         "Uploading..."))
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)
                                                             (details online?)
@@ -186,3 +156,86 @@
                                                          :on (and online? (= :open rtc-state))
                                                          :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
                                                          :queuing (pos? unpushed-block-update-count)}])})]]))
+
+(def ^:private *accumulated-download-logs (atom []))
+(c.m/run-background-task
+ ::update-accumulated-download-logs
+ (m/reduce
+  (fn [_ log]
+    (when log
+      (if (= :download-completed (:sub-type log))
+        (reset! *accumulated-download-logs [])
+        (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))
+  rtc-flows/rtc-download-log-flow))
+
+(def ^:private *accumulated-upload-logs (atom []))
+(c.m/run-background-task
+ ::update-accumulated-upload-logs
+ (m/reduce
+  (fn [_ log]
+    (when log
+      (if (= :upload-completed (:sub-type log))
+        (reset! *accumulated-upload-logs [])
+        (swap! *accumulated-upload-logs (fn [logs] (take 20 (conj logs log)))))))
+  rtc-flows/rtc-upload-log-flow))
+
+(defn- accumulated-logs-flow
+  [*acc-logs]
+  (->> (m/watch *acc-logs)
+       (m/eduction
+        (map (fn [logs]
+               (when-let [first-log (first logs)]
+                 (let [graph-uuid (:graph-uuid first-log)]
+                   (take-while (fn [log] (= graph-uuid (:graph-uuid log))) logs))))))))
+
+(rum/defc downloading-logs
+  []
+  (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
+        download-logs (hooks/use-flow-state download-logs-flow)]
+    (when (seq download-logs)
+      [:div
+       (for [log download-logs]
+         [:div (:message log)])])))
+
+(rum/defc uploading-logs
+  []
+  (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
+        upload-logs (hooks/use-flow-state upload-logs-flow)]
+    (when (seq upload-logs)
+      [:div
+       (for [log upload-logs]
+         [:div (:message log)])])))
+
+(def ^:private downloading?-flow
+  (->> rtc-flows/rtc-download-log-flow
+       (m/eduction (map (fn [log] (not= :download-completed (:sub-type log)))))
+       (c.m/continue-flow false)))
+
+(rum/defc downloading-detail
+  []
+  (when (true? (hooks/use-flow-state downloading?-flow))
+    (shui/button
+     {:class   "opacity-50"
+      :variant :ghost
+      :size    :sm
+      :on-click #(shui/popup-show! (.-target %)
+                                   (downloading-logs)
+                                   {:align "end"})}
+     "Downloading...")))
+
+(def ^:private upload?-flow
+  (->> rtc-flows/rtc-upload-log-flow
+       (m/eduction (map (fn [log] (not= :upload-completed (:sub-type log)))))
+       (c.m/continue-flow false)))
+
+(rum/defc uploading-detail
+  []
+  (when (true? (hooks/use-flow-state upload?-flow))
+    (shui/button
+     {:class   "opacity-50"
+      :variant :ghost
+      :size    :sm
+      :on-click #(shui/popup-show! (.-target %)
+                                   (uploading-logs)
+                                   {:align "end"})}
+     "Uploading...")))
