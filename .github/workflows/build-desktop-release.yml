@@ -43,8 +43,8 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
-    - cron: '0 14 * * MON-FRI'
+  # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
+  #   - cron: '0 14 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
