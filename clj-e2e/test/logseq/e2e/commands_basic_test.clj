@@ -43,7 +43,7 @@
       (k/enter)
       (is (string/includes? (util/get-edit-content) "[["))
       (util/exit-edit)
-      (is (= "b1" (util/get-text ".block-ref"))))))
+      (is (= "b1" (.textContent (second (w/query "a.page-ref"))))))))
 
 (deftest link-test
   (testing "/link"
