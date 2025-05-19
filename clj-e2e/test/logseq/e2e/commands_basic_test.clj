@@ -1,4 +1,4 @@
-(ns logseq.e2e.commands-test
+(ns logseq.e2e.commands-basic-test
   (:require
    [clj-time.core :as t]
    [clj-time.local :as tl]
