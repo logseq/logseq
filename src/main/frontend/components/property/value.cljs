@@ -31,6 +31,7 @@
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
+            [logseq.common.util :as common-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
@@ -614,20 +615,29 @@
       :else
       id)))
 
+(defn- sort-select-items
+  [property selected-choices items]
+  (if (:property/closed-values property)
+    items                   ; sorted by order
+    (sort
+     (common-util/by-sorting
+      [{:get-value db-property/property-value-content
+        :asc? true}
+       {:get-value (fn [item] (selected-choices (:db/id item)))
+        :asc? false}])
+     items)))
+
 (defn- select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
   (let [selected-choices (->> selected-choices
                               (remove nil?)
-                              (remove #(= :logseq.property/empty-placeholder %)))
+                              (remove #(= :logseq.property/empty-placeholder %))
+                              set)
         clear-value (str "No " (:block/title property))
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
-        items (if (:property/closed-values property)
-                items                   ; sorted by order
-                (sort-by (fn [item]
-                           (db-property/property-value-content item))
-                         items))
+        items (sort-select-items property selected-choices items)
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
