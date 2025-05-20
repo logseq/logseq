@@ -188,6 +188,21 @@
                                                :db-schema-version (str version-in-db)}}))))
     missing-addresses))
 
+(def get-to-delete-unused-addresses-sql
+  "WITH to_delete(addr) AS (
+     SELECT value
+     FROM json_each(?)
+   ),
+  referenced(addr) AS (
+    SELECT json_each.value
+    FROM kvs
+    JOIN json_each(kvs.addresses)
+    WHERE kvs.addr NOT IN (SELECT addr FROM to_delete)
+      AND json_each.value IN (SELECT addr FROM to_delete)
+  )
+  SELECT addr FROM to_delete
+  WHERE addr NOT IN (SELECT addr FROM referenced)")
+
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data delete-addrs*]
@@ -198,19 +213,19 @@
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                                         :bind item}))))
     (when (seq delete-addrs)
-      (.transaction db (fn [tx]
-                         (doseq [addr delete-addrs]
-                           (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                          :bind #js [addr]}))))
+      (let [result (.exec db #js {:sql get-to-delete-unused-addresses-sql
+                                  :bind (js/JSON.stringify (clj->js delete-addrs))
+                                  :rowMode "array"})
+            non-refed-addrs (map #(aget % 0) result)]
+        (when (seq non-refed-addrs)
+          (.transaction db (fn [tx]
+                             (doseq [addr non-refed-addrs]
+                               (.exec tx #js {:sql "Delete from kvs where addr = ?"
+                                              :bind #js [addr]}))))))
       (let [missing-addrs (when worker-util/dev?
                             (seq (find-missing-addresses nil db {:delete-addrs delete-addrs})))]
-        (if (seq missing-addrs)
-          (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false])
-          (when (seq delete-addrs)
-            (.transaction db (fn [tx]
-                               (doseq [addr delete-addrs]
-                                 (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                                :bind #js [addr]}))))))))))
+        (when (seq missing-addrs)
+          (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false]))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"

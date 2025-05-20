@@ -12,6 +12,7 @@
             [logseq.e2e.plugins-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
+            [logseq.e2e.rtc-extra-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
             [wally.repl :as repl]))

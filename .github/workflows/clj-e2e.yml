@@ -83,10 +83,10 @@ jobs:
           ls -lR ./public
 
       - name: Run e2e tests
-        run: cd clj-e2e && bb dev
+        run: cd clj-e2e && timeout 30m bb dev
         env:
           DEBUG: "pw:api"
-          
+
       - name: Collect screenshots
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4

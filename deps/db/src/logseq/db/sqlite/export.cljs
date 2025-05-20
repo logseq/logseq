@@ -814,18 +814,23 @@
 (defn- patch-invalid-keywords
   "Fixes invalids keywords whose name start with a number e.g. :user.property/2ndsomething"
   [m]
-  (walk/postwalk
-   (fn [e]
-     (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
-       ;; Copied from create-db-ident-from-name since this may be shortlived
-       (let [sanitized-kw (keyword (namespace e)
-                                   (->> (string/replace-first (name e) #"^(\d)" "NUM-$1")
-                                        (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
-                                        (apply str)))]
-        ;;  (when (not= sanitized-kw e) (prn :sanitize e :-> sanitized-kw))
-         (if (not= sanitized-kw e) sanitized-kw e))
-       e))
-   m))
+  (let [initial-version (:kv/value (first (filter #(= :logseq.kv/graph-initial-schema-version (:db/ident %))
+                                                  (::kv-values m))))]
+    ;; Only ignore patch if initial version is > 64.8 since this fix started with 64.9
+    (if (some-> initial-version (db-schema/compare-schema-version {:major 64 :minor 8}) pos?)
+      m
+      (walk/postwalk
+       (fn [e]
+         (if (and (keyword? e) (some-> (namespace e) (string/starts-with? "user.")))
+           ;; Copied from create-db-ident-from-name since this may be shortlived
+           (let [sanitized-kw (keyword (namespace e)
+                                       (->> (string/replace-first (name e) #"^(\d)" "NUM-$1")
+                                            (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
+                                            (apply str)))]
+             ;; (when (not= sanitized-kw e) (prn :sanitize e :-> sanitized-kw))
+             (if (not= sanitized-kw e) sanitized-kw e))
+           e))
+       m))))
 
 (defn- ensure-export-is-valid
   "Checks that export map is usable by sqlite.build including checking that
