@@ -19,7 +19,7 @@
             result (state/<invoke-db-worker :thread-api/search-build-blocks-indice repo)
             blocks (if file-based?
                      (->> result
-                            ;; remove built-in properties from content
+                          ;; remove built-in properties from content
                           (map
                            #(update % :content
                                     (fn [content]
