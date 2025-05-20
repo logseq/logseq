@@ -2,23 +2,23 @@
   (:require
    [clojure.test :refer [deftest testing is use-fixtures run-tests]]
    [com.climate.claypoole :as cp]
+   [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
+   [logseq.e2e.rtc :as rtc]
    [logseq.e2e.util :as util]
    [wally.main :as w]
-   [wally.repl :as repl]
-   [logseq.e2e.block :as b]))
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-2-pages)
 
 (defn- offline
-  [offline?]
-  (.setOffline (.context (w/get-page)) offline?))
-
-(defn- wait-for-ops-synced
   []
-  (w/wait-for "button.cloud.on.queuing" {:timeout 1000})
-  (w/wait-for "button.cloud.on.idle" {:timeout 5000}))
+  (.setOffline (.context (w/get-page)) true))
+
+(defn- online
+  []
+  (.setOffline (.context (w/get-page)) false))
 
 (deftest rtc-extra-test
   (let [graph-name (str "rtc-extra-test-graph-" (.toEpochMilli (java.time.Instant/now)))]
@@ -34,14 +34,24 @@
         (graph/wait-for-remote-graph graph-name)
         (graph/switch-graph graph-name true)))
     (testing "rtc-stop app1, update app2, then rtc-start on app1"
-      (w/with-page @*page1
-        (offline true))
+      (let [*latest-remote-tx (atom nil)]
+        (w/with-page @*page1
+          (offline))
+        (w/with-page @*page2
+          (let [{:keys [_local-tx remote-tx]}
+                (rtc/with-wait-tx-updated
+                  (dotimes [_i 3]
+                    (doseq [i (range 10)]
+                      (b/new-block (str "b" i))
+                      (util/input-command "Doing"))))]
+            (reset! *latest-remote-tx remote-tx))
+          ;; TODO: more operations
+          (util/exit-edit))
+        (w/with-page @*page1
+          (online)
+          (rtc/wait-tx-update-to @*latest-remote-tx)
+          ;; TODO: check blocks exist
+          )))
+    (testing "cleanup"
       (w/with-page @*page2
-        (dotimes [_i 3]
-          (b/new-blocks (map #(str "b" %) (range 10)))
-          (wait-for-ops-synced))
-        ;; TODO: more operations
-        (repl/pause)
-        )
-      )
-    ))
+        (graph/remove-remote-graph graph-name)))))
