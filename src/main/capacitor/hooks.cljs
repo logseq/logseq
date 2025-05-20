@@ -1,1 +1,2 @@
-(ns capacitor.hooks)
+(ns capacitor.hooks
+  (:require [rum.core :as rum]))
