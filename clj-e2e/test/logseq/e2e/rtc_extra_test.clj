@@ -10,7 +10,18 @@
    [wally.main :as w]
    [wally.repl :as repl]))
 
-(use-fixtures :once fixtures/open-2-pages)
+(def *graph-name (atom nil))
+(defn cleanup-fixture
+  [f]
+  (f)
+  (w/with-page @*page2
+    (assert (some? @*graph-name))
+    (graph/remove-remote-graph @*graph-name)))
+
+(use-fixtures :once
+  fixtures/open-2-pages
+  ;; cleanup-fixture
+  )
 
 (defn- offline
   []
@@ -20,8 +31,17 @@
   []
   (.setOffline (.context (w/get-page)) false))
 
+(defn- insert-task-blocks
+  [title-prefix]
+  (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]
+          priority ["No priority" "Low" "Medium" "High" "Urgent"]]
+    (b/new-block (str title-prefix "-" status "-" priority))
+    (util/input-command status)
+    (util/input-command priority)))
+
 (deftest rtc-extra-test
   (let [graph-name (str "rtc-extra-test-graph-" (.toEpochMilli (java.time.Instant/now)))]
+    (reset! *graph-name graph-name)
     (testing "open 2 app instances, add a rtc graph, check this graph available on other instance"
       (cp/prun!
        2
@@ -33,17 +53,14 @@
       (w/with-page @*page2
         (graph/wait-for-remote-graph graph-name)
         (graph/switch-graph graph-name true)))
-    (testing "rtc-stop app1, update app2, then rtc-start on app1"
+    (testing "rtc-stop app1, add some task blocks, then rtc-start on app1"
       (let [*latest-remote-tx (atom nil)]
         (w/with-page @*page1
           (offline))
         (w/with-page @*page2
           (let [{:keys [_local-tx remote-tx]}
                 (rtc/with-wait-tx-updated
-                  (dotimes [_i 3]
-                    (doseq [i (range 10)]
-                      (b/new-block (str "b" i))
-                      (util/input-command "Doing"))))]
+                  (insert-task-blocks "t1"))]
             (reset! *latest-remote-tx remote-tx))
           ;; TODO: more operations
           (util/exit-edit))
@@ -54,4 +71,5 @@
           )))
     (testing "cleanup"
       (w/with-page @*page2
-        (graph/remove-remote-graph graph-name)))))
+        (assert (some? @*graph-name))
+        (graph/remove-remote-graph @*graph-name)))))
