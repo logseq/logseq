@@ -420,11 +420,11 @@
 
 (rum/defc db-page-title-actions
   [page]
-  [:div.absolute.-top-4.left-0.opacity-0.db-page-title-actions
+  [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
     (when-not (:logseq.property/icon (db/entity (:db/id page)))
       (shui/button
-       {:variant :outline
+       {:variant :ghost
         :size :sm
         :class "px-2 py-0 h-6 text-xs text-muted-foreground"
         :on-click (fn [e]
@@ -434,7 +434,7 @@
        "Add icon"))
 
     (shui/button
-     {:variant :outline
+     {:variant :ghost
       :size :sm
       :class "px-2 py-0 h-6 text-xs text-muted-foreground"
       :on-click (fn [e]

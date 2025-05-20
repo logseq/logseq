@@ -37,7 +37,7 @@
          (map (juxt :major :minor)
               [(parse-schema-version x) (parse-schema-version y)])))
 
-(def version (parse-schema-version "64.9"))
+(def version (parse-schema-version "64.10"))
 
 (defn major-version
   "Return a number.

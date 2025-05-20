@@ -10,6 +10,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]))
 
@@ -193,7 +194,8 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- page-or-object?
   [entity]
   (and (or (ldb/page? entity) (ldb/object? entity))
-       (not (ldb/hidden? entity))))
+       (not (ldb/hidden? entity))
+       (not (ldb/hidden? (:block/page entity)))))
 
 (defn get-all-fuzzy-supported-blocks
   "Only pages and objects are supported now."
@@ -205,7 +207,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                           (map :e)))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
-    (remove ldb/hidden? blocks)))
+    (->> blocks
+         (remove ldb/hidden?)
+         (remove #(ldb/hidden? (:block/page %))))))
 
 (defn- sanitize
   [content]
@@ -219,13 +223,9 @@ DROP TRIGGER IF EXISTS blocks_au;
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
-      ;; Should properties be included in the search indice?
-      ;; It could slow down the search indexing, also it can be confusing
-      ;; if the showing properties are not useful to users.
-      ;; (let [content (if (and db-based? (seq (:block/properties block)))
-      ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
-      ;;                 content)])
-    (let [title (ldb/get-title-with-parents (assoc block :block.temp/search? true))]
+    (let [title (-> block
+                    (update :block/title ldb/get-title-with-parents)
+                    db-content/recur-replace-uuid-in-block-title)]
       (when uuid
         {:id (str uuid)
          :page (str (or (:block/uuid page) uuid))
@@ -370,11 +370,11 @@ DROP TRIGGER IF EXISTS blocks_au;
                                     set)
                                blocks-to-add-set)]
       {:blocks-to-remove     (->>
-                              (keep #(d/entity db-before %) blocks-to-remove-set)
-                              (remove ldb/hidden?))
+                              (keep #(d/entity db-before %) blocks-to-remove-set))
        :blocks-to-add        (->>
                               (keep #(d/entity db-after %) blocks-to-add-set')
-                              (remove ldb/hidden?))})))
+                              (remove ldb/hidden?)
+                              (remove #(ldb/hidden? (:block/page %))))})))
 
 (defn- get-affected-blocks
   [repo tx-report]

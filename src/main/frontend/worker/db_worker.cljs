@@ -100,39 +100,43 @@
   [^js pool data]
   (.importDb ^js pool repo-path data))
 
-(comment
-  (defn- get-all-datoms-from-sqlite-db
-    [db]
-    (some->> (.exec db #js {:sql "select * from kvs"
-                            :rowMode "array"})
-             bean/->clj
-             (mapcat
-              (fn [[_addr content _addresses]]
-                (let [content' (sqlite-util/transit-read content)
-                      datoms (when (map? content')
-                               (:keys content'))]
-                  datoms)))
-             distinct
-             (map (fn [[e a v t]]
-                    (d/datom e a v t)))))
+(defn- get-all-datoms-from-sqlite-db
+  [db]
+  (some->> (.exec db #js {:sql "select * from kvs"
+                          :rowMode "array"})
+           bean/->clj
+           (mapcat
+            (fn [[_addr content _addresses]]
+              (let [content' (sqlite-util/transit-read content)
+                    datoms (when (map? content')
+                             (:keys content'))]
+                datoms)))
+           distinct
+           (map (fn [[e a v t]]
+                  (d/datom e a v t)))))
 
-  (defn- rebuild-db-from-datoms!
-    "Persistent-sorted-set has been broken, used addresses can't be found"
-    [datascript-conn sqlite-db import-type]
-    (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
-          db (d/init-db [] db-schema/schema
-                        {:storage (storage/storage @datascript-conn)})
-          db (d/db-with db
-                        (map (fn [d]
-                               [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
-      (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
-    ;; export db first
-      (when-not import-type
-        (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
-        (worker-util/post-message :export-current-db []))
-      (.exec sqlite-db #js {:sql "delete from kvs"})
-      (d/reset-conn! datascript-conn db)
-      (db-migrate/fix-db! datascript-conn))))
+(defn- rebuild-db-from-datoms!
+  "Persistent-sorted-set has been broken, used addresses can't be found"
+  [datascript-conn sqlite-db]
+  (let [datoms (get-all-datoms-from-sqlite-db sqlite-db)
+        db (d/init-db [] db-schema/schema
+                      {:storage (storage/storage @datascript-conn)})
+        db (d/db-with db
+                      (map (fn [d]
+                             [:db/add (:e d) (:a d) (:v d) (:t d)]) datoms))]
+    (prn :debug :rebuild-db-from-datoms :datoms-count (count datoms))
+    (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
+    (worker-util/post-message :export-current-db [])
+    (.exec sqlite-db #js {:sql "delete from kvs"})
+    (d/reset-conn! datascript-conn db)
+    (db-migrate/fix-db! datascript-conn)))
+
+(defn- fix-broken-graph
+  [graph]
+  (let [conn (worker-state/get-datascript-conn graph)
+        sqlite-db (worker-state/get-sqlite-conn graph)]
+    (when (and conn sqlite-db)
+      (rebuild-db-from-datoms! conn sqlite-db))))
 
 (comment
   (defn- gc-kvs-table!
@@ -180,8 +184,24 @@
         (when (and compare-result (not (neg? compare-result))) ; >= 64.8
           (worker-util/post-message :capture-error
                                     {:error "db-missing-addresses-v2"
-                                     :payload {:missing-addresses missing-addresses}}))))
+                                     :payload {:missing-addresses (str missing-addresses)
+                                               :db-schema-version (str version-in-db)}}))))
     missing-addresses))
+
+(def get-to-delete-unused-addresses-sql
+  "WITH to_delete(addr) AS (
+     SELECT value
+     FROM json_each(?)
+   ),
+  referenced(addr) AS (
+    SELECT json_each.value
+    FROM kvs
+    JOIN json_each(kvs.addresses)
+    WHERE kvs.addr NOT IN (SELECT addr FROM to_delete)
+      AND json_each.value IN (SELECT addr FROM to_delete)
+  )
+  SELECT addr FROM to_delete
+  WHERE addr NOT IN (SELECT addr FROM referenced)")
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
@@ -193,19 +213,19 @@
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                                         :bind item}))))
     (when (seq delete-addrs)
-      (.transaction db (fn [tx]
-                         (doseq [addr delete-addrs]
-                           (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                          :bind #js [addr]}))))
+      (let [result (.exec db #js {:sql get-to-delete-unused-addresses-sql
+                                  :bind (js/JSON.stringify (clj->js delete-addrs))
+                                  :rowMode "array"})
+            non-refed-addrs (map #(aget % 0) result)]
+        (when (seq non-refed-addrs)
+          (.transaction db (fn [tx]
+                             (doseq [addr non-refed-addrs]
+                               (.exec tx #js {:sql "Delete from kvs where addr = ?"
+                                              :bind #js [addr]}))))))
       (let [missing-addrs (when worker-util/dev?
                             (seq (find-missing-addresses nil db {:delete-addrs delete-addrs})))]
-        (if (seq missing-addrs)
-          (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false])
-          (when (seq delete-addrs)
-            (.transaction db (fn [tx]
-                               (doseq [addr delete-addrs]
-                                 (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
-                                                :bind #js [addr]}))))))))))
+        (when (seq missing-addrs)
+          (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false]))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -770,6 +790,10 @@
 (def-thread-api :thread-api/get-all-page-titles
   [repo]
   (get-all-page-titles-with-cache repo))
+
+(def-thread-api :thread-api/fix-broken-graph
+  [graph]
+  (fix-broken-graph graph))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs

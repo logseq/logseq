@@ -134,6 +134,20 @@
                                                  :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id pos format)))
 
+(defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
+  (if (or (db/page-exists? q (if db-tag?
+                               #{:logseq.class/Tag}
+                               ;; Page existence here should be the same as entity-util/page?.
+                                ;; Don't show 'New page' if a page has any of these tags
+                               db-class/page-classes))
+          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+    partial-matched-pages
+    (if db-tag?
+      (concat [{:block/title (str (t :new-tag) " " q)}]
+              partial-matched-pages)
+      (cons {:block/title (str (t :new-page) " " q)}
+            partial-matched-pages))))
+
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
@@ -157,25 +171,11 @@
                                          date/nlp-pages)
                                     (take 10))))
                            ;; reorder, shortest and starts-with first.
-                           (let [matched-pages-with-new-page
-                                 (fn [partial-matched-pages]
-                                   (if (or (db/page-exists? q (if db-tag?
-                                                                #{:logseq.class/Tag}
-                                                                ;; Page existence here should be the same as entity-util/page?.
-                                                                ;; Don't show 'New page' if a page has any of these tags
-                                                                db-class/page-classes))
-                                           (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
-                                     partial-matched-pages
-                                     (if db-tag?
-                                       (concat [{:block/title (str (t :new-tag) " " q)}]
-                                               partial-matched-pages)
-                                       (cons {:block/title (str (t :new-page) " " q)}
-                                             partial-matched-pages))))]
-                             (if (and (seq matched-pages)
-                                      (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
-                               (cons (first matched-pages)
-                                     (matched-pages-with-new-page (rest matched-pages)))
-                               (matched-pages-with-new-page matched-pages))))]
+                           (if (and (seq matched-pages)
+                                    (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
+                             (cons (first matched-pages)
+                                   (matched-pages-with-new-page (rest matched-pages) db-tag? q))
+                             (matched-pages-with-new-page matched-pages db-tag? q)))]
       [:<>
        (ui/auto-complete
         matched-pages'
@@ -184,7 +184,9 @@
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
                         (let [block' (if-let [id (:block/uuid block)]
-                                       (or (db/entity [:block/uuid id]) block)
+                                       (if-let [e (db/entity [:block/uuid id])]
+                                         (assoc e :block/title (:block/title block))
+                                         block)
                                        block)]
                           [:div.flex.flex-col
                            (when (and (:block/uuid block') (:block/parent block'))
@@ -218,10 +220,11 @@
                                  (ui/icon "letter-n" {:size 14}))])
 
                             (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block'))]
+                                          (let [target (first (:block/_alias block'))
+                                                title (:block/title block)]
                                             (if (ldb/class? target)
-                                              (str (:block/title block') " -> alias: " (:block/title target))
-                                              (:block/title block')))
+                                              (str title " -> alias: " (:block/title target))
+                                              title))
                                           (block-handler/block-unique-title block'))]
                               (search-handler/highlight-exact-query title q))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?

@@ -906,6 +906,12 @@
          move-top-parents-to-library
          update-children-parent-and-order)))))
 
+
+(defn- empty-placeholder-add-block-uuid
+  [_conn _search-db]
+  [{:db/ident :logseq.property/empty-placeholder
+    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid :logseq.property/empty-placeholder)}])
+
 (def ^:large-vars/cleanup-todo schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -1005,8 +1011,8 @@
    [62 {:fix remove-block-schema}]
    [63 {:properties [:logseq.property.table/pinned-columns]}]
    [64 {:fix update-view-filter}]
-   ;;;; schema-version format: "<major>.<minor>"
-   ;;;; int number equals to "<major>" (without <minor>)
+;;;; schema-version format: "<major>.<minor>"
+;;;; int number equals to "<major>" (without <minor>)
    ["64.1" {:properties [:logseq.property.view/group-by-property]
             :fix add-view-icons}]
    ["64.2" {:properties [:logseq.property.view/feature-type]
@@ -1018,7 +1024,8 @@
    ["64.6" {:fix cardinality-one-multiple-values}]
    ["64.7" {:fix rename-repeated-properties}]
    ["64.8" {:fix rename-task-properties}]
-   ["64.9" {:fix fix-rename-parent-to-extends}]])
+   ["64.9" {:fix empty-placeholder-add-block-uuid}]
+   ["64.10" {:fix fix-rename-parent-to-extends}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))

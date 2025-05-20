@@ -210,3 +210,7 @@
                           {:content (str "The graph '" graph "' already exists. Please try again with another name.")
                            :status :error}])
        (create-db full-graph-name opts)))))
+
+(defn fix-broken-graph!
+  [graph]
+  (state/<invoke-db-worker :thread-api/fix-broken-graph graph))

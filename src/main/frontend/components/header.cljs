@@ -402,8 +402,10 @@
             (str "collab-" current-repo))
           (rtc-indicator/indicator)])
 
-       (when (user-handler/logged-in?)
-         (rtc-indicator/downloading-detail))
+      (when (user-handler/logged-in?)
+        (rtc-indicator/downloading-detail))
+      (when (user-handler/logged-in?)
+        (rtc-indicator/uploading-detail))
 
        (when (and current-repo
                   (not (config/demo-graph? current-repo))
