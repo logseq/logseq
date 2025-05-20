@@ -60,10 +60,7 @@
                (when (and (string? page) page)
                  (let [full-page (->> (take (inc idx) namespace)
                                       util/string-join-path)]
-                   (block/page-reference false
-                                         full-page
-                                         {}
-                                         page))))
+                   (block/page-reference {} full-page page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
         {:default-collapsed? false
          :title-trigger? true})])))

@@ -29,27 +29,6 @@
     :else
     content))
 
-(defn- recur-replace-uuid-in-block-title
-  "Return block-title"
-  [ent max-depth]
-  (let [ref-set (loop [result-refs (:block/refs ent)
-                       current-refs (:block/refs ent)
-                       depth 0]
-                  (if (or (>= depth max-depth) (empty? current-refs))
-                    result-refs
-                    (let [next-refs (set (mapcat :block/refs current-refs))
-                          result-refs' (apply conj result-refs next-refs)]
-                      (if (= (count result-refs') (count result-refs))
-                        result-refs
-                        (recur (apply conj result-refs next-refs) next-refs (inc depth))))))]
-    (loop [result (db-content/id-ref->title-ref (:block/title ent) ref-set true)
-           last-result nil
-           depth 0]
-      (if (or (>= depth max-depth)
-              (= last-result result))
-        result
-        (recur (db-content/id-ref->title-ref result ref-set true) result (inc depth))))))
-
 (defn- transform-content
   [repo db {:block/keys [collapsed? format pre-block? title page properties] :as b} level {:keys [heading-to-list?]} context]
   (let [db-based? (sqlite-util/db-based-graph? repo)
@@ -60,7 +39,7 @@
         markdown? (= :markdown format)
         title (if db-based?
                 ;; replace [[uuid]] with block's content
-                (recur-replace-uuid-in-block-title (d/entity db (:db/id b)) 10)
+                (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))
                 title)
         content (or title "")
         page-first-child? (= (:db/id b) (ldb/get-first-child db (:db/id page)))

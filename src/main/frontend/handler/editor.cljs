@@ -1252,15 +1252,22 @@
 
 (defonce *action-bar-timeout (atom nil))
 
+(defn popup-exists?
+  [id]
+  (some->> (shui-popup/get-popups)
+           (some #(some-> % (:id) (str) (string/includes? (str id))))))
+
 (defn show-action-bar!
   [& {:keys [delay]
       :or {delay 200}}]
-  (when (config/db-based-graph?)
+  (when (and (config/db-based-graph?) (not (popup-exists? :selection-action-bar)))
     (when-let [timeout @*action-bar-timeout]
       (js/clearTimeout timeout))
     (state/pub-event! [:editor/hide-action-bar])
-    (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
-      (reset! *action-bar-timeout timeout))))
+    (when (seq (remove (fn [b] (dom/has-class? b "ls-table-cell"))
+                       (state/get-selection-blocks)))
+      (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
+        (reset! *action-bar-timeout timeout)))))
 
 (defn- select-block-up-down
   [direction]
@@ -3332,11 +3339,6 @@
           ;; simulate text selection
           (cursor/select-up-down input direction anchor cursor-rect)))
       (select-block-up-down direction))))
-
-(defn popup-exists?
-  [id]
-  (some->> (shui-popup/get-popups)
-           (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
 (defn editor-commands-popup-exists?
   []
