@@ -1,7 +1,6 @@
-(ns capacitor.pages.utils
+(ns capacitor.components.utils
   (:require [capacitor.state :as state]
-            [capacitor.pages.blocks :as page-blocks]
-            [capacitor.components.ui :as ui]
+            [capacitor.components.blocks :as cc-blocks]
             [cljs-bean.core :as bean]))
 
 ;; https://ionicframework.com/docs/api/nav#push
@@ -16,9 +15,9 @@
 (defn nav-to-block!
   [page-or-block opts]
   (some-> @state/*nav-root
-    (.push #(page-blocks/page page-or-block opts))))
+    (.push #(cc-blocks/page page-or-block opts))))
 
 (defn nav-to-edit-block!
   [block opts]
   (some-> @state/*nav-root
-    (.push #(page-blocks/edit-block-modal block opts))))
+    (.push #(cc-blocks/edit-block-modal block opts))))
