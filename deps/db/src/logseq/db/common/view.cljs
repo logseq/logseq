@@ -61,22 +61,6 @@
           (when (valid-type-for-sort? v)
             v))))))
 
-(defn- by-sorting
-  [sorting]
-  (let [get-value+cmp
-        (map
-         (fn [{:keys [get-value asc?]}]
-           [get-value
-            (if asc? compare #(compare %2 %1))])
-         sorting)]
-    (fn [a b]
-      (reduce
-       (fn [order [get-value cmp]]
-         (if (zero? order)
-           (cmp (get-value a) (get-value b))
-           (reduced order)))
-       0 get-value+cmp))))
-
 (defn- by-one-sorting
   [{:keys [asc? get-value]}]
   (let [cmp (if asc? compare #(compare %2 %1))]
@@ -103,7 +87,7 @@
                              reverse)
 
                            (not (ldb/db-based-graph? db)) ; file graph properties don't support index
-                           (sort (by-sorting
+                           (sort (common-util/by-sorting
                                   [{:get-value get-value-fn
                                     :asc? asc?}]) entities)
 
@@ -138,7 +122,7 @@
                  {:asc? asc?
                   :get-value (memoize (get-value-for-sort property))}))
              minor-sorting)
-        sort-cmp (by-sorting sorting)]
+        sort-cmp (common-util/by-sorting sorting)]
     (mapcat (fn [entities] (sort sort-cmp entities)) partitioned-entities-by-major-sorting)))
 
 (defn sort-entities
