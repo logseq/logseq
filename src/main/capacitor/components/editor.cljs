@@ -8,18 +8,19 @@
 
   (let [*input (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (rum/use-layout-effect!
       (fn []
-        (let [timer (js/requestAnimationFrame
-                      (fn []
-                        (when-let [^js input (some-> (rum/deref *input)
-                                               (.querySelector "textarea"))]
-                          (.focus input)
-                          (let [len (.-length (.-value input))]
-                            (.setSelectionRange input len len))
-                          ;(.scrollIntoView input #js {:behavior "smooth", :block "start"})
-                          )))]
-          #(js/clearTimeout timer)))
+        (js/requestAnimationFrame
+          (fn []
+            (when-let [^js input (some-> (rum/deref *input)
+                                   ;(.querySelector "textarea")
+                                   )]
+              (.focus input)
+              (let [len (.-length (.-value input))]
+                (.setSelectionRange input len len))
+              ;(.scrollIntoView input #js {:behavior "smooth", :block "start"})
+              )))
+        #())
       [])
 
     (rum/use-effect!
@@ -27,18 +28,16 @@
         (let [handle-outside! (fn [^js e]
                                 (when-not (some-> e (.-target) (.closest ".editor-aux-input"))
                                   (on-outside! e)))]
-          (js/window.addEventListener "mousedown" handle-outside!)
-          #(js/window.removeEventListener "mousedown" handle-outside!)))
+          (js/window.addEventListener "pointerdown" handle-outside!)
+          #(js/window.removeEventListener "pointerdown" handle-outside!)))
       [])
 
-    (ionic/ion-textarea
-      {:class "editor-aux-input bg-gray-100 border"
-       :ref *input
-       :auto-grow true
-       :autofocus true
-       :value content})))
+    [:textarea
+     {:class "editor-aux-input bg-gray-50 border-none"
+      :ref *input
+      :value content}]))
 
 (rum/defc content-aux
   [content & opts]
 
-  [:p content])
+  [:div.content-aux-container content])

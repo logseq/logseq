@@ -103,6 +103,19 @@
     (ionic/tabler-icon "file" {:size 30}) "Contents"]
    (cc-blocks/page-blocks "Contents")])
 
+(rum/defc keep-keyboard-open
+  []
+  (let [*input (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (let [f (fn []
+                  (js/requestAnimationFrame #(.focus (rum/deref *input))))]
+          (set! (. js/window -keepKeyboardOpen) f)))
+      [])
+    [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
+     {:id "app-keep-keyboard-open-input"
+      :ref *input}]))
+
 (rum/defc home []
   (let [[reload set-reload!] (rum/use-state 0)]
 
@@ -121,7 +134,7 @@
 
       [:div.pt-4.px-4
        (journals-list)
-       (contents-playground)
+       ;(contents-playground)
        ]
 
       ;; tabbar
@@ -220,5 +233,6 @@
                       :animated true
                       :swipeGesture false})
 
+      (keep-keyboard-open)
       (ui/install-notifications)
       (ui/install-modals)]]))

@@ -86,11 +86,14 @@
   [block]
   (let [content (:block/title block)]
     (cc-editor/editor-aux content
-      {:on-outside! (fn [^js e]
-                      (let [edit-target? (some-> e (.-target) (cc-common/get-dom-block-uuid))]
-                        (when (and (not edit-target?)
-                                (= block (:editing-block @state/*state)))
-                          (state/set-state! :editing-block nil))))})))
+      {:on-outside!
+       (fn [^js e]
+         (let [edit-target? (some-> e (.-target) (cc-common/get-dom-block-uuid))]
+           (when edit-target?
+             (cc-common/keep-keyboard-open e))
+           (when (and (not edit-target?)
+                   (= block (:editing-block @state/*state)))
+             (state/set-state! :editing-block nil))))})))
 
 (rum/defc block-content
   [block]
@@ -99,21 +102,35 @@
 
 (rum/defc block-item
   [block]
-  (let [[editing-block set-editing-block!] (state/use-app-state :editing-block)]
-    (when block
-      (let [editing? (and editing-block
-                       (= (:block/uuid block) (:block/uuid editing-block)))]
+  (let [[editing-block set-editing-block!] (state/use-app-state :editing-block)
+        [editing? set-editing!] (rum/use-state false)]
 
-        [:li.text-xl.pr-1.active:opacity-50.block-item
-         {:on-click (fn []
-                      (when-not editing?
-                        (set-editing-block! block)))
-          :data-blockid (:block/uuid block)}
-         [:div.block-content-or-editor
-          {:class (if editing? "block" "inline")}
-          (if editing?
-            (block-editor block)
-            (block-content block))]]))))
+    (rum/use-effect!
+      (fn []
+        (if (and editing-block
+              (= (:block/uuid block) (:block/uuid editing-block)))
+          (set-editing! true)
+          (set-editing! false
+            ;(fn [editing?]
+            ;  (if editing?
+            ;    () false))
+            ))
+        #())
+      [editing-block])
+
+    (when block
+      [:li.block-item.normalize-text-style
+       {:on-click (fn []
+                    (when-not editing?
+                      (set-editing-block! block)))
+        :data-blockid (:block/uuid block)}
+       [:div.block-bullet-marker
+        [:strong "·"]]
+       [:div.block-content-or-editor
+        {:class (when editing? "is-editing")}
+        (if editing?
+          (block-editor block)
+          (block-content block))]])))
 
 (rum/defc blocks-list
   [blocks]
