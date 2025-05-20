@@ -791,6 +791,11 @@
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
 
 #?(:cljs
+   (defn remove-property-value-blocks [blocks]
+     (->> blocks
+          (remove (fn [b] (d/has-class? b "property-value-container"))))))
+
+#?(:cljs
    (defn get-selected-text
      []
      (utils/getSelectionText)))
@@ -898,7 +903,8 @@
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
-                            remove-embedded-blocks)]
+                            remove-embedded-blocks
+                            remove-property-value-blocks)]
        (when-let [index (.indexOf blocks block)]
          (let [idx (dec index)]
            (when (>= idx 0)
