@@ -930,8 +930,9 @@
   nil)
 
 (defn- on-mouse-up
-  [_e]
-  (editor-handler/show-action-bar!))
+  [e]
+  (when-not (.closest (.-target e) ".block-control-wrap")
+    (editor-handler/show-action-bar!)))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
