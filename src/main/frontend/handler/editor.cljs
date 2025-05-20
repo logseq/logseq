@@ -2,7 +2,6 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
-            [dommy.core :as d]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
@@ -1255,7 +1254,7 @@
     (when-let [timeout @*action-bar-timeout]
       (js/clearTimeout timeout))
     (state/pub-event! [:editor/hide-action-bar])
-    (when (seq (remove (fn [b] (d/has-class? b "ls-table-cell"))
+    (when (seq (remove (fn [b] (dom/has-class? b "ls-table-cell"))
                        (state/get-selection-blocks)))
       (let [timeout (js/setTimeout #(state/pub-event! [:editor/show-action-bar]) delay)]
         (reset! *action-bar-timeout timeout)))))
