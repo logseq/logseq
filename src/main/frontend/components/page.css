@@ -92,7 +92,7 @@
     }
   }
 
-  .db-page-title-actions {
+  .ls-page-title-actions {
     &:has(button[data-popup-active]) {
       @apply opacity-100;
     }

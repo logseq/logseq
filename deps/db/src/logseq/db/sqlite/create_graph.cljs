@@ -201,7 +201,8 @@
                        (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
                        (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
                        ;; Empty property value used by db.type/ref properties
-                       {:db/ident :logseq.property/empty-placeholder}]
+                       {:db/ident :logseq.property/empty-placeholder
+                        :block/uuid (common-uuid/gen-uuid :builtin-block-uuid :logseq.property/empty-placeholder)}]
                        import-type
                        (into (sqlite-util/import-tx import-type)))
         initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")

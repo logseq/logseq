@@ -439,11 +439,10 @@
                        (println "draw file created, " path))
                      text)) "Draw a graph with Excalidraw"])
 
-       (when (util/electron?)
-         ["Upload an asset"
-          [[:editor/click-hidden-file-input :id]]
-          "Upload file types like image, pdf, docx, etc.)"
-          :icon/upload])
+       ["Upload an asset"
+        [[:editor/click-hidden-file-input :id]]
+        "Upload file types like image, pdf, docx, etc.)"
+        :icon/upload]
 
        ["Template" [[:editor/input command-trigger nil]
                     [:editor/search-template]] "Insert a created template here"
