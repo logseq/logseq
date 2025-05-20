@@ -2694,7 +2694,7 @@
         *hover-container? (::hover-container? state)]
     [:div.block-tag.items-center.relative
      {:key (str "tag-" (:db/id tag))
-      :class (if @*hover? "bg-gray-03 rounded pr-1" "px-1")
+      :class (if @*hover? "bg-gray-03 rounded pr-1" "pl-2 pr-1")
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
      [:div.flex.items-center
@@ -2725,7 +2725,9 @@
       (if (and @*hover? (not (ldb/private-tags (:db/ident tag))))
         [:a.inline-flex.text-muted-foreground
          {:title "Remove this tag"
-          :style {:margin-top 1}
+          :style {:margin-top 1
+                  :padding-left 2
+                  :margin-right 2}
           :on-pointer-down
           (fn [e]
             (util/stop e)
