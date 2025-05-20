@@ -1,6 +1,6 @@
 (ns capacitor.components.settings
   (:require [capacitor.handler :as handler]
-            [capacitor.components.utils :as cc-util]
+            [capacitor.components.nav-utils :as cc-util]
             [promesa.core :as p]
             [rum.core :as rum]
             [capacitor.state :as state]

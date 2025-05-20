@@ -1,4 +1,4 @@
-(ns capacitor.components.utils
+(ns capacitor.components.nav-utils
   (:require [capacitor.state :as state]
             [capacitor.components.blocks :as cc-blocks]
             [cljs-bean.core :as bean]))
@@ -14,10 +14,8 @@
 
 (defn nav-to-block!
   [page-or-block opts]
-  (some-> @state/*nav-root
-    (.push #(cc-blocks/page page-or-block opts))))
+  (nav-push! #(cc-blocks/page page-or-block opts)))
 
 (defn nav-to-edit-block!
   [block opts]
-  (some-> @state/*nav-root
-    (.push #(cc-blocks/edit-block-modal block opts))))
+  (nav-push! #(cc-blocks/edit-block-modal block opts)))

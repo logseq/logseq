@@ -11,7 +11,7 @@
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
             [capacitor.handler :as handler]
-            [capacitor.components.utils :as cc-utils]
+            [capacitor.components.nav-utils :as cc-utils]
             [capacitor.components.blocks :as cc-blocks]
             [capacitor.components.ui :as ui]
             [frontend.db.conn :as db-conn]
@@ -95,6 +95,14 @@
           (cc-blocks/page-blocks journal)
           ]))]))
 
+(rum/defc contents-playground < rum/reactive db-mixins/query
+  []
+
+  [:div.py-4
+   [:h1.text-4xl.flex.gap-1.items-center.mb-4.pt-2.font-mono
+    (ionic/tabler-icon "file" {:size 30}) "Contents"]
+   (cc-blocks/page-blocks "Contents")])
+
 (rum/defc home []
   (let [[reload set-reload!] (rum/use-state 0)]
 
@@ -113,6 +121,7 @@
 
       [:div.pt-4.px-4
        (journals-list)
+       (contents-playground)
        ]
 
       ;; tabbar
@@ -186,8 +195,14 @@
     ;; navigation
     (rum/use-effect!
       (fn []
-        (let [handle-back! (fn []
-                             (-> (rum/deref nav-ref) (.pop)))
+        (let [handle-back!
+              (fn []
+                (cond
+                  (not (nil? (state/get-editing-block)))
+                  (state/set-editing-block! nil)
+
+                  :else
+                  (cc-utils/nav-pop!)))
               ^js back-listener (.addListener App "backButton" handle-back!)]
           #(.remove back-listener)))
       [])

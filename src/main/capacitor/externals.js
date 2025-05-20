@@ -7,21 +7,27 @@ function initGlobalListeners () {
   console.debug('[externals] init global listeners')
 
   const didShowHandle = (event) => {
+    const docHeight = document.documentElement.clientHeight
     const { keyboardHeight } = event
-    const alertWrapper = document.querySelector('.alert-wrapper')
-    if (alertWrapper) {
-      setTimeout(() => {
-        alertWrapper.style.setProperty('transform',
-          `translateY(-${keyboardHeight / 3}px)`, 'important')
-      }, 100)
-    }
+    if (keyboardHeight === 0) return
+    document.body.style.height = (docHeight - keyboardHeight) + 'px'
+
+    // const alertWrapper = document.querySelector('.alert-wrapper')
+    // if (alertWrapper) {
+    //   setTimeout(() => {
+    //     alertWrapper.style.setProperty('transform',
+    //       `translateY(-${keyboardHeight / 3}px)`, 'important')
+    //   }, 100)
+    // }
   }
 
   const didHideHandle = () => {
-    const alertWrapper = document.querySelector('.alert-wrapper')
-    if (alertWrapper) {
-      alertWrapper.style.transform = 'translateY(0)'
-    }
+    document.body.style.removeProperty('height')
+
+    // const alertWrapper = document.querySelector('.alert-wrapper')
+    // if (alertWrapper) {
+    //   alertWrapper.style.transform = 'translateY(0)'
+    // }
   }
 
   Keyboard.addListener('keyboardWillShow', didShowHandle)
