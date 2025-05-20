@@ -524,10 +524,16 @@
   }
 }
 
-.block-main-content {
+.ls-page-title-container .block-content-wrapper {
+  .ls-page-title-actions {
+    @apply absolute -top-4 opacity-0;
+    left: -2px;
+  }
+
   &:hover {
-    & > .db-page-title-actions {
+    & > .ls-page-title-actions {
       @apply delay-300 transition-opacity opacity-100;
+
     }
   }
 }
