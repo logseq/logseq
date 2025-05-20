@@ -172,21 +172,23 @@
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
-   (let [ref-set (loop [result-refs (:block/refs ent)
-                        current-refs (:block/refs ent)
-                        depth 0]
-                   (if (or (>= depth max-depth) (empty? current-refs))
-                     result-refs
-                     (let [next-refs (set (mapcat :block/refs current-refs))
-                           result-refs' (apply conj result-refs next-refs)]
-                       (if (= (count result-refs') (count result-refs))
-                         result-refs
-                         (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
-         opts {:replace-block-id? true}]
-     (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
-            last-result nil
-            depth 0]
-       (if (or (>= depth max-depth)
-               (= last-result result))
-         result
-         (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))))
+   (if (some->> (:block/title ent) (#(re-find id-ref-pattern %)))
+     (let [ref-set (loop [result-refs (:block/refs ent)
+                          current-refs (:block/refs ent)
+                          depth 0]
+                     (if (or (>= depth max-depth) (empty? current-refs))
+                       result-refs
+                       (let [next-refs (set (mapcat :block/refs current-refs))
+                             result-refs' (apply conj result-refs next-refs)]
+                         (if (= (count result-refs') (count result-refs))
+                           result-refs
+                           (recur (apply conj result-refs next-refs) next-refs (inc depth))))))
+           opts {:replace-block-id? true}]
+       (loop [result (id-ref->title-ref (:block/title ent) ref-set opts)
+              last-result nil
+              depth 0]
+         (if (or (>= depth max-depth)
+                 (= last-result result))
+           result
+           (recur (id-ref->title-ref result ref-set opts) result (inc depth)))))
+     (:block/title ent))))
