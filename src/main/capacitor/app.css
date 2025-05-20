@@ -82,3 +82,36 @@ ion-textarea {
     }
   }
 }
+
+.editor-aux-input {
+}
+
+.app-blocks-list {
+  .normalize-text-style {
+    @apply text-[20px] leading-[28px];
+  }
+
+  .block-item {
+    @apply flex list-none active:opacity-70 py-1;
+  }
+
+  .block-bullet-marker {
+    @apply flex w-[30px] items-start justify-center;
+
+    > strong {
+      @apply text-[32px] opacity-80;
+    }
+  }
+
+  .block-content-or-editor {
+    @apply flex flex-1;
+
+    .editor-aux-input {
+      @apply p-0 text-xl m-0 w-full;
+    }
+
+    .content-aux-container {
+      @apply w-full;
+    }
+  }
+}

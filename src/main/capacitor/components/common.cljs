@@ -1,4 +1,5 @@
-(ns capacitor.components.common)
+(ns capacitor.components.common
+  (:require [frontend.util :as utils]))
 
 (defn get-dom-block-uuid
   [^js el]
@@ -10,3 +11,11 @@
 (defn get-dom-page-scroll
   [^js el]
   (some-> el (.closest "[part=scroll]")))
+
+(defn keep-keyboard-open
+  [^js e]
+  (try
+    (.keepKeyboardOpen js/window)
+    (some-> e (utils/stop))
+    (catch js/Error e'
+      (js/console.error e'))))
