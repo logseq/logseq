@@ -33,6 +33,7 @@
 
 (defn wait-tx-update-to
   [new-tx]
+  (assert (int? new-tx))
   (loop [i 5]
     (when (zero? i) (throw (ex-info "wait-tx-update-to" {:update-to new-tx})))
     (util/wait-timeout 1000)

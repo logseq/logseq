@@ -1,4 +1,4 @@
-(ns logseq.e2e.outliner-test
+(ns logseq.e2e.outliner-basic-test
   (:require
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.block :as b]

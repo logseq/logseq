@@ -33,6 +33,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -748,7 +749,7 @@
                              id (:db/id node)
                              [header label] (if (integer? id)
                                               (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (:block/title node)
+                                                                 (db-content/recur-replace-uuid-in-block-title node)
                                                                  (block-handler/block-unique-title node))
                                                     title (subs node-title 0 256)
                                                     node (or (db/entity id) node)
@@ -756,7 +757,7 @@
                                                     header (when-not (db/page? node)
                                                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                [:div.text-xs.opacity-70
-                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
+                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
                                                            (when-not (or (:logseq.property/classes property)
                                                                          (= (:db/ident property) :block/tags))
@@ -1092,10 +1093,7 @@
        (closed-value-item value opts)
 
        (or (entity-util/page? value)
-           (and (seq (:block/tags value))
-                ;; FIXME: page-cp should be renamed to node-cp and
-                ;; support this case and maybe other complex cases.
-                (not (string/includes? (:block/title value) "[["))))
+           (seq (:block/tags value)))
        (when value
          (let [opts {:disable-preview? true
                      :tag? tag?
@@ -1158,7 +1156,7 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
-                    (util/stop e)
+                    (state/clear-selection!)
                     (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
@@ -1173,7 +1171,7 @@
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-click show!
+          :on-pointer-down show!
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")

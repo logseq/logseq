@@ -29,9 +29,10 @@
         opts (dissoc opts :color?)
         item (cond
                (and (= :emoji (:type icon')) (:id icon'))
-               [:em-emoji (merge {:id (:id icon')
-                                  :style {:line-height 1}}
-                                 opts)]
+               [:span.ui__icon
+                [:em-emoji (merge {:id (:id icon')
+                                   :style {:line-height 1}}
+                                  opts)]]
 
                (and (= :tabler-icon (:type icon')) (:id icon'))
                (ui/icon (:id icon') opts))]
