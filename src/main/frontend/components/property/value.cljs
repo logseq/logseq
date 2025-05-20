@@ -1156,7 +1156,7 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
-                    (util/stop e)
+                    (state/clear-selection!)
                     (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
                                     (util/shift-key? e)
@@ -1171,7 +1171,7 @@
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-click show!
+          :on-pointer-down show!
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
