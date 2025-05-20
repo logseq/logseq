@@ -1,4 +1,4 @@
-(ns capacitor.pages.blocks
+(ns capacitor.components.blocks
   (:require [capacitor.state :as state]
             [frontend.db.model :as db-model]
             [promesa.core :as p]
@@ -8,6 +8,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as fstate]
+            [capacitor.components.editor :as cc-editor]
             [capacitor.ionic :as ionic]))
 
 (rum/defc edit-block-modal
@@ -80,17 +81,43 @@
   (some-> @state/*nav-root
     (.push #(edit-block-modal block opts))))
 
+(defn get-dom-block-uuid
+  [^js el]
+  (some-> el
+    (.closest "[data-blockid]")
+    (.-dataset) (.-blockid)
+    (uuid)))
+
 (rum/defc block-editor
-  [])
+  [block]
+  (let [content (:block/title block)]
+    (cc-editor/editor-aux content
+      {:on-outside! (fn []
+                      (when (= block (:editing-block @state/*state))
+                        (state/set-state! :editing-block nil)))})))
 
 (rum/defc block-content
-  [])
+  [block]
+  (let [content (:block/title block)]
+    (cc-editor/content-aux content {})))
 
 (rum/defc block-item
   [block]
-  (when block
-    [:li.text-xl.pr-1 {:on-click #()}
-     [:span (:block/title block)]]))
+  (let [[editing-block set-editing-block!] (state/use-app-state :editing-block)]
+    (when block
+      (let [editing? (and editing-block
+                       (= (:block/uuid block) (:block/uuid editing-block)))]
+
+        [:li.text-xl.pr-1.active:opacity-50.block-item
+         {:on-click (fn []
+                      (when-not editing?
+                        (set-editing-block! block)))
+          :data-blockid (:block/uuid block)}
+         [:div.block-content-or-editor
+          {:class (if editing? "block" "inline")}
+          (if editing?
+            (block-editor block)
+            (block-content block))]]))))
 
 (rum/defc blocks-list
   [blocks]

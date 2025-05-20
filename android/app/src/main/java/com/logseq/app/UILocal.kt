@@ -55,6 +55,7 @@ class UILocal : Plugin() {
       val selectedDate = Calendar.getInstance().apply {
         set(selectedYear, selectedMonth, selectedDay)
       }
+
       val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
       val formattedDate = sdf.format(selectedDate.time)
 

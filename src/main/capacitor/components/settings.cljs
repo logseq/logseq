@@ -1,6 +1,6 @@
-(ns capacitor.pages.settings
+(ns capacitor.components.settings
   (:require [capacitor.handler :as handler]
-            [capacitor.pages.utils :as pages-util]
+            [capacitor.components.utils :as cc-util]
             [promesa.core :as p]
             [rum.core :as rum]
             [capacitor.state :as state]
@@ -74,7 +74,7 @@
        (for [page filtered-pages]
          (let [ident (some-> (:block/tags page) first :db/ident)]
            [:li.font-mono.flex.items-center.py-1.active:opacity-50.active:underline.whitespace-nowrap
-            {:on-click #(pages-util/nav-to-block! page {:reload-pages! (fn [] (set-reload! (inc reload)))})}
+            {:on-click #(cc-util/nav-to-block! page {:reload-pages! (fn [] (set-reload! (inc reload)))})}
             (case ident
               :logseq.class/Property (ionic/tabler-icon "letter-t")
               :logseq.class/Page (ionic/tabler-icon "file")

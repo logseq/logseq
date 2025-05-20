@@ -11,8 +11,8 @@
             [capacitor.ionic :as ionic]
             [capacitor.state :as state]
             [capacitor.handler :as handler]
-            [capacitor.pages.utils :as pages-util]
-            [capacitor.pages.blocks :as blocks]
+            [capacitor.components.utils :as cc-utils]
+            [capacitor.components.blocks :as cc-blocks]
             [capacitor.components.ui :as ui]
             [frontend.db.conn :as db-conn]
             [frontend.db-mixins :as db-mixins]
@@ -23,7 +23,7 @@
             [frontend.mobile.util :as mobile-util]
             [goog.date :as gdate]
             [logseq.db :as ldb]
-            [capacitor.pages.settings :as settings]))
+            [capacitor.components.settings :as settings]))
 
 (rum/defc app-graphs-select
   []
@@ -87,11 +87,12 @@
     [:ul.app-journals-list
      (for [journal-id journals]
        (let [journal (db-util/entity journal-id)]
-         [:li.flex.py-1.active:opacity-50.flex-col.w-full
-          {:on-click #(pages-util/nav-to-block! journal {:reload-pages! (fn [] ())})}
-          [:h1.font-semibold.opacity-90 (:block/title journal)]
+         [:li.flex.py-1.flex-col.w-full
+          [:h1.font-semibold.opacity-90.active:opacity-50
+           {:on-click #(cc-utils/nav-to-block! journal {:reload-pages! (fn [] ())})}
+           (:block/title journal)]
           ;; blocks editor
-          (blocks/page-blocks journal)
+          (cc-blocks/page-blocks journal)
           ]))]))
 
 (rum/defc home []
@@ -136,7 +137,7 @@
                 :on-click (fn []
                             (let [apply-date! (fn [date]
                                                 (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. date)))
-                                                      nav-to-journal! #(pages-util/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                      nav-to-journal! #(cc-utils/nav-to-block! % {:reload-pages! (fn [] ())})]
                                                   (if-let [journal (handler/local-page page-name)]
                                                     (nav-to-journal! journal)
                                                     (-> (handler/<create-page! page-name)
