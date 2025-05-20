@@ -931,7 +931,11 @@
 
 (defn- on-mouse-up
   [e]
-  (when-not (.closest (.-target e) ".block-control-wrap")
+  (when-not (or (.closest (.-target e) ".block-control-wrap")
+                (.closest (.-target e) "button")
+                (.closest (.-target e) "input")
+                (.closest (.-target e) "textarea")
+                (.closest (.-target e) "a"))
     (editor-handler/show-action-bar!)))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
