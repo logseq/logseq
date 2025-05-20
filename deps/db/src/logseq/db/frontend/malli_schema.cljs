@@ -460,6 +460,7 @@
 (def property-value-placeholder
   [:map
    [:db/ident [:= :logseq.property/empty-placeholder]]
+   [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]])
 
 (defn entity-dispatch-key [db ent]
@@ -486,10 +487,10 @@
                        :closed-value-block
                        (and (:logseq.property/created-from-property d) (:logseq.property/value d))
                        :property-value-block
-                       (:block/uuid d)
-                       :block
                        (= (:db/ident d) :logseq.property/empty-placeholder)
                        :property-value-placeholder
+                       (:block/uuid d)
+                       :block
                        (:db/ident d)
                        :db-ident-key-value)]
     dispatch-key))
