@@ -9,6 +9,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as fstate]
             [capacitor.components.editor :as cc-editor]
+            [capacitor.components.common :as cc-common]
             [capacitor.ionic :as ionic]))
 
 (rum/defc edit-block-modal
@@ -81,20 +82,15 @@
   (some-> @state/*nav-root
     (.push #(edit-block-modal block opts))))
 
-(defn get-dom-block-uuid
-  [^js el]
-  (some-> el
-    (.closest "[data-blockid]")
-    (.-dataset) (.-blockid)
-    (uuid)))
-
 (rum/defc block-editor
   [block]
   (let [content (:block/title block)]
     (cc-editor/editor-aux content
-      {:on-outside! (fn []
-                      (when (= block (:editing-block @state/*state))
-                        (state/set-state! :editing-block nil)))})))
+      {:on-outside! (fn [^js e]
+                      (let [edit-target? (some-> e (.-target) (cc-common/get-dom-block-uuid))]
+                        (when (and (not edit-target?)
+                                (= block (:editing-block @state/*state)))
+                          (state/set-state! :editing-block nil))))})))
 
 (rum/defc block-content
   [block]

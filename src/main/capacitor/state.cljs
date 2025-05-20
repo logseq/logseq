@@ -10,6 +10,7 @@
          }))
 
 (defn use-nav-root [] (r/use-atom *nav-root))
+
 (defn use-app-state
   ([] (r/use-atom *state))
   ([ks] (r/use-atom-in *state ks)))
@@ -45,3 +46,8 @@
         (swap! *state assoc path value))))
   nil)
 
+(defn get-editing-block []
+  (:editing-block @*state))
+
+(defn set-editing-block! [block]
+  (set-state! :editing-block block))
