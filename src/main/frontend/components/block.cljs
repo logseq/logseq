@@ -3047,7 +3047,6 @@
      (block-content config block edit-input-id block-id *show-query?))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
-  (rum/local false ::hover?)
   [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
   (let [format (if (config/db-based-graph? (state/get-current-repo))
                  :markdown
@@ -3084,7 +3083,10 @@
                         :format format}
                        edit-input-id
                        config))]
-         [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display "flex"}}
+         [:div.flex.flex-1.w-full.block-content-wrapper
+          {:style {:display "flex"}}
+          (when-let [actions-cp (:page-title-actions-cp config)]
+            (actions-cp block))
           (block-content-with-error config block edit-input-id block-id *show-query? editor-box)
 
           (when (and (not hide-block-refs-count?)
@@ -3639,8 +3641,6 @@
 
         [:div.flex.flex-col.w-full
          [:div.block-main-content.flex.flex-row.gap-2
-          (when-let [actions-cp (:page-title-actions-cp config)]
-            (actions-cp block))
           (when page-icon
             page-icon)
 

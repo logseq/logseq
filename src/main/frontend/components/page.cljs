@@ -192,13 +192,13 @@
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
                  (when-not (config/db-based-graph?)
-                  (let [page-e (first (:rum/args state))
-                        page-name (:block/name page-e)]
-                    (when (and page-name
-                               (db/journal-page? page-name)
-                               (>= (date/journal-title->int page-name)
-                                   (date/journal-title->int (date/today))))
-                      (state/pub-event! [:journal/insert-template page-name]))))
+                   (let [page-e (first (:rum/args state))
+                         page-name (:block/name page-e)]
+                     (when (and page-name
+                                (db/journal-page? page-name)
+                                (>= (date/journal-title->int page-name)
+                                    (date/journal-title->int (date/today))))
+                       (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
   [state block* {:keys [sidebar? whiteboard?] :as config}]
   (when-let [id (:db/id block*)]
@@ -420,11 +420,11 @@
 
 (rum/defc db-page-title-actions
   [page]
-  [:div.absolute.-top-4.left-0.opacity-0.db-page-title-actions
+  [:div.ls-page-title-actions
    [:div.flex.flex-row.items-center.gap-2
     (when-not (:logseq.property/icon (db/entity (:db/id page)))
       (shui/button
-       {:variant :outline
+       {:variant :ghost
         :size :sm
         :class "px-2 py-0 h-6 text-xs text-muted-foreground"
         :on-click (fn [e]
@@ -434,7 +434,7 @@
        "Add icon"))
 
     (shui/button
-     {:variant :outline
+     {:variant :ghost
       :size :sm
       :class "px-2 py-0 h-6 text-xs text-muted-foreground"
       :on-click (fn [e]
