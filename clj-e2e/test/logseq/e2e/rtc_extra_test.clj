@@ -8,6 +8,7 @@
    [logseq.e2e.graph :as graph]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.locator :as loc]
+   [logseq.e2e.outliner-basic-test :as outliner-basic-test]
    [logseq.e2e.page :as page]
    [logseq.e2e.rtc :as rtc]
    [logseq.e2e.settings :as settings]
@@ -164,6 +165,35 @@ page1: rtc-start"
     (testing "perform same operations on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
         (insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-2")
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-2-graphs)))))
+
+(deftest rtc-outliner-test
+  (doseq [test-fn [outliner-basic-test/create-test-page-and-insert-blocks
+                   outliner-basic-test/indent-and-outdent
+                   outliner-basic-test/move-up-down
+                   outliner-basic-test/delete
+                   outliner-basic-test/delete-test-with-children]]
+    (let [test-fn-in-page2 (fn [*latest-remote-tx]
+                             (w/with-page @*page2
+                               (let [{:keys [_local-tx remote-tx]}
+                                     (rtc/with-wait-tx-updated
+                                       (test-fn))]
+                                 (reset! *latest-remote-tx remote-tx))))]
+
+      ;; testing while rtc connected
+      (let [*latest-remote-tx (atom nil)]
+        (new-logseq-page)
+        (test-fn-in-page2 *latest-remote-tx)
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-2-graphs))
+
+      ;; testing while rtc off then on
+      (let [*latest-remote-tx (atom nil)]
+        (new-logseq-page)
+        (with-stop-restart-rtc @*page1 #(test-fn-in-page2 *latest-remote-tx))
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))))
