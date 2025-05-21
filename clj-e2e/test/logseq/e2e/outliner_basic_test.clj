@@ -8,7 +8,9 @@
    [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
-(use-fixtures :each fixtures/new-logseq-page)
+(use-fixtures :each
+  fixtures/new-logseq-page
+  fixtures/validate-graph)
 
 (deftest create-test-page-and-insert-blocks
   ;; a page block and a child block
