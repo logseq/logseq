@@ -94,9 +94,10 @@
                   :add-new-object! add-new-object!
                   :show-add-property? true
                   :show-items-count? true
-                  :add-property! (fn []
+                  :add-property! (fn [e]
                                    (state/pub-event! [:editor/new-property {:block class
-                                                                            :class-schema? true}]))})]))
+                                                                            :class-schema? true
+                                                                            :target (.-target e)}]))})]))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
   [state class {:keys [current-page? sidebar?]}]

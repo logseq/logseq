@@ -695,7 +695,7 @@
                                {:id "add property"
                                 :prop {:style {:width "-webkit-fill-available"
                                                :min-width 160}
-                                       :on-click (fn [] (when (fn? add-property!) (add-property!)))}
+                                       :on-click (fn [e] (when (fn? add-property!) (add-property! e)))}
                                 :value :add-new-property
                                 :content (add-property-button)
                                 :disabled? true})
