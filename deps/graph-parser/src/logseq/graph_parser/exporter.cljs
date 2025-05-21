@@ -424,9 +424,12 @@
 (def all-built-in-names
   "All built-in properties and classes as a set of keywords"
   (set/union all-built-in-property-file-ids
+             ;; This should list all new pages introduced with db graph
              (set (->> db-class/built-in-classes
                        vals
-                       (map #(-> % :title string/lower-case keyword))))))
+                       (map :title)
+                       (concat ["Library"])
+                       (map #(-> % string/lower-case keyword))))))
 
 (def file-built-in-property-names
   "File-graph built-in property names that are supported. Expressed as set of keywords"
