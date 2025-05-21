@@ -1,6 +1,7 @@
 (ns logseq.e2e.assert
   (:import [com.microsoft.playwright.assertions PlaywrightAssertions])
-  (:require [wally.main :as w]))
+  (:require [clojure.test :as t]
+            [wally.main :as w]))
 
 (def assert-that PlaywrightAssertions/assertThat)
 
@@ -47,3 +48,13 @@
 (defn assert-selected-block-text
   [text]
   (assert-is-visible (format ".ls-block.selected :text('%s')" text)))
+
+(defn assert-graph-summary-equal
+  "`summary` is returned by `validate-graph`"
+  [summary1 summary2]
+  (let [compare-keys [:blocks :pages :classes :properties ;; :entities
+                      ]]
+
+    (t/is (= (select-keys summary1 compare-keys)
+             (select-keys summary2 compare-keys))
+          [summary1 summary2])))

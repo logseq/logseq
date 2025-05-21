@@ -2,6 +2,7 @@
   (:require
    [clojure.test :refer [deftest testing is use-fixtures run-tests]]
    [com.climate.claypoole :as cp]
+   [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
@@ -60,8 +61,10 @@
           (util/exit-edit))
         (w/with-page @*page1
           (rtc/rtc-start)
-          (repl/pause)
-          (rtc/wait-tx-update-to @*latest-remote-tx)
-
-          ;; TODO: check blocks exist
-          )))))
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (let [[p1-summary p2-summary]
+              (map (fn [p]
+                     (w/with-page p
+                       (graph/validate-graph)))
+                   [@*page1 @*page2])]
+          (assert/assert-graph-summary-equal p1-summary p2-summary))))))
