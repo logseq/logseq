@@ -473,29 +473,7 @@
     (when (seq ref-ids)
       (d/pull-many db '[*] ref-ids))))
 
-(defn hidden-ref?
-  "Whether ref-block (for block with the `id`) should be hidden."
-  [db ref-block id]
-  (let [db-based? (entity-plus/db-based-graph? db)]
-    (if db-based?
-      (let [entity (d/entity db id)]
-        (or
-         (= (:db/id ref-block) id)
-         (= id (:db/id (:block/page ref-block)))
-         (hidden? (:block/page ref-block))
-         (hidden? ref-block)
-         (contains? (set (map :db/id (:block/tags ref-block))) (:db/id entity))
-         (some? (get ref-block (:db/ident entity)))))
-      (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))))))
-
-(defn get-block-refs-count
-  [db id]
-  (some->> (d/entity db id)
-           :block/_refs
-           (remove (fn [ref-block] (hidden-ref? db ref-block id)))
-           count))
+(def get-block-refs-count common-initial-data/get-block-refs-count)
 
 (defn hidden-or-internal-tag?
   [e]

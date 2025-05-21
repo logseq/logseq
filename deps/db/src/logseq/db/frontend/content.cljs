@@ -172,7 +172,7 @@
   ([ent]
    (recur-replace-uuid-in-block-title ent 10))
   ([ent max-depth]
-   (if (some->> (:block/title ent) (#(re-find id-ref-pattern %)))
+   (if (some->> (:block/title ent) (re-find id-ref-pattern))
      (let [ref-set (loop [result-refs (:block/refs ent)
                           current-refs (:block/refs ent)
                           depth 0]
