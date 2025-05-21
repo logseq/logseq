@@ -16,9 +16,12 @@
         :task (do (clojure "-M:test -r \".*\\-basic\\-test$\"")
                   (System/exit 0))}
 
-  extra-test {:doc "run tests (ns'es ending in '-extra-test')"
-              :task (do (clojure "-M:test -r \".*\\-extra\\-test$\"")
-                        (System/exit 0))}
+  rtc-extra-test {:doc "run rtc-extra-test"
+                  :task (do (clojure "-M:test -n logseq.e2e.rtc-extra-test")
+                            (System/exit 0))}
+
+  -run-rtc-extra-test {:depends [serve prn rtc-extra-test]}
+  run-rtc-extra-test {:task (run '-run-rtc-extra-test {:parallel true})}
 
   -dev {:depends [serve prn test]}
 
