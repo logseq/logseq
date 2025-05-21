@@ -614,20 +614,26 @@
       :else
       id)))
 
-(defn- select-aux
+(defn- sort-select-items
+  [property selected-choices items]
+  (if (:property/closed-values property)
+    items                   ; sorted by order
+    (sort-by
+     (juxt (fn [item] (not (selected-choices (:db/id item))))
+           db-property/property-value-content)
+     items)))
+
+(rum/defc select-aux
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
   (let [selected-choices (->> selected-choices
                               (remove nil?)
-                              (remove #(= :logseq.property/empty-placeholder %)))
+                              (remove #(= :logseq.property/empty-placeholder %))
+                              set)
         clear-value (str "No " (:block/title property))
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
-        items (if (:property/closed-values property)
-                items                   ; sorted by order
-                (sort-by (fn [item]
-                           (db-property/property-value-content item))
-                         items))
+        [items _] (hooks/use-state (sort-select-items property selected-choices items))
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
