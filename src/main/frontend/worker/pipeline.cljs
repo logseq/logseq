@@ -64,7 +64,7 @@
                                          template-blocks (->> (mapcat (fn [id]
                                                                         (let [tag (d/entity db id)
                                                                               journal? (= journal-id id)
-                                                                              parents (ldb/get-class-extends tag {:node-class? true})
+                                                                              parents (ldb/get-class-extends tag)
                                                                               templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
                                                                           (cond->> templates
                                                                             journal?
