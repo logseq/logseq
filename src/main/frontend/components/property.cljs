@@ -361,7 +361,6 @@
                    state)}
   [state block *property-key {:keys [class-schema?]
                               :as opts}]
-  (prn :debug :key *property-key)
   (let [*property (::property state)
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
@@ -388,7 +387,7 @@
         [:div.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
          (when (not= @*show-new-property-config? :adding-property)
            (cond
-             @*show-new-property-config?
+             (or (nil? property) @*show-new-property-config?)
              (property-type-select property (merge opts
                                                    {:*property *property
                                                     :*property-name *property-key
