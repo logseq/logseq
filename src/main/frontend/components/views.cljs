@@ -130,56 +130,59 @@
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
         sub-content (fn [{:keys [id]}]
-                      [:<>
-                       (shui/dropdown-menu-item
-                        {:key "asc"
-                         :on-click #(column-set-sorting! sorting column true)}
-                        [:div.flex.flex-row.items-center.gap-1
-                         (ui/icon "arrow-up" {:size 15})
-                         [:div "Sort ascending"]])
-                       (shui/dropdown-menu-item
-                        {:key "desc"
-                         :on-click #(column-set-sorting! sorting column false)}
-                        [:div.flex.flex-row.items-center.gap-1
-                         (ui/icon "arrow-down" {:size 15})
-                         [:div "Sort descending"]])
-                       (when property
-                         (shui/dropdown-menu-item
-                          {:on-click #(shui/popup-show! (.-target %)
-                                                        (fn []
-                                                          [:div.ls-property-dropdown-editor.-m-1
-                                                           (property-config/dropdown-editor property nil {})])
-                                                        {:align "start"})}
-                          [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "adjustments" {:size 15}) "Configure"]))
-                       (when (and db-based? property)
-                         (shui/dropdown-menu-item
-                          {:on-click (fn [_e]
-                                       (if pinned?
-                                         (db-property-handler/delete-property-value! (:db/id view-entity)
-                                                                                     :logseq.property.table/pinned-columns
-                                                                                     (:db/id property))
-                                         (property-handler/set-block-property! (state/get-current-repo)
-                                                                               (:db/id view-entity)
-                                                                               :logseq.property.table/pinned-columns
-                                                                               (:db/id property)))
-                                       (shui/popup-hide! id))}
-                          [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "pin" {:size 15})
-                           [:div (if pinned? "Unpin" "Pin")]]))])]
+                      (let [table-options [(shui/dropdown-menu-item
+                                            {:key "asc"
+                                             :on-click #(column-set-sorting! sorting column true)}
+                                            [:div.flex.flex-row.items-center.gap-1
+                                             (ui/icon "arrow-up" {:size 15})
+                                             [:div "Sort ascending"]])
+                                           (shui/dropdown-menu-item
+                                            {:key "desc"
+                                             :on-click #(column-set-sorting! sorting column false)}
+                                            [:div.flex.flex-row.items-center.gap-1
+                                             (ui/icon "arrow-down" {:size 15})
+                                             [:div "Sort descending"]])
+                                           (when (and db-based? property)
+                                             (shui/dropdown-menu-item
+                                              {:on-click (fn [_e]
+                                                           (if pinned?
+                                                             (db-property-handler/delete-property-value! (:db/id view-entity)
+                                                                                                         :logseq.property.table/pinned-columns
+                                                                                                         (:db/id property))
+                                                             (property-handler/set-block-property! (state/get-current-repo)
+                                                                                                   (:db/id view-entity)
+                                                                                                   :logseq.property.table/pinned-columns
+                                                                                                   (:db/id property)))
+                                                           (shui/popup-hide! id))}
+                                              [:div.flex.flex-row.items-center.gap-1
+                                               (ui/icon "pin" {:size 15})
+                                               [:div (if pinned? "Unpin" "Pin")]]))]
+                            tag (when-let [entity (:logseq.property/view-for view-entity)]
+                                  (when (ldb/class? entity)
+                                    entity))
+                            option (cond->
+                                    {:with-title? false
+                                     :more-options table-options}
+                                     (some? tag)
+                                     (assoc :class-schema? true))]
+                        [:div.ls-property-dropdown
+                         (property-config/property-dropdown property tag option)]))]
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-      :on-mouse-up (fn [^js e]
-                     (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
-                       (when (and (or (nil? @*last-header-action-target)
-                                      (not= el @*last-header-action-target))
-                                  (string/blank? (some-> el (.-style) (.-transform))))
-                         (shui/popup-show! el sub-content
-                                           {:align "start" :as-dropdown? true
-                                            :on-before-hide (fn []
-                                                              (reset! *last-header-action-target el)
-                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))}
+      :on-click (fn [^js e]
+                  (let [popup-id (str "table-column-" (:id column))]
+                    (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
+                      (when (and (or (nil? @*last-header-action-target)
+                                     (not= el @*last-header-action-target))
+                                 (string/blank? (some-> el (.-style) (.-transform))))
+                        (shui/popup-show! el sub-content
+                                          {:id popup-id
+                                           :align "start"
+                                           :as-dropdown? true
+                                           :on-before-hide (fn []
+                                                             (reset! *last-header-action-target el)
+                                                             (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
      (let [title (str (:name column))]
        [:span {:title title
                :class "max-w-full overflow-hidden text-ellipsis"}
@@ -210,6 +213,17 @@
      (if row
        (container config' row)
        [:div])]))
+
+(defn- save-block-and-focus
+  [*ref set-focus-timeout! hide-popup?]
+  (let [node (rum/deref *ref)
+        cell (util/rec-get-node node "ls-table-cell")]
+    (p/do!
+     (editor-handler/save-current-block!)
+     (when hide-popup?
+       (shui/popup-hide!))
+     (state/exit-editing-and-set-selected-blocks! [cell])
+     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
 
 (rum/defc block-title
   "Used on table view"
@@ -253,9 +267,16 @@
                                           [:div.ls-table-block.flex.flex-row.items-start
                                            {:style {:width width :max-width width :margin-right "6px"}
                                             :on-click util/stop-propagation}
-                                           (block-container {:popup? true
-                                                             :view? true
-                                                             :table-block-title? true} block)])))]
+                                           (block-container
+                                            {:popup? true
+                                             :view? true
+                                             :table-block-title? true
+                                             :on-key-down
+                                             (fn [e]
+                                               (when (= (util/ekey e) "Enter")
+                                                 (util/stop e)
+                                                 (save-block-and-focus *ref set-focus-timeout! true)))}
+                                            block)])))]
                           (p/do!
                            (shui/popup-show!
                             (.closest (.-target e) ".ls-table-cell")
@@ -263,12 +284,7 @@
                             {:id :ls-table-block-editor
                              :as-mask? true
                              :on-after-hide (fn []
-                                              (let [node (rum/deref *ref)
-                                                    cell (util/rec-get-node node "ls-table-cell")]
-                                                (p/do!
-                                                 (editor-handler/save-current-block!)
-                                                 (state/exit-editing-and-set-selected-blocks! [cell])
-                                                 (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))})
+                                              (save-block-and-focus *ref set-focus-timeout! false))})
                            (editor-handler/edit-block! block :max {:container-id :unknown-container})))))))}
      (if block
        [:div.flex.flex-row
