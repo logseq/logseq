@@ -3,7 +3,8 @@
             [datascript.core :as d]
             [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.db :as db-db]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
@@ -40,8 +41,8 @@
         (is (= ["foo" "bar"] (map :block/title [(:block/parent (:block/parent child-page))
                                                 (:block/parent child-page)]))
             "Child page with new parent has correct parents")
-        (is (= (map :block/uuid (ldb/get-class-extends child-page))
-               (map :block/uuid (ldb/get-class-extends child-page2)))
+        (is (= (map :block/uuid (db-db/get-page-parents child-page))
+               (map :block/uuid (db-db/get-page-parents child-page2)))
             "Child page with existing parents has correct parents")
         (is (= ["Root Tag" "c1"] (map :block/title (ldb/get-classes-parents [child-page3])))
             "Child class with new parent has correct parents")

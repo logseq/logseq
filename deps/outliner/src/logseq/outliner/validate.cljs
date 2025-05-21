@@ -45,7 +45,7 @@
                      :payload {:message "Built-in pages can't be edited"
                                :type :warning}}))))
 
-(defn- validate-unique-by-parent-and-name [db entity new-title]
+(defn- validate-unique-by-extends-and-name [db entity new-title]
   (when-let [_res (seq (d/q '[:find [?b ...]
                               :in $ ?eid ?type ?title
                               :where
@@ -117,7 +117,7 @@
                                      :type :warning}})))))
 
     (:logseq.property.class/extends entity)
-    (validate-unique-by-parent-and-name db entity new-title)))
+    (validate-unique-by-extends-and-name db entity new-title)))
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of nodes for the following cases:

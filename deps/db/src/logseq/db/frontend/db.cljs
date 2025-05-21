@@ -44,14 +44,13 @@
               (d/entity db (:e d))))))
 
 (defn get-class-extends
-  [node & {:keys [node-class?]}]
+  "Returns all parents of a class"
+  [node]
   (when-let [parent (:logseq.property.class/extends node)]
     (loop [current-parent parent
            parents' []]
-      (if (and
-           current-parent
-           (if node-class? (entity-util/class? current-parent) true)
-           (not (contains? parents' current-parent)))
+      (if (and current-parent
+               (not (contains? parents' current-parent)))
         (recur (:logseq.property.class/extends current-parent)
                (conj parents' current-parent))
         (vec (reverse parents'))))))
@@ -61,23 +60,20 @@
   (when-let [parent (:block/parent node)]
     (loop [current-parent parent
            parents' []]
-      (if (and
-           current-parent
-           (not (contains? parents' current-parent)))
+      (if (and current-parent
+               (not (contains? parents' current-parent)))
         (recur (:block/parent current-parent)
                (conj parents' current-parent))
         (vec (reverse parents'))))))
 
-(defn get-class-title-with-extends
+(defn- get-class-title-with-extends
   [entity]
-  (if (entity-util/class? entity)
-    (let [parents' (->> (get-class-extends entity)
-                        (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                        vec)]
-      (string/join
-       ns-util/parent-char
-       (map :block/title (conj (vec parents') entity))))
-    (:block/title entity)))
+  (let [parents' (->> (get-class-extends entity)
+                      (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
+                      vec)]
+    (string/join
+     ns-util/parent-char
+     (map :block/title (conj (vec parents') entity)))))
 
 (defn get-title-with-parents
   [entity]
@@ -97,9 +93,10 @@
     (:block/title entity)))
 
 (defn get-classes-parents
+  "Returns all parents of all classes. Like get-class-extends but for multiple classes"
   [tags]
   (let [tags' (filter entity-util/class? tags)
-        result (mapcat #(get-class-extends % {:node-class? true}) tags')]
+        result (mapcat get-class-extends tags')]
     (set result)))
 
 (defn class-instance?
