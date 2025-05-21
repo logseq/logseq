@@ -7,7 +7,8 @@
             [wally.main :as w]
             [wally.repl :as repl])
   (:import (com.microsoft.playwright Locator$PressSequentiallyOptions
-                                     Locator$FilterOptions)
+                                     Locator$FilterOptions
+                                     Page$GetByTextOptions)
            (com.microsoft.playwright TimeoutError)))
 
 (defn repeat-until-visible
@@ -189,3 +190,9 @@
 (defn -query-last
   [q]
   (.last (w/-query q)))
+
+(defn get-by-text
+  [text exact?]
+  (if exact?
+    (.getByText (w/get-page) text (.setExact (Page$GetByTextOptions.) true))
+    (.getByText (w/get-page) text)))
