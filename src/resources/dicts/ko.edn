@@ -34,7 +34,6 @@
  :left-side-bar/journals "일지"
  :left-side-bar/nav-favorites "즐겨찾기"
  :left-side-bar/nav-recent-pages "최근 페이지"
- :page/delete-confirmation "이 페이지와 페이지의 파일들을 삭제하시겠습니까?"
  :page/open-in-finder "디렉토리에서 열기"
  :page/open-with-default-app "기본 앱으로 열기"
  :page/make-public "출판 전 공개 상태로 만들기"
