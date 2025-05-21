@@ -23,14 +23,6 @@
   fixtures/open-2-pages
   cleanup-fixture)
 
-(defn- offline
-  []
-  (.setOffline (.context (w/get-page)) true))
-
-(defn- online
-  []
-  (.setOffline (.context (w/get-page)) false))
-
 (defn- insert-task-blocks
   [title-prefix]
   (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]
@@ -47,6 +39,7 @@
        2
        #(w/with-page %
           (settings/developer-mode)
+          (w/refresh)
           (util/login-test-account))
        [@*page1 @*page2])
       (w/with-page @*page1
@@ -57,7 +50,7 @@
     (testing "rtc-stop app1, add some task blocks, then rtc-start on app1"
       (let [*latest-remote-tx (atom nil)]
         (w/with-page @*page1
-          (offline))
+          (rtc/rtc-stop))
         (w/with-page @*page2
           (let [{:keys [_local-tx remote-tx]}
                 (rtc/with-wait-tx-updated
@@ -66,7 +59,9 @@
           ;; TODO: more operations
           (util/exit-edit))
         (w/with-page @*page1
-          (online)
+          (rtc/rtc-start)
+          (repl/pause)
           (rtc/wait-tx-update-to @*latest-remote-tx)
+
           ;; TODO: check blocks exist
           )))))

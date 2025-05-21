@@ -52,3 +52,9 @@
   (when wait-sync?
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   (assert/assert-graph-loaded?))
+
+(defn validate-graph
+  []
+  (util/search-and-click "(Dev) Validate current graph")
+  (assert/assert-is-visible ".notifications :has-text('Your graph is valid')")
+  (w/click ".notifications .ls-icon-x"))
