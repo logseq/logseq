@@ -767,9 +767,6 @@
                                          (do
                                            (prn :debug :unknown-title-error :title s
                                                 :data (db/pull (:db/id page-entity)))
-                                           (db/transact! [{:db/id (:db/id page-entity)
-                                                           :block/title "FIX unknown page"
-                                                           :block/name "fix unknown page"}])
                                            "Unknown title")
                                          (re-find db-content/id-ref-pattern s)
                                          (db-content/content-id-ref->page s (:block/refs page-entity))
