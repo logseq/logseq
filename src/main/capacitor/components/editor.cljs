@@ -7,7 +7,7 @@
             [frontend.handler.notification :as notification]))
 
 (rum/defc editor-aux
-  [content {:keys [on-outside! on-save!]}]
+  [content {:keys [on-outside! on-save! on-delete!]}]
 
   (let [*input (rum/use-ref nil)]
 
@@ -33,26 +33,37 @@
           #(js/window.removeEventListener "pointerdown" handle-outside!)))
       [])
 
-    (let [save-content!
+    (let [save-handle!
           (fn [opts]
             (let [content (.-value (rum/deref *input))]
               (when on-save!
                 (prn :debug "save block content:" content opts)
                 (on-save! content opts))))
-          debounce-save-content! (util/debounce save-content! 500)]
+          delete-handle! (fn [opts]
+                           (let [content (.-value (rum/deref *input))]
+                             (when on-delete!
+                               (prn :debug "delete block:" content opts)
+                               (on-delete! content opts))))
+          debounce-save-handle! (util/debounce save-handle! 500)]
       (ui/textarea
         {:class "editor-aux-input bg-gray-200 border-none"
          :ref *input
          :on-key-down (fn [^js e]
                         (let [ekey (.-key e)
                               target (.-target e)
-                              enter? (= ekey "Enter")]
+                              enter? (= ekey "Enter")
+                              backspace? (= ekey "Backspace")]
 
                           (cond
                             (and enter? (cursor/end? target))
-                            (do (save-content! {:enter? true})
+                            (do (save-handle! {:enter? true})
                               (util/stop e))
-                            :else (debounce-save-content!)
+
+                            (and backspace? (cursor/start? target))
+                            (do (delete-handle! {})
+                              (util/stop e))
+
+                            :else (debounce-save-handle!)
                             )))
          :default-value content}))))
 
