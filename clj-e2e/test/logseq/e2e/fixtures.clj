@@ -75,7 +75,9 @@
 
 (defn create-page
   []
-  (page/new-page (str "page " (swap! *page-number inc))))
+  (let [page-name (str "page " (swap! *page-number inc))]
+    (page/new-page page-name)
+    page-name))
 
 (defn new-logseq-page
   [f]
