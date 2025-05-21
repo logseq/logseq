@@ -8,6 +8,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.state :as fstate]
+            [frontend.handler.notification :as notification]
             [capacitor.components.editor :as cc-editor]
             [capacitor.components.common :as cc-common]
             [capacitor.ionic :as ionic]))
@@ -82,9 +83,18 @@
   (some-> @state/*nav-root
     (.push #(edit-block-modal block opts))))
 
+;; handlers
+(defn insert-new-block!
+  [content opts]
+  (let [opts' (merge {:sibling? true}
+                opts {:edit-block? false})]
+    (editor-handler/api-insert-new-block! content opts')))
+
+;; components
 (rum/defc block-editor
   [block]
-  (let [content (:block/title block)]
+  (let [content (:block/title block)
+        exit! #(state/set-state! :editing-block nil)]
     (cc-editor/editor-aux content
       {:on-outside!
        (fn [^js e]
@@ -93,7 +103,31 @@
              (cc-common/keep-keyboard-open e))
            (when (and (not edit-target?)
                    (= block (:editing-block @state/*state)))
-             (state/set-state! :editing-block nil))))})))
+             (exit!))))
+       :on-save!
+       (fn [content {:keys [enter?]}]
+         (let [block-uuid (:block/uuid block)
+               current-repo (fstate/get-current-repo)]
+
+           ;; update block content
+           (-> (do (when enter? (exit!))
+                 (editor-handler/save-block! current-repo block-uuid content))
+             (p/then (fn []
+                       (state/set-state! [:modified-blocks block-uuid] (js/Date.now))
+                       (when enter?
+                         ;; create new block
+                         (cc-common/keep-keyboard-open nil)
+                         (-> (insert-new-block! "" {:block-uuid block-uuid})
+                           (p/then (fn [new-block]
+                                     (prn :debug "new block:" new-block)
+                                     (when-let [parent-block (:block/parent new-block)]
+                                       (state/set-state! [:modified-pages (:block/uuid parent-block)] (js/Date.now)))
+                                     ;; edit the new block
+                                     (js/requestAnimationFrame #(state/set-editing-block! new-block))
+                                     )))
+                         )))
+             (p/catch #(notification/show! (str %) :error)))))
+       })))
 
 (rum/defc block-content
   [block]
@@ -101,14 +135,24 @@
     (cc-editor/content-aux content {})))
 
 (rum/defc block-item
-  [block]
-  (let [[editing-block set-editing-block!] (state/use-app-state :editing-block)
+  [block']
+  (let [[block set-block!] (rum/use-state block')
+        block-uuid (:block/uuid block)
+        [editing-block set-editing-block!] (state/use-app-state :editing-block)
+        [modified-ts] (state/use-app-state [:modified-blocks block-uuid])
         [editing? set-editing!] (rum/use-state false)]
 
     (rum/use-effect!
       (fn []
+        ;; rerender modified block
+        (-> (db-utils/entity (:db/id block)) (set-block!))
+        #())
+      [modified-ts block'])
+
+    (rum/use-effect!
+      (fn []
         (if (and editing-block
-              (= (:block/uuid block) (:block/uuid editing-block)))
+              (= block-uuid (:block/uuid editing-block)))
           (set-editing! true)
           (set-editing! false
             ;(fn [editing?]
@@ -137,7 +181,7 @@
   (when (seq blocks)
     [:ul.app-blocks-list
      (for [block blocks]
-       (block-item block))]))
+       (rum/with-key (block-item block) (str (:block/uuid block))))]))
 
 (rum/defc blocks-container
   [root]
@@ -153,7 +197,7 @@
   (let [[page set-page!] (rum/use-state
                            (if (:db/id page-name-or-entity) page-name-or-entity
                              (db-model/get-page page-name-or-entity)))
-        [p] (state/use-app-state [:last-modified-page-uuid (:block/uuid page)])
+        [modified-page] (state/use-app-state [:modified-pages (:block/uuid page)])
         [_loading? set-loading!] (rum/use-state false)]
 
     (rum/use-effect!
@@ -161,10 +205,11 @@
       (fn []
         (-> (db-async/<get-block (fstate/get-current-repo) (:block/uuid page))
           (p/then (fn [page]
+                    (prn :debug "re-render page:" (:block/title page))
                     (set-page! (db-utils/entity (:db/id page)))))
           (p/finally #()))
         #())
-      [p])
+      [modified-page])
 
     (when page
       [:div.app-page-blocks.mb-4
@@ -177,9 +222,7 @@
         [loading? set-loading!] (rum/use-state true)
         rerender! (fn []
                     (set-page! (db-utils/entity (:db/id block)))
-                    (swap! state/*state assoc
-                      :last-modified-page-uuid
-                      {(:block/uuid block) (js/Date.now)}))]
+                    (state/set-state! [:modified-pages (:block/uuid block)] (js/Date.now)))]
 
     (rum/use-effect!
       ;; sync page blocks

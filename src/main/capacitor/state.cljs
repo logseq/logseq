@@ -5,8 +5,9 @@
 (defonce *nav-root (atom nil))
 (defonce *state
   (atom {:version 0
-         :last-modified-page-uuid nil
          :editing-block nil
+         :modified-pages {}
+         :modified-blocks {} ;; {:uuid timestamp}
          }))
 
 (defn use-nav-root [] (r/use-atom *nav-root))
