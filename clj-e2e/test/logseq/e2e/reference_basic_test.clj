@@ -10,7 +10,9 @@
 
 (use-fixtures :once fixtures/open-page)
 
-(use-fixtures :each fixtures/new-logseq-page)
+(use-fixtures :each
+  fixtures/new-logseq-page
+  fixtures/validate-graph)
 
 ;; block references
 (deftest self-reference
