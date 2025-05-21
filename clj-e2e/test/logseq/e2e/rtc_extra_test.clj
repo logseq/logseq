@@ -6,6 +6,7 @@
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
    [logseq.e2e.rtc :as rtc]
+   [logseq.e2e.settings :as settings]
    [logseq.e2e.util :as util]
    [wally.main :as w]
    [wally.repl :as repl]))
@@ -20,8 +21,7 @@
 
 (use-fixtures :once
   fixtures/open-2-pages
-  ;; cleanup-fixture
-  )
+  cleanup-fixture)
 
 (defn- offline
   []
@@ -46,6 +46,7 @@
       (cp/prun!
        2
        #(w/with-page %
+          (settings/developer-mode)
           (util/login-test-account))
        [@*page1 @*page2])
       (w/with-page @*page1
@@ -68,8 +69,4 @@
           (online)
           (rtc/wait-tx-update-to @*latest-remote-tx)
           ;; TODO: check blocks exist
-          )))
-    (testing "cleanup"
-      (w/with-page @*page2
-        (assert (some? @*graph-name))
-        (graph/remove-remote-graph @*graph-name)))))
+          )))))
