@@ -130,43 +130,43 @@
                   (contains? (set (map :db/id (:logseq.property.table/pinned-columns view-entity)))
                              (:db/id property)))
         sub-content (fn [{:keys [id]}]
-                      [:<>
-                       (shui/dropdown-menu-item
-                        {:key "asc"
-                         :on-click #(column-set-sorting! sorting column true)}
-                        [:div.flex.flex-row.items-center.gap-1
-                         (ui/icon "arrow-up" {:size 15})
-                         [:div "Sort ascending"]])
-                       (shui/dropdown-menu-item
-                        {:key "desc"
-                         :on-click #(column-set-sorting! sorting column false)}
-                        [:div.flex.flex-row.items-center.gap-1
-                         (ui/icon "arrow-down" {:size 15})
-                         [:div "Sort descending"]])
-                       (when property
-                         (shui/dropdown-menu-item
-                          {:on-click #(shui/popup-show! (.-target %)
-                                                        (fn []
-                                                          [:div.ls-property-dropdown-editor.-m-1
-                                                           (property-config/dropdown-editor property nil {})])
-                                                        {:align "start"})}
-                          [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "adjustments" {:size 15}) "Configure"]))
-                       (when (and db-based? property)
-                         (shui/dropdown-menu-item
-                          {:on-click (fn [_e]
-                                       (if pinned?
-                                         (db-property-handler/delete-property-value! (:db/id view-entity)
-                                                                                     :logseq.property.table/pinned-columns
-                                                                                     (:db/id property))
-                                         (property-handler/set-block-property! (state/get-current-repo)
-                                                                               (:db/id view-entity)
-                                                                               :logseq.property.table/pinned-columns
-                                                                               (:db/id property)))
-                                       (shui/popup-hide! id))}
-                          [:div.flex.flex-row.items-center.gap-1
-                           (ui/icon "pin" {:size 15})
-                           [:div (if pinned? "Unpin" "Pin")]]))])]
+                      (let [table-options [(shui/dropdown-menu-item
+                                            {:key "asc"
+                                             :on-click #(column-set-sorting! sorting column true)}
+                                            [:div.flex.flex-row.items-center.gap-1
+                                             (ui/icon "arrow-up" {:size 15})
+                                             [:div "Sort ascending"]])
+                                           (shui/dropdown-menu-item
+                                            {:key "desc"
+                                             :on-click #(column-set-sorting! sorting column false)}
+                                            [:div.flex.flex-row.items-center.gap-1
+                                             (ui/icon "arrow-down" {:size 15})
+                                             [:div "Sort descending"]])
+                                           (when (and db-based? property)
+                                             (shui/dropdown-menu-item
+                                              {:on-click (fn [_e]
+                                                           (if pinned?
+                                                             (db-property-handler/delete-property-value! (:db/id view-entity)
+                                                                                                         :logseq.property.table/pinned-columns
+                                                                                                         (:db/id property))
+                                                             (property-handler/set-block-property! (state/get-current-repo)
+                                                                                                   (:db/id view-entity)
+                                                                                                   :logseq.property.table/pinned-columns
+                                                                                                   (:db/id property)))
+                                                           (shui/popup-hide! id))}
+                                              [:div.flex.flex-row.items-center.gap-1
+                                               (ui/icon "pin" {:size 15})
+                                               [:div (if pinned? "Unpin" "Pin")]]))]
+                            tag (when-let [entity (:logseq.property/view-for view-entity)]
+                                  (when (ldb/class? entity)
+                                    entity))
+                            option (cond->
+                                    {:with-title? false
+                                     :more-options table-options}
+                                     (some? tag)
+                                     (assoc :class-schema? true))]
+                        [:div.ls-property-dropdown
+                         (property-config/property-dropdown property tag option)]))]
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
