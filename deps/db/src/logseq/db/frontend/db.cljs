@@ -40,8 +40,7 @@
 (defn get-all-properties
   [db]
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
-       (map (fn [d]
-              (d/entity db (:e d))))))
+       (map (fn [d] (d/entity db (:e d))))))
 
 (defn get-page-parents
   [node & {:keys [node-class?]}]
