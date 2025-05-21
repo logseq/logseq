@@ -788,4 +788,5 @@
   :dev/validate-db "(Dev) Validate current graph"
   :dev/fix-broken-graph "(Dev) Fix current broken graph"
   :dev/rtc-stop "(Dev) RTC Stop"
+  :dev/rtc-start "(Dev) RTC Start"
   :window/close "Close window"}}
