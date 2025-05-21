@@ -461,7 +461,10 @@
   [:map
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/uuid :uuid]
-   [:block/tx-id {:optional true} :int]])
+   [:block/tx-id {:optional true} :int]
+   [:block/created-at {:optional true} :int]
+   [:block/updated-at {:optional true} :int]
+   [:block/properties {:optional true} block-properties]])
 
 (defn entity-dispatch-key [db ent]
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
