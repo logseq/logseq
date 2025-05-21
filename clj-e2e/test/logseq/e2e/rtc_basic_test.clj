@@ -13,6 +13,8 @@
 
 (use-fixtures :once fixtures/open-2-pages)
 
+(use-fixtures :each fixtures/validate-graph)
+
 (deftest rtc-basic-test
   (let [graph-name (str "rtc-graph-" (.toEpochMilli (java.time.Instant/now)))
         page-names (map #(str "rtc-test-page" %) (range 4))]
