@@ -787,4 +787,5 @@
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
   :dev/fix-broken-graph "(Dev) Fix current broken graph"
+  :dev/rtc-stop "(Dev) RTC Stop"
   :window/close "Close window"}}
