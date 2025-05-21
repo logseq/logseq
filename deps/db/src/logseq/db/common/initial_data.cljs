@@ -154,6 +154,32 @@
       (with-raw-title entity)
       (assoc :db/id (:db/id entity))))
 
+(defn hidden-ref?
+  "Whether ref-block (for block with the `id`) should be hidden."
+  [db ref-block id]
+  (let [db-based? (entity-plus/db-based-graph? db)]
+    (if db-based?
+      (let [entity (d/entity db id)]
+        (or
+         (= (:db/id ref-block) id)
+         (= id (:db/id (:block/page ref-block)))
+         (entity-util/hidden? (:block/page ref-block))
+         (entity-util/hidden? ref-block)
+         (contains? (set (map :db/id (:block/tags ref-block))) (:db/id entity))
+         (some? (get ref-block (:db/ident entity)))))
+      (or
+       (= (:db/id ref-block) id)
+       (= id (:db/id (:block/page ref-block)))))))
+
+(defn get-block-refs-count
+  [db id]
+  (or
+   (some->> (d/entity db id)
+            :block/_refs
+            (remove (fn [ref-block] (hidden-ref? db ref-block id)))
+            count)
+   0))
+
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id {:keys [children? children-only? nested-children? properties children-props]}]
   (let [block (d/entity db (if (uuid? id)
@@ -211,7 +237,7 @@
                                           :else
                                           v)))
                          block-refs-count?
-                         (assoc :block.temp/refs-count (count (:block/_refs block))))]
+                         (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
             (cond->
              {:block block'}
               children?

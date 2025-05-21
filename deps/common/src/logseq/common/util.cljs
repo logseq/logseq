@@ -393,3 +393,19 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
       (str nn "/" (name x))
       (name x))
     x))
+
+(defn by-sorting
+  [sorting]
+  (let [get-value+cmp
+        (map
+         (fn [{:keys [get-value asc?]}]
+           [get-value
+            (if asc? compare #(compare %2 %1))])
+         sorting)]
+    (fn [a b]
+      (reduce
+       (fn [order [get-value cmp]]
+         (if (zero? order)
+           (cmp (get-value a) (get-value b))
+           (reduced order)))
+       0 get-value+cmp))))
