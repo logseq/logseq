@@ -101,3 +101,6 @@
 
 (defn ^:export replace-graph-with-db-file []
   (state/pub-event! [:dialog-select/db-graph-replace]))
+
+(defn ^:export rtc-stop []
+  (state/<invoke-db-worker :thread-api/rtc-stop))
