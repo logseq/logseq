@@ -170,16 +170,19 @@
     (shui/button
      {:variant "text"
       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
-      :on-mouse-up (fn [^js e]
-                     (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
-                       (when (and (or (nil? @*last-header-action-target)
-                                      (not= el @*last-header-action-target))
-                                  (string/blank? (some-> el (.-style) (.-transform))))
-                         (shui/popup-show! el sub-content
-                                           {:align "start" :as-dropdown? true
-                                            :on-before-hide (fn []
-                                                              (reset! *last-header-action-target el)
-                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))}))))}
+      :on-click (fn [^js e]
+                  (let [popup-id (str "table-column-" (:id column))]
+                    (when-let [^js el (some-> (.-target e) (.closest "[aria-roledescription=sortable]"))]
+                      (when (and (or (nil? @*last-header-action-target)
+                                     (not= el @*last-header-action-target))
+                                 (string/blank? (some-> el (.-style) (.-transform))))
+                        (shui/popup-show! el sub-content
+                                          {:id popup-id
+                                           :align "start"
+                                           :as-dropdown? true
+                                           :on-before-hide (fn []
+                                                             (reset! *last-header-action-target el)
+                                                             (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
      (let [title (str (:name column))]
        [:span {:title title
                :class "max-w-full overflow-hidden text-ellipsis"}
