@@ -1,9 +1,11 @@
 (ns capacitor.components.blocks
   (:require [capacitor.state :as state]
+            [clojure.string :as string]
             [frontend.db.model :as db-model]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.db.async :as db-async]
+            [frontend.db.conn :as db-conn]
             [frontend.db.utils :as db-utils]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -104,6 +106,7 @@
            (when (and (not edit-target?)
                    (= block (:editing-block @state/*state)))
              (exit!))))
+
        :on-save!
        (fn [content {:keys [enter?]}]
          (let [block-uuid (:block/uuid block)
@@ -111,6 +114,9 @@
 
            ;; update block content
            (-> (do (when enter? (exit!))
+                 ;; check block exist?
+                 (when-not (db-utils/entity (:db/id block))
+                   (throw nil))
                  (editor-handler/save-block! current-repo block-uuid content))
              (p/then (fn []
                        (state/set-state! [:modified-blocks block-uuid] (js/Date.now))
@@ -127,6 +133,27 @@
                                      )))
                          )))
              (p/catch #(notification/show! (str %) :error)))))
+
+       :on-delete!
+       (fn [content]
+         (let [prev-block (db-model/get-prev (db-conn/get-db) (:db/id block))
+               parent-block (:block/parent block)]
+           (cond
+             (and (nil? prev-block) (nil? parent-block)) nil
+             :else
+             (let [has-children? (seq (:block/_parent block))]
+               (when-not has-children?
+                 (p/do!
+                   (editor-handler/delete-block-aux! block)
+                   (state/set-state! [:modified-blocks (:block/uuid block)] (js/Date.now))
+                   (when prev-block
+                     (cc-common/keep-keyboard-open nil)
+                     (js/requestAnimationFrame #(state/set-editing-block! prev-block)))
+                   (when (false? (some-> content (string/trim) (string/blank?)))
+                     (notification/show! "concat prev block content!!")
+                     )))))
+           (prn :debug "delete node:" (:db/id block) (:block/title prev-block))
+           ))
        })))
 
 (rum/defc block-content
@@ -154,11 +181,7 @@
         (if (and editing-block
               (= block-uuid (:block/uuid editing-block)))
           (set-editing! true)
-          (set-editing! false
-            ;(fn [editing?]
-            ;  (if editing?
-            ;    () false))
-            ))
+          (set-editing! false))
         #())
       [editing-block])
 
@@ -184,13 +207,23 @@
        (rum/with-key (block-item block) (str (:block/uuid block))))]))
 
 (rum/defc blocks-container
-  [root]
-  [:div.app-blocks-container
-   (let [block? (not (db-model/page? root))
-         children (:block/_parent root)
-         blocks (if block? [root] (db-model/sort-by-order children))]
-     ;(js/console.log "==>> blocks:" (:block/title root) (count blocks))
-     (blocks-list blocks))])
+  [root-block]
+  (let [[block set-block!] (rum/use-state root-block)
+        [modified-ts] (state/use-app-state [:modified-blocks (:block/uuid block)])
+        page? (db-model/page? block)
+        children (:block/_parent block)
+        blocks (some-> children (seq) (db-model/sort-by-order))]
+
+    (rum/use-effect!
+      (fn []
+        (set-block! (db-utils/entity (:db/id root-block)))
+        #())
+      [modified-ts root-block])
+
+    ;(js/console.log "=>> blocks:" (:block/title root) (count blocks))
+    [:div.app-blocks-container
+     {:class (when page? "as-page")}
+     (blocks-list blocks)]))
 
 (rum/defc page-blocks
   [page-name-or-entity]
