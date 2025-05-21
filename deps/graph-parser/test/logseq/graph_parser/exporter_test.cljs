@@ -591,7 +591,8 @@
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %)
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
-                       "pages/Whiteboard___Arrow_head_toggle.md"])
+                       "pages/Whiteboard___Arrow_head_toggle.md"
+                       "pages/Library.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
