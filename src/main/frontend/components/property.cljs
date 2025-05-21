@@ -638,9 +638,12 @@
                                         (into result cur-properties)
                                         result)))
                              result))
-        full-properties (->> (concat block-own-properties'
-                                     (map (fn [p] [p (get block p)]) class-properties))
-                             remove-built-in-or-other-position-properties)]
+        full-properties (cond->
+                         (->> (concat block-own-properties'
+                                      (map (fn [p] [p (get block p)]) class-properties))
+                              remove-built-in-or-other-position-properties)
+                          (and (ldb/class? block) (empty? (:logseq.property.class/properties block)))
+                          (concat [[:logseq.property.class/properties nil]]))]
     (cond
       (empty? full-properties)
       (when sidebar-properties?
