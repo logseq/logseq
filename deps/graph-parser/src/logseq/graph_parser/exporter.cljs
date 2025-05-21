@@ -60,22 +60,14 @@
                       (merge ex-data' {:page-name page-name
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
-(defn- block-db-tag?
-  [block]
-  (and (set? (:block/tags block))
-       (contains? (:block/tags block) :logseq.class/Tag)))
-
 (defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
-  (let [parent-k' (if (block-db-tag? block)
-                    :logseq.property.class/extends
-                    parent-k)]
-    (if (:block/namespace block)
-      (-> (dissoc block :block/namespace)
-          (assoc parent-k'
-                 {:block/uuid (get-page-uuid page-names-to-uuids
-                                             (get-in block [:block/namespace :block/name])
-                                             {:block block :block/namespace (:block/namespace block)})}))
-      block)))
+  (if (:block/namespace block)
+    (-> (dissoc block :block/namespace)
+        (assoc parent-k
+               {:block/uuid (get-page-uuid page-names-to-uuids
+                                           (get-in block [:block/namespace :block/name])
+                                           {:block block :block/namespace (:block/namespace block)})}))
+    block))
 
 (defn- build-class-ident-name
   [class-name]
