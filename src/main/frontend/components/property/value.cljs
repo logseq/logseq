@@ -1241,7 +1241,9 @@
                                  (set-editing! false))))]
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
-      :on-click #(set-editing! true)}
+      :on-click #(do
+                   (state/clear-selection!)
+                   (set-editing! true))}
      (if editing?
        (shui/input
         {:ref *input-ref
