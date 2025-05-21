@@ -15,7 +15,9 @@
 
 (use-fixtures :once fixtures/open-page)
 
-(use-fixtures :each fixtures/new-logseq-page)
+(use-fixtures :each
+  fixtures/new-logseq-page
+  fixtures/validate-graph)
 
 (deftest command-trigger-test
   (testing "/command trigger popup"
