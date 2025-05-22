@@ -99,7 +99,13 @@
               collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
           (when collapsed?
             (editor-handler/expand-block! current-block-id))
-          (let [f #(let [triggers (->> (d/sel ".jtrigger")
+          (let [f #(let [selected-block-or-editing-block (or (first (state/get-selection-blocks))
+                                                    ;; current edited block
+                                                             (some-> (:block-parent-id (first (state/get-editor-args)))
+                                                                     js/document.getElementById))
+                         triggers (->> (if selected-block-or-editing-block
+                                         (d/sel selected-block-or-editing-block ".jtrigger")
+                                         (d/sel ".jtrigger"))
                                        (remove (fn [^js n] (or (.closest n ".positioned-properties")
                                                                (.closest n ".view-actions")))))]
                      (when (seq triggers)
