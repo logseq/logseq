@@ -156,7 +156,8 @@
        (p/let [repo (state/get-current-repo)
                properties (if (:class-schema? select-opts)
                             (property-handler/get-class-property-choices)
-                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))
+                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true
+                                                               :block (:block select-opts)}))
                classes (->> (db-model/get-all-classes repo)
                             (remove ldb/built-in?))]
          (set-classes! classes)
@@ -418,6 +419,7 @@
                              (shui/popup-hide!)))}]
          (property-select (merge (:select-opts opts) {:on-chosen on-chosen
                                                       :input-opts input-opts
+                                                      :block block
                                                       :class-schema? class-schema?}))))]))
 
 (rum/defcs new-property < rum/reactive
