@@ -47,7 +47,8 @@
                                       :redef false}
                            :cross-chunk-method-motion false}
         :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
-        :closure-defines {goog.debug.LOGGING_ENABLED true
+        :closure-defines {lambdaisland.glogi.console/colorize "false"
+                          goog.debug.LOGGING_ENABLED true
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
                           frontend.config/ENABLE-PLUGINS #shadow/env ["ENABLE_PLUGINS" :as :bool :default true]

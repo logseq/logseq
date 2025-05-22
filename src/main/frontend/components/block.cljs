@@ -2129,8 +2129,9 @@
         own-number-list?   (:own-order-number-list? config)
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
+        page-title?        (:page-title? config)
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true
-                                                              :ignore-children? (:page-title? config)})
+                                                              :ignore-children? page-title?})
         link?              (boolean (:original-block config))
         icon-size          (if collapsed? 12 14)
         icon               (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
@@ -2145,7 +2146,8 @@
                                 :is-with-icon  with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
-     (when (and (or (not fold-button-right?) collapsable?) (not (:table? config)))
+     (when (and (or (not fold-button-right?) collapsable?)
+                (not (:table? config)))
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2160,7 +2162,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or order-list? config/publishing?)))
+                               (and collapsed? (or page-title? order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])

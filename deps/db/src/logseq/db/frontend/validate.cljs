@@ -38,10 +38,10 @@
                               ;; remove :db/id as it adds needless declarations to schema
                               #(validator [(dissoc % :db/id)])
                               ent-maps)]
-        (js/console.log "changed eids:" changed-ids tx-meta)
+        (prn "changed eids:" changed-ids :tx-meta tx-meta)
         (if (seq invalid-ent-maps)
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
-            (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
+            (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
               (let [m' (update m :block/properties (fn [properties]
                                                      (map (fn [[p v]]
