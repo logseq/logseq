@@ -1189,7 +1189,7 @@
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-pointer-down show!
+          :on-click show!
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
