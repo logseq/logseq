@@ -144,32 +144,29 @@
   (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
-(defn- validate-parent-property-have-same-type
-  "Validates whether given parent and children are valid. Allows 'class' and
-  'page' types to have a relationship with their own type. May consider allowing more
-  page types if they don't cause systemic bugs"
+(defn- validate-extends-property-have-correct-type
+  "Validates whether given parent and children are classes"
   [parent-ent child-ents]
-  (when (or (and (ldb/class? parent-ent) (not (every? ldb/class? child-ents)))
-            (and (ldb/internal-page? parent-ent) (not (every? ldb/internal-page? child-ents)))
-            (not ((some-fn ldb/class? ldb/internal-page?) parent-ent)))
-    (throw (ex-info "Can't set this page as a parent because the child page is a different type"
+  (when (or (not (ldb/class? parent-ent))
+            (not (every? ldb/class? child-ents)))
+    (throw (ex-info "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
                     {:type :notification
-                     :payload {:message "Can't set this page as a parent because the child page is a different type"
-                               :type :warning}
+                     :payload {:message "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
+                               :type :error}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
 
-(defn- disallow-built-in-class-parent-change
+(defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
     (throw (ex-info "Can't change the parent of a built-in tag"
                     {:type :notification
                      :payload {:message "Can't change the parent of a built-in tag"
-                               :type :warning}}))))
+                               :type :error}}))))
 
-(defn validate-parent-property
+(defn validate-extends-property
   [parent-ent child-ents]
-  (disallow-built-in-class-parent-change parent-ent child-ents)
-  (validate-parent-property-have-same-type parent-ent child-ents))
+  (disallow-built-in-class-extends-change parent-ent child-ents)
+  (validate-extends-property-have-correct-type parent-ent child-ents))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
   [db _block-eids v]
