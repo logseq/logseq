@@ -133,7 +133,6 @@
                            (let [{:keys [start end]} @*between-dates]
                              (when (and start end)
                                (let [clause [:between [:page-ref start] [:page-ref end]]]
-                                 (prn :debug :tree tree)
                                  (append-tree! tree opts loc clause)
                                  (reset! *between-dates {}))))))]])
 
