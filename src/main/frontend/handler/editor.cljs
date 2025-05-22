@@ -3339,6 +3339,11 @@
   []
   (popup-exists? "editor.commands"))
 
+(defn open-selected-blocks-in-sidebar!
+  []
+  (doseq [id (state/get-selection-block-ids)]
+    (state/sidebar-add-block! (state/get-current-repo) id :block)))
+
 (defn open-selected-block!
   [direction e]
   (let [selected-blocks (state/get-selection-blocks)
