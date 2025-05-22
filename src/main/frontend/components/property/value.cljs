@@ -608,7 +608,7 @@
           (:db/id page)))
 
       (and class? page? id)
-      (p/let [_ (db-page-handler/convert-to-tag! page-entity)]
+      (p/let [_ (db-page-handler/convert-page-to-tag! page-entity)]
         id)
 
       :else

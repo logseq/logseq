@@ -42,18 +42,21 @@
    (when (valid-tag? repo (db/entity repo [:block/uuid block-id]) tag-entity)
      (db-property-handler/set-block-property! block-id :block/tags (:db/id tag-entity)))))
 
-(defn convert-to-tag!
+(defn convert-page-to-tag!
   "Converts a Page to a Tag"
   [page-entity]
-  (if (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
-    (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
-    (let [txs [(db-class/build-new-class (db/get-db)
-                                         {:db/id (:db/id page-entity)
-                                          :block/title (:block/title page-entity)
-                                          :block/created-at (:block/created-at page-entity)})
-               [:db/retract (:db/id page-entity) :block/tags :logseq.class/Page]]]
+  (cond (db/page-exists? (:block/title page-entity) #{:logseq.class/Tag})
+        (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
+        (:block/parent page-entity)
+        (notification/show! "Namespaced pages can't be tags" :error false)
+        :else
+        (let [txs [(db-class/build-new-class (db/get-db)
+                                             {:db/id (:db/id page-entity)
+                                              :block/title (:block/title page-entity)
+                                              :block/created-at (:block/created-at page-entity)})
+                   [:db/retract (:db/id page-entity) :block/tags :logseq.class/Page]]]
 
-      (db/transact! (state/get-current-repo) txs {:outliner-op :save-block}))))
+          (db/transact! (state/get-current-repo) txs {:outliner-op :save-block}))))
 
 (defn convert-tag-to-page!
   [entity]
@@ -61,7 +64,7 @@
     (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
     (when-not (:logseq.property/built-in? entity)
       (if (seq (:logseq.property.class/_extends entity))
-        (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :warning false)
+        (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)
         (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
           (let [convert-fn
                 (fn convert-fn []
