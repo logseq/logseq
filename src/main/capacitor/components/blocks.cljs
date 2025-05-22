@@ -2,6 +2,7 @@
   (:require [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.db.model :as db-model]
+            [frontend.util.cursor :as cursor]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.db.async :as db-async]
@@ -96,43 +97,49 @@
 (rum/defc block-editor
   [block]
   (let [content (:block/title block)
-        exit! #(state/set-state! :editing-block nil)]
+        block-uuid (:block/uuid block)
+        current-repo (fstate/get-current-repo)]
+
     (cc-editor/editor-aux content
-      {:on-outside!
+      {:on-focused!
+       (fn [^js input]
+         (let [cursor-at (some-> (state/get-editing-opts) :cursor-at)]
+           (if (number? cursor-at)
+             (cursor/move-cursor-to input cursor-at)
+             (cursor/move-cursor-to-end input))))
+
+       :on-outside!
        (fn [^js e]
          (let [edit-target? (some-> e (.-target) (cc-common/get-dom-block-uuid))]
            (when edit-target?
              (cc-common/keep-keyboard-open e))
            (when (and (not edit-target?)
                    (= block (:editing-block @state/*state)))
-             (exit!))))
+             (state/exit-editing!))))
 
        :on-save!
-       (fn [content {:keys [enter?]}]
-         (let [block-uuid (:block/uuid block)
-               current-repo (fstate/get-current-repo)]
-
-           ;; update block content
-           (-> (do (when enter? (exit!))
-                 ;; check block exist?
-                 (when-not (db-utils/entity (:db/id block))
-                   (throw nil))
-                 (editor-handler/save-block! current-repo block-uuid content))
-             (p/then (fn []
-                       (state/set-state! [:modified-blocks block-uuid] (js/Date.now))
-                       (when enter?
-                         ;; create new block
-                         (cc-common/keep-keyboard-open nil)
-                         (-> (insert-new-block! "" {:block-uuid block-uuid})
-                           (p/then (fn [new-block]
-                                     (prn :debug "new block:" new-block)
-                                     (when-let [parent-block (:block/parent new-block)]
-                                       (state/set-state! [:modified-pages (:block/uuid parent-block)] (js/Date.now)))
-                                     ;; edit the new block
-                                     (js/requestAnimationFrame #(state/set-editing-block! new-block))
-                                     )))
-                         )))
-             (p/catch #(notification/show! (str %) :error)))))
+       (fn [content {:keys [enter? esc?]}]
+         ;; update block content
+         (-> (do (when (or enter? esc?) (state/exit-editing!))
+               ;; check block exist?
+               (when-not (db-utils/entity (:db/id block))
+                 (throw nil))
+               (editor-handler/save-block! current-repo block-uuid content))
+           (p/then (fn []
+                     (state/set-state! [:modified-blocks block-uuid] (js/Date.now))
+                     (when enter?
+                       ;; create new block
+                       (cc-common/keep-keyboard-open nil)
+                       (-> (insert-new-block! "" {:block-uuid block-uuid})
+                         (p/then (fn [new-block]
+                                   (prn :debug "new block:" new-block)
+                                   (when-let [parent-block (:block/parent new-block)]
+                                     (state/set-state! [:modified-pages (:block/uuid parent-block)] (js/Date.now)))
+                                   ;; edit the new block
+                                   (js/requestAnimationFrame #(state/edit-block! new-block))
+                                   )))
+                       )))
+           (p/catch #(notification/show! (str %) :error))))
 
        :on-delete!
        (fn [content]
@@ -140,18 +147,21 @@
                parent-block (:block/parent block)]
            (cond
              (and (nil? prev-block) (nil? parent-block)) nil
+
              :else
              (let [has-children? (seq (:block/_parent block))]
                (when-not has-children?
                  (p/do!
                    (editor-handler/delete-block-aux! block)
                    (state/set-state! [:modified-blocks (:block/uuid block)] (js/Date.now))
+                   (when (and (false? (some-> content (string/trim) (string/blank?))) prev-block)
+                     (editor-handler/save-block! current-repo prev-block
+                       (str (:block/title prev-block) content)))
                    (when prev-block
                      (cc-common/keep-keyboard-open nil)
-                     (js/requestAnimationFrame #(state/set-editing-block! prev-block)))
-                   (when (false? (some-> content (string/trim) (string/blank?)))
-                     (notification/show! "concat prev block content!!")
-                     )))))
+                     (state/set-state! [:modified-blocks (:block/uuid prev-block)] (js/Date.now))
+                     (js/requestAnimationFrame #(state/edit-block! prev-block
+                                                  {:cursor-at (count (:block/title prev-block))})))))))
            (prn :debug "delete node:" (:db/id block) (:block/title prev-block))
            ))
        })))

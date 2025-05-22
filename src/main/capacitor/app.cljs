@@ -212,7 +212,7 @@
               (fn []
                 (cond
                   (not (nil? (state/get-editing-block)))
-                  (state/set-editing-block! nil)
+                  (state/exit-editing!)
 
                   :else
                   (cc-utils/nav-pop!)))
