@@ -6,8 +6,9 @@
 (defonce *state
   (atom {:version 0
          :editing-block nil
+         :editing-opts nil
          :modified-pages {}
-         :modified-blocks {} ;; {:uuid timestamp}
+         :modified-blocks {}                                ;; {:uuid timestamp}
          }))
 
 (defn use-nav-root [] (r/use-atom *nav-root))
@@ -50,5 +51,14 @@
 (defn get-editing-block []
   (:editing-block @*state))
 
-(defn set-editing-block! [block]
-  (set-state! :editing-block block))
+(defn edit-block!
+  ([block] (edit-block! block nil))
+  ([block opts]
+   (set-state! :editing-block block)
+   (set-state! :editing-opts opts)))
+
+(defn exit-editing! []
+  (edit-block! nil nil))
+
+(defn get-editing-opts []
+  (:editing-opts @*state))

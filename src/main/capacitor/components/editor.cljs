@@ -7,7 +7,7 @@
             [frontend.handler.notification :as notification]))
 
 (rum/defc editor-aux
-  [content {:keys [on-outside! on-save! on-delete!]}]
+  [content {:keys [on-outside! on-save! on-delete! on-focused! on-keydown! on-keyup!]}]
 
   (let [*input (rum/use-ref nil)]
 
@@ -17,8 +17,8 @@
           (fn []
             (when-let [^js input (some-> (rum/deref *input))]
               (.focus input)
-              (let [len (.-length (.-value input))]
-                (.setSelectionRange input len len))
+              (when on-focused!
+                (on-focused! input))
               ;(.scrollIntoView input #js {:behavior "smooth", :block "start"})
               )))
         #())
@@ -35,7 +35,7 @@
 
     (let [save-handle!
           (fn [opts]
-            (let [content (.-value (rum/deref *input))]
+            (when-let [content (some-> (rum/deref *input) (.-value))]
               (when on-save!
                 (prn :debug "save block content:" content opts)
                 (on-save! content opts))))
@@ -52,19 +52,25 @@
                         (let [ekey (.-key e)
                               target (.-target e)
                               enter? (= ekey "Enter")
+                              esc? (= ekey "Escape")
                               backspace? (= ekey "Backspace")]
 
-                          (cond
-                            (and enter? (cursor/end? target))
-                            (do (save-handle! {:enter? true})
-                              (util/stop e))
+                          (when (or (nil? on-keydown!)
+                                  (not (false? (on-keydown! e))))
+                            (cond
+                              (or (and enter? (cursor/end? target)) esc?)
+                              (do (save-handle! {:enter? enter? :esc? esc?})
+                                (util/stop e))
 
-                            (and backspace? (cursor/start? target))
-                            (do (delete-handle! {})
-                              (util/stop e))
+                              (and backspace? (cursor/start? target))
+                              (do (delete-handle! {})
+                                (util/stop e))
 
-                            :else (debounce-save-handle!)
-                            )))
+                              :else (debounce-save-handle!)
+                              ))))
+         :on-key-up (fn [^js e]
+                      (when on-keyup!
+                        (on-keyup! e)))
          :default-value content}))))
 
 (rum/defc content-aux
