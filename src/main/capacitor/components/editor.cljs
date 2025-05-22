@@ -1,13 +1,14 @@
 (ns capacitor.components.editor
   (:require [rum.core :as rum]
             [capacitor.components.ui :as ui]
+            [cljs-bean.core :as bean]
             [capacitor.ionic :as ionic]
             [frontend.util.cursor :as cursor]
             [frontend.util :as util]
             [frontend.handler.notification :as notification]))
 
 (rum/defc editor-aux
-  [content {:keys [on-outside! on-save! on-delete! on-focused! on-keydown! on-keyup!]}]
+  [content {:keys [on-outside! on-save! on-delete! on-focused! on-keydown! on-keyup! on-bounded!]}]
 
   (let [*input (rum/use-ref nil)]
 
@@ -48,25 +49,35 @@
       (ui/textarea
         {:class "editor-aux-input bg-gray-200 border-none"
          :ref *input
+         :on-change (fn [] (debounce-save-handle!))
          :on-key-down (fn [^js e]
                         (let [ekey (.-key e)
                               target (.-target e)
                               enter? (= ekey "Enter")
                               esc? (= ekey "Escape")
-                              backspace? (= ekey "Backspace")]
+                              backspace? (= ekey "Backspace")
+                              arrow-up? (= ekey "ArrowUp")
+                              arrow-down? (= ekey "ArrowDown")]
 
                           (when (or (nil? on-keydown!)
                                   (not (false? (on-keydown! e))))
                             (cond
+                              (or arrow-up? arrow-down?)
+                              (when-let [{:keys [isFirstLine isLastLine]} (some-> (.checkCursorLine js/window.externalsjs target) (bean/->clj))]
+                                (when (and on-bounded! (or (and arrow-up? isFirstLine)
+                                                         (and arrow-down? isLastLine)))
+                                  (on-bounded! (if arrow-up? :up :down) target)
+                                  (util/stop e)))
+
                               (or (and enter? (cursor/end? target)) esc?)
                               (do (save-handle! {:enter? enter? :esc? esc?})
                                 (util/stop e))
 
-                              (and backspace? (cursor/start? target))
+                              (and backspace?
+                                (cursor/start? target)
+                                (not (util/input-text-selected? target)))
                               (do (delete-handle! {})
                                 (util/stop e))
-
-                              :else (debounce-save-handle!)
                               ))))
          :on-key-up (fn [^js e]
                       (when on-keyup!

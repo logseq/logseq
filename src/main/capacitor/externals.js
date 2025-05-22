@@ -55,7 +55,23 @@ const settleStatusBar = async () => {
   }
 }
 
+function checkCursorLine (textarea) {
+  const { value, selectionStart } = textarea
+
+  const lines = value.split('\n')
+  const totalLines = lines.length
+
+  const textBeforeCursor = value.substring(0, selectionStart)
+  const currentLine = textBeforeCursor.split('\n').length
+
+  const isFirstLine = currentLine === 1
+  const isLastLine = currentLine === totalLines
+
+  return { isFirstLine, isLastLine, currentLine, totalLines }
+}
+
 window.externalsjs = {
   initGlobalListeners,
   settleStatusBar,
+  checkCursorLine,
 }
