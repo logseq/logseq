@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.db.model :as db-model]
             [frontend.util.cursor :as cursor]
+            [dommy.core :as dom]
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.db.async :as db-async]
@@ -93,6 +94,29 @@
                 opts {:edit-block? false})]
     (editor-handler/api-insert-new-block! content opts')))
 
+(defn dom-prev-block
+  [^js current-block-node]
+  (when-let [prev-node (loop [node current-block-node]
+                         (when-let [node (some-> node (.-previousSibling))]
+                           (when node
+                             (if (dom/has-class? node "block-item")
+                               node
+                               (recur node)))))]
+    (let [uuid' (.-blockid (.-dataset prev-node))]
+      (db-model/get-block-by-uuid (uuid uuid')))))
+
+(defn dom-next-block
+  [^js current-block-node]
+  (when-let [next-node (loop [node current-block-node]
+                         (when-let [node (some-> node (.-nextSibling))]
+                           (when node
+                             (if (dom/has-class? node "block-item")
+                               node
+                               (recur node)))))]
+    (prn :debug next-node)
+    (let [uuid' (.-blockid (.-dataset next-node))]
+      (db-model/get-block-by-uuid (uuid uuid')))))
+
 ;; components
 (rum/defc block-editor
   [block]
@@ -107,6 +131,16 @@
            (if (number? cursor-at)
              (cursor/move-cursor-to input cursor-at)
              (cursor/move-cursor-to-end input))))
+
+       :on-bounded!
+       (fn [dir ^js input]
+         (case dir
+           :up (when-let [prev-block (dom-prev-block (.closest input ".block-item"))]
+                 (state/edit-block! prev-block {}))
+           :down (when-let [next-block (dom-next-block (.closest input ".block-item"))]
+                   (js/console.log next-block)
+                   (state/edit-block! next-block {}))
+           :dune))
 
        :on-outside!
        (fn [^js e]
