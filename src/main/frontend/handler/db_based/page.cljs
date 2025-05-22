@@ -65,6 +65,8 @@
               (fn convert-fn []
                 (let [page-txs [[:db/retract (:db/id page-entity) :db/ident]
                                 [:db/retract (:db/id page-entity) :block/tags :logseq.class/Tag]
+                                [:db/retract (:db/id page-entity) :logseq.property.class/extends]
+                                [:db/retract (:db/id page-entity) :logseq.property.class/properties]
                                 [:db/add (:db/id page-entity) :block/tags :logseq.class/Page]]
                       obj-txs (mapcat (fn [obj]
                                         (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
@@ -75,7 +77,7 @@
                       txs (concat page-txs obj-txs)]
                   (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
           (-> (shui/dialog-confirm!
-               "Converting a tag to page also removes tags from any nodes that have that tag. Are you ok with that?"
+               "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
                {:id :convert-tag-to-page
                 :data-reminder :ok})
               (p/then convert-fn)))))))
