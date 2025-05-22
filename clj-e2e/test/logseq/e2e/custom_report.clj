@@ -1,5 +1,6 @@
 (ns logseq.e2e.custom-report
-  (:require [clojure.stacktrace :as stack]
+  (:require [clojure.pprint :as pp]
+            [clojure.stacktrace :as stack]
             [clojure.string :as string]
             [clojure.test :as t]
             [logseq.e2e.playwright-page :as pw-page])
@@ -9,6 +10,8 @@
   "Set of pw-contexts.
   record all playwright contexts in this dynamic var"
   nil)
+
+(def ^:dynamic *pw-page->console-logs* nil)
 
 (defn screenshot
   [page test-name]
@@ -37,7 +40,13 @@
   ;; screenshot for all pw pages when :error
   (when-let [all-contexts (seq *pw-contexts*)]
     (doseq [page (mapcat pw-page/get-pages all-contexts)]
-      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*))))))
+      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*)))))
+
+  ;; dump console logs
+  (when-let [pw-page->console-logs (some-> *pw-page->console-logs* deref)]
+    (doseq [[_pw-page logs] pw-page->console-logs]
+      (spit (format "e2e-dump/console-logs-%s.txt" (System/currentTimeMillis))
+            (with-out-str (pp/pprint logs))))))
 
 (defmethod t/report :fail
   [m]
@@ -52,4 +61,10 @@
   ;; screenshot for all pw pages when :fail
   (when-let [all-contexts (seq *pw-contexts*)]
     (doseq [page (mapcat pw-page/get-pages all-contexts)]
-      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*))))))
+      (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*)))))
+
+;; dump console logs
+  (when-let [pw-page->console-logs (some-> *pw-page->console-logs* deref)]
+    (doseq [[_pw-page logs] pw-page->console-logs]
+      (spit (format "e2e-dump/console-logs-%s.txt" (System/currentTimeMillis))
+            (with-out-str (pp/pprint logs))))))
