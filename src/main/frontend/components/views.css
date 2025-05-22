@@ -15,3 +15,8 @@
 .group-list-view div[data-testid='virtuoso-item-list'] div[data-testid='virtuoso-item-list'] {
     @apply gap-0;
 }
+
+.ls-table-block {
+    @apply flex flex-row items-start text-sm;
+    margin-right: 6px;
+}

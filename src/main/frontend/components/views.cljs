@@ -260,12 +260,12 @@
                         (let [popup (fn []
                                       (let [width (-> (max 160 width) (- 18))]
                                         (if many?
-                                          [:div.ls-table-block.flex.flex-row.items-start
-                                           {:style {:width width :max-width width :margin-right "6px"}
+                                          [:div.ls-table-block
+                                           {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
                                            (pv/property-value row property {})]
-                                          [:div.ls-table-block.flex.flex-row.items-start
-                                           {:style {:width width :max-width width :margin-right "6px"}
+                                          [:div.ls-table-block
+                                           {:style {:width width :max-width width}
                                             :on-click util/stop-propagation}
                                            (block-container
                                             {:popup? true
