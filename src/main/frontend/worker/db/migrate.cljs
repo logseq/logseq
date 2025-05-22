@@ -987,14 +987,15 @@
   (when (neg? compare-result)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
-(defn- ensure-built-in-data-exists!
+(defn ensure-built-in-data-exists!
   [conn]
   (let [*uuids (atom {})
         data (->> (sqlite-create-graph/build-db-initial-data "")
                   (keep (fn [data]
                           (if (map? data)
                             (cond
-                              (= (:db/ident data) :logseq.kv/schema-version)
+                              ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
+                              (= "logseq.kv" (some-> (:db/ident data) namespace))
                               nil
 
                               (= (:block/title data) "Contents")

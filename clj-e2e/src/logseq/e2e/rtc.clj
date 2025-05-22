@@ -44,3 +44,11 @@
       (if (>= local-tx new-tx)
         local-tx
         (recur (dec i))))))
+
+(defn rtc-start
+  []
+  (util/search-and-click "(Dev) RTC Start"))
+
+(defn rtc-stop
+  []
+  (util/search-and-click "(Dev) RTC Stop"))

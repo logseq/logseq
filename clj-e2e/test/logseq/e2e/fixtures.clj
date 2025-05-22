@@ -1,7 +1,10 @@
 (ns logseq.e2e.fixtures
-  (:require [logseq.e2e.config :as config]
+  (:require [logseq.e2e.assert :as assert]
+            [logseq.e2e.config :as config]
             [logseq.e2e.custom-report :as custom-report]
+            [logseq.e2e.graph :as graph]
             [logseq.e2e.page :as page]
+            [logseq.e2e.settings :as settings]
             [wally.main :as w]))
 
 ;; TODO: save trace
@@ -15,6 +18,9 @@
     (w/grant-permissions :clipboard-write :clipboard-read)
     (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}]
       (w/navigate (str "http://localhost:" (or port @config/*port)))
+      (settings/developer-mode)
+      (w/refresh)
+      (assert/assert-graph-loaded?)
       (f))))
 
 (def *page1 (atom nil))
@@ -36,13 +42,17 @@
               w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
       (run!
        #(w/with-page %
-          (w/navigate (str "http://localhost:" port')))
+          (w/navigate (str "http://localhost:" port'))
+          (settings/developer-mode)
+          (w/refresh))
        [p1 p2])
       (f))
 
     ;; use with-page-open to release resources
     (w/with-page-open p1)
-    (w/with-page-open p2)))
+    (w/with-page-open p2)
+    (reset! *page1 nil)
+    (reset! *page2 nil)))
 
 (def ^:dynamic *pw-ctx* nil)
 (defn open-new-context
@@ -65,9 +75,21 @@
 
 (defn create-page
   []
-  (page/new-page (str "page " (swap! *page-number inc))))
+  (let [page-name (str "page " (swap! *page-number inc))]
+    (page/new-page page-name)
+    page-name))
 
 (defn new-logseq-page
   [f]
   (create-page)
   (f))
+
+(defn validate-graph
+  [f]
+  (f)
+  (if (and @*page1 @*page2)
+    (doseq [p [@*page1 @*page2]]
+      (w/with-page p
+        (graph/validate-graph)))
+
+    (graph/validate-graph)))
