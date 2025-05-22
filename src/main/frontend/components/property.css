@@ -45,23 +45,29 @@
   @apply focus-visible:outline-none focus-visible:bg-gray-03 focus-visible:rounded;
 }
 
+.jtrigger {
+    @apply relative;
+
+    &-id {
+        @apply absolute left-[-19px] top-[3px] rounded-full leading-none
+        flex items-center justify-center bg-primary text-primary-foreground border-none
+        text-xs min-w-[20px] min-h-[20px] scale-95;
+    }
+}
+
+.ls-new-property .jtrigger {
+    &-id {
+      @apply left-[-11px] top-[2px];
+    }
+}
+
 .ls-properties-area {
   .property-pair {
     @apply flex flex-row flex-wrap space-x-1;
 
-    .jtrigger {
-      @apply relative;
-
-      &-id {
-        @apply absolute left-[-22px] top-[2px] rounded-full leading-none
-        flex items-center justify-center bg-primary text-primary-foreground border-none
-        text-xs min-w-[20px] min-h-[20px] scale-95;
-      }
-    }
-
     .jtrigger-view {
       > .jtrigger-id {
-        @apply left-[-14px];
+        @apply left-[-11px];
       }
 
       &:has(> .jtrigger-id) {

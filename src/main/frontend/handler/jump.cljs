@@ -1,12 +1,12 @@
 (ns frontend.handler.jump
   "Jump to property key/value"
-  (:require [frontend.state :as state]
+  (:require [clojure.string :as string]
             [dommy.core :as d]
-            [clojure.string :as string]
-            [frontend.util :as util]
-            [frontend.handler.notification :as notification]
+            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.db :as db]))
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defonce *current-keys (atom nil))
 (defonce *jump-data (atom {}))
@@ -92,20 +92,16 @@
                              (first (state/get-selection-block-ids))
                              (:block/uuid (db/get-page (state/get-current-page))))]
     (cond
-      current-block-id
+      (or current-block-id (:ui/sidebar-open? @state/state))
       (when (empty? (d/sel js/document ".jtrigger-id"))
         (let [current-block (when (uuid? current-block-id)
                               (db/entity [:block/uuid current-block-id]))
               collapsed? (or (state/get-block-collapsed current-block-id) (:block/collapsed? current-block))]
           (when collapsed?
             (editor-handler/expand-block! current-block-id))
-          (let [f #(let [selected-block-or-page (or (first (state/get-selection-blocks))
-                                   ;; current edited block
-                                                    (some-> (:block-parent-id (first (state/get-editor-args)))
-                                                            js/document.getElementById)
-                                   ;; current page
-                                                    (d/sel1 js/document "#main-content-container .ls-properties-area"))
-                         triggers (d/sel selected-block-or-page ".jtrigger")]
+          (let [f #(let [triggers (->> (d/sel ".jtrigger")
+                                       (remove (fn [^js n] (or (.closest n ".positioned-properties")
+                                                               (.closest n ".view-actions")))))]
                      (when (seq triggers)
                        (reset! *jump-data {:mode :property
                                            :triggers triggers})

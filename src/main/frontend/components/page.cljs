@@ -602,7 +602,7 @@
 
 (rum/defc sidebar-page-properties
   [config page]
-  (let [[collapsed? set-collapsed!] (rum/use-state true)]
+  (let [[collapsed? set-collapsed!] (rum/use-state (not (ldb/class? page)))]
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
