@@ -1,7 +1,10 @@
 (ns logseq.e2e.graph
-  (:require [logseq.e2e.assert :as assert]
+  (:require [clojure.edn :as edn]
+            [clojure.string :as string]
+            [logseq.e2e.assert :as assert]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w]
+            [logseq.e2e.locator :as loc]))
 
 (defn- refresh-all-remote-graphs
   []
@@ -52,3 +55,12 @@
   (when wait-sync?
     (w/wait-for "button.cloud.on.idle" {:timeout 20000}))
   (assert/assert-graph-loaded?))
+
+(defn validate-graph
+  []
+  (util/search-and-click "(Dev) Validate current graph")
+  (assert/assert-is-visible (loc/and ".notifications div" (w/get-by-text "Your graph is valid")))
+  (let [content (.textContent (loc/and ".notifications div" (w/get-by-text "Your graph is valid")))
+        summary (edn/read-string (subs content (string/index-of content "{")))]
+    (w/click ".notifications .ls-icon-x")
+    summary))

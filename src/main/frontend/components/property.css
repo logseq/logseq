@@ -357,8 +357,8 @@ a.control-link {
   }
 }
 
-.ls-property-dropdown-editor {
-  @apply w-[300px] p-1.5;
+.ls-property-dropdown {
+  @apply w-[260px] p-1.5;
 
   .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
   }
