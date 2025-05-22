@@ -10,5 +10,4 @@
                                          :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
   io.github.nextjournal/nbb-test-runner
   {:git/sha "012017a8a8983d05f905f38f631f5222f25b9ed9"}
-  io.github.pez/baldr {:mvn/version "1.0.9"}
-  com.lambdaisland/glogi {:mvn/version "1.1.144"}}}
+  io.github.pez/baldr {:mvn/version "1.0.9"}}}
