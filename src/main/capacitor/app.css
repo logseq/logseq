@@ -92,7 +92,7 @@ ion-textarea {
   }
 
   .block-item {
-    @apply flex list-none active:opacity-70 py-1;
+    @apply flex list-none py-1;
   }
 
   .block-bullet-marker {
