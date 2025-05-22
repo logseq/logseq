@@ -203,6 +203,7 @@
                  :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
+                 :property "letter-p"
                  :page "page"
                  :node "letter-n"
                  "letter-t"))]
