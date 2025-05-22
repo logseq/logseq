@@ -1174,6 +1174,7 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
+                    (util/stop e)
                     (state/clear-selection!)
                     (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
