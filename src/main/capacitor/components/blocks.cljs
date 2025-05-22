@@ -113,7 +113,6 @@
                              (if (dom/has-class? node "block-item")
                                node
                                (recur node)))))]
-    (prn :debug next-node)
     (let [uuid' (.-blockid (.-dataset next-node))]
       (db-model/get-block-by-uuid (uuid uuid')))))
 
@@ -184,18 +183,17 @@
 
              :else
              (let [has-children? (seq (:block/_parent block))]
-               (when-not has-children?
+               (when (and (not has-children?) prev-block)
                  (p/do!
+                   (when prev-block (cc-common/keep-keyboard-open nil))
                    (editor-handler/delete-block-aux! block)
                    (state/set-state! [:modified-blocks (:block/uuid block)] (js/Date.now))
                    (when (and (false? (some-> content (string/trim) (string/blank?))) prev-block)
                      (editor-handler/save-block! current-repo prev-block
                        (str (:block/title prev-block) content)))
-                   (when prev-block
-                     (cc-common/keep-keyboard-open nil)
-                     (state/set-state! [:modified-blocks (:block/uuid prev-block)] (js/Date.now))
-                     (js/requestAnimationFrame #(state/edit-block! prev-block
-                                                  {:cursor-at (count (:block/title prev-block))})))))))
+                   (state/set-state! [:modified-blocks (:block/uuid prev-block)] (js/Date.now))
+                   (js/requestAnimationFrame #(state/edit-block! prev-block
+                                                {:cursor-at (count (:block/title prev-block))}))))))
            (prn :debug "delete node:" (:db/id block) (:block/title prev-block))
            ))
        })))

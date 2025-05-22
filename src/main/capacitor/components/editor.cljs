@@ -47,7 +47,7 @@
                                (on-delete! content opts))))
           debounce-save-handle! (util/debounce save-handle! 500)]
       (ui/textarea
-        {:class "editor-aux-input bg-gray-200 border-none"
+        {:class "editor-aux-input bg-gray-200 border-none resize-none"
          :ref *input
          :on-change (fn [] (debounce-save-handle!))
          :on-key-down (fn [^js e]
