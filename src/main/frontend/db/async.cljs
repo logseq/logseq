@@ -9,16 +9,14 @@
             [frontend.db :as db]
             [frontend.db.async.util :as db-async-util]
             [frontend.db.file-based.async :as file-async]
-            [frontend.db.model :as db-model]
             [frontend.db.file-based.model :as file-model]
+            [frontend.db.model :as db-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.handler.file-based.property.util :as property-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
             [promesa.core :as p]))
 
 (def <q db-async-util/<q)
@@ -54,28 +52,6 @@
     (p/let [templates (<get-all-templates repo)]
       (get templates name))))
 
-(defn db-based-get-all-properties
-  "Return seq of all property names except for private built-in properties."
-  [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property?]
-            :or {remove-built-in-property? true
-                 remove-non-queryable-built-in-property? false}}]
-  (let [result (->> (d/datoms (db/get-db graph) :avet :block/tags :logseq.class/Property)
-                    (map (fn [datom] (db/entity (:e datom))))
-                    (sort-by (juxt ldb/built-in? :block/title)))]
-    (cond->> result
-      remove-built-in-property?
-      ;; remove private built-in properties
-      (remove (fn [p]
-                (let [ident (:db/ident p)]
-                  (and (ldb/built-in? p)
-                       (not (ldb/public-built-in-property? p))
-                       (not= ident :logseq.property/icon)))))
-      remove-non-queryable-built-in-property?
-      (remove (fn [p]
-                (let [ident (:db/ident p)]
-                  (and (ldb/built-in? p)
-                       (not (:queryable? (db-property/built-in-properties ident))))))))))
-
 (defn <get-all-properties
   "Returns all public properties as property maps including their
   :block/title and :db/ident. For file graphs the map only contains
@@ -83,7 +59,7 @@
   [& {:as opts}]
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (db-based-get-all-properties graph opts)
+      (db-model/get-all-properties graph opts)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
         (remove #(hidden-properties (:block/title %)) properties)))))

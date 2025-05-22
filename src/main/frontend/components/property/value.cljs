@@ -679,7 +679,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
-   {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice!] :as opts}
+   {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
    result]
   (let [repo (state/get-current-repo)
         classes (:logseq.property/classes property)
@@ -695,9 +695,6 @@
         extends-property? (= (:db/ident property) :logseq.property.class/extends)
         children-pages (when extends-property? (model/get-structured-children repo (:db/id block)))
         property-type (:logseq.property/type property)
-        get-all-classes-f (fn []
-                            (model/get-all-classes repo {:except-root-class? true
-                                                         :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))}))
         nodes (cond
                 extends-property?
                 (let [;; Disallows cyclic hierarchies
@@ -709,8 +706,14 @@
                       excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
                   excluded-options)
 
-                (= property-type :class)
-                (get-all-classes-f)
+                (contains? #{:class :property} property-type)
+                (let [classes (model/get-all-classes
+                               repo
+                               {:except-root-class? true
+                                :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})]
+                  (if (= property-type :class)
+                    classes
+                    (property-handler/get-class-property-choices)))
 
                 (seq classes)
                 (->>
@@ -766,7 +769,7 @@
                                                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
                                                     label [:div.flex.flex-row.items-center.gap-1
                                                            (when-not (or (:logseq.property/classes property)
-                                                                         (= (:db/ident property) :block/tags))
+                                                                         (contains? #{:class :property} (:logseq.property/type property)))
                                                              (ui/icon icon {:size 14}))
                                                            [:div title]]]
                                                 [header label])
@@ -806,10 +809,18 @@
                  :input-opts input-opts
                  :on-input (debounce on-input 50)
                  :on-chosen (fn [chosen selected?]
-                              (p/let [id (if (integer? chosen)
+                              (p/let [add-tag-property? (and (= (:db/ident property) :logseq.property.class/properties) (not (integer? chosen)))
+                                      id (if (integer? chosen)
                                            chosen
                                            (when-not (string/blank? (string/trim chosen))
-                                             (<create-page-if-not-exists! block property classes' chosen)))
+                                             (if (= (:db/ident property) :logseq.property.class/properties)
+                                               (do
+                                                 (shui/popup-hide!)
+                                                 (state/pub-event! [:editor/new-property {:block block
+                                                                                          :class-schema? true
+                                                                                          :property-key chosen
+                                                                                          :target target}]))
+                                               (<create-page-if-not-exists! block property classes' chosen))))
                                       _ (when (and (integer? id) (not (entity-util/page? (db/entity id))))
                                           (db-async/<get-block repo id))]
                                 (if id
@@ -820,7 +831,8 @@
                                       (let [e (db/entity id)]
                                         {:value (select-keys e [:db/id :block/uuid])
                                          :label (:block/title e)}))))
-                                  (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
+                                  (when-not add-tag-property?
+                                    (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
@@ -1144,17 +1156,17 @@
         editing? (:editing? opts)
         type (:logseq.property/type property)
         select-opts' (assoc select-opts :multiple-choices? false)
-        popup-content (fn content-fn [_]
+        popup-content (fn content-fn [target]
                         [:div.property-select
                          (case type
                            (:entity :number :default :url)
                            (select block property select-opts' opts)
 
                            (:node :class :property :page :date)
-                           (property-value-select-node block property select-opts' opts))])
+                           (property-value-select-node block property select-opts' (assoc opts :target target)))])
         trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
         show-popup! (fn [target]
-                      (shui/popup-show! target popup-content
+                      (shui/popup-show! target (fn [] (popup-content target))
                                         {:align "start"
                                          :as-dropdown? true
                                          :auto-focus? true
@@ -1368,7 +1380,7 @@
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
-        select-cp (fn [select-opts]
+        select-cp (fn [select-opts target]
                     (let [select-opts (merge {:multiple-choices? true
                                               :on-chosen (fn []
                                                            (when on-chosen (on-chosen)))}
@@ -1378,18 +1390,20 @@
                       [:div.property-select
                        (if (contains? #{:node :page :class :property} type)
                          (property-value-select-node block property
-                                                     select-opts
+                                                     (assoc select-opts :target target)
                                                      opts)
                          (select block property select-opts opts))]))]
     (if editing?
-      (select-cp {})
+      (select-cp {} nil)
       (let [toggle-fn shui/popup-hide!
-            content-fn (fn [{:keys [_id content-props]}]
-                         (select-cp {:content-props content-props}))
+            content-fn (fn [{:keys [_id content-props]} target]
+                         (select-cp {:content-props content-props} target))
             show-popup! (fn [^js e]
                           (let [target (.-target e)]
                             (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                              (shui/popup-show! (rum/deref *el) content-fn
+                              (shui/popup-show! (rum/deref *el)
+                                                (fn [opts]
+                                                  (content-fn opts target))
                                                 {:as-dropdown? true :as-content? false
                                                  :align "start" :auto-focus? true}))))]
         [:div.multi-values.jtrigger
@@ -1432,7 +1446,6 @@
   (ui/catch-error
    (ui/block-error "Something wrong" {})
    (let [block-cp (state/get-component :block/blocks-container)
-         properties-cp (state/get-component :block/properties-cp)
          opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
                       :inline-text (state/get-component :block/inline-text)
@@ -1486,10 +1499,6 @@
                         :class (str (when empty-value? "empty-value")
                                     (when-not (:other-position? opts) " w-full"))}
                        (cond
-                         (= property-ident :logseq.property.class/properties)
-                         (properties-cp {} block {:selected? false
-                                                  :class-schema? true})
-
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v opts)
 

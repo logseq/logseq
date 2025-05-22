@@ -1,6 +1,6 @@
 (ns logseq.e2e.rtc-extra-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures run-tests]]
+   [clojure.test :refer [deftest testing is use-fixtures run-test]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
@@ -81,6 +81,22 @@
          [@*page1 @*page2])]
     (assert/assert-graph-summary-equal p1-summary p2-summary)))
 
+(defn- validate-task-blocks
+  []
+  (let [icon-names ["Backlog" "Todo" "InProgress50" "InReview" "Done" "Cancelled"]
+        icon-name->count
+        (w/with-page @*page2
+          (into
+           {}
+           (map
+            (fn [icon-name]
+              [icon-name (.count (w/-query (str ".ls-icon-" icon-name)))])
+            icon-names)))]
+    (prn :validate-task-blocks icon-name->count)
+    (w/with-page @*page1
+      (doseq [[icon-name count*] icon-name->count]
+        (assert/assert-have-count (str ".ls-icon-" icon-name) count*)))))
+
 (defn- insert-task-blocks
   [title-prefix]
   (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]
@@ -88,6 +104,9 @@
     (b/new-block (str title-prefix "-" status "-" priority))
     (util/input-command status)
     (util/input-command priority)))
+
+(defn- update-task-blocks
+  [])
 
 (deftest rtc-task-blocks-test
   (let [insert-task-blocks-in-page2
@@ -104,6 +123,7 @@
         (with-stop-restart-rtc @*page1 #(insert-task-blocks-in-page2 *latest-remote-tx))
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-task-blocks)
         (validate-2-graphs)))
 
     (new-logseq-page)
@@ -113,6 +133,7 @@
         (insert-task-blocks-in-page2 *latest-remote-tx)
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-task-blocks)
         (validate-2-graphs)))))
 
 (defn- add-new-properties

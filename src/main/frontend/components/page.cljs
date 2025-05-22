@@ -10,6 +10,7 @@
             [frontend.components.file-based.hierarchy :as hierarchy]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
+            [frontend.components.property.config :as property-config]
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
             [frontend.components.scheduled-deadlines :as scheduled]
@@ -438,9 +439,24 @@
       :size :sm
       :class "px-2 py-0 h-6 text-xs text-muted-foreground"
       :on-click (fn [e]
-                  (state/pub-event! [:editor/new-property {:block page
-                                                           :target (.-target e)}]))}
-     "Set property")]])
+                  (if (ldb/property? page)
+                    (shui/popup-show!
+                     (.-target e)
+                     (fn []
+                       [:div.ls-property-dropdown
+                        (property-config/property-dropdown page nil {})])
+                     {:align :center})
+                    (let [opts (cond-> {:block page :target (.-target e)}
+                                 (ldb/class? page)
+                                 (assoc :class-schema? true))]
+                      (state/pub-event! [:editor/new-property opts]))))}
+     (cond
+       (ldb/class? page)
+       "Add tag property"
+       (ldb/property? page)
+       "Configure"
+       :else
+       "Set property"))]])
 
 (rum/defc db-page-title
   [page whiteboard-page? sidebar? container-id]
@@ -558,7 +574,7 @@
      (shui/tabs
       {:defaultValue default-tab
        :class "w-full"}
-      (when (or both? property?)
+      (when both?
         [:div.flex.flex-row.gap-1.items-center
          (shui/tabs-list
           {:class "h-8"}
