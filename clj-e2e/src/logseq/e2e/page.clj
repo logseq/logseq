@@ -6,6 +6,7 @@
 
 (defn goto-page
   [page-name]
+  (assert (string? page-name) page-name)
   (util/search-and-click page-name))
 
 (defn new-page

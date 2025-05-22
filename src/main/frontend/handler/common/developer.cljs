@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -101,3 +102,9 @@
 
 (defn ^:export replace-graph-with-db-file []
   (state/pub-event! [:dialog-select/db-graph-replace]))
+
+(defn ^:export rtc-stop []
+  (rtc-handler/<rtc-stop!))
+
+(defn ^:export rtc-start []
+  (rtc-handler/<rtc-start! (state/get-current-repo)))

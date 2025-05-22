@@ -637,7 +637,15 @@
    :dev/validate-db   {:binding []
                        :db-graph? true
                        :inactive (not (state/developer-mode?))
-                       :fn :frontend.handler.common.developer/validate-db}})
+                       :fn :frontend.handler.common.developer/validate-db}
+   :dev/rtc-stop {:binding []
+                  :db-graph? true
+                  :inactive (not (state/developer-mode?))
+                  :fn :frontend.handler.common.developer/rtc-stop}
+   :dev/rtc-start {:binding []
+                   :db-graph? true
+                   :inactive (not (state/developer-mode?))
+                   :fn :frontend.handler.common.developer/rtc-start}})
 
 (let [keyboard-commands
       {::commands (set (keys all-built-in-keyboard-shortcuts))
@@ -866,6 +874,8 @@
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :dev/fix-broken-graph
+          :dev/rtc-stop
+          :dev/rtc-start
           :ui/customize-appearance])
         (with-meta {:before m/enable-when-not-editing-mode!}))
 
@@ -1059,6 +1069,8 @@
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :dev/fix-broken-graph
+     :dev/rtc-stop
+     :dev/rtc-start
      :ui/clear-all-notifications]
 
     :shortcut.category/plugins

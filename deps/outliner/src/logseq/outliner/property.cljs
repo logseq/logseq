@@ -251,9 +251,9 @@
                           (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
       v
       ;; only value-ref-property types should call this
-      (let [v' (if (and number-property? (string? v))
-                 (parse-double v)
-                 v)]
+      (when-let [v' (if (and number-property? (string? v))
+                      (parse-double v)
+                      v)]
         (find-or-create-property-value conn property-id v')))))
 
 (defn- throw-error-if-self-value
