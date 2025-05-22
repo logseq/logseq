@@ -19,6 +19,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]))
 
@@ -208,25 +209,30 @@
 ;; ===============
 (defn- resolve-timestamp-property
   [e]
-  (let [k' (second e)]
-    (when (or (keyword? k') (symbol? k') (string? k'))
-      (let [k (-> k'
-                  (name)
-                  (string/lower-case)
-                  (string/replace "_" "-")
-                  keyword)]
-        (case k
-          :created-at
-          :block/created-at
-          :updated-at
-          :block/updated-at
-          k)))))
+  (let [k (second e)]
+    (when (or (keyword? k) (symbol? k) (string? k))
+      (let [k' (-> k
+                   (name)
+                   (string/lower-case)
+                   (string/replace "_" "-")
+                   keyword)]
+        (if (and (config/db-based-graph?) (db-property/property? k'))
+          k'
+          (case k'
+            :created-at
+            :block/created-at
+            :updated-at
+            :block/updated-at
+            nil))))))
 
 (defn get-timestamp-property
   [e]
-  (let [k (resolve-timestamp-property e)]
-    (when (contains? #{:block/created-at :block/updated-at} k)
-      k)))
+  (when-let [k (resolve-timestamp-property e)]
+    (if (config/db-based-graph?)
+      (when (keyword? k)
+        k)
+      (when (contains? #{:block/created-at :block/updated-at} k)
+        k))))
 
 (defn- build-journal-between-two-arg
   [e]

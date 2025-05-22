@@ -16,6 +16,7 @@
 (defn- sync-db-to-main-thread
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
+  (when repo (worker-state/set-db-latest-tx-time! repo))
   (let [{:keys [from-disk?]} tx-meta
         result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
         tx-report' (:tx-report result)]

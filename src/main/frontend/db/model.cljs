@@ -17,6 +17,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]))
 
 ;; TODO: extract to specific models and move data transform logic to the
@@ -528,6 +529,52 @@ independent of format as format specific heading characters are stripped"
     (if except-root-class?
       (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
       classes)))
+
+(defn ui-non-suitable-property?
+  [block m {:keys [class-schema?]}]
+  (when block
+    (let [block-page? (ldb/page? block)
+          block-types (let [types (ldb/get-entity-types block)]
+                        (cond-> types
+                          (and block-page? (not (contains? types :page)))
+                          (conj :page)
+                          (empty? types)
+                          (conj :block)))
+          view-context (get m :logseq.property/view-context :all)]
+      (or (contains? #{:logseq.property/query} (:db/ident m))
+          (and (not block-page?) (contains? #{:block/alias} (:db/ident m)))
+          ;; Filters out properties from being in wrong :view-context and :never view-contexts
+          (and (not= view-context :all) (not (contains? block-types view-context)))
+          (and (ldb/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident m)))
+          ;; Filters out adding buggy class properties e.g. Alias and Parent
+          (and class-schema? (ldb/public-built-in-property? m) (:logseq.property/view-context m))))))
+
+(defn get-all-properties
+  "Return seq of all property names except for private built-in properties."
+  [graph & {:keys [remove-built-in-property? remove-non-queryable-built-in-property? remove-ui-non-suitable-properties?
+                   class-schema? block]
+            :or {remove-built-in-property? true
+                 remove-non-queryable-built-in-property? false
+                 remove-ui-non-suitable-properties? false}}]
+  (let [db (conn/get-db graph)
+        result (sort-by (juxt ldb/built-in? :block/title)
+                        (ldb/get-all-properties db))]
+    (cond->> result
+      remove-built-in-property?
+      ;; remove private built-in properties
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (ldb/public-built-in-property? p))
+                       (not= ident :logseq.property/icon)))))
+      remove-non-queryable-built-in-property?
+      (remove (fn [p]
+                (let [ident (:db/ident p)]
+                  (and (ldb/built-in? p)
+                       (not (:queryable? (db-property/built-in-properties ident)))))))
+      remove-ui-non-suitable-properties?
+      (remove (fn [p]
+                (ui-non-suitable-property? block p {:class-schema? class-schema?}))))))
 
 (defn get-all-readable-classes
   "Gets all classes that are used in a read only context e.g. querying or used
