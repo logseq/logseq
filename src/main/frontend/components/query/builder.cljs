@@ -91,43 +91,38 @@
   {:will-unmount (fn [state]
                    (swap! *between-dates dissoc (first (:rum/args state)))
                    state)}
-  [state id placeholder {:keys [auto-focus on-select]}]
+  [state id placeholder {:keys [on-select]}]
   (let [*input-value (::input-value state)]
-    [:div.ml-4
-     [:input.query-builder-datepicker.form-input.block.sm:text-sm.sm:leading-5
-      {:auto-focus (or auto-focus false)
-       :data-key (name id)
-       :placeholder placeholder
-       :aria-label placeholder
-       :value (some-> @*input-value (first))
-       :on-focus (fn [^js e]
-                   (js/setTimeout
-                    #(shui/popup-show! (.-target e)
-                                       (let [select-handle! (fn [^js d]
-                                                              (let [gd (date/js-date->goog-date d)
-                                                                    journal-date (date/js-date->journal-title gd)]
-                                                                (reset! *input-value [journal-date d])
-                                                                (swap! *between-dates assoc id journal-date))
-                                                              (some-> on-select (apply []))
-                                                              (shui/popup-hide!))]
-                                         (ui/single-calendar
-                                          {:initial-focus true
-                                           :selected (some-> @*input-value (second))
-                                           :on-select select-handle!}))
-                                       {:id :query-datepicker
-                                        :content-props {:class "p-0"}
-                                        :align :start}) 16))}]]))
+    (shui/button
+     {:variant :secondary
+      :size :sm
+      :on-click (fn [^js e]
+                  (shui/popup-show! (.-target e)
+                                    (let [select-handle! (fn [^js d]
+                                                           (let [gd (date/js-date->goog-date d)
+                                                                 journal-date (date/js-date->journal-title gd)]
+                                                             (reset! *input-value [journal-date d])
+                                                             (swap! *between-dates assoc id journal-date))
+                                                           (some-> on-select (apply []))
+                                                           (shui/popup-hide!))]
+                                      (ui/single-calendar
+                                       {:initial-focus false
+                                        :selected (some-> @*input-value (second))
+                                        :on-select select-handle!}))
+                                    {:id :query-datepicker
+                                     :content-props {:class "p-0"}
+                                     :align :start}))}
+     (or (first @*input-value) placeholder))))
 
 (rum/defcs between <
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc] :as opts}]
   [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
-   [:div.flex.flex-row
-    [:div.font-medium.mt-2 "Between: "]
+   [:div.flex.flex-row.items-center.gap-2
+    [:div.font-medium "Between: "]
     (datepicker :start "Start date"
-                (merge opts {:auto-focus true
-                             :on-select (fn []
+                (merge opts {:on-select (fn []
                                           (when-let [^js end-input (js/document.querySelector ".query-builder-datepicker[data-key=end]")]
                                             (when (string/blank? (.-value end-input))
                                               (.focus end-input))))}))
@@ -138,6 +133,7 @@
                            (let [{:keys [start end]} @*between-dates]
                              (when (and start end)
                                (let [clause [:between [:page-ref start] [:page-ref end]]]
+                                 (prn :debug :tree tree)
                                  (append-tree! tree opts loc clause)
                                  (reset! *between-dates {}))))))]])
 
