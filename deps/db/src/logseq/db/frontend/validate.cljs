@@ -2,6 +2,7 @@
   "Validate frontend db for DB graphs"
   (:require [clojure.pprint :as pprint]
             [datascript.core :as d]
+            [lambdaisland.glogi :as log]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [malli.core :as m]
@@ -38,10 +39,10 @@
                               ;; remove :db/id as it adds needless declarations to schema
                               #(validator [(dissoc % :db/id)])
                               ent-maps)]
-        (js/console.log "changed eids:" changed-ids tx-meta)
+        (log/info "changed eids:" changed-ids :tx-meta tx-meta)
         (if (seq invalid-ent-maps)
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
-            (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
+            (log/error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
               (let [m' (update m :block/properties (fn [properties]
                                                      (map (fn [[p v]]

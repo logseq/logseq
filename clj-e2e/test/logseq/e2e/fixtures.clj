@@ -16,11 +16,16 @@
                   :persistent false
                   :slow-mo @config/*slow-mo})
     (w/grant-permissions :clipboard-write :clipboard-read)
-    (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}]
+    (binding [custom-report/*pw-contexts* #{(.context (w/get-page))}
+              custom-report/*pw-page->console-logs* (atom {})]
       (w/navigate (str "http://localhost:" (or port @config/*port)))
       (settings/developer-mode)
       (w/refresh)
       (assert/assert-graph-loaded?)
+      (let [p (w/get-page)]
+        (.onConsoleMessage p (fn [msg]
+                               (when custom-report/*pw-page->console-logs*
+                                 (swap! custom-report/*pw-page->console-logs* update p conj (.text msg))))))
       (f))))
 
 (def *page1 (atom nil))
@@ -39,12 +44,20 @@
     (reset! *page1 p1)
     (reset! *page2 p2)
     (binding [custom-report/*pw-contexts* (set [(.context @p1) (.context @p2)])
+              custom-report/*pw-page->console-logs* (atom {})
               w/*page* (delay (throw (ex-info "Don't use *page*, use *page1* and *page2* instead" {})))]
       (run!
        #(w/with-page %
           (w/navigate (str "http://localhost:" port'))
           (settings/developer-mode)
-          (w/refresh))
+          (w/refresh)
+          (assert/assert-graph-loaded?)
+          (let [p (w/get-page)]
+            (.onConsoleMessage
+             p
+             (fn [msg]
+               (when custom-report/*pw-page->console-logs*
+                 (swap! custom-report/*pw-page->console-logs* update p conj (.text msg)))))))
        [p1 p2])
       (f))
 
