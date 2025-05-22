@@ -89,6 +89,8 @@
    "Done" "Done"
    "Canceled" "Cancelled"})
 
+(def priorities ["No priority" "Low" "Medium" "High" "Urgent"])
+
 (defn- validate-task-blocks
   []
   (let [icon-names (vals status->icon-name)
@@ -108,7 +110,7 @@
 (defn- insert-task-blocks
   [title-prefix]
   (doseq [status (keys status->icon-name)
-          priority ["No priority" "Low" "Medium" "High" "Urgent"]]
+          priority priorities]
     (b/new-block (str title-prefix "-" status "-" priority))
     (util/input-command status)
     (util/input-command priority)))
@@ -119,7 +121,8 @@
     (doseq [q-seq qs-partitions]
       (doseq [q q-seq]
         (w/click q)
-        (util/input-command (rand-nth (keys status->icon-name)))))))
+        (util/input-command (rand-nth (keys status->icon-name)))
+        (util/input-command (rand-nth priorities))))))
 
 (deftest rtc-task-blocks-test
   (let [insert-task-blocks-in-page2
