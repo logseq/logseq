@@ -93,14 +93,16 @@
       (get-journal-title db e)
       (or
        (get (.-kv e) k)
-       (let [result (lookup-entity e k default-value)
+       (if db-based?
+         (let [result (lookup-entity e k default-value)
              ;; Replace title for pages only, otherwise it'll recursively
              ;; replace block id refs if there're cycle references of blocks
-             refs (:block/refs e)
-             result' (if (and (string? result) refs)
-                       (db-content/id-ref->title-ref result refs)
-                       result)]
-         (or result' default-value))))))
+               refs (:block/refs e)
+               result' (if (and (string? result) refs)
+                         (db-content/id-ref->title-ref result refs)
+                         result)]
+           (or result' default-value))
+         (lookup-entity e k default-value))))))
 
 (defn- lookup-kv-with-default-value
   [db ^Entity e k default-value]
