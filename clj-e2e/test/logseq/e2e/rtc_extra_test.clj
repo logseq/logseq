@@ -1,6 +1,6 @@
 (ns logseq.e2e.rtc-extra-test
   (:require
-   [clojure.test :refer [deftest testing is use-fixtures run-test]]
+   [clojure.test :refer [deftest testing is use-fixtures run-test run-tests]]
    [com.climate.claypoole :as cp]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
@@ -81,9 +81,17 @@
          [@*page1 @*page2])]
     (assert/assert-graph-summary-equal p1-summary p2-summary)))
 
+(def status->icon-name
+  {"Backlog" "Backlog"
+   "Todo" "Todo"
+   "Doing" "InProgress50"
+   "In review" "InReview"
+   "Done" "Done"
+   "Canceled" "Cancelled"})
+
 (defn- validate-task-blocks
   []
-  (let [icon-names ["Backlog" "Todo" "InProgress50" "InReview" "Done" "Cancelled"]
+  (let [icon-names (vals status->icon-name)
         icon-name->count
         (w/with-page @*page2
           (into
@@ -99,14 +107,19 @@
 
 (defn- insert-task-blocks
   [title-prefix]
-  (doseq [status ["Backlog" "Todo" "Doing" "In review" "Done" "Canceled"]
+  (doseq [status (keys status->icon-name)
           priority ["No priority" "Low" "Medium" "High" "Urgent"]]
     (b/new-block (str title-prefix "-" status "-" priority))
     (util/input-command status)
     (util/input-command priority)))
 
 (defn- update-task-blocks
-  [])
+  []
+  (let [qs-partitions (partition-all 5 (seq (.all (loc/filter ".ls-block" :has ".ui__icon"))))]
+    (doseq [q-seq qs-partitions]
+      (doseq [q q-seq]
+        (w/click q)
+        (util/input-command (rand-nth (keys status->icon-name)))))))
 
 (deftest rtc-task-blocks-test
   (let [insert-task-blocks-in-page2
@@ -116,11 +129,25 @@
                   (rtc/with-wait-tx-updated
                     (insert-task-blocks "t1"))]
               (reset! *latest-remote-tx remote-tx))
-            ;; TODO: more operations
-            (util/exit-edit)))]
-    (testing "rtc-stop app1, add some task blocks, then rtc-start on app1"
+            (util/exit-edit)))
+        update-task-blocks-in-page2
+        (fn [*latest-remote-tx]
+          (w/with-page @*page2
+            (let [{:keys [_local-tx remote-tx]}
+                  (rtc/with-wait-tx-updated
+                    (update-task-blocks))]
+              (reset! *latest-remote-tx remote-tx))))]
+    (testing "add some task blocks while rtc disconnected on page1"
       (let [*latest-remote-tx (atom nil)]
         (with-stop-restart-rtc @*page1 #(insert-task-blocks-in-page2 *latest-remote-tx))
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-task-blocks)
+        (validate-2-graphs)))
+
+    (testing "update task blocks while rtc disconnected on page1"
+      (let [*latest-remote-tx (atom nil)]
+        (with-stop-restart-rtc @*page1 #(update-task-blocks-in-page2 *latest-remote-tx))
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-task-blocks)
@@ -131,6 +158,14 @@
     (testing "perform same operations on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
         (insert-task-blocks-in-page2 *latest-remote-tx)
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-task-blocks)
+        (validate-2-graphs)))
+
+    (testing "update task blocks while rtc connected on page1"
+      (let [*latest-remote-tx (atom nil)]
+        (update-task-blocks-in-page2 *latest-remote-tx)
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-task-blocks)
