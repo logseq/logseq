@@ -13,10 +13,10 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.query.builder :as query-builder]
             [frontend.mixins :as mixins]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -506,9 +506,13 @@
                         (symbol? end))
                   (name end)
                   (second end))]
-        (str (if (= k :block/created-at)
+        (str (cond
+               (= k :block/created-at)
                "Created"
-               "Updated")
+               (= k :block/updated-at)
+               "Updated"
+               :else
+               (or (:block/title (db/entity k)) (name k)))
              " " start
              (when end
                (str " ~ " end))))
