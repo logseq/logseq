@@ -2688,10 +2688,10 @@ electron-to-chromium@^1.5.149:
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.5.151.tgz#5edd6c17e1b2f14b4662c41b9379f96cc8c2bb7c"
   integrity sha512-Rl6uugut2l9sLojjS4H4SAr3A4IgACMLgpuEMPYCVcKydzfyPrn5absNRju38IhQOf/NwjJY8OGWjlteqYeBCA==
 
-electron@36.2.0:
-  version "36.2.0"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-36.2.0.tgz#05bb179eb4c5de0412fc6d49628abc949fd679c1"
-  integrity sha512-5yldoRjBKxPQfI0QMX+qq750o3Nl8N1SZnJqOPMq0gZ6rIJ+7y4ZLp808GrFwjfTm05TYgq3GSD8FGuKQZqwEw==
+electron@35.2.2:
+  version "35.2.2"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-35.2.2.tgz#3eb16819eae70e492a9251cde4929687893e0c2e"
+  integrity sha512-jZnCOtIgrt28esWP5z/PKndj/vPQ/Zt+cvNRlb/qOGnK/AjW1mASwPMtQ099NlSodf69RR3JrhnZCYbTWeDR4g==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^22.7.7"

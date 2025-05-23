@@ -1194,10 +1194,10 @@ base64-js@^1.3.1, base64-js@^1.5.1:
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"
   integrity sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==
 
-better-sqlite3@^11.10.0:
-  version "11.10.0"
-  resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-11.10.0.tgz#2b1b14c5acd75a43fd84d12cc291ea98cef57d98"
-  integrity sha512-EwhOpyXiOEL/lKzHz9AW1msWFNzGc/z+LzeB3/jnFJpxu+th2yqvzsSWas1v9jgs9+xiXJcD5A8CJxAG2TaghQ==
+better-sqlite3@11.9.1:
+  version "11.9.1"
+  resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-11.9.1.tgz#0540da2f2ce24cbd766bb35db412f4be2c75b8bb"
+  integrity sha512-Ba0KR+Fzxh2jDRhdg6TSH0SJGzb8C0aBY4hR8w8madIdIzzC6Y1+kx5qR6eS1Z+Gy20h6ZU28aeyg0z1VIrShQ==
   dependencies:
     bindings "^1.5.0"
     prebuild-install "^7.1.1"
@@ -2044,10 +2044,10 @@ electron-wix-msi@^5.1.3:
   optionalDependencies:
     "@bitdisaster/exe-icon-extractor" "^1.0.10"
 
-electron@*, electron@36.2.0:
-  version "36.2.0"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-36.2.0.tgz#05bb179eb4c5de0412fc6d49628abc949fd679c1"
-  integrity sha512-5yldoRjBKxPQfI0QMX+qq750o3Nl8N1SZnJqOPMq0gZ6rIJ+7y4ZLp808GrFwjfTm05TYgq3GSD8FGuKQZqwEw==
+electron@*, electron@35.2.2:
+  version "35.2.2"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-35.2.2.tgz#3eb16819eae70e492a9251cde4929687893e0c2e"
+  integrity sha512-jZnCOtIgrt28esWP5z/PKndj/vPQ/Zt+cvNRlb/qOGnK/AjW1mASwPMtQ099NlSodf69RR3JrhnZCYbTWeDR4g==
   dependencies:
     "@electron/get" "^2.0.0"
     "@types/node" "^22.7.7"
