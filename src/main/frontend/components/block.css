@@ -1036,6 +1036,10 @@ html.is-mac {
   height: 16px;
 }
 
+.ls-page-title .positioned-properties {
+  margin-top: 15px;
+}
+
 .ls-page-title .ls-page-icon button {
   margin-top: 8px;
 }
