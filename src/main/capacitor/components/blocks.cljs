@@ -13,6 +13,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as fstate]
             [frontend.handler.notification :as notification]
+            [frontend.components.page :as cp-page]
             [capacitor.components.editor :as cc-editor]
             [capacitor.components.common :as cc-common]
             [capacitor.ionic :as ionic]))
@@ -337,17 +338,19 @@
       (ionic/ion-content {:class "ion-padding"}
         (if loading?
           [:p.text-xl.text-center "Loading ..."]
-          (let [edit-opts {:reload-page! rerender!}]
-            [:<>
-             (when-let [children (:block/_parent page)]
-               [:ul.mt-2
-                {:class "min-h-[80px]"}
-                (for [block children]
-                  [:li.text-xl {:on-click #(nav-to-edit-block! block edit-opts)} (:block/title block)])])
-             [:p.pt-3.flex
-              (ionic/ion-button
-                {:fill "outline"
-                 :on-click #(nav-to-edit-block! {:block/page page} edit-opts)
-                 :class "w-full"}
-                "+ Add")]]))
-        ))))
+          (cp-page/page-blocks-cp page {})
+          ;(let [edit-opts {:reload-page! rerender!}]
+          ;  [:<>
+          ;   (when-let [children (:block/_parent page)]
+          ;     [:ul.mt-2
+          ;      {:class "min-h-[80px]"}
+          ;      (for [block children]
+          ;        [:li.text-xl {:on-click #(nav-to-edit-block! block edit-opts)} (:block/title block)])])
+          ;   [:p.pt-3.flex
+          ;    (ionic/ion-button
+          ;      {:fill "outline"
+          ;       :on-click #(nav-to-edit-block! {:block/page page} edit-opts)
+          ;       :class "w-full"}
+          ;      "+ Add")]]
+          ;  )
+          )))))
