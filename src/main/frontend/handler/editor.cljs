@@ -67,7 +67,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.popup.core :as shui-popup]
-            [capacitor.components.common :as cc-common]
+            ;; [capacitor.components.common :as cc-common]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -516,7 +516,7 @@
                  pos 0
                  unsaved-chars @(:editor/async-unsaved-chars @state/state)
                  container-id (get-new-container-id :insert {:sibling? sibling?})]
-             (when (util/mobile?) (cc-common/keep-keyboard-open nil))
+             ;; (when (util/mobile?) (cc-common/keep-keyboard-open nil))
              (edit-block! next-block' (+ pos (count unsaved-chars))
                           {:container-id container-id
                            :custom-content (str unsaved-chars (:block/title next-block'))}))))))
