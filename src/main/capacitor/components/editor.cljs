@@ -45,7 +45,7 @@
                              (when on-delete!
                                (prn :debug "delete block:" content opts)
                                (on-delete! content opts))))
-          debounce-save-handle! (util/debounce save-handle! 500)]
+          debounce-save-handle! (util/debounce save-handle! 128)]
       (ui/textarea
         {:class "editor-aux-input bg-gray-200 border-none resize-none"
          :ref *input
