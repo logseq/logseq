@@ -291,6 +291,11 @@
       [:div.app-page-blocks.mb-4
        (blocks-container page)])))
 
+(rum/defc page-blocks-classic
+  [page]
+  [:div.app-page-blocks.as-classic
+   (cp-page/page-blocks-cp page {})])
+
 (rum/defc page [block {:keys [reload-pages!]}]
   (let [[^js nav] (state/use-nav-root)
         [page set-page!] (rum/use-state (db-utils/entity (:db/id block)))
@@ -338,7 +343,7 @@
       (ionic/ion-content {:class "ion-padding"}
         (if loading?
           [:p.text-xl.text-center "Loading ..."]
-          (cp-page/page-blocks-cp page {})
+          (page-blocks-classic page)
           ;(let [edit-opts {:reload-page! rerender!}]
           ;  [:<>
           ;   (when-let [children (:block/_parent page)]
