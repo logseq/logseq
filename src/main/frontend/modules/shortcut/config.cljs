@@ -270,6 +270,9 @@
    :editor/cycle-todo                       {:binding "mod+enter"
                                              :fn      editor-handler/cycle-todo!}
 
+   :editor/toggle-checked                   {:binding "mod+space"
+                                             :fn      editor-handler/toggle-checked!}
+
    :editor/up                               {:binding ["up" "ctrl+p"]
                                              :fn      (editor-handler/shortcut-up-down :up)}
 
@@ -655,6 +658,7 @@
             :graph/save
             :graph/re-index
             :editor/cycle-todo
+            :editor/toggle-checked
             :editor/up
             :editor/down
             :editor/left
@@ -812,6 +816,7 @@
       :editor/zoom-in
       :editor/zoom-out
       :editor/cycle-todo
+      :editor/toggle-checked
       :editor/follow-link
       :editor/open-link-in-sidebar
       :editor/move-block-up
