@@ -69,8 +69,14 @@
 
 .block-content-or-editor-wrap {
   @apply flex flex-1 flex-row flex-wrap gap-1;
+  container-type: inline-size;
 }
 
+@container (max-width: 600px) {
+    .time-spent, .positioned-properties.block-right {
+        display: none;
+    }
+}
 .block-content-or-editor-inner {
   @apply flex flex-1 flex-col w-full pr-1;
 }
@@ -1036,7 +1042,7 @@ html.is-mac {
   height: 16px;
 }
 
-.ls-page-title .positioned-properties {
+.ls-page-title .positioned-properties, .ls-page-title .time-spent {
   margin-top: 15px;
 }
 
