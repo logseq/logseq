@@ -2,8 +2,10 @@
   "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
             ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
+            [clojure.string :as string]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core]
             [datascript.storage :refer [IStorage]]
@@ -86,14 +88,33 @@
   "For a given database name, opens a sqlite db connection for it, creates
   needed sqlite tables if not created and returns a datascript connection that's
   connected to the sqlite db"
-  [graphs-dir db-name]
-  (let [[_db-sanitized-name db-full-path] (common-sqlite/get-db-full-path graphs-dir db-name)
-        db (new sqlite db-full-path nil)
+  ([db-full-path]
+   (open-db! nil db-full-path))
+  ([graphs-dir db-name]
+   (let [[base-name db-full-path]
+         (if (nil? graphs-dir)
+           [(node-path/basename db-name) db-name]
+           [db-name (second (common-sqlite/get-db-full-path graphs-dir db-name))])
+         db (new sqlite db-full-path nil)
         ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
-        schema (if (common-sqlite/local-file-based-graph? db-name)
-                 file-schema/schema
-                 db-schema/schema)]
-    (common-sqlite/create-kvs-table! db)
-    (let [storage (new-sqlite-storage db)
-          conn (common-sqlite/get-storage-conn storage schema)]
-      conn)))
+         schema (if (common-sqlite/local-file-based-graph? base-name)
+                  file-schema/schema
+                  db-schema/schema)]
+     (common-sqlite/create-kvs-table! db)
+     (let [storage (new-sqlite-storage db)
+           conn (common-sqlite/get-storage-conn storage schema)]
+       conn))))
+
+(defn ->open-db-args
+  "Creates args for open-db from a graph arg. Works for relative and absolute paths and
+   defaults to ~/logseq/graphs/ when no '/' present in name"
+  [graph-dir-or-path]
+  ;; Pass full path directly to allow for paths that don't have standard graph naming convention
+  (if (node-path/isAbsolute graph-dir-or-path)
+    [graph-dir-or-path]
+    (if (string/includes? graph-dir-or-path "/")
+      (let [resolve-path' #(if (node-path/isAbsolute %) %
+                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
+                               (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
+        ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir-or-path)))
+      [(node-path/join (os/homedir) "logseq" "graphs") graph-dir-or-path])))
