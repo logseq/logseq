@@ -110,12 +110,16 @@ const common = {
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
       () => gulp.src([
+        'node_modules/marked/marked.min.js',
+        'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@ionic/core/dist/ionic/**',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
-        'node_modules/prop-types/prop-types.min.js'
+        'node_modules/prop-types/prop-types.min.js',
+        'node_modules/interactjs/dist/interact.min.js',
+        'packages/ui/dist/ui.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
       () => gulp.src([
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',

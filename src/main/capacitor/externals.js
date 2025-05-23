@@ -3,14 +3,19 @@ import { Capacitor } from '@capacitor/core'
 import { StatusBar, Style } from '@capacitor/status-bar'
 import { App } from '@capacitor/app'
 
-function initGlobalListeners () {
+function initGlobalListeners (opts = {}) {
   console.debug('[externals] init global listeners')
 
   const didShowHandle = (event) => {
     const docHeight = document.documentElement.clientHeight
     const { keyboardHeight } = event
-    if (keyboardHeight === 0) return
-    document.body.style.height = (docHeight - keyboardHeight) + 'px'
+    const { onKeyboardShow } = opts
+
+    if (onKeyboardShow) onKeyboardShow(event)
+
+    if (keyboardHeight !== 0) {
+      document.body.style.height = (docHeight - keyboardHeight) + 'px'
+    }
 
     // const alertWrapper = document.querySelector('.alert-wrapper')
     // if (alertWrapper) {
@@ -22,6 +27,9 @@ function initGlobalListeners () {
   }
 
   const didHideHandle = () => {
+    const { onKeyboardHide } = opts
+    if (onKeyboardHide) onKeyboardHide()
+
     document.body.style.removeProperty('height')
 
     // const alertWrapper = document.querySelector('.alert-wrapper')
@@ -71,6 +79,7 @@ function checkCursorLine (textarea) {
 }
 
 window.externalsjs = {
+  Keyboard, Capacitor,
   initGlobalListeners,
   settleStatusBar,
   checkCursorLine,

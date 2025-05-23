@@ -81,6 +81,9 @@
                                   :main
                                   {:init-fn capacitor.core/init
                                    :depends-on #{:shared}}
+                                  :code-editor
+                                  {:entries [frontend.extensions.code]
+                                   :depends-on #{:main}}
                                   :db-worker
                                   {:init-fn frontend.worker.db-worker/init
                                    :depends-on #{:shared}

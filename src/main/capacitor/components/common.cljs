@@ -1,5 +1,7 @@
-(ns capacitor.components.common
-  (:require [frontend.util :as utils]))
+(ns capacitor.components.common)
+
+(defn stop [e]
+  (when e (doto e (.preventDefault) (.stopPropagation))))
 
 (defn get-dom-block-uuid
   [^js el]
@@ -12,10 +14,17 @@
   [^js el]
   (some-> el (.closest "[part=scroll]")))
 
+(defn current-page-scroll
+  []
+  (some-> (js/document.querySelector "ion-nav > .ion-page:not(.ion-page-hidden)")
+    (.querySelector "ion-content")
+    (.-shadowRoot)
+    (.querySelector "[part=scroll]")))
+
 (defn keep-keyboard-open
   [^js e]
   (try
     (.keepKeyboardOpen js/window)
-    (some-> e (utils/stop))
+    (some-> e (stop))
     (catch js/Error e'
       (js/console.error e'))))

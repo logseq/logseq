@@ -19,6 +19,7 @@
             [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :as mobile-util]
+            [capacitor.components.common :as capacitor-new-common]
             [logseq.common.util :as common-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -37,9 +38,46 @@
    [clojure.string :as string]
    [clojure.walk :as walk]))
 
+#?(:cljs
+   (do
+     (def safe-re-find common-util/safe-re-find)
+     (defn safe-keyword
+       [s]
+       (when (string? s)
+         (keyword (string/replace s " " "_"))))))
+
 #?(:cljs (goog-define NODETEST false)
    :clj (def NODETEST false))
 (defonce node-test? NODETEST)
+
+#?(:cljs
+   (do
+     (defn- ios*?
+       []
+       (utils/ios))
+     (def ios? (memoize ios*?))))
+
+#?(:cljs
+   (do
+     (defn- safari*?
+       []
+       (let [ua (string/lower-case js/navigator.userAgent)]
+         (and (string/includes? ua "webkit")
+           (not (string/includes? ua "chrome")))))
+     (def safari? (memoize safari*?))))
+
+#?(:cljs
+   (do
+     (defn- mobile*?
+       "Triggering condition: Mobile phones
+        *** Warning!!! ***
+        For UX logic only! Don't use for FS logic
+        iPad / Android Pad doesn't trigger!"
+       []
+       (when-not node-test?
+         (safe-re-find #"Mobi" js/navigator.userAgent)))
+     (def mobile? (memoize mobile*?))
+     (def capacitor-new? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
@@ -59,25 +97,19 @@
            ([]
             (gdom/getElement "main-content-container"))
            ([el]
-            (if (.closest el "#main-content-container")
-              (app-scroll-container-node)
-              (or
-               (gdom/getElementByClass "sidebar-item-list")
-               (app-scroll-container-node))))))
+            (if (capacitor-new?)
+              (capacitor-new-common/current-page-scroll)
+              (if (.closest el "#main-content-container")
+                (app-scroll-container-node)
+                (or
+                  (gdom/getElementByClass "sidebar-item-list")
+                  (app-scroll-container-node)))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
 #?(:cljs (defonce hsl2hex utils/hsl2hex))
 
 #?(:cljs (def string-join-path common-util/string-join-path))
-
-#?(:cljs
-   (do
-     (def safe-re-find common-util/safe-re-find)
-     (defn safe-keyword
-       [s]
-       (when (string? s)
-         (keyword (string/replace s " " "_"))))))
 
 #?(:cljs
    (do
@@ -98,34 +130,6 @@
        {:malli/schema [:=> [:cat :string] :string]}
        [s]
        (sanitizeFilename (str s)))))
-
-#?(:cljs
-   (do
-     (defn- ios*?
-       []
-       (utils/ios))
-     (def ios? (memoize ios*?))))
-
-#?(:cljs
-   (do
-     (defn- safari*?
-       []
-       (let [ua (string/lower-case js/navigator.userAgent)]
-         (and (string/includes? ua "webkit")
-              (not (string/includes? ua "chrome")))))
-     (def safari? (memoize safari*?))))
-
-#?(:cljs
-   (do
-     (defn- mobile*?
-       "Triggering condition: Mobile phones
-        *** Warning!!! ***
-        For UX logic only! Don't use for FS logic
-        iPad / Android Pad doesn't trigger!"
-       []
-       (when-not node-test?
-         (safe-re-find #"Mobi" js/navigator.userAgent)))
-     (def mobile? (memoize mobile*?))))
 
 #?(:cljs
    (do
@@ -1263,8 +1267,7 @@
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
 
-             header-height (-> (gdom/getElementByClass "cp__header")
-                               .-clientHeight)
+             header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
 
              main-node   (app-scroll-container-node el)
              scroll-top'  (.-scrollTop main-node)

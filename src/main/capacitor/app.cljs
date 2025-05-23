@@ -3,8 +3,9 @@
             ["@capacitor/status-bar" :refer [StatusBar Style]]
             ["./externals.js"]
             [clojure.string :as string]
-            [frontend.db.react :as react]
-            [frontend.util :as util]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.toaster.core :as shui-toaster]
             [rum.core :as rum]
             [frontend.rum :as frum]
             [promesa.core :as p]
@@ -202,7 +203,8 @@
     (rum/use-effect!
       (fn []
         (some-> js/window.externalsjs (.settleStatusBar))
-        (some-> js/window.externalsjs (.initGlobalListeners)))
+        (some-> js/window.externalsjs
+          (.initGlobalListeners #js {:onKeyboardHide (fn [] (state/exit-editing!))})))
       [current-repo])
 
     ;; navigation
@@ -235,4 +237,9 @@
 
       (keep-keyboard-open)
       (ui/install-notifications)
-      (ui/install-modals)]]))
+      (ui/install-modals)
+
+      (shui-toaster/install-toaster)
+      (shui-dialog/install-modals)
+      (shui-popup/install-popups)
+      ]]))
