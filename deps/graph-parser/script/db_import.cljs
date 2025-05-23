@@ -4,9 +4,7 @@
    the import process"
   (:require ["fs" :as fs]
             ["fs/promises" :as fsp]
-            ["os" :as os]
             ["path" :as node-path]
-            #_:clj-kondo/ignore
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
             [clojure.set :as set]
@@ -18,7 +16,8 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)
@@ -125,17 +124,6 @@
       (p/let [_ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
         {:import-state (:import-state doc-options)}))))
 
-(defn- get-dir-and-db-name
-  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
-   defaults to ~/logseq/graphs/ when no '/' present in name"
-  [graph-dir]
-  (if (string/includes? graph-dir "/")
-    (let [resolve-path' #(if (node-path/isAbsolute %) %
-                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
-                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
-      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
-    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
-
 (def spec
   "Options spec"
   {:help {:alias :h
@@ -171,9 +159,11 @@
             (println (str "Usage: $0 FILE-GRAPH DB-GRAPH [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (get-dir-and-db-name db-graph-dir)
+        init-conn-args (sqlite-cli/->open-db-args db-graph-dir)
+        db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
+        db-dir (if (= 1 (count init-conn-args)) (node-path/dirname (first init-conn-args)) (second init-conn-args))
         file-graph' (resolve-path file-graph)
-        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
+        conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)}))
         directory? (.isDirectory (fs/statSync file-graph'))
         user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help :continue))
                        ;; coerce option collection into strings
@@ -182,12 +172,11 @@
                        true
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
-        options' (merge {:user-options user-options
-                         :graph-name db-name}
+        options' (merge {:user-options user-options}
                         (select-keys options [:files :verbose :continue :debug]))]
     (p/let [{:keys [import-state]}
             (if directory?
-              (import-file-graph-to-db file-graph' (node-path/join dir db-name) conn options')
+              (import-file-graph-to-db file-graph' db-dir conn options')
               (import-files-to-db file-graph' conn options'))]
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
