@@ -157,7 +157,7 @@ const common = {
     const mode = process.env.PLATFORM || 'ios'
 
     const IP = ip.address()
-    const LOGSEQ_APP_SERVER_URL = `http://${IP}:3001`
+    const LOGSEQ_APP_SERVER_URL = `http://${IP}:3002`
 
     if (typeof global.fetch === 'function') {
       try {
