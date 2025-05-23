@@ -136,9 +136,11 @@
      [:div.pt-4.px-4
        ;; (journals-list)
 
-      [:div#main-container.flex.flex-1
-       [:div#main-content-container.w-full
-        (journal/all-journals)]]
+      [:main#app-container-wrapper.ls-fold-button-on-right
+       [:div#app-container
+        [:div#main-container.flex.flex-1
+         [:div#main-content-container.w-full
+          (journal/all-journals)]]]]
 
        ;(contents-playground)
       ]
