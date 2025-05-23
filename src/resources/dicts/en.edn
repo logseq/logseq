@@ -665,6 +665,7 @@
   :editor/move-block-up           "Move block up"
   :editor/move-block-down         "Move block down"
   :editor/open-edit               "Edit selected block"
+  :editor/open-selected-blocks-in-sidebar "Open selected block(s) in sidebar"
   :editor/select-block-up         "Select block above"
   :editor/select-block-down       "Select block below"
   :editor/delete-selection        "Delete selected blocks"
