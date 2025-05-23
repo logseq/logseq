@@ -13,6 +13,8 @@
 
 (def ^:dynamic *pw-page->console-logs* nil)
 
+(def ^:dynamic *preserve-graph* nil)
+
 (defn screenshot
   [page test-name]
   (println :screenshot test-name)
@@ -46,7 +48,10 @@
   (when-let [pw-page->console-logs (some-> *pw-page->console-logs* deref)]
     (doseq [[_pw-page logs] pw-page->console-logs]
       (spit (format "e2e-dump/console-logs-%s.txt" (System/currentTimeMillis))
-            (with-out-str (pp/pprint logs))))))
+            (with-out-str (pp/pprint logs)))))
+
+  (when (some? *preserve-graph*)
+    (set! *preserve-graph* true)))
 
 (defmethod t/report :fail
   [m]
@@ -63,8 +68,11 @@
     (doseq [page (mapcat pw-page/get-pages all-contexts)]
       (screenshot page (string/join "-" (map (comp str :name meta) t/*testing-vars*)))))
 
-;; dump console logs
+  ;; dump console logs
   (when-let [pw-page->console-logs (some-> *pw-page->console-logs* deref)]
     (doseq [[_pw-page logs] pw-page->console-logs]
       (spit (format "e2e-dump/console-logs-%s.txt" (System/currentTimeMillis))
-            (with-out-str (pp/pprint logs))))))
+            (with-out-str (pp/pprint logs)))))
+
+  (when (some? *preserve-graph*)
+    (set! *preserve-graph* true)))
