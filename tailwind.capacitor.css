@@ -9,6 +9,7 @@
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 
+@import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";
 @import "src/main/frontend/components/block.css";
 @import "src/main/frontend/components/property.css";
