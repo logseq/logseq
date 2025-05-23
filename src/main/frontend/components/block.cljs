@@ -3499,7 +3499,6 @@
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
         table? (:table? config*)
-        sidebar? (:sidebar? config*)
         property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
@@ -3667,14 +3666,14 @@
                                          :hide-block-refs-count? hide-block-refs-count?
                                          :*show-query? *show-query?}))])]
 
-         (when (and db-based? (not collapsed?) (not (or table? property?)))
+         (when (and db-based? (not collapsed?) (not (or table? property? (:page-title? config))))
            (block-positioned-properties config block :block-below))]
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
      (when (and db-based?
-                (or sidebar? (not collapsed?))
+                (not collapsed?)
                 (not (or table? property?)))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])

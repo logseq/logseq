@@ -181,7 +181,7 @@
 }
 
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50 text-sm;
+  @apply !h-6 !px-0 font-normal opacity-50;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -300,6 +300,7 @@ a.control-link {
 }
 
 .property-key {
+  font-size: 15px;
   /* Same height with one-line block container */
   min-width: 160px;
   min-height: 28px;
@@ -329,8 +330,10 @@ a.control-link {
 
   .property-icon {
     @apply flex items-center;
-    height: 26px;
-    margin-top: 1px;
+    svg {
+        width: 15px;
+        height: 15px;
+    }
   }
 
   .editor-inner {
