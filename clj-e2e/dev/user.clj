@@ -13,6 +13,7 @@
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-test]
+            [logseq.e2e.property-basic-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
             [wally.repl :as repl]))
@@ -34,6 +35,11 @@
   []
   (->> (future (run-tests 'logseq.e2e.commands-basic-test))
        (swap! *futures assoc :commands-test)))
+
+(defn run-property-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.property-basic-test))
+       (swap! *futures assoc :property-test)))
 
 (defn run-outliner-test
   []
@@ -72,7 +78,8 @@
              'logseq.e2e.outliner-basic-test
              'logseq.e2e.rtc-basic-test
              'logseq.e2e.plugins-basic-test
-             'logseq.e2e.reference-basic-test))
+             'logseq.e2e.reference-basic-test
+             'logseq.e2e.property-basic-test))
 
 (defn start
   []

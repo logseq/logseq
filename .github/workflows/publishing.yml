@@ -4,7 +4,7 @@ on:
   # Path filters ensure jobs only kick off if a change is made to publishing or
   # its local dependencies
   push:
-    branches: [master]
+    branches: [master, "feat/db"]
     paths:
       - 'deps/publishing/**'
       # db is a local dep that could break functionality in this lib and should trigger this
