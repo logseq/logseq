@@ -2692,12 +2692,11 @@
   (let [*hover? (::hover? state)
         *hover-container? (::hover-container? state)
         private-tag? (ldb/private-tags (:db/ident tag))]
-    [:div.block-tag.items-center.relative
+    [:div.block-tag
      {:key (str "tag-" (:db/id tag))
-      :class (if @*hover?
-               (str "bg-gray-03 rounded "
-                    (if private-tag? "px-1" "pr-1"))
-               "pl-2 pr-1")
+      :class (str (when private-tag? "private-tag ")
+                  (when @*hover?
+                    (if private-tag? "!px-1" "!pl-0")))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
      [:div.flex.items-center
@@ -3075,9 +3074,9 @@
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
-      [:div.flex.flex-1.flex-row.gap-1.items-center
+      [:div.block-row.flex.flex-1.flex-row.gap-1.items-center
        (if (and editor-box edit? (not type-block-editor?))
-         [:div.editor-wrapper.flex.flex-1
+         [:div.editor-wrapper.flex.flex-1.w-full
           {:id editor-id
            :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
           (ui/catch-error
@@ -3118,7 +3117,7 @@
             (block-refs-count block refs-count *hide-block-refs?))])
 
        (when-not (:table-block-title? config)
-         [:div.flex.flex-row.items-center.self-start.gap-1
+         [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
           (when (and db-based? (not table?))
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
