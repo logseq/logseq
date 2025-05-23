@@ -11,6 +11,7 @@
    [logseq.e2e.locator :as loc]
    [logseq.e2e.outliner-basic-test :as outliner-basic-test]
    [logseq.e2e.page :as page]
+   [logseq.e2e.property-basic-test :as property-basic-test]
    [logseq.e2e.rtc :as rtc]
    [logseq.e2e.settings :as settings]
    [logseq.e2e.util :as util]
@@ -177,43 +178,13 @@
         (validate-task-blocks)
         (validate-2-graphs)))))
 
-(defn- add-new-properties
-  [title-prefix]
-  (b/new-blocks (map #(str title-prefix "-" %) ["Text" "Number" "Date" "DateTime" "Checkbox" "Url" "Node"]))
-  (doseq [property-type ["Text" "Number" "Date" "DateTime" "Checkbox" "Url" "Node"]]
-    (let [property-name (str "p-" title-prefix "-" property-type)]
-      (w/click (util/get-by-text (str title-prefix "-" property-type) true))
-      (k/press "Control+e")
-      (util/input-command "Add new property")
-      (util/input property-name)
-      (w/click (w/get-by-text "New option:"))
-      (assert/assert-is-visible (w/get-by-text "Select a property type"))
-      (w/click (loc/and "span" (util/get-by-text property-type true)))
-      (case property-type
-        "Text" (do
-                 (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
-                 (util/input "Text"))
-        "Number" (do (assert/assert-is-visible (format "input[placeholder='%s']" (str "Set " property-name)))
-                     (util/input "111")
-                     (w/click (w/get-by-text "New option:")))
-        ("DateTime" "Date") (do
-                              (assert/assert-is-visible ".ls-property-dialog")
-                              (k/enter)
-                              (k/esc))
-        "Checkbox" nil
-        "Url" nil
-        "Node" (do
-                 (w/click (w/get-by-text "Skip choosing tag"))
-                 (util/input (str title-prefix "-Node-value"))
-                 (w/click (w/get-by-text "New option:")))))))
-
 (deftest rtc-property-test
   (let [insert-new-property-blocks-in-page2
         (fn [*latest-remote-tx title-prefix]
           (w/with-page @*page2
             (let [{:keys [_local-tx remote-tx]}
                   (rtc/with-wait-tx-updated
-                    (add-new-properties title-prefix))]
+                    (property-basic-test/add-new-properties title-prefix))]
               (reset! *latest-remote-tx remote-tx))))]
     (testing "page1: rtc-stop
 page2: create some user properties with different type
