@@ -541,6 +541,7 @@
 .ls-block {
   @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
   container-type: inline-size;
+  container-name: ls-block;
 
   &.selected {
     @apply rounded;
@@ -568,7 +569,7 @@
     }
 }
 
-@container (max-width: 370) {
+@container ls-block (max-width: 430px) {
     .ls-properties-area {
         display: none;
     }
