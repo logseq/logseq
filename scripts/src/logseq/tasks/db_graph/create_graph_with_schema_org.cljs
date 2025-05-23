@@ -11,8 +11,6 @@
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :node properties are given a :cardinality :many"
   (:require ["fs" :as fs]
-            ["os" :as os]
-            ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
             [clojure.set :as set]
@@ -23,7 +21,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
-            [nbb.core :as nbb]))
+            [nbb.core :as nbb]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
 (defn- get-comment-string
   [rdfs-comment renamed-pages]
@@ -406,11 +405,11 @@
             (println (str "Usage: $0 GRAPH-NAME [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (if (string/includes? graph-dir "/")
-                        ((juxt node-path/dirname node-path/basename) graph-dir)
-                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
-                                                  :classpath (cp/get-classpath)})
+        init-conn-args (sqlite-cli/->open-db-args graph-dir)
+        db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
+        conn (apply outliner-cli/init-conn
+                    (conj init-conn-args {:additional-config (:config options)
+                                          :classpath (cp/get-classpath)}))
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)]

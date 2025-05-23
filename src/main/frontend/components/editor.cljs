@@ -800,6 +800,8 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
+               :autocapitalize "off"
+               :autocorrect "off"
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

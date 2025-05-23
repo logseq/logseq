@@ -2,17 +2,16 @@
   "A script that creates or updates a DB graph given a sqlite.build EDN file.
    If the given graph already exists, the EDN file updates the graph."
   (:require ["fs" :as fs]
-            ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
-            [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [validate-db]))
+            [validate-db]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"
@@ -20,17 +19,6 @@
   (if (node-path/isAbsolute path)
     path
     (node-path/join (or js/process.env.ORIGINAL_PWD ".") path)))
-
-(defn- get-dir-and-db-name
-  "Gets dir and db name for use with open-db! Works for relative and absolute paths and
-   defaults to ~/logseq/graphs/ when no '/' present in name"
-  [graph-dir]
-  (if (string/includes? graph-dir "/")
-    (let [resolve-path' #(if (node-path/isAbsolute %) %
-                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
-                             (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
-      ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir)))
-    [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
 
 (def spec
   "Options spec"
@@ -48,11 +36,13 @@
             (println (str "Usage: $0 GRAPH-NAME EDN-PATH [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (get-dir-and-db-name graph-dir)
+        init-conn-args (conj (sqlite-cli/->open-db-args graph-dir))
         sqlite-build-edn (merge (if (:import options) {} {:auto-create-ontology? true})
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
-        graph-exists? (fs/existsSync (node-path/join dir db-name))
-        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath) :import-type :cli/create-graph})
+        graph-exists? (fs/existsSync (apply node-path/join init-conn-args))
+        db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
+        conn (apply outliner-cli/init-conn
+                    (conj init-conn-args {:classpath (cp/get-classpath) :import-type :cli/create-graph}))
         {:keys [init-tx block-props-tx misc-tx] :as _txs}
         (if (:import options)
           (sqlite-export/build-import sqlite-build-edn @conn {})
