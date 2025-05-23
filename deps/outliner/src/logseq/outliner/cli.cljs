@@ -46,10 +46,15 @@
    * :additional-config - Additional config map to merge into repo config.edn
    * :classpath - A java classpath string i.e. paths delimited by ':'. Used to find default config.edn
      that comes with Logseq"
-  [dir db-name & [opts]]
-  (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true})
-  ;; Same order as frontend.db.conn/start!
-  (let [conn (sqlite-cli/open-db! dir db-name)]
+  [& args*]
+  (let [[args opts] (if (map? (last args*))
+                      [(butlast args*) (last args*)]
+                      [args* {}])
+        ;; Only mkdir when a dir and db-name are passed
+        _ (when (= 2 (count args))
+            (fs/mkdirSync (apply node-path/join args) #js {:recursive true}))
+        ;; Same order as frontend.db.conn/start!
+        conn (apply sqlite-cli/open-db! args)]
     (db-pipeline/add-listener conn)
     (setup-init-data conn opts)
     conn))
