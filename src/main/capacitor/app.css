@@ -1,5 +1,5 @@
 html, body {
-  @apply text-[18px] leading-6;
+  @apply text-[18px] leading-6 min-h-[unset];
 }
 #root {
   @apply p-4;

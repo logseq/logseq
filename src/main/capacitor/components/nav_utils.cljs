@@ -12,6 +12,9 @@
 (defn nav-pop! []
   (some-> @state/*nav-root (.pop)))
 
+(defn nav-length? []
+  (some-> ^js @state/*nav-root (.getLength)))
+
 (defn nav-to-block!
   [page-or-block opts]
   (nav-push! #(cc-blocks/page page-or-block opts)))
