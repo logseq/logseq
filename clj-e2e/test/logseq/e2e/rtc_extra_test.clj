@@ -4,6 +4,7 @@
    [com.climate.claypoole :as cp]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
+   [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
    [logseq.e2e.keyboard :as k]
@@ -33,11 +34,13 @@
       (graph/wait-for-remote-graph graph-name)
       (graph/switch-graph graph-name true))
 
-    (f)
-
-    ;; cleanup
-    (w/with-page @*page2
-      (graph/remove-remote-graph graph-name))))
+    (binding [custom-report/*preserve-graph* false]
+      (f)
+      ;; cleanup
+      (if custom-report/*preserve-graph*
+        (println "Don't remove graph: " graph-name)
+        (w/with-page @*page2
+          (graph/remove-remote-graph graph-name))))))
 
 (defn- new-logseq-page
   "new logseq page and switch to this page on both page1 and page2"
