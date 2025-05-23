@@ -5,8 +5,8 @@
             [frontend.config :as config]
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
 

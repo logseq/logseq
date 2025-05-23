@@ -2,14 +2,14 @@
   "This ns is a system component that encapsulates global config functionality.
   Unlike repo config, this also manages a directory for configuration. This
   component depends on a repo."
-  (:require [frontend.fs :as fs]
-            [frontend.state :as state]
-            [promesa.core :as p]
-            [shadow.resource :as rc]
+  (:require [borkdude.rewrite-edn :as rewrite]
             [clojure.edn :as edn]
             [electron.ipc :as ipc]
-            [borkdude.rewrite-edn :as rewrite]
-            [logseq.common.path :as path]))
+            [frontend.fs :as fs]
+            [frontend.state :as state]
+            [logseq.common.path :as path]
+            [promesa.core :as p]
+            [shadow.resource :as rc]))
 
 ;; Use defonce to avoid broken state on dev reload
 ;; Also known as home directory a.k.a. '~'

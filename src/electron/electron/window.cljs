@@ -4,29 +4,29 @@
             [electron.configs :as cfgs]
             [electron.context-menu :as context-menu]
             [electron.logger :as logger]
-            ["electron" :refer [BrowserWindow app session shell] :as electron]
+            ["electron" :refer [BrowserWindow app session shell dialog] :as electron]
             ["path" :as node-path]
             ["url" :as URL]
             [electron.state :as state]
             [cljs-bean.core :as bean]
-            [clojure.core.async :as async]
             [clojure.string :as string]))
 
 (defonce *quitting? (atom false))
 
 (def MAIN_WINDOW_ENTRY (if dev?
-                         ;"http://localhost:3001"
-                         (str "file://" (node-path/join js/__dirname "index.html"))
-                         (str "file://" (node-path/join js/__dirname "electron.html"))))
+                         ;; Use index.html to test plugins on development mode
+                         "http://localhost:3001"
+                         (str "file://" (node-path/join js/__dirname "index.html"))))
 
 (defn create-main-window!
   ([]
    (create-main-window! MAIN_WINDOW_ENTRY nil))
   ([url]
    (create-main-window! url nil))
-  ([url opts]
+  ([url {:keys [graph] :as opts}]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
+         url (if graph (str url "#/?graph=" graph) url)
          win-opts  (cond->
                      {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
                       :width                (.-width win-state)
@@ -91,17 +91,8 @@
     (close-watcher-f win dir))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
-    (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
-    (.send web-contents "persistent-dbs"))
-  (async/go
-    (let [_ (async/<! state/persistent-dbs-chan)]
-      (destroy-window! win)
-      ;; (if @*quitting?
-      ;;   (doseq [win (get-all-windows)]
-      ;;     (destroy-window! win))
-      ;;   (destroy-window! win))
-      (when @*quitting?
-        (async/put! state/persistent-dbs-chan true)))))
+    (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
+  (destroy-window! win))
 
 (defn on-close-actions!
   ;; TODO merge with the on close in core
@@ -134,9 +125,18 @@
   [url default-open]
   (let [URL (.-URL URL)
         parsed-url (try (URL. url) (catch :default _ nil))]
-    (if (and parsed-url (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url)))
-      (.openExternal shell url)
-      (when default-open (default-open url)))))
+    (when parsed-url
+      (if (contains? #{"https:" "http:" "mailto:"} (.-protocol parsed-url))
+        (.openExternal shell url)
+        (when-let [^js res (and (fn? default-open)
+                             (.showMessageBoxSync dialog
+                               #js {:type "warning"
+                                    :message (str "Are you sure you want to open this link? \n\n" url)
+                                    :defaultId 1
+                                    :cancelId 0
+                                    :buttons #js ["Cancel" "OK"]}))]
+          (when (= res 1)
+            (default-open url)))))))
 
 (defn setup-window-listeners!
   [^js win]
@@ -148,10 +148,9 @@
                         (utils/safe-decode-uri-component url) url)
                   url (if-not win32? (string/replace url "file://" "") url)]
               (logger/info "new-window" url)
-              (if (some #(string/includes?
-                          (.normalize node-path url)
-                          (.join node-path (. app getAppPath) %))
-                        ["index.html" "electron.html"])
+              (if (string/includes?
+                   (.normalize node-path url)
+                   (.join node-path (. app getAppPath) "index.html"))
                 (logger/info "pass-window" url)
                 (open-default-app! url open))))
 
@@ -177,18 +176,18 @@
               (-> (if (= url "about:blank")
                     (merge {:action "allow"
                             :overrideBrowserWindowOptions
-                            {:frame                true
-                             :titleBarStyle        "default"
+                            {:frame true
+                             :titleBarStyle "default"
                              :trafficLightPosition {:x 16 :y 16}
-                             :autoHideMenuBar      (not mac?)
-                             :fullscreenable       (not fullscreen?)
+                             :autoHideMenuBar (not mac?)
+                             :fullscreenable (not fullscreen?)
                              :webPreferences
-                             {:plugins          true
-                              :nodeIntegration  false
-                              :webSecurity      (not dev?)
-                              :preload          (node-path/join js/__dirname "js/preload.js")
+                             {:plugins true
+                              :nodeIntegration false
+                              :webSecurity (not dev?)
+                              :preload (node-path/join js/__dirname "js/preload.js")
                               :nativeWindowOpen true}}}
-                           features)
+                      features)
                     (do (open-external! url) {:action "deny"}))
                   (bean/->js))))]
 

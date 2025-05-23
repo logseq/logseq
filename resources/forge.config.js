@@ -5,7 +5,7 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
-    buildVersion: '86',
+    buildVersion: '87',
     protocols: [
       {
         "protocol": "logseq",
@@ -20,12 +20,12 @@ module.exports = {
       'entitlements-inherit': 'entitlements.plist',
       'signature-flags': 'library'
     },
-    osxNotarize: {
+    osxNotarize: process.env['APPLE_ID'] ? {
       tool: 'notarytool',
       appleId: process.env['APPLE_ID'],
       appleIdPassword: process.env['APPLE_ID_PASSWORD'],
       teamId: process.env['APPLE_TEAM_ID']
-    },
+    } : undefined,
   },
   makers: [
     {
