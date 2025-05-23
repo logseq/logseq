@@ -216,8 +216,15 @@
                   (not (nil? (state/get-editing-block)))
                   (state/exit-editing!)
 
+                  (seq (ui/get-modal))
+                  nil
+
                   :else
-                  (cc-utils/nav-pop!)))
+                  (-> (cc-utils/nav-length?)
+                    (p/then (fn [len]
+                              (if (= len 1)
+                                (.exitApp App)
+                                (cc-utils/nav-pop!)))))))
               ^js back-listener (.addListener App "backButton" handle-back!)]
           #(.remove back-listener)))
       [])
