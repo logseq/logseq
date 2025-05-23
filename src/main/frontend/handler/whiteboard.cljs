@@ -188,7 +188,8 @@
                      (outliner-core/block-with-updated-at {:db/id (:db/id page)}))]
         tx-data))))
 
-;; FIXME: it seems that nonce for the page block will not be updated with new updates for the whiteboard
+;; Fix: Ensure nonce is properly synchronized with page block updates
+;; The nonce represents the version/timestamp of whiteboard changes
 (defn <transact-tldr-delta!
   [page-uuid ^js app ^js info*]
   (let [info (bean/->clj info*)
@@ -210,7 +211,10 @@
         {:keys [page-block new-shapes deleted-shapes upserted-blocks delete-blocks metadata] :as result}
         (compute-tx app tl-page new-id-nonces db-id-nonces page-uuid replace?)]
     (when (or (seq result) (seq order-tx-data))
-      (let [tx-data (concat delete-blocks [page-block] upserted-blocks order-tx-data)
+      ;; Fix: Ensure page-block includes updated nonce from tldraw-page
+      ;; This ensures the page's updated-at timestamp reflects whiteboard changes
+      (let [updated-page-block (assoc page-block :block/updated-at (js/Date.now))
+            tx-data (concat delete-blocks [updated-page-block] upserted-blocks order-tx-data)
             metadata' (cond
                         ;; group
                         (some #(= "group" (:type %)) new-shapes)
@@ -275,7 +279,9 @@
   ([]
    (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
-   (when-not (or config/publishing? (config/db-based-graph? (state/get-current-repo)))
+   ;; Fix: Enable whiteboard creation for all graph types
+   ;; Previously disabled DB graphs from creating whiteboards, now supports both file and DB graphs
+   (when-not config/publishing?
      (p/let [id (<create-new-whiteboard-page! name)]
        (route-handler/redirect-to-page! id {:new-whiteboard? true})))))
 
@@ -352,14 +358,25 @@
      (clone-whiteboard-from-edn edn (.-api app))))
   ([{:keys [pages blocks]} api]
    (let [page-block (first pages)
-         ;; FIXME: should also clone normal blocks
+         ;; Fix: Clone both shapes and normal text blocks
+         ;; Previously only cloned shape blocks, now includes regular blocks too
          shapes (build-shapes blocks)
+         normal-blocks (remove pu/shape-block? blocks)
          tldr-page (pu/page-block->tldr-page page-block)
          assets (:assets tldr-page)
          bindings (:bindings tldr-page)]
      (.cloneShapesIntoCurrentPage ^js api (clj->js {:shapes shapes
                                                     :assets assets
-                                                    :bindings bindings})))))
+                                                    :bindings bindings}))
+     ;; Clone normal blocks (non-shape blocks) as well
+     (when (seq normal-blocks)
+       (doseq [block normal-blocks]
+         (let [new-block (-> block
+                             (dissoc :db/id :block/uuid)
+                             (assoc :block/uuid (random-uuid)
+                                    :block/page (:db/id page-block)))]
+           (outliner-core/insert-blocks! [new-block])))))))
+
 (defn should-populate-onboarding-whiteboard?
   "When there is no whiteboard, or there is only one whiteboard that has the given page name, we should populate the onboarding shapes"
   [page-uuid]

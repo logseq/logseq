@@ -277,16 +277,17 @@
       (for [nav checked-navs]
         (cond
           (= nav :whiteboards)
+          ;; Fix: Enable whiteboard navigation for both file and DB-based graphs
+          ;; Previously only shown for file-based graphs, now available for all
           (when enable-whiteboards?
-            (when (not db-based?)
-              (sidebar-item
-               {:class "whiteboard"
-                :title (t :right-side-bar/whiteboards)
-                :href (rfe/href :whiteboards)
-                :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-                :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                :icon "writing"
-                :shortcut :go/whiteboards})))
+            (sidebar-item
+             {:class "whiteboard"
+              :title (t :right-side-bar/whiteboards)
+              :href (rfe/href :whiteboards)
+              :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+              :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+              :icon "writing"
+              :shortcut :go/whiteboards}))
 
           (= nav :flashcards)
           (when (state/enable-flashcards? (state/get-current-repo))
@@ -374,6 +375,41 @@
          {:key (str "recent-" (:db/id page))
           :title (block-handler/block-unique-title page)}
          (page-name page (icon/get-node-icon-cp page {:size 16}) true)])])))
+
+(defn close-sidebar-on-mobile!
+  []
+  (and (util/sm-breakpoint?)
+       (state/toggle-left-sidebar!)))
+
+(defn create-dropdown
+  []
+  (ui/dropdown-with-links
+   (fn [{:keys [toggle-fn]}]
+     [:button#create-button
+      {:on-click toggle-fn}
+      [:<>
+       (ui/icon "plus" {:font? "true"})
+       [:span.mx-1 (t :left-side-bar/create)]]])
+   (cond-> []
+     true (conj {:title (t :left-side-bar/new-page)
+                 :class "new-page-link"
+                 :options {:on-click #(do (close-sidebar-on-mobile!)
+                                          (state/pub-event! [:go/search]))
+                           :shortcut (ui/keyboard-shortcut-from-config :go/search)}
+                 :icon (ui/type-icon {:name "new-page"
+                                      :class "highlight"
+                                      :extension? true})})
+     ;; Fix: Add whiteboard creation option for all graph types
+     (state/enable-whiteboards? (state/get-current-repo))
+     (conj {:title (t :left-side-bar/new-whiteboard)
+            :class "new-whiteboard-link"
+            :options {:on-click #(do (close-sidebar-on-mobile!)
+                                     (whiteboard-handler/<create-new-whiteboard-and-redirect!))
+                      :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
+            :icon (ui/type-icon {:name "new-whiteboard"
+                                 :class "highlight"
+                                 :extension? true})}))
+   {}))
 
 (defn get-default-home-if-valid
   []
