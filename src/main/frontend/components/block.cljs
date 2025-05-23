@@ -2148,8 +2148,7 @@
                                 :is-with-icon  with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
-     (when (and (or (not fold-button-right?) collapsable?)
-                (not (:table? config)))
+     (when (not (:table? config))
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
@@ -2896,7 +2895,7 @@
         block-type (or
                     (pu/lookup block :logseq.property/ls-type)
                     :default)
-        mouse-down-key (if (util/ios?)
+        mouse-down-key (if (util/mobile?)
                          :on-click
                          :on-pointer-down) ; TODO: it seems that Safari doesn't work well with on-pointer-down
         attrs (cond->
