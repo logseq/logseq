@@ -39,4 +39,13 @@ const config: CapacitorConfig = {
   }
 }
 
+if (process.env.LOGSEQ_APP_SERVER_URL) {
+  Object.assign(config, {
+    server: {
+      url: process.env.LOGSEQ_APP_SERVER_URL,
+      cleartext: true
+    }
+  })
+}
+
 export = config;

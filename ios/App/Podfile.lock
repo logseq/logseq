@@ -1,9 +1,4 @@
 PODS:
-  - AgeEncryption (1.0.6)
-  - Alamofire (5.6.2)
-  - AWSCore (2.27.10)
-  - AWSS3 (2.27.10):
-    - AWSCore (= 2.27.10)
   - Capacitor (7.2.0):
     - CapacitorCordova
   - CapacitorActionSheet (7.0.1):
@@ -35,11 +30,6 @@ PODS:
     - Capacitor
   - JcesarmobileSslSkip (0.4.0):
     - Capacitor
-  - LogseqCapacitorFileSync (5.0.2):
-    - AgeEncryption (~> 1.0.6)
-    - Alamofire
-    - AWSS3
-    - Capacitor
   - SendIntent (0.0.1):
     - Capacitor
 
@@ -60,15 +50,7 @@ DEPENDENCIES:
   - "CapawesomeCapacitorBackgroundTask (from `../../node_modules/@capawesome/capacitor-background-task`)"
   - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
-  - "LogseqCapacitorFileSync (from `../../node_modules/@logseq/capacitor-file-sync`)"
   - SendIntent (from `../../node_modules/send-intent`)
-
-SPEC REPOS:
-  trunk:
-    - AgeEncryption
-    - Alamofire
-    - AWSCore
-    - AWSS3
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -103,16 +85,10 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capgo/capacitor-navigation-bar"
   JcesarmobileSslSkip:
     :path: "../../node_modules/@jcesarmobile/ssl-skip"
-  LogseqCapacitorFileSync:
-    :path: "../../node_modules/@logseq/capacitor-file-sync"
   SendIntent:
     :path: "../../node_modules/send-intent"
 
 SPEC CHECKSUMS:
-  AgeEncryption: 23c203675d5e4883a18b133ab1d5e61ff29e0c18
-  Alamofire: d368e1ff8a298e6dde360e35a3e68e6c610e7204
-  AWSCore: dbad318b7ff0fd86fb8387d3ad1f30049c05bc58
-  AWSS3: 0cf2cedb263368f624ca721e5c56a8cb59fc44bc
   Capacitor: 106e7a4205f4618d582b886a975657c61179138d
   CapacitorActionSheet: 24609588961cc27c87e8b033be92b5eee65b5d4c
   CapacitorApp: d63334c052278caf5d81585d80b21905c6f93f39
@@ -129,9 +105,8 @@ SPEC CHECKSUMS:
   CapawesomeCapacitorBackgroundTask: 834d797abc9933fac4354490d1a2f3c0e389b98d
   CapgoCapacitorNavigationBar: 3a0e93a40b7da3d3cb74c0410bb761a1525406be
   JcesarmobileSslSkip: b0f921e9d397a57f7983731209ca1ee244119c1f
-  LogseqCapacitorFileSync: 541dcd5492b8aeb2257cce3d18bb9ed5800cfcad
   SendIntent: 0a17b6984c4f27e9dfa56513267ba2c044a5a6c8
 
-PODFILE CHECKSUM: 615b869df5e31ea8a2027fb6e2d192ce3aa95505
+PODFILE CHECKSUM: df64fb8749b799fc4571323f5341b09f84c86b69
 
-COCOAPODS: 1.11.2
+COCOAPODS: 1.16.2
