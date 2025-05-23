@@ -282,7 +282,6 @@
 
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
-  (mobile/init!)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-ios?)

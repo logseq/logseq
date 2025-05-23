@@ -230,29 +230,16 @@
            (rgb2hex rgb))))))
 
 #?(:cljs
-   (defn set-android-theme
-     []
-     (let [f #(when (mobile-util/native-android?)
-                (when-let [bg-color (try (get-computed-bg-color)
-                                         (catch :default _
-                                           nil))]
-                  (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
-                  (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))]
-       (js/setTimeout f 32))))
-
-#?(:cljs
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (set-android-theme))))
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (set-android-theme))))
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
 (defn find-first
   [pred coll]
@@ -1049,8 +1036,7 @@
                      (d/set-attr! :type "text/css")
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
-           (d/append! parent-node link))
-         (set-android-theme)))))
+           (d/append! parent-node link))))))
 
 (defn remove-common-preceding
   [col1 col2]

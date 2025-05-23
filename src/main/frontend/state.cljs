@@ -2304,8 +2304,7 @@ Similar to re-frame subscriptions"
 
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)
-  (storage/set :ui/radix-color color)
-  (util/set-android-theme))
+  (storage/set :ui/radix-color color))
 
 (defn set-editor-font! [font]
   (let [font (if (keyword? font) (name font) (str font))]
