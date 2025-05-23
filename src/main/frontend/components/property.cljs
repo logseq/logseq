@@ -424,15 +424,15 @@
 (rum/defcs new-property < rum/reactive
   [state block opts]
   (when-not config/publishing?
-    [:div.ls-new-property {:style {:margin-left 7 :margin-top 1}}
-     [:a.fade-link.flex.jtrigger
+    [:div.ls-new-property {:style {:margin-left 7 :margin-top 1 :font-size 15}}
+     [:a.flex.jtrigger.text-muted-foreground
       {:tab-index 0
        :on-click (fn [e]
                    (state/pub-event! [:editor/new-property (merge opts {:block block
                                                                         :target (.-target e)})]))}
       [:div.flex.flex-row.items-center.shrink-0
-       (ui/icon "plus" {:size 16})
-       [:div.ml-1
+       (ui/icon "plus" {:size 15})
+       [:div.ml-1 {:style {:margin-top 1}}
         "Add property"]]]]))
 
 (defn- resolve-linked-block-if-exists
@@ -558,7 +558,7 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties?] :as opts}]
+  [state _target-block {:keys [sidebar-properties? page-title?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -580,7 +580,8 @@
                                ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
                                (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
-                          (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
+                          (when-not (or sidebar-properties? page-title?
+                                        (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
 
@@ -596,18 +597,20 @@
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
-                                  (cond
-                                    show-empty-and-hidden-properties?
-                                    false
-                                    root-block?
-                                    false
-                                    (and (:logseq.property/hide-empty-value property)
-                                         (nil? (get properties property-id)))
-                                    true
-                                    state-hide-empty-properties?
-                                    (nil? (get block property-id))
-                                    :else
-                                    (boolean (:logseq.property/hide? property)))))
+                                  (boolean
+                                   (when-not (or sidebar-properties? page-title?)
+                                     (cond
+                                       show-empty-and-hidden-properties?
+                                       false
+                                       root-block?
+                                       false
+                                       (and (:logseq.property/hide-empty-value property)
+                                            (nil? (get properties property-id)))
+                                       true
+                                       state-hide-empty-properties?
+                                       (nil? (get block property-id))
+                                       :else
+                                       (boolean (:logseq.property/hide? property)))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
