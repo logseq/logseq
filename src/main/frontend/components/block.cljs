@@ -58,6 +58,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
@@ -2148,17 +2149,21 @@
                                 :is-with-icon  with-icon?
                                 :bullet-closed collapsed?
                                 :bullet-hidden (:hide-bullet? config)}])}
-     (when (not (:table? config))
+     (when (and (or (not fold-button-right?) collapsable? collapsed?)
+                (not (:table? config)))
        [:a.block-control
         {:id       (str "control-" uuid)
          :on-click (fn [event]
                      (util/stop event)
                      (state/clear-edit!)
-                     (if ref?
-                       (state/toggle-collapsed-block! uuid)
-                       (if collapsed?
-                         (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid)))
+                     (p/do!
+                      (if ref?
+                        (state/toggle-collapsed-block! uuid)
+                        (if collapsed?
+                          (editor-handler/expand-block! uuid)
+                          (editor-handler/collapse-block! uuid)))
+                      (when (util/mobile?)
+                        (haptics/haptics :light)))
                      ;; debug config context
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
@@ -3005,18 +3010,17 @@
   [_config {:block/keys [uuid] :as _block}]
   [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
    [:div.commands-button.w-0.rounded-r-md
-    {:id (str "block-left-menu-" uuid)}
+    {:id (str "block-left-menu-" uuid)
+     :style {:max-width 40}}
     [:div.indent (ui/icon "indent-increase" {:size 18})]]])
 
 (rum/defc block-right-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block} edit?]
+  [_config {:block/keys [uuid] :as _block}]
   [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
    [:div.commands-button.w-0.rounded-md
     {:id (str "block-right-menu-" uuid)
-     :style {:max-width (if edit? 40 80)}}
-    [:div.outdent (ui/icon "indent-decrease" {:size 18})]
-    (when-not edit?
-      [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
+     :style {:max-width 40}}
+    [:div.outdent (ui/icon "indent-decrease" {:size 18})]]])
 
 (rum/defc block-content-with-error
   [config block edit-input-id block-id *show-query? editor-box]
@@ -3686,7 +3690,7 @@
            (block-positioned-properties config block :block-below))]
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
-          (block-right-menu config block editing?))])
+          (block-right-menu config block))])
 
      (when (and db-based?
                 (not collapsed?)

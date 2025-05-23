@@ -310,6 +310,7 @@
                   y (.-clientY touch)]
               (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
 
+;; FIXME: disable scroll
 (defn on-touch-move
   [event block uuid edit? *show-left-menu? *show-right-menu?]
   (when-let [touches (.-targetTouches event)]
@@ -396,24 +397,24 @@
       (try
         (when (> (. js/Math abs dx) 10)
           (cond
-            (and left-menu (>= (.-clientWidth left-menu) 40))
+            left-menu
             (when (indentable? block)
               (haptics/with-haptics-impact
                 (indent-outdent-blocks! [block] true nil)
                 :light))
 
-            (and right-menu (<= 40 (.-clientWidth right-menu) 79))
+            right-menu
             (when (outdentable? block)
               (haptics/with-haptics-impact
                 (indent-outdent-blocks! [block] false nil)
                 :light))
 
-            (and right-menu (>= (.-clientWidth right-menu) 80))
-            (haptics/with-haptics-impact
-              (do (state/set-state! :mobile/show-action-bar? true)
-                  (state/set-state! :mobile/actioned-block block)
-                  (select-block! uuid))
-              :light)
+;; TODO: long press to select
+            ;; (haptics/with-haptics-impact
+            ;;   (do (state/set-state! :mobile/show-action-bar? true)
+            ;;       (state/set-state! :mobile/actioned-block block)
+            ;;       (select-block! uuid))
+            ;;   :light)
 
             :else
             nil))
