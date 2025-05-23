@@ -153,6 +153,8 @@
      (ionic/ion-page
       {:id "app-main-content"}
       (ionic/ion-header
+       ;; FIXME: iOS camera
+       ;; {:style {:padding-top 25}}
        (ionic/ion-toolbar
         (ionic/ion-buttons {:slot "start"}
                            (app-graphs-select))
@@ -243,7 +245,7 @@
       (ionic/ion-nav {:ref nav-ref
                       :root root                            ;;settings/page
                       :animated true
-                      :swipeGesture false})
+                      :swipeGesture true})
 
       (keep-keyboard-open)
       (ui/install-notifications)
