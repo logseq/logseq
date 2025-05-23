@@ -203,6 +203,7 @@
                  :datetime "calendar"
                  :checkbox "checkbox"
                  :url "link"
+                 :property "letter-p"
                  :page "page"
                  :node "letter-n"
                  "letter-t"))]
@@ -423,7 +424,7 @@
 (rum/defcs new-property < rum/reactive
   [state block opts]
   (when-not config/publishing?
-    [:div.ls-new-property {:style {:margin-left 6 :margin-top 1}}
+    [:div.ls-new-property {:style {:margin-left 7 :margin-top 1}}
      [:a.fade-link.flex.jtrigger
       {:tab-index 0
        :on-click (fn [e]
