@@ -190,7 +190,9 @@
       (assert/assert-is-visible (w/get-by-text "Select a property type"))
       (w/click (loc/and "span" (util/get-by-text property-type true)))
       (case property-type
-        "Text" (util/input "Text")
+        "Text" (do
+                 (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
+                 (util/input "Text"))
         "Number" (do (assert/assert-is-visible (format "input[placeholder='%s']" (str "Set " property-name)))
                      (util/input "111")
                      (w/click (w/get-by-text "New option:")))
