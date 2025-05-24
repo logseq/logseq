@@ -137,7 +137,10 @@
                                     (if-let [new-order (when new-id->order (get new-id->order (str (:block/uuid block))))]
                                       (assoc block :block/order new-order)
                                       block))))
-        page-name (or (:block/title page-entity) (str page-uuid))
+        page-name (let [tl-page-name (gobj/get tl-page "name")]
+                    (if (and tl-page-name (not (string/blank? tl-page-name)))
+                      tl-page-name
+                      (or (:block/title page-entity) (str page-uuid))))
         page-block (build-page-block page-entity page-name tl-page assets)]
     (when (or (seq upserted-blocks)
               (seq deleted-shapes-tx)
@@ -213,7 +216,8 @@
     (when (or (seq result) (seq order-tx-data))
       ;; Fix: Ensure page-block includes updated nonce from tldraw-page
       ;; This ensures the page's updated-at timestamp reflects whiteboard changes
-      (let [updated-page-block (assoc page-block :block/updated-at (js/Date.now))
+      (let [updated-page-block (or (:page-block result) page-block)
+            updated-page-block (assoc updated-page-block :block/updated-at (js/Date.now))
             tx-data (concat delete-blocks [updated-page-block] upserted-blocks order-tx-data)
             metadata' (cond
                         ;; group
