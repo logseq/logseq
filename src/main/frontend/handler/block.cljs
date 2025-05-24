@@ -355,7 +355,11 @@
         (when (and (> (. js/Math abs dx) (. js/Math abs dy))
                    (> (. js/Math abs dx) 10))
           (dom/set-style! block-container :transform "translateX(0)")
-          (state/exit-editing-and-set-selected-blocks! [block-container])
+          (if (contains? (set (state/get-selection-blocks)) block-container)
+            (state/drop-selection-block! block-container)
+            (do
+              (state/clear-edit!)
+              (state/conj-selection-block! block-container nil)))
           (haptics/haptics)
 
             ;; (haptics/with-haptics-impact
