@@ -3,9 +3,25 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [logseq.db.default :as default-db]
             [frontend.state :as state]
             [frontend.util :as util]))
+
+;; Graph View Alias Handling
+;;
+;; The graph view can either show or hide alias nodes based on user preference.
+;; When alias nodes are hidden:
+;; 1. Alias pages are removed from the graph
+;; 2. Any links to/from alias pages are redirected to their source pages
+;; 3. Links are deduplicated after redirection
+;;
+;; Example:
+;; If page A has an alias B, and page C links to B:
+;; - With alias nodes shown: C -> B -> A
+;; - With alias nodes hidden: C -> A
+;;
+;; This is controlled by the :alias-nodes? setting in the graph UI.
 
 (defn- build-links
   [links]
@@ -13,6 +29,12 @@
          {:source from
           :target to})
        links))
+
+(defn- get-main-page
+  [repo page-name]
+  "Returns the source page name for an alias page, or nil if the page is not an alias"
+  (when-let [source (db/get-alias-source-page repo page-name)]
+    (:block/name source)))
 
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
@@ -61,28 +83,66 @@
    nodes))
 
 (defn- normalize-page-name
+  "Normalizes page names and handles alias node filtering in the graph.
+  
+  When alias nodes are hidden:
+  - Removes alias nodes from the graph
+  - Redirects links that involve alias pages to their source pages
+  - Deduplicates any resulting duplicate links
+  
+  Args:
+    nodes: Collection of graph nodes with :id and :label
+    links: Collection of graph links with :source and :target
+    page-name->original-name: Map of normalized page names to original names"
   [{:keys [nodes links page-name->original-name]}]
-  (let [links (->>
+  (let [repo (state/get-current-repo)
+        ;; Get map of alias pages to their main pages
+        alias-map (when-not (:alias-nodes? (state/graph-settings))
+                   (->> nodes
+                        (map :id)
+                        (keep (fn [page]
+                              (when-let [main (get-main-page repo page)]
+                                [page main])))
+                        (into {})))
+        links (->>
                (map
                  (fn [{:keys [source target]}]
                    (let [source (get page-name->original-name source)
-                         target (get page-name->original-name target)]
+                         target (get page-name->original-name target)
+                         ;; Redirect links from/to aliases to their main pages
+                         source (or (get alias-map source) source)
+                         target (or (get alias-map target) target)]
                      (when (and source target)
                        {:source source :target target})))
                  links)
-               (remove nil?))
+               (remove nil?)
+               ;; Remove duplicate links after alias merging
+               distinct)
         nodes (->> (remove-uuids-and-files! nodes)
                    (util/distinct-by (fn [node] (:id node)))
                    (map (fn [node]
                           (if-let [original-name (get page-name->original-name (:id node))]
-                            (assoc node :id original-name :label original-name)
+                            ;; Skip alias nodes when merging
+                            (when (or (:alias-nodes? (state/graph-settings))
+                                    (not (get alias-map original-name)))
+                              (assoc node :id original-name :label original-name))
                             nil)))
                    (remove nil?))]
     {:nodes nodes
      :links links}))
 
 (defn build-global-graph
-  [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
+  "Builds the global graph visualization data structure.
+  
+  Args:
+    theme: Current theme ('light' or 'dark')
+    settings: Map of graph settings including:
+      :journal? - Show journal pages
+      :alias-nodes? - Show alias nodes (when false, merges aliases with source pages)
+      :orphan-pages? - Show orphaned pages
+      :builtin-pages? - Show built-in pages
+      :excluded-pages? - Show explicitly excluded pages"
+  [theme {:keys [journal? alias-nodes? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
@@ -93,22 +153,38 @@
             full-pages (db/get-all-pages repo)
             all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
+            ;; Build map of alias pages to their source pages
+            alias-map (when-not alias-nodes?
+                       (->> full-pages
+                            (keep (fn [page]
+                                  (when-let [source (get-main-page repo (:block/name page))]
+                                    [(:block/name page) source])))
+                            (into {})))
             pages-after-journal-filter (if-not journal?
-                                         (remove :block/journal? full-pages)
-                                         full-pages)
-
-           pages-after-exclude-filter (cond->> pages-after-journal-filter
-                                        (not excluded-pages?)
-                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
-
-            links (concat (seq relation)
-                          (seq tagged-pages)
-                          (seq namespaces))
+                                        (remove :block/journal? full-pages)
+                                        full-pages)
+            pages-after-exclude-filter (cond->> pages-after-journal-filter
+                                       (not excluded-pages?)
+                                       (remove (fn [p] (= true (:exclude-from-graph-view (:block/properties p))))))
+            ;; Filter out alias pages
+            pages-after-alias-filter (cond->> pages-after-exclude-filter
+                                     (not alias-nodes?)
+                                     (remove (fn [p]
+                                             (contains? alias-map (:block/name p)))))
+            
+            ;; Redirect links from aliases to their source pages
+            links (->> (concat (seq relation)
+                             (seq tagged-pages)
+                             (seq namespaces))
+                       (map (fn [[from to]]
+                             [(get alias-map from from)
+                              (get alias-map to to)]))
+                       distinct)
             linked (set (flatten links))
-            build-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+            built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
             nodes (cond->> (map :block/name pages-after-exclude-filter)
                     (not builtin-pages?)
-                    (remove (fn [p] (contains? build-in-pages (string/lower-case p))))
+                    (remove (fn [p] (contains? built-in-pages (string/lower-case p))))
                     (not orphan-pages?)
                     (filter #(contains? linked (string/lower-case %))))
             page-links (reduce (fn [m [k v]] (-> (update m k inc)

@@ -5,7 +5,8 @@
             [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.graph-parser.util :as gp-util]
+            [frontend.util :as util]))
 
 ;; transit serialization
 
@@ -109,3 +110,18 @@
   [query & inputs]
   (when-let [repo (state/get-current-repo)]
     (apply d/q query (conn/get-db repo) inputs)))
+
+(defn get-alias-pages
+  "Returns all pages that are aliases of the given page"
+  [repo page-name]
+  (when (and repo page-name)
+    (let [page-name (util/page-name-sanity-lc page-name)]
+      (->> (d/q '[:find (pull ?p [*])
+                  :in $ ?page-name
+                  :where
+                  [?p :block/alias ?a]
+                  [?a :block/name ?page-name]]
+                (conn/get-db repo)
+                page-name)
+           (map first)
+           (filter :block/name)))))
