@@ -16,6 +16,7 @@
         container-id (when node
                        (when-let [container-id-str (dom/attr node "containerid")]
                          (util/safe-parse-int container-id-str)))]
+    (.focus input)
     (when container-id
       (state/set-state! :editor/container-id container-id))
 
