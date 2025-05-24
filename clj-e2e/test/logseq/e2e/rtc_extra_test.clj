@@ -242,7 +242,25 @@
             (reset! *latest-remote-tx remote-tx)))
         (w/with-page @*page2
           (rtc/wait-tx-update-to @*latest-remote-tx))
-        (validate-2-graphs)))))
+        (validate-2-graphs)))
+    (testing "disconnect on page1 and page2, do some conflict updates, reconnect and check"
+      (w/with-page @*page1 (rtc/rtc-stop))
+      (w/with-page @*page2 (rtc/rtc-stop))
+
+      ;; TODO: more updates
+      (w/with-page @*page1
+        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
+        (b/indent))
+      (w/with-page @*page2
+        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
+        (b/delete-blocks)
+        )
+      (w/with-page @*page1 (rtc/rtc-start))
+      (w/with-page @*page2 (rtc/rtc-start) (repl/pause))
+      ;; (validate-2-graphs)
+      ;; TODO: validate block contents which are not equal now(some BUG here)
+      )
+    ))
 
 (comment
   (let [title-prefix "xxxx"
