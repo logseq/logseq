@@ -103,6 +103,8 @@
   (atom false))
 (defonce *dragging-block
   (atom nil))
+(defonce *dragging-over-block
+  (atom nil))
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
@@ -2053,21 +2055,21 @@
   [uuid]
   (= (:block/uuid @*dragging-block) uuid))
 
-(defn- bullet-drag-start
-  [event block uuid block-id]
+(defn- on-drag-start
+  [event block block-id]
   (let [selected (set (map #(.-id %) (state/get-selection-blocks)))
-        selected? (contains? selected block-id)]
+        selected? (contains? selected block-id)
+        block-uuid (:db/id block)]
     (when-not selected?
       (util/clear-selection!)
-      (editor-handler/highlight-block! uuid)))
+      (editor-handler/highlight-block! block-uuid))
+    (editor-handler/block->data-transfer! block-uuid event false)
 
-  (editor-handler/block->data-transfer! uuid event false)
-
-  (.setData (gobj/get event "dataTransfer")
-            "block-dom-id"
-            block-id)
-  (reset! *dragging? true)
-  (reset! *dragging-block block))
+    (.setData (gobj/get event "dataTransfer")
+              "block-dom-id"
+              block-id)
+    (reset! *dragging? true)
+    (reset! *dragging-block block)))
 
 (defn- bullet-on-click
   [e block uuid {:keys [on-redirect-to-page]}]
@@ -2175,20 +2177,24 @@
      (when-not (:hide-bullet? config)
        (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid config)}
                      [:span.bullet-container.cursor
-                      {:id (str "dot-" uuid)
-                       :draggable true
-                       :on-drag-start (fn [event]
-                                        (reset! *bullet-dragging? true)
-                                        (util/stop-propagation event)
-                                        (bullet-drag-start event block uuid block-id))
-                       :on-drag-end (fn [_e]
-                                      (reset! *bullet-dragging? false))
-                       :blockid (str uuid)
-                       :class (str (when collapsed? "bullet-closed")
-                                   (when (and (:document/mode? config)
-                                              (not collapsed?))
-                                     " hide-inner-bullet")
-                                   (when order-list? " as-order-list typed-list"))}
+                      (cond->
+                       {:id (str "dot-" uuid)
+
+                        :blockid (str uuid)
+                        :class (str (when collapsed? "bullet-closed")
+                                    (when (and (:document/mode? config)
+                                               (not collapsed?))
+                                      " hide-inner-bullet")
+                                    (when order-list? " as-order-list typed-list"))}
+                        (not (util/mobile?))
+                        (assoc
+                         :draggable true
+                         :on-drag-start (fn [event]
+                                          (reset! *bullet-dragging? true)
+                                          (util/stop-propagation event)
+                                          (on-drag-start event block block-id))
+                         :on-drag-end (fn [_e]
+                                        (reset! *bullet-dragging? false))))
 
                       (if with-icon?
                         icon
@@ -3278,6 +3284,9 @@
 
                           :else
                           :sibling)]
+      (when-not (= uuid @*dragging-over-block)
+        (haptics/haptics))
+      (reset! *dragging-over-block uuid)
       (reset! *drag-to-block block-id)
       (reset! *move-to' move-to-value))))
 
@@ -3291,6 +3300,7 @@
   ([_event *move-to']
    (reset! *dragging? false)
    (reset! *dragging-block nil)
+   (reset! *dragging-over-block nil)
    (reset! *drag-to-block nil)
    (reset! *move-to' nil)
    (editor-handler/unhighlight-blocks!)))
@@ -3300,6 +3310,7 @@
   [^js event uuid target-block original-block *move-to']
   (util/stop event)
   (when-not (dnd-same-block? uuid)
+    (haptics/haptics)
     (let [block-uuids (state/get-selection-block-ids)
           lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
           selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
@@ -3575,6 +3586,13 @@
                        (block-handler/on-touch-end event))
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
+
+       (util/capacitor-new?)
+       (assoc
+        :draggable true
+        :on-drag-start (fn [event]
+                         (util/stop-propagation event)
+                         (on-drag-start event block block-id)))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
