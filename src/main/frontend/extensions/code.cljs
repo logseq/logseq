@@ -442,14 +442,22 @@
 
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
-                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
-                                                 (when meta-or-ctrl-pressed?
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
+                                                     shift-pressed? (.-shiftKey e)]
+                                                 (when (and meta-or-ctrl-pressed? (not shift-pressed?))
                                                    ;; prevent default behavior of browser
                                                    ;; Cmd + [ => Go back in browser, outdent in CodeMirror
                                                    ;; Cmd + ] => Go forward in browser, indent in CodeMirror
                                                    (case key-code
                                                      "BracketLeft" (util/stop e)
                                                      "BracketRight" (util/stop e)
+                                                     ;; handle Cmd + Z in codemirror itself
+                                                     "KeyZ" (util/stop e)
+                                                     nil))
+                                                 (when (and meta-or-ctrl-pressed? shift-pressed?)
+                                                   (case key-code
+                                                     ;; handle Cmd + Shift + Z in codemirror itself
+                                                     "KeyZ" (util/stop e)
                                                      nil)))))
         (.addEventListener element "mousedown"
                            (fn [e]
