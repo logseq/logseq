@@ -24,6 +24,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
@@ -110,15 +111,47 @@
                       page-uuid-or-old-name
                       :else
                       (:block/uuid (db/get-page page-uuid-or-old-name)))
-          result (ui-outliner-tx/transact!
-                  {:outliner-op :rename-page}
-                  (outliner-op/rename-page! page-uuid new-name))]
-    (case (if (string? result) (keyword result) result)
-      :invalid-empty-name
-      (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
-      :rename-page-exists
-      (notification/show! "Another page with the new name exists already" :warning)
-      nil)))
+          page (db/get-page page-uuid)
+          repo (state/get-current-repo)
+          db-based? (config/db-based-graph? repo)
+          ;; For whiteboards, we need to handle the rename differently
+          ;; because the tldraw page name needs to be kept in sync
+          _ (when (and page (model/whiteboard-page? page))
+              (let [tldraw-page (pu/get-block-property-value page :logseq.property.tldraw/page)]
+                (when tldraw-page
+                  (let [updated-tldraw-page (assoc tldraw-page :name new-name)
+                        tx-data [{:db/id (:db/id page)
+                                  :block/title new-name
+                                  :block/name (util/page-name-sanity-lc new-name)
+                                  :block/updated-at (util/time-ms)}
+                                 (if db-based?
+                                   {:db/id (:db/id page)
+                                    :logseq.property.tldraw/page updated-tldraw-page}
+                                   {:db/id (:db/id page)
+                                    :block/properties (assoc (:block/properties page)
+                                                             (pu/get-pid :logseq.property.tldraw/page)
+                                                             updated-tldraw-page)})]]
+                    ;; For whiteboards, directly update the page instead of using rename-page op
+                    ;; which doesn't work for DB graphs
+                    (db/transact! repo tx-data {:outliner-op :save-whiteboard})
+                    ;; Return early to avoid calling rename-page op
+                    (throw (ex-info "whiteboard-renamed" {:renamed true}))))))]
+    ;; This will only run for non-whiteboard pages
+    (try
+      (let [result (ui-outliner-tx/transact!
+                    {:outliner-op :rename-page}
+                    (outliner-op/rename-page! page-uuid new-name))]
+        (case (if (string? result) (keyword result) result)
+          :invalid-empty-name
+          (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
+          :rename-page-exists
+          (notification/show! "Another page with the new name exists already" :warning)
+          nil))
+      (catch :default e
+        (when-not (and (instance? js/Error e) 
+                       (= (ex-message e) "whiteboard-renamed")
+                       (= (:renamed (ex-data e)) true))
+          (throw e))))))
 
 (defn <reorder-favorites!
   [favorites]
