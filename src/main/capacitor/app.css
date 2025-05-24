@@ -130,3 +130,7 @@ ion-textarea {
     }
   }
 }
+
+:root {
+    --ls-page-title-size: 26px;
+}
