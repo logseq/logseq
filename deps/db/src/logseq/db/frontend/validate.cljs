@@ -118,7 +118,7 @@
     {:entities (count entities)
      :pages (count (filter :block/name entities))
      ;; Nodes that aren't pages
-     :blocks (count (filter :block/parent entities))
+     :blocks (count (filter :block/page entities))
      :classes classes-count
      :properties properties-count
      ;; Objects that aren't classes or properties

@@ -1,15 +1,15 @@
 (ns ^:node-only logseq.outliner.cli
   "Primary ns for outliner CLI fns"
-  (:require [borkdude.rewrite-edn :as rewrite]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.common.config :as common-config]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.outliner.db-pipeline :as db-pipeline]
-            ["fs" :as fs]
-            ["path" :as node-path]
-            [logseq.common.config :as common-config]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (defn- find-on-classpath [classpath rel-path]
   (some (fn [dir]

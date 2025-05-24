@@ -65,8 +65,12 @@
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
-        node-icon (if (:own-icon? opts)
+        node-icon (cond
+                    (:own-icon? opts)
                     (get node-entity (pu/get-pid :logseq.property/icon))
+                    (:link? opts)
+                    "arrow-narrow-right"
+                    :else
                     (get-node-icon node-entity))]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
