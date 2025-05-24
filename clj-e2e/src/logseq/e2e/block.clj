@@ -15,6 +15,7 @@
 
 (defn save-block
   [text]
+  (assert/assert-have-count util/editor-q 1)
   (w/click util/editor-q)
   (w/fill util/editor-q text)
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
@@ -62,6 +63,7 @@
 
 (defn wait-editor-text
   [text]
+  (assert/assert-have-count util/editor-q 1)
   (w/wait-for (format ".editor-wrapper textarea:text('%s')" text)))
 
 (def copy #(k/press "ControlOrMeta+c" {:delay 100}))
