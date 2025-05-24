@@ -256,7 +256,7 @@
         (b/delete-blocks)
         )
       (w/with-page @*page1 (rtc/rtc-start))
-      (w/with-page @*page2 (rtc/rtc-start) (repl/pause))
+      (w/with-page @*page2 (rtc/rtc-start))
       ;; (validate-2-graphs)
       ;; TODO: validate block contents which are not equal now(some BUG here)
       )
