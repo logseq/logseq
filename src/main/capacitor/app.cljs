@@ -148,7 +148,7 @@
       {:id "app-main-content"}
       (ionic/ion-header
        ;; FIXME: iOS camera
-       ;; {:style {:padding-top 25}}
+       {:style {:padding-top 25}}
        (ionic/ion-toolbar
         (ionic/ion-buttons {:slot "start"}
                            (app-graphs-select))
