@@ -281,16 +281,6 @@
 
 (def *touch-start (atom nil))
 
-(defn- target-disable-swipe?
-  [target]
-  (let [user-defined-tags (get-in (state/get-config)
-                                  [:mobile :gestures/disabled-in-block-with-tags])]
-    (or (.closest target ".dsl-query")
-        (.closest target ".drawer")
-        (.closest target ".draw-wrap")
-        (some #(.closest target (util/format "[data-refs-self*=%s]" %))
-              user-defined-tags))))
-
 (defn on-touch-start
   [event uuid]
   (util/stop-propagation event)
@@ -377,8 +367,10 @@
         (catch :default e
           (js/console.error e))
         (finally
-          (reset! *swipe nil))))))
+          (reset! *swipe nil)
+          (reset! *touch-start nil))))))
 
 (defn on-touch-cancel
   [_e]
-  (reset! *swipe nil))
+  (reset! *swipe nil)
+  (reset! *touch-start nil))
