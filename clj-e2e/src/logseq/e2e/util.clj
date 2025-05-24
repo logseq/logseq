@@ -48,7 +48,8 @@
 
 (defn get-edit-block-container
   []
-  (first (w/query ".ls-block" {:has (w/-query ".editor-wrapper textarea")})))
+  (assert/assert-have-count editor-q 1)
+  (first (w/query ".ls-block" {:has (w/-query editor-q)})))
 
 (defn input
   "Notice this will replace the existing input value with `text`"
