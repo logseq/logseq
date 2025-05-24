@@ -164,8 +164,8 @@
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :ca #{:port :right-side-bar/history-global :settings-page/tab-editor :settings-page/tab-general 
-          :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}      
+   :ca #{:port :right-side-bar/history-global :settings-page/tab-editor :settings-page/tab-general
+          :whiteboard/color :whiteboard/connector :whiteboard/text :whiteboard/triangle}
    :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :right-side-bar/history-global}
    :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
          :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
@@ -185,6 +185,7 @@
    :tr #{:help/awesome-logseq}
    :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}
    :cs #{:host :port :help/blog :settings-page/tab-editor :whiteboard/text}
+   :ar #{} ;; Added Arabic entry - initially allow no duplicates with English
    })
 
 (defn- validate-languages-dont-have-duplicates
@@ -201,7 +202,8 @@
                     {:translation-key %
                      :lang lang
                      :duplicate-value (shorten (lang-dicts %) 70)})
-                 (keys (apply dissoc lang-dicts (allowed-duplicates lang))))))
+                 ;; Use (get allowed-duplicates lang #{}) to safely handle potentially missing keys
+                 (keys (apply dissoc lang-dicts (get allowed-duplicates lang #{}))))))
              (sort-by (juxt :lang :translation-key)))]
     (if (empty? invalid-dicts)
       (println "All languages have no duplicate English values!")
@@ -209,6 +211,7 @@
         (println "These translations keys are invalid because they are just copying the English value:")
         (task-util/print-table invalid-dicts)
         (System/exit 1)))))
+
 
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
