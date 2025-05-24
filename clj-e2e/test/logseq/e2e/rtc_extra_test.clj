@@ -186,9 +186,7 @@
                   (rtc/with-wait-tx-updated
                     (property-basic-test/add-new-properties title-prefix))]
               (reset! *latest-remote-tx remote-tx))))]
-    (testing "page1: rtc-stop
-page2: create some user properties with different type
-page1: rtc-start"
+    (testing "add different types user properties on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
         (with-stop-restart-rtc @*page1 #(insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-1"))
         (w/with-page @*page1
@@ -230,6 +228,19 @@ page1: rtc-start"
         (new-logseq-page)
         (with-stop-restart-rtc @*page1 #(test-fn-in-page2 *latest-remote-tx))
         (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-2-graphs)))))
+
+(deftest rtc-outliner-conflict-update-test
+  (let [title-prefix "rtc-outliner-conflict-update-test"]
+    (testing "add some blocks, ensure them synced"
+      (let [*latest-remote-tx (atom nil)]
+        (w/with-page @*page1
+          (let [{:keys [_local-tx remote-tx]}
+                (rtc/with-wait-tx-updated
+                  (b/new-blocks (map #(str title-prefix "-" %) (range 10))))]
+            (reset! *latest-remote-tx remote-tx)))
+        (w/with-page @*page2
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))))
 
