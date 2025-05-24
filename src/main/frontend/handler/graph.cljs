@@ -81,6 +81,23 @@
     {:nodes nodes
      :links links}))
 
+(defn exclude-from-graph
+  [pages, excluded-pages?]
+  (let  [aliases (cond->> pages
+                   (not excluded-pages?)
+                   (mapcat (fn [page]
+                             (when (=  true (:exclude-from-graph-view (:block/properties page)))
+                               (:block/alias page))))
+                   (remove nil?)
+                   (map :db/id))]
+    (cond->> pages
+      (not excluded-pages?)
+      (remove (fn [page]
+                (or
+                 (not (nil? (some #{(:db/id page)} aliases)))
+                 (= true (:exclude-from-graph-view (:block/properties page)))))))))
+
+
 (defn build-global-graph
   [theme {:keys [journal? orphan-pages? builtin-pages? excluded-pages?]}]
   (let [dark? (= "dark" theme)
@@ -97,9 +114,7 @@
                                          (remove :block/journal? full-pages)
                                          full-pages)
 
-           pages-after-exclude-filter (cond->> pages-after-journal-filter
-                                        (not excluded-pages?)
-                                        (remove (fn [p] (=  true (:exclude-from-graph-view (:block/properties p))))))
+            pages-after-exclude-filter (exclude-from-graph pages-after-journal-filter excluded-pages?)
 
             links (concat (seq relation)
                           (seq tagged-pages)
@@ -168,7 +183,7 @@
                        (remove nil?)
                        (distinct))
             nodes (build-nodes dark? page links (set tags) nodes namespaces)
-            full-pages (db/get-all-pages repo)
+            full-pages (exclude-from-graph (db/get-all-pages repo) false) ;; TODO Figue out how to toggel
             all-pages (map db/get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
