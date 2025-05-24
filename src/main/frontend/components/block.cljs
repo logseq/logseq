@@ -2611,6 +2611,7 @@
 
             :else
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+              (util/mobile-keep-keyboard-open)
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
               (let [f #(p/do!
@@ -3050,24 +3051,6 @@
                                                                                            :container-id (:container-id config)}))}})])
      (block-content config block edit-input-id block-id *show-query?))))
 
-(rum/defc block-content-wrapper
-  [block editor-box edit? type-block-editor? editor-cp content-cp]
-  (let [[editing? set-editing!] (hooks/use-state edit?)
-        editing-block (state/get-edit-block)
-        next-edit-block-id (:db/id editing-block)]
-    (hooks/use-effect!
-     (fn []
-       (if (and editing? (false? edit?) next-edit-block-id
-                (not= next-edit-block-id (:db/id block)))
-         ;; editing another block, need to wait another block's editor to be ready
-         (util/schedule #(set-editing! false))
-         (set-editing! edit?))
-       (fn []))
-     [edit?])
-    (if (and editor-box editing? (not type-block-editor?))
-      editor-cp
-      content-cp)))
-
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
   (let [format (if (config/db-based-graph? (state/get-current-repo))
@@ -3132,7 +3115,9 @@
                                       :format format}
                                      edit-input-id
                                      config))]]
-         (block-content-wrapper block editor-box edit? type-block-editor? editor-cp content-cp))
+         (if (and editor-box edit? (not type-block-editor?))
+           editor-cp
+           content-cp))
 
        (when-not (:table-block-title? config)
          [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
