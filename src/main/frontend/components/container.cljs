@@ -335,7 +335,9 @@
 (rum/defc sidebar-favorites < rum/reactive
   []
   (let [_favorites-updated? (state/sub :favorites/updated?)
-        favorite-entities (page-handler/get-favorites)]
+        favorite-entities (page-handler/get-favorites)
+        current-page (state/get-current-page)
+        favorited? (page-handler/favorited? current-page)]
     (sidebar-content-group
      [:a.wrap-th
       [:strong.flex-1 (t :left-side-bar/nav-favorites)]]
@@ -346,18 +348,28 @@
       (fn [e]
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
-     (when (seq favorite-entities)
-       (let [favorite-items (map
-                             (fn [e]
-                               (let [icon (icon/get-node-icon-cp e {:size 16})]
-                                 {:id (str (:db/id e))
-                                  :value (:block/uuid e)
-                                  :content [:li.favorite-item.font-medium (page-name e icon false)]}))
-                             favorite-entities)]
-         (dnd-component/items favorite-items
-                              {:on-drag-end (fn [favorites']
-                                              (page-handler/<reorder-favorites! favorites'))
-                               :parent-node :ul.favorites.text-sm}))))))
+     [(when current-page
+        (when-not favorited?
+          [:div.favorite-item.flex.items-center.cursor.text-sm
+           {:on-click (fn []
+                        (page-handler/<favorite-page! current-page))}
+           [[:button.button.icon
+             (ui/icon "star" {:class "icon" :size 12})]
+            [:span
+             {:style {:font-size "0.8em"}}
+             (t :page/add-to-favorites)]]]))
+      (when (seq favorite-entities)
+        (let [favorite-items (map
+                              (fn [e]
+                                (let [icon (icon/get-node-icon e {:size 16})]
+                                  {:id (str (:db/id e))
+                                   :value (:block/uuid e)
+                                   :content [:li.favorite-item.font-medium (page-name e icon false)]}))
+                              favorite-entities)]
+          (dnd-component/items favorite-items
+                               {:on-drag-end (fn [favorites']
+                                               (page-handler/<reorder-favorites! favorites'))
+                                :parent-node :ul.favorites.text-sm})))])))
 
 (rum/defc sidebar-recent-pages < rum/reactive db-mixins/query
   []
