@@ -15,7 +15,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.file-based.drawer :as drawer]
-            [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.db :as ldb]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -294,140 +293,92 @@
 
 (defn on-touch-start
   [event uuid]
-  (let [target (.-target event)
-        input (state/get-input)
+  (util/stop-propagation event)
+  (let [input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when-not (target-disable-swipe? target)
-      (when (not= selection-type "Range")
-        (when-let [touches (.-targetTouches event)]
-          (when (= (.-length touches) 1)
-            (let [touch (aget touches 0)
-                  x (.-clientX touch)
-                  y (.-clientY touch)]
-              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
+    (when (not= selection-type "Range")
+      (when-let [touches (.-targetTouches event)]
+        (when (= (.-length touches) 1)
+          (let [touch (aget touches 0)
+                x (.-clientX touch)
+                y (.-clientY touch)]
+            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
 
 ;; FIXME: disable scroll
 (defn on-touch-move
-  [event block uuid edit? *show-left-menu? *show-right-menu?]
-  (when-let [touches (.-targetTouches event)]
-    (let [selection-type (.-type (.getSelection js/document))]
-      (when-not (= selection-type "Range")
-        (when (or (not (state/editing?))
-                  (< (- (js/Date.now) @*touch-start) 600))
-          (when (and (= (.-length touches) 1) @*swipe)
-            (let [{:keys [x0 xi direction]} @*swipe
-                  touch (aget touches 0)
-                  tx (.-clientX touch)
-                  ty (.-clientY touch)
-                  direction (if (nil? direction)
-                              (if (> tx x0)
-                                :right
-                                :left)
-                              direction)]
-              (swap! *swipe #(-> %
-                                 (assoc :tx tx)
-                                 (assoc :ty ty)
-                                 (assoc :xi tx)
-                                 (assoc :yi ty)
-                                 (assoc :direction direction)))
-              (when (< (* (- xi x0) (- tx xi)) 0)
+  [^js goog-event]
+  (let [event (.-event_ goog-event)]
+    (when-let [touches (.-targetTouches event)]
+      (let [selection-type (.-type (.getSelection js/document))
+            target (.-target event)
+            block-container (util/rec-get-node target "ls-block")]
+        (when-not (= selection-type "Range")
+          (when (or (not (state/editing?))
+                    (< (- (js/Date.now) @*touch-start) 600))
+            (when (and (= (.-length touches) 1) @*swipe)
+              (let [{:keys [x0 xi direction]} @*swipe
+                    touch (aget touches 0)
+                    tx (.-clientX touch)
+                    ty (.-clientY touch)
+                    direction (if (nil? direction)
+                                (if (> tx x0)
+                                  :right
+                                  :left)
+                                direction)]
                 (swap! *swipe #(-> %
-                                   (assoc :x0 tx)
-                                   (assoc :y0 ty))))
-              (let [{:keys [x0 y0]} @*swipe
-                    dx (- tx x0)
-                    dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 30)
-                           (> (. js/Math abs dx) 30))
-                  (let [left (gdom/getElement (str "block-left-menu-" uuid))
-                        right (gdom/getElement (str "block-right-menu-" uuid))]
-
-                    (cond
-                      (= direction :right)
-                      (do
-                        (reset! *show-left-menu? true)
-                        (when left
-                          (when (>= dx 0)
-                            (set! (.. left -style -width) (str dx "px")))
-                          (when (< dx 0)
-                            (set! (.. left -style -width) (str (max (+ 40 dx) 0) "px")))
-
-                          (let [indent (gdom/getFirstElementChild left)]
-                            (when (indentable? block)
-                              (if (>= (.-clientWidth left) 40)
-                                (set! (.. indent -style -opacity) "100%")
-                                (set! (.. indent -style -opacity) "30%"))))))
-
-                      (= direction :left)
-                      (do
-                        (reset! *show-right-menu? true)
-                        (when right
-                          (when (<= dx 0)
-                            (set! (.. right -style -width) (str (- dx) "px")))
-                          (when (> dx 0)
-                            (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
-
-                          (let [outdent (gdom/getFirstElementChild right)
-                                more (when-not edit?
-                                       (gdom/getLastElementChild right))]
-                            (when (and outdent (outdentable? block))
-                              (if (and (>= (.-clientWidth right) 40)
-                                       (< (.-clientWidth right) 80))
-                                (set! (.. outdent -style -opacity) "100%")
-                                (set! (.. outdent -style -opacity) "30%")))
-
-                            (when more
-                              (if (>= (.-clientWidth right) 80)
-                                (set! (.. more -style -opacity) "100%")
-                                (set! (.. more -style -opacity) "30%"))))))
-                      :else
-                      nil)))))))))))
+                                   (assoc :tx tx)
+                                   (assoc :ty ty)
+                                   (assoc :xi tx)
+                                   (assoc :yi ty)
+                                   (assoc :direction direction)))
+                (when (< (* (- xi x0) (- tx xi)) 0)
+                  (swap! *swipe #(-> %
+                                     (assoc :x0 tx)
+                                     (assoc :y0 ty))))
+                (let [{:keys [x0 y0]} @*swipe
+                      dx (- tx x0)
+                      dy (- ty y0)]
+                  (when (and (< (. js/Math abs dy) 30)
+                             (> (. js/Math abs dx) 10)
+                             direction)
+                    (.preventDefault goog-event)
+                    (let [left (if (= direction :right)
+                                 (if (>= dx 0) (min dx 60) (max dx 0))
+                                 (if (<= dx 0) (- (min (js/Math.abs dx) 60)) (min dx 60)))]
+                      (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
 (defn on-touch-end
-  [_event block uuid *show-left-menu? *show-right-menu?]
+  [event]
+  (util/stop-propagation event)
   (when @*swipe
-    (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
-          right-menu (gdom/getElement (str "block-right-menu-" uuid))
-          {:keys [x0 tx]} @*swipe
-          dx (- tx x0)]
+    (let [target (.-target event)
+          {:keys [x0 y0 tx ty]} @*swipe
+          dy (- ty y0)
+          dx (- tx x0)
+          block-container (util/rec-get-node target "ls-block")]
       (try
-        (when (> (. js/Math abs dx) 10)
-          (cond
-            left-menu
-            (when (indentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] true nil)
-                :light))
+        (when (and (> (. js/Math abs dx) (. js/Math abs dy))
+                   (> (. js/Math abs dx) 10))
+          (dom/set-style! block-container :transform "translateX(0)")
+          (state/exit-editing-and-set-selected-blocks! [block-container])
+          (haptics/haptics)
 
-            right-menu
-            (when (outdentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] false nil)
-                :light))
-
-;; TODO: long press to select
             ;; (haptics/with-haptics-impact
             ;;   (do (state/set-state! :mobile/show-action-bar? true)
             ;;       (state/set-state! :mobile/actioned-block block)
             ;;       (select-block! uuid))
             ;;   :light)
-
-            :else
-            nil))
+          )
         (catch :default e
           (js/console.error e))
         (finally
-          (reset! *show-left-menu? false)
-          (reset! *show-right-menu? false)
           (reset! *swipe nil))))))
 
 (defn on-touch-cancel
-  [*show-left-menu? *show-right-menu?]
-  (reset! *show-left-menu? false)
-  (reset! *show-right-menu? false)
+  [_e]
   (reset! *swipe nil))

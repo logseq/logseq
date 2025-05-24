@@ -2162,8 +2162,7 @@
                         (if collapsed?
                           (editor-handler/expand-block! uuid)
                           (editor-handler/collapse-block! uuid)))
-                      (when (util/mobile?)
-                        (haptics/haptics :light)))
+                      (haptics/haptics))
                      ;; debug config context
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
@@ -3007,22 +3006,6 @@
                                  (swap! *hide-block-refs? not)))}
                   [:span.text-sm block-refs-count'])]))
 
-(rum/defc block-left-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
-  [:div.block-left-menu.flex.bg-base-2.rounded-r-md.mr-1
-   [:div.commands-button.w-0.rounded-r-md
-    {:id (str "block-left-menu-" uuid)
-     :style {:max-width 40}}
-    [:div.indent (ui/icon "indent-increase" {:size 18})]]])
-
-(rum/defc block-right-menu < rum/reactive
-  [_config {:block/keys [uuid] :as _block}]
-  [:div.block-right-menu.flex.bg-base-2.rounded-md.ml-1
-   [:div.commands-button.w-0.rounded-md
-    {:id (str "block-right-menu-" uuid)
-     :style {:max-width 40}}
-    [:div.outdent (ui/icon "indent-decrease" {:size 18})]]])
-
 (rum/defc block-content-with-error
   [config block edit-input-id block-id *show-query? editor-box]
   (let [[editing? set-editing!] (hooks/use-state false)
@@ -3482,6 +3465,12 @@
                     ::hide-block-refs? (atom default-hide?)
                     ::show-query? (atom false)
                     ::refs-count *refs-count)))}
+  (mixins/event-mixin
+   (fn [state]
+     (let [*ref (::ref state)]
+       ;; React doesn't let us directly control passive via onTouchMove
+       ;; So here we listen `touchmove` on the block node
+       (mixins/listen state @*ref "touchmove" block-handler/on-touch-move))))
   [state container-state repo config* block {:keys [navigating-block navigated? editing? selected?] :as opts}]
   (let [*ref (::ref state)
         *hide-block-refs? (get state ::hide-block-refs?)
@@ -3524,8 +3513,6 @@
                      db-collapsed?)
         config (assoc config :collapsed? collapsed?)
         breadcrumb-show? (:breadcrumb-show? config)
-        *show-left-menu? (::show-block-left-menu? container-state)
-        *show-right-menu? (::show-block-right-menu? container-state)
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         page-embed? (:page-embed? config)
@@ -3567,7 +3554,7 @@
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
                                                                            :font-size (if (:page-title? config) 38 18)}}})])))]
-    [:div.ls-block
+    [:div.ls-block.swipe-item
      (cond->
       {:id (str "ls-block-"
                 ;; container-id "-"
@@ -3582,7 +3569,12 @@
                    (when order-list? " is-order-list")
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))}
+       :haschild (str (boolean has-child?))
+       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+       :on-touch-end (fn [event]
+                       (block-handler/on-touch-end event))
+       :on-touch-cancel (fn [e]
+                          (block-handler/on-touch-cancel e))}
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
@@ -3619,13 +3611,6 @@
         {:style (when (and db-based? (:page-title? config))
                   {:margin-left (if page-icon -36 -30)})
          :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
-         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-         :on-touch-move (fn [event]
-                          (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
-         :on-touch-end (fn [event]
-                         (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-         :on-touch-cancel (fn [_e]
-                            (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
          :on-mouse-move (fn [e]
@@ -3644,9 +3629,6 @@
                                    :collapsed? collapsed?
                                    :*control-show? *control-show?
                                    :edit? edit?}))))
-
-        (when (and @*show-left-menu? (not in-whiteboard?) (not (or table? property?)))
-          (block-left-menu config block))
 
         [:div.flex.flex-col.w-full
          [:div.block-main-content.flex.flex-row.gap-2
@@ -3672,10 +3654,7 @@
                                          :*show-query? *show-query?}))])]
 
          (when (and db-based? (not collapsed?) (not (or table? property? (:page-title? config))))
-           (block-positioned-properties config block :block-below))]
-
-        (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
-          (block-right-menu config block))])
+           (block-positioned-properties config block :block-below))]])
 
      (when (and db-based?
                 (not collapsed?)
