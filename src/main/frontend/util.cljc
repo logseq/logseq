@@ -6,7 +6,6 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
@@ -19,7 +18,6 @@
             [clojure.pprint]
             [dommy.core :as d]
             [frontend.mobile.util :as mobile-util]
-            [capacitor.components.common :as capacitor-new-common]
             [logseq.common.util :as common-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -63,7 +61,7 @@
        []
        (let [ua (string/lower-case js/navigator.userAgent)]
          (and (string/includes? ua "webkit")
-           (not (string/includes? ua "chrome")))))
+              (not (string/includes? ua "chrome")))))
      (def safari? (memoize safari*?))))
 
 #?(:cljs
@@ -93,17 +91,24 @@
 #?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
+#?(:cljs
+   (defn current-page-scroll
+     []
+     (some-> (js/document.querySelector "ion-nav > .ion-page:not(.ion-page-hidden)")
+             (.querySelector "ion-content")
+             (.-shadowRoot)
+             (.querySelector "[part=scroll]"))))
 #?(:cljs (defn app-scroll-container-node
            ([]
             (gdom/getElement "main-content-container"))
            ([el]
             (if (capacitor-new?)
-              (capacitor-new-common/current-page-scroll)
+              (current-page-scroll)
               (if (.closest el "#main-content-container")
                 (app-scroll-container-node)
                 (or
-                  (gdom/getElementByClass "sidebar-item-list")
-                  (app-scroll-container-node)))))))
+                 (gdom/getElementByClass "sidebar-item-list")
+                 (app-scroll-container-node)))))))
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
