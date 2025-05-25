@@ -1,4 +1,5 @@
 (ns capacitor.ionic
+  (:refer-clojure :exclude [list])
   (:require ["@capacitor/camera" :as ionicCamera]
             ["@ionic/react" :as ionicReact]
             [logseq.shui.icon.v2 :as shui-icon]
@@ -43,3 +44,4 @@
 (defonce menu (shui-util/react->rum (.-IonMenu ionic-react) false))
 (defonce menu-button (shui-util/react->rum (.-IonMenuButton ionic-react) false))
 (defonce action-sheet (shui-util/react->rum (.-IonActionSheet ionic-react) false))
+(defonce searchbar (shui-util/react->rum (.-IonSearchbar ionic-react) false))
