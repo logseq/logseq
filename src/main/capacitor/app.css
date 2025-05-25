@@ -133,4 +133,5 @@ ion-textarea {
 
 :root {
     --ls-page-title-size: 26px;
+    --ion-color-primary: #000000;
 }

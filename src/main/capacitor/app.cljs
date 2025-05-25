@@ -36,29 +36,29 @@
                           "Select a Graph")]
     [:<>
      (ionic/ion-button
-      {:fill "clear" :mode "ios"
-       :class "border-none w-full rounded-lg font-semibold pt-2"
+      {:fill "clear"
+       :mode "ios"
+       :class "border-none w-full rounded-lg"
        :on-click (fn []
-                   (ui/open-modal! "Switch graph"
-                                   {:type :action-sheet
-                                    :buttons (for [repo graphs]
-                                               {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
-                                                :role (:url repo)})
-                                    :inputs []
-                                    :on-action (fn [e]
-                                                 (when-let [url (:role e)]
-                                                   (when (string/starts-with? url "logseq_db_")
-                                                     (fstate/pub-event! [:graph/switch url]))))}))}
-      short-repo-name)
-
-     (ionic/ion-button
-      {:class "relative -left-2 pt-1.5 opacity-50"
-       :on-click (fn []
-                   (when-let [db-name (js/prompt "Create new db")]
-                     (when-not (string/blank? db-name)
-                       (-> (repo-handler/new-db! db-name)
-                           (p/then #())))))}
-      (ionic/tabler-icon "plus" {:size 24}))]))
+                   (let [buttons (concat
+                                  (for [repo graphs]
+                                    {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
+                                     :role (:url repo)})
+                                  [{:text "Add new graph"
+                                    :role "add-new-graph"}])]
+                     (ui/open-modal! "Switch graph"
+                                     {:type :action-sheet
+                                      :buttons buttons
+                                      :inputs []
+                                      :on-action (fn [e]
+                                                   (when-let [role (:role e)]
+                                                     (if (= "add-new-graph" role)
+                                                       (when-let [db-name (js/prompt "Create new db")]
+                                                         (when-not (string/blank? db-name)
+                                                           (repo-handler/new-db! db-name)))
+                                                       (when (string/starts-with? role "logseq_db_")
+                                                         (fstate/pub-event! [:graph/switch role])))))})))}
+      short-repo-name)]))
 
 (rum/defc bottom-tabs
   []
@@ -157,14 +157,14 @@
                                                                 (let [val (.-value (.-detail e))]
                                                                   (apply-date! val)
                                                                   (close!)))}))))))}
-                           [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 26})])
+                           [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 24})])
 
                           (ionic/ion-button {:fill "clear"}
                                             (ionic/ion-nav-link
                                              {:routerDirection "forward"
                                               :class "w-full"
                                               :component settings/page}
-                                             [:span {:slot "icon-only"} (ionic/tabler-icon "dots-circle-horizontal" {:size 26})])))))
+                                             [:span {:slot "icon-only"} (ionic/tabler-icon "dots" {:size 24})])))))
 
        ;; main content
      (if db-restoring?
