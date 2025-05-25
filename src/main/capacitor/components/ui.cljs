@@ -4,15 +4,12 @@
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as fstate]
-            [goog.object :as gobj]
             [medley.core :as medley]
-            [react-textarea-autosize :as TextareaAutosize]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-(defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 
 (rum/defc safe-page-container
   [content {:keys [header-content page-props content-props]}]
