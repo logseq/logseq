@@ -528,16 +528,16 @@
 ;; scrollHeight
 (rum/defcs graph-filter-section < (rum/local false ::open?)
   [state title content {:keys [search-filters]}]
-  (let [open? (get state ::open?)]
-    (when (and (seq search-filters) (not @open?))
-      (reset! open? true))
-    [:li.relative
-     [:div
-      [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
-       [:div.flex.items-center.justify-between
-        title
-        (if @open? (svg/caret-down) (svg/caret-right))]]
-      (content open?)]]))
+   (let [open? (get state ::open?)]
+     (when (and (seq search-filters) (not @open?))
+       (reset! open? true))
+     [:li.relative
+      [:div
+       [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
+        [:div.flex.items-center.justify-between
+         title
+         (if @open? (svg/caret-down) (svg/caret-right))]]
+       (content open?)]]))
 
 (rum/defc filter-expand-area
   [open? content]
@@ -550,6 +550,7 @@
 (defonce *graph-reset? (atom false))
 (defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
+(defonce *alias-nodes? (atom false))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
@@ -575,10 +576,11 @@
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
-  (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
+  (let [{:keys [journal? alias-nodes? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
         {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
+        alias-nodes?' (rum/react *alias-nodes?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
@@ -586,6 +588,7 @@
         charge-strength'  (rum/react *charge-strength)
         charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
+        alias-nodes? (if (nil? alias-nodes?') alias-nodes? alias-nodes?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
@@ -619,29 +622,25 @@
                 ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
                 (util/format "%d page%s" c1 s1))]
              [:div.p-6
-              ;; [:div.flex.items-center.justify-between.mb-2
-              ;;  [:span "Layout"]
-              ;;  (ui/select
-              ;;    (mapv
-              ;;     (fn [item]
-              ;;       (if (= (:label item) layout)
-              ;;         (assoc item :selected "selected")
-              ;;         item))
-              ;;     [{:label "gForce"}
-              ;;      {:label "dagre"}])
-              ;;    (fn [_e value]
-              ;;      (set-setting! :layout value))
-              ;;    "graph-layout")]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Alias nodes"]
+               [:div.mt-1
+                (ui/toggle alias-nodes?
+                          (fn []
+                            (let [value (not alias-nodes?)]
+                              (reset! *alias-nodes? value)
+                              (set-setting! :alias-nodes? value)))
+                          true)]]
               [:div.flex.items-center.justify-between.mb-2
                [:span (t :settings-page/enable-journals)]
                ;; FIXME: why it's not aligned well?
                [:div.mt-1
                 (ui/toggle journal?
-                           (fn []
-                             (let [value (not journal?)]
-                               (reset! *journal? value)
-                               (set-setting! :journal? value)))
-                           true)]]
+                          (fn []
+                            (let [value (not journal?)]
+                              (reset! *journal? value)
+                              (set-setting! :journal? value)))
+                          true)]]
               [:div.flex.items-center.justify-between.mb-2
                [:span "Orphan pages"]
                [:div.mt-1
@@ -851,34 +850,30 @@
 
 (rum/defc page-graph-inner < rum/reactive
   [_page graph dark?]
-   (let [ show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?) ]
-  [:div.sidebar-item.flex-col
-             [:div.flex.items-center.justify-between.mb-0
-              [:span (t :right-side-bar/show-journals)]
-              [:div.mt-1
-               (ui/toggle show-journals-in-page-graph? ;my-val;
-                           (fn []
-                             (let [value (not show-journals-in-page-graph?)]
-                               (reset! *show-journals-in-page-graph? value)
-                               ))
-                          true)]
-              ]
-
-   (graph/graph-2d {:nodes (:nodes graph)
-                    :links (:links graph)
-                    :width 600
-                    :height 600
-                    :dark? dark?
-                    :register-handlers-fn
-                    (fn [graph]
-                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
+  (let [show-journals-in-page-graph? (rum/react *show-journals-in-page-graph?)]
+    [:div.sidebar-item.flex-col
+     [:div.flex.items-center.justify-between.mb-0
+      [:span (t :right-side-bar/show-journals)]
+      [:div.mt-1
+       (ui/toggle show-journals-in-page-graph?
+                  (fn []
+                    (let [value (not show-journals-in-page-graph?)]
+                      (reset! *show-journals-in-page-graph? value)))
+                  true)]]
+     (graph/graph-2d {:nodes (:nodes graph)
+                      :links (:links graph)
+                      :width 600
+                      :height 600
+                      :dark? dark?
+                      :register-handlers-fn
+                      (fn [graph]
+                        (graph-register-handlers graph (atom nil) (atom nil) dark?))})]))
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
   (let [page (or
               (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
+                   (state/sub [:route-match :path-params :name])) (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
@@ -1151,8 +1146,8 @@
                                                        (cond
                                                          (= 13 (.-keyCode e)) (search-fn)
                                                          (= 27 (.-keyCode e)) (reset-fn)))))
-                                  :ref           *search-input
-                                  :default-value ""}]
+                                                   :ref           *search-input
+                                                   :default-value ""}]
 
               (when (not (string/blank? @*search-key))
                 [:a.cancel {:on-click reset-fn}
@@ -1242,9 +1237,9 @@
                                        (:db/id page)
                                        :page))))
                      :href     (rfe/href :page {:name (:block/name page)})}
-                 (when-let [icon (get-in page [:block/properties :icon])]
-                   [:span.pr-1 icon])
-                 (component-block/page-cp {} page)]]
+                     (when-let [icon (get-in page [:block/properties :icon])]
+                       [:span.pr-1 icon])
+                     (component-block/page-cp {} page)]]
 
                (when-not mobile?
                  [[:td.backlinks [:span backlinks]]
