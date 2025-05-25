@@ -771,6 +771,27 @@
         (state/set-edit-content! edit-input-id new-content)
         (cursor/move-cursor-to current-input new-pos)))))
 
+(defn toggle-checked!
+  []
+  (when-let [blocks (seq (get-selected-blocks))]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))]
+      (outliner-tx/transact! {:outliner-op :toggle-completed}
+                             (doseq [id ids]
+                               (let [block (db/pull [:block/uuid id])
+                                     block (merge block (block/parse-title-and-body block))
+                                     marker (:block/marker block)]
+                                 (cond
+                                   (nil? marker)
+                                   nil
+
+                                   (= "DONE" marker)
+                                   (uncheck block)
+
+                                   :else
+                                   (check block))))))))
+
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
   (let [new-content (string/replace-first content
