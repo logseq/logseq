@@ -1,6 +1,6 @@
 (ns capacitor.ionic
-  (:require ["@ionic/react" :as ionicReact]
-            ["@capacitor/camera" :as ionicCamera]
+  (:require ["@capacitor/camera" :as ionicCamera]
+            ["@ionic/react" :as ionicReact]
             [logseq.shui.icon.v2 :as shui-icon]
             [logseq.shui.util :as shui-util]))
 
@@ -11,6 +11,7 @@
 
 (def tabler-icon shui-icon/root)
 
+(defonce ion-app (shui-util/react->rum (.-IonApp ionic-react) true))
 (defonce ion-page (shui-util/react->rum (.-IonPage ionic-react) true))
 (defonce ion-nav (shui-util/react->rum (.-IonNav ionic-react) true))
 (defonce ion-nav-link (shui-util/react->rum (.-IonNavLink ionic-react) true))
@@ -27,7 +28,8 @@
 (defonce ion-textarea (shui-util/react->rum (.-IonTextarea ionic-react) true))
 (defonce ion-icon (shui-util/react->rum (.-IonIcon ionic-react) true))
 (defonce ion-badge (shui-util/react->rum (.-IonBadge ionic-react) true))
-(defonce ion-tabs (shui-util/react->rum (.-IonTabs ionic-react) true))
+(defonce ion-tabs (shui-util/react->rum (.-IonTabs ionic-react) false))
+(defonce ion-tab (shui-util/react->rum (.-IonTab ionic-react) false))
 (defonce ion-tab-bar (shui-util/react->rum (.-IonTabBar ionic-react) false))
 (defonce ion-tab-button (shui-util/react->rum (.-IonTabButton ionic-react) false))
 (defonce ion-modal (shui-util/react->rum (.-IonModal ionic-react) false))
