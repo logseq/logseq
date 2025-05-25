@@ -216,7 +216,15 @@
       {:tab "settings"}
       (ionic/ion-content
        (settings)))
-     (bottom-tabs))))
+     (bottom-tabs)
+
+     (keep-keyboard-open)
+     (ui/install-notifications)
+     (ui/install-modals)
+
+     (shui-toaster/install-toaster)
+     (shui-dialog/install-modals)
+     (shui-popup/install-popups))))
 
 (rum/defc main []
   (let [current-repo (frum/use-atom-in fstate/state :git/current-repo)]
