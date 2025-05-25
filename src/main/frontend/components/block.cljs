@@ -1842,10 +1842,13 @@
                     :checked checked?
                     :on-mouse-down (fn [e]
                                      (util/stop-propagation e))
-                    :on-change (fn [_e]
-                                 (if checked?
-                                   (editor-handler/uncheck block)
-                                   (editor-handler/check block)))}))))
+                    :on-change (fn [e]
+                                 (let [alt-pressed? (gobj/get (.-nativeEvent e) "altKey")]
+                                   (if checked?
+                                     (editor-handler/uncheck block)
+                                     (if (not alt-pressed?)
+                                       (editor-handler/check block)
+                                       (editor-handler/cancel block)))))}))))
 
 (defn list-checkbox
   [config checked?]
