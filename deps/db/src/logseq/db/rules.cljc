@@ -105,6 +105,20 @@
      [(>= ?d ?start)]
      [(<= ?d ?end)]]
 
+   :before
+   '[(before ?b ?end)
+     [?b :block/page ?p]
+     [?p :block/journal? true]
+     [?p :block/journal-day ?d]
+     [(< ?d ?end)]]
+  
+   :after
+   '[(after ?b ?start)
+     [?b :block/page ?p]
+     [?p :block/journal? true]
+     [?p :block/journal-day ?d]
+     [(> ?d ?start)]
+     
    :has-property
    '[(has-property ?b ?prop)
      [?b :block/properties ?bp]
