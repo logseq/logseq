@@ -1,6 +1,7 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
             ["@capacitor/app" :refer [App]]
+            [capacitor.components.search :as search]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui]
             [capacitor.ionic :as ion]
@@ -151,15 +152,6 @@
          (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
        (journals)))))
 
-(rum/defc search
-  []
-  (ion/page
-   {:id "search-tab"}
-   (ion/header
-    (ion/toolbar
-     "Search"))
-   [:div.flex.flex-1.p-4 "Search results"]))
-
 (rum/defc settings
   []
   (ion/page
@@ -180,6 +172,8 @@
        #())
      [(rum/deref nav-ref)])
     (ion/tabs
+     {:onIonTabsDidChange (fn [^js e]
+                            (state/set-tab! (.-tab (.-detail e))))}
      (ion/tab
       {:tab "home"}
       (ion/nav {:ref nav-ref
@@ -189,7 +183,7 @@
      (ion/tab
       {:tab "search"}
       (ion/content
-       (search)))
+       (search/search)))
      (ion/tab
       {:tab "settings"}
       (ion/content
