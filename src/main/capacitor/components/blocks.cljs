@@ -295,7 +295,7 @@
                                                       (when-let [id (:block/uuid block)]
                                                         [:block/uuid id]))]
                                           (db-utils/entity eid)))
-        title (or (:block/title block) (:block.temp/cached-title block))
+        title (or (:block/title block) (:block/title page))
         [loading? set-loading!] (rum/use-state true)
         rerender! (fn []
                     (set-page! (db-utils/entity (:db/id block)))

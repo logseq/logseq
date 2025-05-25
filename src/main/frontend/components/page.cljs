@@ -472,11 +472,16 @@
                   (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
                     (when-not (= (.-nodeName (.-target e)) "INPUT")
                       (.preventDefault e)
-                      (when (gobj/get e "shiftKey")
+                      (cond
+                        (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page)))))}
+                         :page)
+                        (util/capacitor-new?)
+                        (route-handler/redirect-to-page! (:block/uuid page))
+                        :else
+                        nil))))}
 
      [:div.w-full.relative
       (component-block/block-container
