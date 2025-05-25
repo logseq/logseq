@@ -1,0 +1,845 @@
+{:accessibility/skip-to-main-content "تخط إلى المحتوى الرئيسي"
+ :tutorial/text #resource "tutorials/tutorial-ar.md" ; ملاحظة: الملف الهدف يحتاج إلى ترجمة
+ :tutorial/dummy-notes #resource "tutorials/dummy-notes-ar.md" ; ملاحظة: الملف الهدف يحتاج إلى ترجمة
+ :on-boarding/demo-graph "هذا رسم بياني تجريبي، لن يتم حفظ التغييرات حتى تفتح مجلداً محلياً."
+ :on-boarding/add-graph "إضافة رسم بياني"
+ :on-boarding/open-local-dir "فتح مجلد محلي"
+ :on-boarding/new-graph-desc-1 "يدعم Logseq كلاً من Markdown و Org-mode. يمكنك فتح مجلد موجود أو إنشاء مجلد جديد على جهازك، يُعرف المجلد أيضًا ببساطة باسم folder. سيتم تخزين بياناتك فقط على هذا الجهاز."
+ :on-boarding/new-graph-desc-2 "بعد فتح المجلد الخاص بك، سيتم إنشاء ثلاثة مجلدات في ذلك المجلد:"
+ :on-boarding/new-graph-desc-3 "/journals - لتخزين صفحات يومياتك"
+ :on-boarding/new-graph-desc-4 "/pages - لتخزين الصفحات الأخرى"
+ :on-boarding/new-graph-desc-5 "/logseq - لتخزين الإعدادات، custom.css، وبعض البيانات الوصفية."
+ :on-boarding/welcome-whiteboard-modal-title "لوحة جديدة لأفكارك."
+ :on-boarding/welcome-whiteboard-modal-description "الألواح البيضاء أداة رائعة للعصف الذهني والتنظيم. الآن يمكنك وضع أي من أفكارك من قاعدة المعرفة أو أفكار جديدة بجانب بعضها البعض على لوحة مكانية للربط والترابط والفهم بطرق جديدة."
+ :on-boarding/welcome-whiteboard-modal-skip "تخطِ"
+ :on-boarding/welcome-whiteboard-modal-start "ابدأ استخدام الألواح البيضاء"
+ :on-boarding/tour-whiteboard-home "{1} الصفحة الرئيسية لألواحك البيضاء"
+ :on-boarding/tour-whiteboard-home-description "للألواح البيضاء قسم خاص بها في التطبيق حيث يمكنك رؤيتها بلمحة، وإنشاء ألواح جديدة أو حذفها بسهولة."
+ :on-boarding/tour-whiteboard-new "{1} إنشاء لوح أبيض جديد"
+ :on-boarding/tour-whiteboard-new-description "هناك طرق متعددة لإنشاء لوح أبيض جديد. إحداها دائمًا هنا في لوحة التحكم."
+ :handbook/title "مساعدة"
+ :handbook/topics "المواضيع"
+ :handbook/popular-topics "المواضيع الشائعة"
+ :handbook/help-categories "فئات المساعدة"
+ :handbook/search "بحث"
+ :handbook/home "الرئيسية"
+ :handbook/settings "الإعدادات"
+ :handbook/close "إغلاق"
+ :on-boarding/tour-whiteboard-btn-next "التالي"
+ :on-boarding/tour-whiteboard-btn-back "رجوع"
+ :on-boarding/tour-whiteboard-btn-finish "إنهاء"
+ :on-boarding/quick-tour-btn-next "التالي"
+ :on-boarding/quick-tour-btn-back "رجوع"
+ :on-boarding/quick-tour-btn-finish "إنهاء"
+ :on-boarding/quick-tour-btn-skip "تخطي الجولة السريعة"
+ :on-boarding/quick-tour-steps "خطوة "
+ :on-boarding/quick-tour-help-title "❓ مساعدة"
+ :on-boarding/quick-tour-help-desc "يمكنك دائمًا النقر هنا للحصول على المساعدة ومعلومات أخرى حول Logseq."
+ :on-boarding/quick-tour-journal-page-title "📆 صفحة اليوميات اليومية"
+ :on-boarding/quick-tour-journal-page-desc-1 "هذه صفحة اليوميات اليومية لهذا اليوم. هنا يمكنك تدوين أفكارك وما تعلمته وأفكارك. لا تقلق بشأن التنظيم. فقط اكتب و"
+ :on-boarding/quick-tour-journal-page-desc-2 "[[اربط]]"
+ :on-boarding/quick-tour-journal-page-desc-3 "أفكارك."
+ :on-boarding/quick-tour-left-sidebar-title "👀 الشريط الجانبي الأيسر"
+ :on-boarding/quick-tour-left-sidebar-desc "افتح الشريط الجانبي الأيسر لاستكشاف عناصر القائمة المهمة في Logseq."
+ :on-boarding/quick-tour-favorites-title "⭐️ المفضلة"
+ :on-boarding/quick-tour-favorites-desc-1 "ثبّت صفحاتك المفضلة عبر قائمة `... ` في أي صفحة."
+ :on-boarding/quick-tour-favorites-desc-2 "لقد أضفنا أيضًا بعض صفحات القوالب هنا لمساعدتك على البدء. يمكنك إزالة هذه بمجرد البدء في كتابة ملاحظاتك الخاصة."
+ :on-boarding/command-palette-quick-tour "جولة سريعة للتهيئة"
+ :on-boarding/importing-main-title "استيراد الملاحظات الموجودة"
+ :on-boarding/importing-main-desc "يمكنك أيضًا القيام بذلك لاحقًا في التطبيق."
+ :on-boarding/importing-title "هل لديك بالفعل ملاحظات تريد استيرادها؟"
+ :on-boarding/importing-desc "إذا كانت بتنسيق JSON أو EDN أو Markdown، يمكن لـ Logseq التعامل معها."
+ :on-boarding/importing-roam-desc "استيراد تصدير JSON لرسم Roam البياني الخاص بك"
+ :on-boarding/importing-lsq-desc "استيراد تصدير EDN أو JSON لرسم Logseq البياني الخاص بك"
+ :on-boarding/importing-opml-desc " استيراد ملفات OPML"
+ :on-boarding/main-title (fn [] ["مرحباً بك في " [:strong "Logseq!"]])
+ :on-boarding/main-desc "أولاً، تحتاج إلى اختيار مجلد حيث سيقوم Logseq بتخزين أفكارك وملاحظاتك."
+ :on-boarding/section-btn-title "اختر مجلداً"
+ :on-boarding/section-btn-desc "افتح مجلداً موجوداً أو أنشئ مجلداً جديداً"
+ :on-boarding/section-title "كيف يحفظ Logseq عملك"
+ :on-boarding/section-desc "داخل المجلد الذي تختاره، سيقوم Logseq بإنشاء 4 مجلدات."
+ :on-boarding/section-tip-1 "كل صفحة عبارة عن ملف مخزن فقط على {1} الخاص بك."
+ :on-boarding/section-tip-2 "قد تختار مزامنته لاحقًا."
+ :on-boarding/section-assets "الرسومات والمستندات"
+ :on-boarding/section-computer "الكمبيوتر"
+ :on-boarding/section-journals "الملاحظات اليومية"
+ :on-boarding/section-pages "الصفحات"
+ :on-boarding/section-phone "الهاتف"
+ :on-boarding/section-app "داخلي للتطبيق"
+ :on-boarding/section-config "ملف الإعدادات"
+ :query/config-property-settings "إعدادات الخصائص لهذا الاستعلام:"
+ :bug-report/main-title "تقرير خطأ"
+ :bug-report/clipboard-inspector-title "أداة فحص بيانات الحافظة"
+ :bug-report/main-desc "هل يمكنك مساعدتنا عن طريق إرسال تقرير خطأ؟ سنقوم بحل المشكلة في أقرب وقت ممكن."
+ :bug-report/section-clipboard-title "هل الخطأ الذي واجهته يتعلق بهذه الميزات؟"
+ :bug-report/section-clipboard-desc "يمكنك استخدام هذه الأدوات المفيدة لتزويدنا بمعلومات إضافية."
+ :bug-report/section-clipboard-btn-title "مساعد الحافظة"
+ :bug-report/section-clipboard-btn-desc "فحص وجمع بيانات الحافظة"
+ :bug-report/section-issues-title "أو..."
+ :bug-report/section-issues-desc "إذا لم تكن هناك أدوات متاحة لك لجمع معلومات إضافية، فيرجى الإبلاغ عن الخطأ مباشرة."
+ :bug-report/section-issues-btn-title "إرسال تقرير خطأ"
+ :bug-report/section-issues-btn-desc "ساعد في تحسين Logseq!"
+ :bug-report/inspector-page-desc-1 "اضغط Ctrl+V / ⌘+V لفحص بيانات الحافظة الخاصة بك"
+ :bug-report/inspector-page-desc-2 "أو انقر هنا للصق إذا كنت تستخدم إصدار الهاتف المحمول"
+ :bug-report/inspector-page-placeholder "اضغط مطولاً هنا للصق إذا كنت على الهاتف المحمول"
+ :bug-report/inspector-page-tip "هل هناك خطأ ما؟ لا مشكلة، انقر للعودة إلى الخطوة السابقة."
+ :bug-report/inspector-page-btn-back "رجوع"
+ :bug-report/inspector-page-btn-copy "نسخ النتيجة"
+ :bug-report/inspector-page-copy-notif "تم النسخ إلى الحافظة!"
+ :bug-report/inspector-page-btn-create-issue "إنشاء مشكلة"
+ :bug-report/inspector-page-desc-clipboard "هذه هي البيانات المقروءة من الحافظة."
+ :bug-report/inspector-page-desc-copy "إذا كان من المقبول مشاركة هذا، فانقر فوق زر النسخ."
+ :bug-report/inspector-page-desc-create-issue "الآن يمكنك الإبلاغ عن النتيجة الملصقة في الحافظة. يرجى لصق النتيجة في قسم 'السياق الإضافي' وذكر من أين نسخت المحتوى الأصلي. شكراً!"
+ :help/title-usage "الاستخدام"
+ :help/title-community "المجتمع"
+ :help/title-development "التطوير"
+ :help/title-about "حول"
+ :help/title-terms "الشروط"
+ :help/start "البدء"
+ :help/about "حول Logseq"
+ :help/roadmap "خارطة الطريق"
+ :help/bug "تقرير خطأ"
+ :help/feature "طلب ميزة"
+ :help/changelog "سجل التغييرات"
+ :help/blog "مدونة Logseq"
+ :help/docs "التوثيق"
+ :help/privacy "سياسة الخصوصية"
+ :help/terms "الشروط"
+ :help/forum-community "مجتمع المنتدى"
+ :help/awesome-logseq "Awesome Logseq"
+ :help/shortcuts "اختصارات لوحة المفاتيح"
+ :help/shortcuts-triggers "المشغلات"
+ :help/shortcut "الاختصار"
+ :help/search "بحث في الصفحات/الكتل/الأوامر"
+ :help/slash-autocomplete "الإكمال التلقائي بالشرطة المائلة"
+ :help/reference-autocomplete "الإكمال التلقائي لمرجع الصفحة"
+ :help/block-reference "مرجع الكتلة"
+ :help/open-link-in-sidebar "فتح الرابط في الشريط الجانبي"
+ :search/page-names "بحث في أسماء الصفحات"
+ :search-item/whiteboard "لوح أبيض"
+ :search-item/page "صفحة"
+ :search-item/no-result "لا توجد نتائج مطابقة"
+ :help/context-menu "قائمة سياق الكتلة"
+ :help/markdown-syntax "صيغة Markdown"
+ :help/org-mode-syntax "صيغة Org mode"
+ :bold "غامق"
+ :italics "مائل"
+ :highlight "تمييز"
+ :strikethrough "يتوسطه خط"
+ :code "كود"
+ :untitled "بدون عنوان"
+ :right-side-bar/help "مساعدة"
+ :right-side-bar/switch-theme "السمة"
+ :right-side-bar/contents "المحتويات"
+ :right-side-bar/page-graph "رسم بياني للصفحة"
+ :right-side-bar/history "(للمطورين) سجل التراجع/الإعادة"
+ :right-side-bar/history-undos "عمليات التراجع"
+ :right-side-bar/history-redos "عمليات الإعادة"
+ :right-side-bar/history-global "عام"
+ :right-side-bar/history-pageonly "الصفحة فقط"
+ :right-side-bar/block-ref "مراجع الكتل"
+ :right-side-bar/graph-view "عرض الرسم البياني"
+ :right-side-bar/all-pages "كل الصفحات"
+ :right-side-bar/whiteboards "الألواح البيضاء"
+ :right-side-bar/flashcards "بطاقات المذاكرة"
+ :right-side-bar/new-page "صفحة جديدة"
+ :right-side-bar/show-journals "إظهار اليوميات"
+ :right-side-bar/separator "مقبض تغيير حجم الشريط الجانبي الأيمن"
+ :right-side-bar/toggle-right-sidebar "تبديل الشريط الجانبي الأيمن"
+ :right-side-bar/pane-close "إغلاق"
+ :right-side-bar/pane-close-others "إغلاق الآخرين"
+ :right-side-bar/pane-close-all "إغلاق الكل"
+ :right-side-bar/pane-collapse "طي"
+ :right-side-bar/pane-collapse-others "طي الآخرين"
+ :right-side-bar/pane-collapse-all "طي الكل"
+ :right-side-bar/pane-expand "توسيع"
+ :right-side-bar/pane-expand-all "توسيع الكل"
+ :right-side-bar/pane-open-as-page "فتح كصفحة"
+ :right-side-bar/pane-more "المزيد"
+ :left-side-bar/switch "التبديل إلى:"
+ :left-side-bar/journals "اليوميات"
+ :left-side-bar/create "إنشاء"
+ :left-side-bar/new-page "صفحة جديدة"
+ :left-side-bar/new-whiteboard "لوح أبيض جديد"
+ :left-side-bar/nav-favorites "المفضلة"
+ :left-side-bar/nav-recent-pages "الأخيرة"
+ :page/something-went-wrong "حدث خطأ ما"
+ :page/logseq-is-having-a-problem "يواجه Logseq مشكلة. لمحاولة إعادته إلى حالة العمل، يرجى تجربة الخطوات الآمنة التالية بالترتيب:"
+ :page/step "الخطوة {1}"
+ :page/try "جرب"
+ :page/slide-view "عرض كشرائح"
+ :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "نصيحة: اضغط "] [:code "f"] [:span.opacity-70 " للانتقال إلى وضع ملء الشاشة"]])
+ :page/delete-confirmation "هل أنت متأكد أنك تريد حذف هذه الصفحة وملفها؟"
+ :page/open-in-finder "فتح في المجلد"
+ :page/open-with-default-app "فتح باستخدام التطبيق الافتراضي"
+ :page/make-public "جعلها عامة للنشر"
+ :page/version-history "عرض سجل الصفحة"
+ :page/open-backup-directory "فتح مجلد نسخ احتياطي للصفحة"
+ :page/make-private "جعلها خاصة"
+ :page/delete "حذف الصفحة"
+ :page/add-to-favorites "إضافة إلى المفضلة"
+ :page/unfavorite "إزالة من المفضلة"
+ :page/show-journals "إظهار اليوميات"
+ :page/show-whiteboards "إظهار الألواح البيضاء"
+ :block/name "اسم الصفحة"
+ :page/earlier "سابقاً"
+ :page/copy-page-url "نسخ رابط الصفحة"
+ :page/illegal-page-name "اسم صفحة غير صالح!"
+ :page/page-already-exists "الصفحة \"{1}\" موجودة بالفعل!"
+ :page/whiteboard-to-journal-error "لا يمكن إعادة تسمية صفحات الألواح البيضاء إلى عناوين اليوميات!"
+ :file/name "اسم الملف"
+ :file/last-modified-at "آخر تعديل في"
+ :file/no-data "لا توجد بيانات"
+ :file/format-not-supported "التنسيق .{1} غير مدعوم."
+ :file/validate-existing-file-error "الصفحة موجودة بالفعل بملف آخر: {1}، الملف الحالي: {2}. يرجى الاحتفاظ بواحد فقط منهما وإعادة فهرسة الرسم البياني الخاص بك."
+ :file-rn/re-index "يوصى بشدة بإعادة الفهرسة بعد إعادة تسمية الملفات وعلى الأجهزة الأخرى بعد المزامنة."
+ :file-rn/need-action "يُقترح إجراء إعادة تسمية الملفات لتتناسب مع التنسيق الجديد. إعادة الفهرسة مطلوبة على جميع الأجهزة عند مزامنة الملفات المعاد تسميتها."
+ :file-rn/or-select-actions " أو أعد تسمية الملفات بشكل فردي أدناه، ثم "
+ :file-rn/or-select-actions-2 ". هذه الإجراءات غير متاحة بمجرد إغلاق هذه اللوحة."
+ :file-rn/legend "🟢 إجراءات إعادة تسمية اختيارية؛ 🟡 إجراء إعادة تسمية مطلوب لتجنب تغيير العنوان؛ 🔴 تغيير جذري."
+ :file-rn/close-panel "إغلاق اللوحة"
+ :file-rn/all-action "تطبيق جميع الإجراءات! ({1})"
+ :file-rn/select-format "(خيار وضع المطور، خطير!) حدد تنسيق اسم الملف"
+ :file-rn/rename "إعادة تسمية الملف \"{1}\" إلى \"{2}\""
+ :file-rn/apply-rename "تطبيق عملية إعادة تسمية الملف"
+ :file-rn/suggest-rename "الإجراء المطلوب: "
+ :file-rn/otherwise-breaking "وإلا سيصبح العنوان"
+ :file-rn/no-action "أحسنت! لا يلزم اتخاذ أي إجراء آخر."
+ :file-rn/confirm-proceed "تحديث التنسيق!"
+ :file-rn/select-confirm-proceed "مطور: كتابة التنسيق"
+ :file-rn/unreachable-title "تحذير! سيصبح اسم الصفحة {1} تحت تنسيق اسم الملف الحالي، ما لم يتم تعيين الخاصية `title::` يدويًا"
+ :file-rn/optional-rename "اقتراح: "
+ :file-rn/format-deprecated "أنت تستخدم حاليًا تنسيقًا قديمًا. يوصى بشدة بالتحديث إلى أحدث تنسيق. يرجى نسخ بياناتك احتياطيًا وإغلاق عملاء Logseq على الأجهزة الأخرى قبل العملية."
+ :file-rn/filename-desc-1 "يحدد هذا الإعداد كيفية تخزين الصفحة في ملف. يخزن Logseq الصفحة في ملف بنفس الاسم."
+ :file-rn/filename-desc-2 "بعض الأحرف مثل \"/\" أو \"?\" غير صالحة لاسم الملف."
+ :file-rn/filename-desc-3 "يستبدل Logseq الأحرف غير الصالحة بمكافئها المشفر بعنوان URL لجعلها صالحة (على سبيل المثال، يصبح \"?\" \"%3F\")."
+ :file-rn/filename-desc-4 "يتم أيضًا استبدال فاصل مساحة الاسم \"/\" بـ \"___\" (ثلاث شرطات سفلية) لاعتبارات جمالية."
+ :file-rn/instruct-1 "إنها عملية من خطوتين لتحديث تنسيق اسم الملف:"
+ :file-rn/instruct-2 "1. انقر "
+ :file-rn/instruct-3 "2. اتبع التعليمات أدناه لإعادة تسمية الملفات إلى التنسيق الجديد:"
+ :page/created-at "تم الإنشاء في"
+ :page/updated-at "تم التحديث في"
+ :page/backlinks "الروابط الخلفية"
+ :linked-references/filter-search "بحث في الصفحات المرتبطة"
+ :linked-references/unexpected-error "المراجع المرتبطة: خطأ غير متوقع. يرجى إعادة فهرسة الرسم البياني الخاص بك أولاً."
+ :linked-references/filter-heading "تصفية"
+ :linked-references/filter-directions "انقر للتضمين و Shift+انقر للاستبعاد. انقر مرة أخرى للإزالة."
+ :linked-references/filter-includes "يتضمن: "
+ :linked-references/filter-excludes "يستبعد: "
+ :linked-references/reference-count (fn [filtered-count total]
+                                      ;; 1 مرجع مرتبط
+                                      ;; 1 من 1 مرجع مرتبط
+                                      ;; 2 من 5 مراجع مرتبطة
+                                      (str
+                                       (when filtered-count
+                                         (str filtered-count " من "))
+                                       total
+                                       (if (= total 1) " مرجع مرتبط" " مراجع مرتبطة")))
+ :unlinked-references/reference-count (fn [total]
+                                        ;; 1 مرجع غير مرتبط
+                                        ;; 5 مراجع غير مرتبطة
+                                        (str total
+                                         (if (= total 1) " مرجع غير مرتبط" " مراجع غير مرتبطة")))
+ :editor/block-search "البحث عن كتلة"
+ :text/image "صورة"
+ :asset/show-in-folder "إظهار الصورة في المجلد"
+ :asset/open-in-browser "فتح الصورة في المتصفح"
+ :asset/delete "حذف الصورة"
+ :asset/copy "نسخ الصورة"
+ :asset/maximize "تكبير الصورة"
+ :asset/confirm-delete "هل أنت متأكد أنك تريد حذف هذه {1}؟"
+ :asset/physical-delete "إزالة الملف أيضًا (لاحظ أنه لا يمكن استعادته)"
+ :color/gray "رمادي"
+ :color/red "أحمر"
+ :color/yellow "أصفر"
+ :color/green "أخضر"
+ :color/blue "أزرق"
+ :color/purple "بنفسجي"
+ :color/pink "وردي"
+ :editor/copy "نسخ"
+ :editor/cut "قص"
+ :editor/expand-block-children "توسيع الكل"
+ :editor/collapse-block-children "طي الكل"
+ :editor/delete-selection "حذف الكتل المحددة"
+ :editor/cycle-todo "تدوير حالة TODO"
+ :dev/show-page-data "(للمطورين) إظهار بيانات الصفحة"
+ :dev/show-block-data "(للمطورين) إظهار بيانات الكتلة"
+ :dev/show-block-ast "(للمطورين) إظهار AST للكتلة"
+ :dev/show-page-ast "(للمطورين) إظهار AST للصفحة"
+ :content/copy-export-as "نسخ / تصدير كـ.."
+ :content/copy-block-url "نسخ رابط الكتلة"
+ :content/copy-block-ref "نسخ مرجع الكتلة"
+ :content/copy-block-emebed "نسخ تضمين الكتلة"
+ :content/copy-ref "نسخ هذا المرجع"
+ :content/delete-ref "حذف هذا المرجع"
+ :content/replace-with-text "استبدال بالنص"
+ :content/replace-with-embed "استبدال بالتضمين"
+ :content/open-in-sidebar "فتح في الشريط الجانبي"
+ :content/click-to-edit "انقر للتحرير"
+ :context-menu/make-a-flashcard "إنشاء بطاقة مذاكرة"
+ :context-menu/toggle-number-list "تبديل القائمة المرقمة"
+ :context-menu/preview-flashcard "معاينة بطاقة المذاكرة"
+ :context-menu/make-a-template "إنشاء قالب"
+ :context-menu/input-template-name "ما هو اسم القالب؟"
+ :context-menu/template-include-parent-block "تضمين الكتلة الأصل في القالب؟"
+ :context-menu/template-exists-warning "القالب موجود بالفعل!"
+ :settings-page/git-tip "إذا قمت بتمكين Logseq Sync، يمكنك عرض سجل تعديل الصفحة مباشرة. هذا القسم مخصص للمستخدمين المتمكنين تقنيًا فقط."
+ :settings-page/git-desc-1 "لعرض سجل تعديل الصفحة، انقر فوق النقاط الأفقية الثلاث في الزاوية العلوية اليمنى وحدد \"عرض سجل الصفحة\"."
+ :settings-page/git-desc-2 "للمستخدمين المحترفين، يدعم Logseq أيضًا استخدام "
+ :settings-page/git-desc-3 " للتحكم في الإصدارات. استخدم Git على مسؤوليتك الخاصة حيث لا يدعم فريق Logseq مشكلات Git العامة."
+ :settings-page/git-commit-on-close "تنفيذ Git commit عند إغلاق النافذة"
+ :settings-page/git-switcher-label "تمكين التنفيذ التلقائي لـ Git commit"
+ :settings-page/git-commit-delay "ثواني التنفيذ التلقائي لـ Git commit"
+ :settings-page/edit-config-edn "تعديل config.edn"
+ :settings-page/edit-global-config-edn "تعديل global config.edn"
+ :settings-page/edit-custom-css "تعديل custom.css"
+ :settings-page/edit-export-css "تعديل export.css"
+ :settings-page/edit-setting "تعديل"
+ :settings-page/custom-configuration "إعدادات مخصصة"
+ :settings-page/custom-global-configuration "إعدادات عامة مخصصة"
+ :settings-page/theme-light "فاتح"
+ :settings-page/theme-dark "داكن"
+ :settings-page/theme-system "النظام"
+ :settings-page/custom-theme "سمة مخصصة"
+ :settings-page/export-theme "تصدير السمة"
+ :settings-page/show-brackets "إظهار الأقواس"
+ :settings-page/spell-checker "مدقق إملائي"
+ :settings-page/auto-updater "المُحدِّث التلقائي"
+ :settings-page/disable-sentry "إرسال بيانات الاستخدام والتشخيصات إلى Logseq"
+ :settings-page/disable-sentry-desc "لن يقوم Logseq أبدًا بجمع قاعدة بيانات الرسم البياني المحلية الخاصة بك أو بيع بياناتك."
+ :settings-page/preferred-outdenting "الإزاحة المنطقية للخارج"
+ :settings-page/preferred-outdenting-tip "يُظهر الجانب الأيسر الإزاحة للخارج بالإعداد الافتراضي، ويُظهر الجانب الأيمن الإزاحة للخارج مع تمكين الإزاحة المنطقية للخارج "
+ :settings-page/preferred-outdenting-tip-more "→ تعلم المزيد"
+ :settings-page/show-full-blocks "إظهار جميع أسطر مرجع الكتلة"
+ :settings-page/auto-expand-block-refs "توسيع مراجع الكتل تلقائيًا عند التكبير"
+ :settings-page/auto-expand-block-refs-tip "يتحكم هذا الخيار في توسيع مراجع الكتل تلقائيًا عند التكبير."
+ :settings-page/custom-date-format "تنسيق التاريخ المفضل"
+ :settings-page/custom-date-format-warning "إعادة الفهرسة مطلوبة! ستُكسر مراجع اليوميات الحالية!"
+ :settings-page/custom-date-format-notification "يجب عليك إعادة فهرسة الرسم البياني الخاص بك حتى يصبح هذا التغيير ساري المفعول"
+ :settings-page/preferred-pasting-file-hint "عند التمكين، سيؤدي لصق صورة من الإنترنت إلى تنزيل الصورة وإدراجها. عند التعطيل، سيقوم بلصق رابط الصورة."
+ :settings-page/preferred-file-format "تنسيق الملف المفضل"
+ :settings-page/preferred-workflow "سير العمل المفضل"
+ :settings-page/preferred-pasting-file "تفضيل لصق الملف"
+ :settings-page/enable-shortcut-tooltip "تمكين تلميح الاختصار"
+ :settings-page/enable-timetracking "تتبع الوقت"
+ :settings-page/enable-tooltip "التلميحات"
+ :settings-page/enable-journals "اليوميات"
+ :settings-page/enable-all-pages-public "جميع الصفحات عامة عند النشر"
+ :settings-page/home-default-page "تعيين الصفحة الرئيسية الافتراضية"
+ :settings-page/enable-block-time "الطوابع الزمنية للكتل"
+ :settings-page/clear-cache "مسح ذاكرة التخزين المؤقت"
+ :settings-page/clear "مسح"
+ :settings-page/clear-cache-warning "سيؤدي مسح ذاكرة التخزين المؤقت إلى تجاهل الرسوم البيانية المفتوحة. ستفقد التغييرات غير المحفوظة."
+ :settings-page/developer-mode "وضع المطور"
+ :settings-page/developer-mode-desc "يساعد وضع المطور المساهمين ومطوري الإضافات على اختبار تكاملاتهم مع Logseq بكفاءة أكبر."
+ :settings-page/current-version "الإصدار الحالي"
+ :settings-page/tab-general "عام"
+ :settings-page/tab-editor "المحرر"
+ :settings-page/tab-keymap "خريطة المفاتيح"
+ :settings-page/tab-version-control "التحكم في الإصدارات"
+ :settings-page/tab-account "الحساب"
+ :settings-page/tab-advanced "متقدم"
+ :settings-page/tab-assets "الأصول"
+ :settings-page/tab-features "الميزات"
+ :settings-page/plugin-system "الإضافات"
+ :settings-page/enable-flashcards "بطاقات المذاكرة"
+ :settings-page/network-proxy "وكيل الشبكة"
+ :settings-page/filename-format "تنسيق اسم الملف"
+ :settings-page/alpha-features "ميزات ألفا"
+ :settings-page/beta-features "ميزات بيتا"
+ :settings-page/login-prompt "للوصول إلى الميزات الجديدة قبل أي شخص آخر، يجب أن تكون راعيًا أو داعمًا لـ Logseq في Open Collective وبالتالي تسجيل الدخول أولاً."
+ :settings-page/sync "مزامنة"
+ :settings-page/sync-desc-1 "انقر "
+ :settings-page/sync-desc-2 "هنا"
+ :settings-page/sync-desc-3 " للحصول على إرشادات حول كيفية إعداد واستخدام المزامنة."
+ :settings-page/sync-diff-merge "تمكين الدمج الذكي عند المزامنة"
+ :settings-page/sync-diff-merge-desc "دمج التحديثات المحلية مع الملفات البعيدة تلقائيًا عند حدوث تعارض، بدلاً من الكتابة فوق الملفات البعيدة"
+ :settings-page/sync-diff-merge-warn "يتم تنشيط قدرة الدمج الذكي فقط على العميل بعد أول مزامنة ناجحة مع الخادم البعيد على الرسم البياني في إصدار Logseq الجديد. تمكين هذا على جميع الأجهزة للوصول إلى أفضل تجربة."
+ :settings-page/enable-whiteboards "الألواح البيضاء"
+ :settings-page/native-titlebar "شريط العنوان الأصلي"
+ :settings-page/native-titlebar-desc "يمكّن شريط عنوان النافذة الأصلي على Windows و Linux."
+ :settings-page/check-for-updates "التحقق من وجود تحديثات"
+ :settings-page/checking "جار التحقق ..."
+ :settings-page/revision "المراجعة: "
+ :settings-page/changelog "ما الجديد؟"
+ :settings-page/app-updated "تطبيقك محدث 🎉"
+ :settings-page/update-available "تم العثور على إصدار جديد "
+ :settings-page/update-error-1 "⚠️ عذرًا، حدث خطأ ما!"
+ :settings-page/update-error-2 " يرجى الاطلاع على "
+ :settings-permission/start-granting "منح"
+
+ :settings-page/auto-chmod "تغيير أذونات الملف تلقائيًا"
+ :settings-page/auto-chmod-desc "قم بالتعطيل للسماح بالتحرير بواسطة عدة مستخدمين مع أذونات ممنوحة عن طريق عضوية المجموعة."
+ :yes "نعم"
+
+ :submit "إرسال"
+ :cancel "إلغاء"
+ :close "إغلاق"
+ :delete "حذف"
+ :save "حفظ"
+ :type "النوع"
+ :host "المضيف"
+ :port "المنفذ"
+ :re-index "إعادة الفهرسة"
+ :re-index-detail "إعادة بناء الرسم البياني"
+ :re-index-multiple-windows-warning "تحتاج إلى إغلاق النوافذ الأخرى قبل إعادة فهرسة هذا الرسم البياني."
+ :re-index-discard-unsaved-changes-warning "ستؤدي إعادة الفهرسة إلى تجاهل الرسم البياني الحالي، ثم معالجة جميع الملفات مرة أخرى كما هي مخزنة حاليًا على القرص. ستفقد التغييرات غير المحفوظة وقد يستغرق الأمر بعض الوقت. متابعة؟"
+ :open-new-window "نافذة جديدة"
+ :sync-from-local-files "تحديث"
+ :sync-from-local-files-detail "استيراد التغييرات من الملفات المحلية"
+ :sync-from-local-changes-detected "يكتشف التحديث ويعالج الملفات المعدلة على القرص الخاص بك والتي اختلفت عن محتوى صفحة Logseq الحالية. متابعة؟"
+
+ :whiteboard/align-left "محاذاة لليسار"
+ :whiteboard/align-center-horizontally "محاذاة أفقية للوسط"
+ :whiteboard/align-right "محاذاة لليمين"
+ :whiteboard/distribute-horizontally "توزيع أفقي"
+ :whiteboard/align-top "محاذاة للأعلى"
+ :whiteboard/align-center-vertically "محاذاة رأسية للوسط"
+ :whiteboard/align-bottom "محاذاة للأسفل"
+ :whiteboard/distribute-vertically "توزيع رأسي"
+ :whiteboard/pack-into-rectangle "حزم في مستطيل"
+ :whiteboard/zoom-to-fit "تكبير ليناسب"
+ :whiteboard/ungroup "فك التجميع"
+ :whiteboard/group "تجميع"
+ :whiteboard/cut "قص"
+ :whiteboard/copy "نسخ"
+ :whiteboard/paste "لصق"
+ :whiteboard/paste-as-link "لصق كرابط"
+ :whiteboard/export "تصدير"
+ :whiteboard/select-all "تحديد الكل"
+ :whiteboard/deselect-all "إلغاء تحديد الكل"
+ :whiteboard/lock "قفل"
+ :whiteboard/unlock "فتح القفل"
+ :whiteboard/delete "حذف"
+ :whiteboard/flip-horizontally "قلب أفقي"
+ :whiteboard/flip-vertically "قلب رأسي"
+ :whiteboard/move-to-front "نقل إلى الأمام"
+ :whiteboard/move-to-back "نقل إلى الخلف"
+ :whiteboard/dev-print-shape-props "(للمطورين) طباعة خصائص الشكل"
+ :whiteboard/auto-resize "تغيير الحجم تلقائيًا"
+ :whiteboard/expand "توسيع"
+ :whiteboard/collapse "طي"
+ :whiteboard/website-url "رابط الموقع"
+ :whiteboard/reload "إعادة تحميل"
+ :whiteboard/open-website-url "فتح رابط الموقع"
+ :whiteboard/youtube-url "رابط يوتيوب"
+ :whiteboard/open-youtube-url "فتح رابط يوتيوب"
+ :whiteboard/twitter-url "رابط تويتر"
+ :whiteboard/open-twitter-url "فتح رابط تويتر"
+ :whiteboard/fill "تعبئة"
+ :whiteboard/stroke-type "نوع الخط"
+ :whiteboard/arrow-head "رأس السهم"
+ :whiteboard/bold "غامق"
+ :whiteboard/italic "مائل"
+ :whiteboard/undo "تراجع"
+ :whiteboard/redo "إعادة"
+ :whiteboard/zoom-in "تكبير"
+ :whiteboard/zoom-out "تصغير"
+ :whiteboard/select "تحديد"
+ :whiteboard/pan "تحريك"
+ :whiteboard/add-block-or-page "إضافة كتلة أو صفحة"
+ :whiteboard/draw "رسم"
+ :whiteboard/highlight "تمييز"
+ :whiteboard/eraser "ممحاة"
+ :whiteboard/connector "موصل"
+ :whiteboard/text "نص"
+ :whiteboard/color "اللون"
+ :whiteboard/select-custom-color "تحديد لون مخصص"
+ :whiteboard/opacity "الشفافية"
+ :whiteboard/extra-small "صغير جدًا"
+ :whiteboard/small "صغير"
+ :whiteboard/medium "متوسط"
+ :whiteboard/large "كبير"
+ :whiteboard/extra-large "كبير جدًا"
+ :whiteboard/huge "ضخم"
+ :whiteboard/scale-level "مستوى المقياس"
+ :whiteboard/rectangle "مستطيل"
+ :whiteboard/circle "دائرة"
+ :whiteboard/triangle "مثلث"
+ :whiteboard/shape "شكل"
+ :whiteboard/open-page "فتح الصفحة"
+ :whiteboard/open-page-in-sidebar "فتح الصفحة في الشريط الجانبي"
+ :whiteboard/remove-link "إزالة الرابط"
+ :whiteboard/link "رابط"
+ :whiteboard/references "المراجع"
+ :whiteboard/link-to-any-page-or-block "رابط إلى أي صفحة أو كتلة"
+ :whiteboard/start-typing-to-search "ابدأ الكتابة للبحث..."
+ :whiteboard/new-block-no-colon "كتلة جديدة"
+ :whiteboard/new-block "كتلة جديدة:"
+ :whiteboard/new-page "صفحة جديدة:"
+ :whiteboard/new-whiteboard "لوح أبيض جديد"
+ :whiteboard/search-only-blocks "بحث في الكتل فقط"
+ :whiteboard/search-only-pages "بحث في الصفحات فقط"
+ :whiteboard/cache-outdated "ذاكرة التخزين المؤقت قديمة. يرجى النقر على زر 'إعادة الفهرسة' في قائمة الرسم البياني المنسدلة."
+ :whiteboard/shape-quick-links "روابط سريعة للأشكال"
+ :whiteboard/edit-pdf "تعديل PDF"
+ :whiteboard/dashboard-card-new-whiteboard "لوح أبيض جديد"
+ :whiteboard/dashboard-card-created "تم الإنشاء "
+ :whiteboard/dashboard-card-edited "تم التعديل "
+ :whiteboard/toggle-grid "تبديل الشبكة"
+ :whiteboard/snap-to-grid "محاذاة إلى الشبكة"
+ :whiteboard/toggle-pen-mode "تبديل وضع القلم"
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "مرجع" "مراجع"))
+ :flashcards/modal-welcome-title "حان الوقت لإنشاء بطاقة!"
+ :flashcards/modal-welcome-desc-1 "يمكنك إضافة \"#card\" إلى أي كتلة لتحويلها إلى بطاقة أو تشغيل \"/cloze\" لإضافة بعض الإخفاءات."
+ :flashcards/modal-welcome-desc-2 "يمكنك "
+ :flashcards/modal-welcome-desc-3 "النقر على هذا الرابط"
+ :flashcards/modal-welcome-desc-4 " للتحقق من التوثيق."
+ :flashcards/modal-btn-show-answers "إظهار الإجابات"
+ :flashcards/modal-btn-hide-answers "إخفاء الإجابات"
+ :flashcards/modal-btn-show-clozes "إظهار الإخفاءات"
+ :flashcards/modal-btn-next-card "التالي"
+ :flashcards/modal-btn-reset "إعادة تعيين"
+ :flashcards/modal-btn-reset-tip "إعادة تعيين هذه البطاقة حتى تتمكن من مراجعتها على الفور."
+ :flashcards/modal-btn-forgotten "منسي"
+ :flashcards/modal-btn-remembered "متذكر"
+ :flashcards/modal-btn-recall "استغرق بعض الوقت للتذكر"
+ :flashcards/modal-finished "تهانينا، لقد راجعت جميع البطاقات لهذا الاستعلام، أراك في المرة القادمة! 💯"
+ :flashcards/modal-select-all "الكل"
+ :flashcards/modal-select-switch "التبديل إلى"
+ :flashcards/modal-current-total "الحالي/الإجمالي"
+ :flashcards/modal-overdue-total "المتأخر/الإجمالي"
+ :flashcards/modal-toggle-preview-mode "تبديل وضع المعاينة"
+ :flashcards/modal-toggle-random-mode "تبديل الوضع العشوائي"
+
+ :home "الرئيسية"
+ :new-page "صفحة جديدة:"
+ :whiteboard "لوح أبيض"
+ :whiteboards "ألواح بيضاء"
+ :new-graph "إضافة رسم بياني جديد"
+ :graph "رسم بياني"
+ :graph/persist "يقوم Logseq بمزامنة الحالة الداخلية، يرجى الانتظار لعدة ثوانٍ."
+ :graph/persist-error "فشل مزامنة الحالة الداخلية."
+ :graph/save "جار الحفظ..."
+ :graph/save-success "تم الحفظ بنجاح"
+ :graph/save-error "فشل الحفظ"
+ :graph/all-graphs "جميع الرسوم البيانية"
+ :graph/local-graphs "الرسوم البيانية المحلية:"
+ :graph/remote-graphs "الرسوم البيانية البعيدة:"
+ :export "تصدير"
+ :export-graph "تصدير الرسم البياني"
+ :export-page "تصدير الصفحة"
+ :export-markdown "تصدير كـ Markdown قياسي (بدون خصائص الكتلة)"
+ :export-opml "تصدير كـ OPML"
+ :export-public-pages "تصدير الصفحات العامة"
+ :export-json "تصدير كـ JSON"
+ :export-roam-json "تصدير كـ Roam JSON"
+ :export-edn "تصدير كـ EDN"
+ :export-transparent-background "خلفية شفافة"
+ :export-copy-to-clipboard "نسخ إلى الحافظة"
+ :export-copied-to-clipboard "تم النسخ إلى الحافظة!"
+ :export-save-to-file "حفظ إلى ملف"
+ :all-graphs "جميع الرسوم البيانية"
+ :all-pages "كل الصفحات"
+ :all-whiteboards "جميع الألواح البيضاء"
+ :all-files "جميع الملفات"
+ :remove-orphaned-pages "إزالة الصفحات اليتيمة؟"
+ :all-journals "جميع اليوميات"
+ :settings "الإعدادات"
+ :settings-of-plugins "الإضافات"
+ :plugins "الإضافات"
+ :themes "السمات"
+ :relaunch-confirm-to-work "يجب إعادة تشغيل التطبيق ليعمل. هل تريد إعادة تشغيله الآن؟"
+ :import "استيراد"
+ :importing "جار الاستيراد"
+ :join-community "انضم إلى المجتمع"
+ :discourse-title "منتدانا!"
+ :help-shortcut-title "انقر للتحقق من الاختصارات والنصائح الأخرى"
+ :loading "جار التحميل..."
+ :parsing-files "جار تحليل الملفات"
+ :loading-files "جار تحميل الملفات"
+ :login "تسجيل الدخول"
+ :logout "تسجيل الخروج"
+ :download "تنزيل"
+ :language "اللغة"
+ :remove-background "إزالة الخلفية"
+ :remove-heading "إزالة العنوان"
+ :heading "العنوان {1}"
+ :auto-heading "عنوان تلقائي"
+ :open-a-directory "فتح مجلد محلي"
+ :toggle-theme      "تبديل السمة"
+
+ :help/shortcut-page-title "اختصارات لوحة المفاتيح"
+
+ :plugin/installed "مثبت"
+ :plugin/installed-plugin "الإضافة المثبتة: {1}"
+ :plugin/not-installed "غير مثبت"
+ :plugin/installing "جار التثبيت"
+ :plugin/install "تثبيت"
+ :plugin/reload "إعادة تحميل"
+ :plugin/update "تحديث"
+ :plugin/update-plugin "تحديث الإضافة: {1} - {2}"
+ :plugin/check-update "التحقق من التحديث"
+ :plugin/check-all-updates "التحقق من جميع التحديثات"
+ :plugin/found-updates "تحديثات جديدة"
+ :plugin/found-n-updates "تم العثور على {1} تحديثات"
+ :plugin/update-all-selected "تحديث كل المحدد"
+ :plugin/all-updated "تم تحديث الكل!"
+ :plugin/updates-downloading "جار تنزيل التحديثات"
+ :plugin/refresh-lists "تحديث القوائم"
+ :plugin/enabled "ممكّن"
+ :plugin/disabled "معطّل"
+ :plugin/update-available "التحديث متاح"
+ :plugin/updating "جار التحديث"
+ :plugin/uninstall "إلغاء التثبيت"
+ :plugin/marketplace "المتجر"
+ :plugin/downloads "التنزيلات"
+ :plugin/stars "النجوم"
+ :plugin/title "العنوان ({1})"
+ :plugin/all "الكل"
+ :plugin/unpacked "غير معبأ"
+ :plugin/delete-alert "هل أنت متأكد أنك تريد إلغاء تثبيت الإضافة [{1}]؟"
+ :plugin/open-settings "فتح الإعدادات"
+ :plugin/open-package "فتح الحزمة"
+ :plugin/load-unpacked "تحميل إضافة غير معبأة"
+ :plugin/restart "إعادة تشغيل التطبيق"
+ :plugin/unpacked-tips "حدد مجلد الإضافة"
+ :plugin/contribute "✨ اكتب وأرسل إضافة جديدة"
+ :plugin/up-to-date "إنه محدث {1}"
+ :plugin/custom-js-alert "تم العثور على ملف custom.js، هل يُسمح بتنفيذه؟ (إذا كنت لا تفهم محتوى هذا الملف، فمن المستحسن عدم السماح بالتنفيذ، فهذا ينطوي على مخاطر أمنية معينة.)"
+ :plugin/security-warning "يمكن للإضافات الوصول إلى الرسم البياني والملفات المحلية الخاصة بك، وإصدار طلبات الشبكة.
+       يمكن أن تتسبب أيضًا في تلف البيانات أو فقدانها. نحن نعمل على قواعد وصول مناسبة للرسوم البيانية الخاصة بك.
+       في غضون ذلك، تأكد من أن لديك نسخًا احتياطية منتظمة من الرسوم البيانية الخاصة بك وقم بتثبيت الإضافات فقط عندما يمكنك قراءة
+       وفهم الكود المصدري."
+ :plugin/search-plugin "بحث في الإضافات"
+ :plugin/open-preferences "فتح التفضيلات"
+ :plugin/open-logseq-dir "فتح"
+ :plugin/remote-error "خطأ عن بعد: "
+ :plugin/checking-for-updates "جار التحقق من تحديثات الإضافات ..."
+ :plugin/list-of-updates "تحديثات الإضافات: "
+ :plugin/auto-check-for-updates "التحقق التلقائي من التحديثات"
+ :plugin.install-from-file/menu-title "تثبيت من plugins.edn"
+ :plugin.install-from-file/title "تثبيت الإضافات من plugins.edn"
+ :plugin.install-from-file/notice "ستحل الإضافات التالية محل الإضافات الحالية:"
+ :plugin.install-from-file/success "تم تثبيت جميع الإضافات!"
+
+ :pdf/copy-ref "نسخ المرجع"
+ :pdf/copy-text "نسخ النص"
+ :pdf/linked-ref "المراجع المرتبطة"
+ :pdf/toggle-dashed "نمط متقطع لتمييز المنطقة"
+ :pdf/hl-block-colored "تسمية ملونة لكتلة التمييز"
+ :pdf/auto-open-context-menu "فتح قائمة السياق تلقائيًا للتحديدات"
+ :pdf/doc-metadata "بيانات المستند الوصفية"
+
+ :updater/new-version-install "تم تنزيل إصدار جديد."
+ :updater/quit-and-install "إعادة التشغيل للتثبيت"
+
+ :paginates/pages "إجمالي {1} صفحات"
+ :paginates/prev "السابق"
+ :paginates/next "التالي"
+
+ :tips/all-done "تم كل شيء!"
+
+ :select/default-prompt "اختر واحدًا"
+ :select/default-select-multiple "اختر واحدًا أو أكثر"
+ :select.graph/prompt "حدد رسمًا بيانيًا"
+ :select.graph/empty-placeholder-description "لا توجد رسوم بيانية مطابقة. هل تريد إضافة واحد آخر؟"
+ :select.graph/add-graph "نعم، أضف رسمًا بيانيًا آخر"
+
+ :file-sync/other-user-graph "الرسم البياني المحلي الحالي مرتبط بالرسم البياني البعيد لمستخدم آخر. لذا لا يمكن بدء المزامنة."
+ :file-sync/graph-deleted "تم حذف الرسم البياني البعيد الحالي"
+ :file-sync/rsapi-cannot-upload-err "تعذر بدء المزامنة، يرجى التحقق مما إذا كان الوقت المحلي صحيحًا."
+ :file-sync/connectivity-testing-failed "فشل اختبار اتصال الشبكة. يرجى التحقق من إعدادات الشبكة الخاصة بك. عناوين URL للاختبار: "
+
+ :notification/clear-all "مسح الكل"
+
+ :shortcut.category/basics "الأساسيات"
+ :shortcut.category/formatting "التنسيق"
+ :shortcut.category/navigating "التنقل"
+ :shortcut.category/block-editing "تحرير الكتلة العام"
+ :shortcut.category/block-command-editing "تحرير أمر الكتلة"
+ :shortcut.category/block-selection "تحديد الكتلة (اضغط Esc للخروج من التحديد)"
+ :shortcut.category/toggle "تبديل"
+ :shortcut.category/others "أخرى"
+ :shortcut.category/plugins "الإضافات"
+ :shortcut.category/whiteboard "لوح أبيض"
+
+ :keymap/all "الكل"
+ :keymap/disabled "معطل"
+ :keymap/unset "غير معين"
+ :keymap/custom "مخصص"
+ :keymap/search "بحث"
+ :keymap/total "إجمالي الاختصارات"
+ :keymap/keystroke-filter "مرشح ضغطات المفاتيح"
+ :keymap/keystroke-record-desc "اضغط على أي تسلسل من المفاتيح لتصفية الاختصارات"
+ :keymap/keystroke-record-setup-label "اضغط على أي تسلسل من المفاتيح لتعيين اختصار"
+ :keymap/restore-to-default "استعادة إلى الإعداد الافتراضي للنظام"
+ :keymap/customize-for-label "تخصيص الاختصارات"
+ :keymap/conflicts-for-label "تعارضات خريطة المفاتيح لـ"
+
+ :window/minimize "تصغير"
+ :window/maximize "تكبير"
+ :window/restore "استعادة"
+ :window/close "إغلاق"
+ :window/exit-fullscreen "الخروج من وضع ملء الشاشة"
+
+ :header/toggle-left-sidebar         "تبديل الشريط الجانبي الأيسر"
+ :header/search                      "بحث"
+ :header/more                        "المزيد"
+ :header/go-back                     "رجوع"
+ :header/go-forward                  "تقدم"
+
+ ;; Commands are nested for now to stay in sync with the shortcuts system.
+ ;; Other languages should not nest keys under :commands
+ :commands
+ {:date-picker/complete         "منتقي التاريخ: اختر اليوم المحدد"
+  :date-picker/prev-day         "منتقي التاريخ: حدد اليوم السابق"
+  :date-picker/next-day         "منتقي التاريخ: حدد اليوم التالي"
+  :date-picker/prev-week        "منتقي التاريخ: حدد الأسبوع السابق"
+  :date-picker/next-week        "منتقي التاريخ: حدد الأسبوع التالي"
+  :pdf/previous-page            "Pdf: الصفحة السابقة لمستند pdf الحالي"
+  :pdf/next-page                "Pdf: الصفحة التالية لمستند pdf الحالي"
+  :pdf/close                    "Pdf: إغلاق مستند pdf الحالي"
+  :pdf/find                     "Pdf: البحث عن نص في مستند pdf الحالي"
+  :auto-complete/complete       "الإكمال التلقائي: اختر العنصر المحدد"
+  :auto-complete/prev           "الإكمال التلقائي: حدد العنصر السابق"
+  :auto-complete/next           "الإكمال التلقائي: حدد العنصر التالي"
+  :auto-complete/shift-complete "الإكمال التلقائي: افتح العنصر المحدد في الشريط الجانبي"
+  :auto-complete/open-link      "الإكمال التلقائي: افتح العنصر المحدد في المتصفح"
+  :cards/toggle-answers         "البطاقات: إظهار/إخفاء الإجابات/الإخفاءات"
+  :cards/next-card              "البطاقات: البطاقة التالية"
+  :cards/forgotten              "البطاقات: منسي"
+  :cards/remembered             "البطاقات: متذكر"
+  :cards/recall                 "البطاقات: استغرق بعض الوقت للتذكر"
+  :editor/escape-editing        "الخروج من التحرير"
+  :editor/backspace             "مسافة للخلف / حذف للخلف"
+  :editor/delete                "حذف / حذف للأمام"
+  :editor/new-block             "إنشاء كتلة جديدة"
+  :editor/new-line              "سطر جديد في الكتلة الحالية"
+  :editor/new-whiteboard        "لوح أبيض جديد"
+  :editor/follow-link           "متابعة الرابط تحت المؤشر"
+  :editor/open-link-in-sidebar  "فتح الرابط في الشريط الجانبي"
+  :editor/bold                  "غامق"
+  :editor/italics               "مائل"
+  :editor/highlight             "تمييز"
+  :editor/strike-through        "يتوسطه خط"
+  :editor/clear-block           "حذف محتوى الكتلة بالكامل"
+  :editor/kill-line-before      "حذف السطر قبل موضع المؤشر"
+  :editor/copy-embed            "نسخ تضمين كتلة يشير إلى الكتلة الحالية"
+  :editor/kill-line-after       "حذف السطر بعد موضع المؤشر"
+  :editor/beginning-of-block    "نقل المؤشر إلى بداية الكتلة"
+  :editor/end-of-block          "نقل المؤشر إلى نهاية الكتلة"
+  :editor/forward-word          "نقل المؤشر للأمام كلمة واحدة"
+  :editor/backward-word         "نقل المؤشر للخلف كلمة واحدة"
+  :editor/forward-kill-word     "حذف كلمة للأمام"
+  :editor/backward-kill-word    "حذف كلمة للخلف"
+  :editor/replace-block-reference-at-point "استبدال مرجع الكتلة بمحتواه عند النقطة"
+  :editor/paste-text-in-one-block-at-point "لصق النص في كتلة واحدة عند النقطة"
+  :editor/insert-youtube-timestamp "إدراج طابع زمني ليوتيوب"
+  :editor/cycle-todo              "تدوير حالة TODO"
+  :editor/up                      "نقل المؤشر للأعلى / تحديد للأعلى"
+  :editor/down                    "نقل المؤشر للأسفل / تحديد للأسفل"
+  :editor/left                    "نقل المؤشر لليسار / فتح الكتلة المحددة في البداية"
+  :editor/right                   "نقل المؤشر لليمين / فتح الكتلة المحددة في النهاية"
+  :editor/select-up               "تحديد المحتوى أعلاه"
+  :editor/select-down             "تحديد المحتوى أدناه"
+  :editor/move-block-up           "نقل الكتلة للأعلى"
+  :editor/move-block-down         "نقل الكتلة للأسفل"
+  :editor/open-edit               "تحرير الكتلة المحددة"
+  :editor/select-block-up         "تحديد الكتلة أعلاه"
+  :editor/select-block-down       "تحديد الكتلة أدناه"
+  :editor/delete-selection        "حذف الكتل المحددة"
+  :editor/expand-block-children   "توسيع"
+  :editor/collapse-block-children "طي"
+  :editor/toggle-block-children   "تبديل التوسيع/الطي"
+  :editor/indent                  "إزاحة الكتلة للداخل"
+  :editor/outdent                 "إزاحة الكتلة للخارج"
+  :editor/copy                    "نسخ (ينسخ إما التحديد أو مرجع الكتلة)"
+  :editor/copy-text               "نسخ التحديدات كنص"
+  :editor/cut                     "قص"
+  :editor/undo                    "تراجع"
+  :editor/redo                    "إعادة"
+  :editor/insert-link             "رابط HTML"
+  :editor/select-all-blocks       "تحديد جميع الكتل"
+  :editor/select-parent           "تحديد الكتلة الأصل"
+  :editor/zoom-in                 "تكبير كتلة التحرير / للأمام بخلاف ذلك"
+  :editor/zoom-out                "تصغير كتلة التحرير / للخلف بخلاف ذلك"
+  :editor/toggle-undo-redo-mode   "تبديل وضع التراجع والإعادة (عام أو الصفحة فقط)"
+  :editor/toggle-number-list      "تبديل القائمة المرقمة"
+  :whiteboard/select              "أداة التحديد"
+  :whiteboard/pan                 "أداة التحريك"
+  :whiteboard/portal              "أداة البوابة"
+  :whiteboard/pencil              "أداة القلم الرصاص"
+  :whiteboard/highlighter         "أداة التمييز"
+  :whiteboard/eraser              "أداة الممحاة"
+  :whiteboard/connector           "أداة الموصل"
+  :whiteboard/text                "أداة النص"
+  :whiteboard/rectangle           "أداة المستطيل"
+  :whiteboard/ellipse             "أداة القطع الناقص"
+  :whiteboard/reset-zoom          "إعادة تعيين التكبير/التصغير"
+  :whiteboard/zoom-to-fit         "تكبير ليناسب الرسم"
+  :whiteboard/zoom-to-selection   "تكبير ليناسب التحديد"
+  :whiteboard/zoom-out            "تصغير"
+  :whiteboard/zoom-in             "تكبير"
+  :whiteboard/send-backward       "نقل للخلف"
+  :whiteboard/send-to-back        "نقل إلى الخلفية"
+  :whiteboard/bring-forward       "نقل للأمام"
+  :whiteboard/bring-to-front      "نقل إلى المقدمة"
+  :whiteboard/lock                "قفل التحديد"
+  :whiteboard/unlock              "فتح قفل التحديد"
+  :whiteboard/group               "تجميع التحديد"
+  :whiteboard/ungroup             "فك تجميع التحديد"
+  :whiteboard/toggle-grid         "تبديل شبكة اللوحة"
+  :whiteboard/clone-right         "استنساخ لليمين"
+  :whiteboard/clone-left          "استنساخ لليسار"
+  :whiteboard/clone-up            "استنساخ للأعلى"
+  :whiteboard/clone-down          "استنساخ للأسفل"
+  :ui/toggle-brackets             "تبديل عرض الأقواس"
+  :go/electron-find-in-page       "البحث عن نص في الصفحة"
+  :go/electron-jump-to-the-next   "الانتقال إلى المطابقة التالية لبحث شريط البحث"
+  :go/electron-jump-to-the-previous "الانتقال إلى المطابقة السابقة لبحث شريط البحث"
+  :go/search                      "بحث في الصفحات والكتل"
+  :go/search-in-page              "بحث في الكتل في الصفحة"
+  :command-palette/toggle         "بحث في الأوامر"
+  :go/journals                    "الانتقال إلى اليوميات"
+  :go/backward                    "للخلف"
+  :go/forward                     "للأمام"
+  :search/re-index                "إعادة بناء فهرس البحث"
+  :sidebar/open-today-page        "فتح صفحة اليوم في الشريط الجانبي الأيمن"
+  :sidebar/close-top              "إغلاق العنصر العلوي في الشريط الجانبي الأيمن"
+  :sidebar/clear                  "مسح الكل في الشريط الجانبي الأيمن"
+  :misc/copy                      "نسخ"
+  :graph/export-as-html           "تصدير صفحات الرسم البياني العامة كـ html"
+  :graph/open                     "تحديد رسم بياني للفتح"
+  :graph/remove                   "إزالة رسم بياني"
+  :graph/add                      "إضافة رسم بياني"
+  :graph/save                     "حفظ الرسم البياني الحالي على القرص"
+  :graph/re-index                 "إعادة فهرسة الرسم البياني الحالي"
+  :command/run                    "تشغيل أمر git"
+  :go/home                        "الانتقال إلى الرئيسية"
+  :go/all-graphs                  "الانتقال إلى جميع الرسوم البيانية"
+  :go/whiteboards                 "الانتقال إلى الألواح البيضاء"
+  :go/all-pages                   "الانتقال إلى كل الصفحات"
+  :go/graph-view                  "الانتقال إلى عرض الرسم البياني"
+  :go/keyboard-shortcuts          "الانتقال إلى اختصارات لوحة المفاتيح"
+  :go/tomorrow                    "الانتقال إلى الغد"
+  :go/next-journal                "الانتقال إلى اليومية التالية"
+  :go/prev-journal                "الانتقال إلى اليومية السابقة"
+  :go/flashcards                  "تبديل بطاقات المذاكرة"
+  :ui/toggle-document-mode        "تبديل وضع المستند"
+  :ui/toggle-settings             "تبديل الإعدادات"
+  :ui/toggle-right-sidebar        "تبديل الشريط الجانبي الأيمن"
+  :ui/toggle-left-sidebar         "تبديل الشريط الجانبي الأيسر"
+  :ui/toggle-help                 "تبديل المساعدة"
+  :ui/toggle-theme                "التبديل بين السمة الداكنة/الفاتحة"
+  :ui/toggle-contents             "تبديل المحتويات في الشريط الجانبي"
+  :ui/accent-color-reset          "إعادة تعيين لون التمييز"
+  :ui/accent-colors-picker        "اختيار لون التمييز"
+   ;;  :ui/open-new-window             "فتح نافذة أخرى"
+  :command/toggle-favorite        "إضافة إلى/إزالة من المفضلة"
+  :editor/open-file-in-default-app "فتح الملف في التطبيق الافتراضي"
+  :editor/open-file-in-directory   "فتح الملف في المجلد الأصل"
+  :editor/copy-current-file        "نسخ الملف الحالي"
+  :editor/copy-page-url           "نسخ رابط الصفحة"
+  :ui/toggle-wide-mode             "تبديل الوضع العريض"
+  :ui/select-theme-color           "تحديد ألوان السمة المتاحة"
+  :ui/goto-plugins                 "الانتقال إلى لوحة تحكم الإضافات"
+  :ui/install-plugins-from-file    "تثبيت الإضافات من plugins.edn"
+  :editor/toggle-open-blocks       "تبديل الكتل المفتوحة (طي أو توسيع جميع الكتل)"
+  :ui/clear-all-notifications      "مسح جميع الإشعارات"
+  :git/commit                      "إنشاء git commit مع رسالة"
+  :dev/show-block-data             "(للمطورين) إظهار بيانات الكتلة"
+  :dev/show-block-ast              "(للمطورين) إظهار AST للكتلة"
+  :dev/show-page-data              "(للمطورين) إظهار بيانات الصفحة"
+  :dev/show-page-ast               "(للمطورين) إظهار AST للصفحة"
+  :window/close                    "إغلاق النافذة"}}
