@@ -481,7 +481,10 @@
      [:div.w-full.relative
       (component-block/block-container
        {:page-title? true
-        :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+        :page-title-actions-cp (when (and with-actions?
+                                          (not (util/capacitor-new?))
+                                          (not= (:db/id (state/get-edit-block)) (:db/id page)))
+                                 db-page-title-actions)
         :hide-title? sidebar?
         :sidebar? sidebar?
         :hide-children? true
