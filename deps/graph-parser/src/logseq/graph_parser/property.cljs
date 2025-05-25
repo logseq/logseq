@@ -59,7 +59,7 @@
   "Properties used by logseq that user can edit"
   []
   (set/union #{:title :icon :template :template-including-parent :public :filters :exclude-from-graph-view
-               :logseq.query/nlp-date
+               :logseq.query/nlp-date :logseq.text-color
           ;; org-mode only
                :macro :filetags}
              editable-linkable-built-in-properties

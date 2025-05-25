@@ -23,6 +23,13 @@
   --ls-highlight-color-blue: var(--rx-blue-05);
   --ls-highlight-color-purple: var(--rx-purple-05);
   --ls-highlight-color-pink: var(--rx-pink-05);
+  --ls-text-color-gray: var(--rx-gray-11);
+  --ls-text-color-red: var(--rx-red-11);
+  --ls-text-color-yellow: var(--rx-yellow-11);
+  --ls-text-color-green: var(--rx-green-11);
+  --ls-text-color-blue: var(--rx-blue-11);
+  --ls-text-color-purple: var(--rx-purple-11);
+  --ls-text-color-pink: var(--rx-pink-11);
 
   /* NOTE: For compatible. Will be deprecated*/
   --ls-block-bullet-color: var(--lx-gray-08, var(--rx-gray-08));

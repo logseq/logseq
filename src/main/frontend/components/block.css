@@ -97,6 +97,38 @@
     padding: 10px 15px;
     border-color: var(--ls-secondary-border-color);
   }
+
+  &[data-logseq-property-text-color=gray] {
+    color: var(--ls-text-color-gray);
+  }
+  
+  &[data-logseq-property-text-color=red] {
+    color: var(--ls-text-color-red);
+  }
+  
+  &[data-logseq-property-text-color=yellow] {
+    color: var(--ls-text-color-yellow);
+  }
+  
+  &[data-logseq-property-text-color=green] {
+    color: var(--ls-text-color-green);
+  }
+  
+  &[data-logseq-property-text-color=blue] {
+    color: var(--ls-text-color-blue);
+  }
+
+  &[data-logseq-property-text-color=purple] {
+    color: var(--ls-text-color-purple);
+  }
+
+  &[data-logseq-property-text-color=purple] {
+    color: var(--ls-text-color-purple);
+  }
+
+  &[data-logseq-property-text-color=pink] {
+    color: var(--ls-text-color-pink);
+  }
 }
 
 .breadcrumb {
