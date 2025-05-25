@@ -919,15 +919,60 @@
                (nth-safe blocks idx))))))))
 
 #?(:cljs
+   (defn get-prev-nth-block-non-collapsed
+     [block n]
+     (loop [block block
+            n n]
+       (let [prev-block (get-prev-block-non-collapsed block)]
+         (if (or (zero? n) (not prev-block))
+           block
+           (recur prev-block (dec n)))))))
+
+#?(:cljs
    (defn get-next-block-non-collapsed
-     [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (inc index)]
-             (when (>= (count blocks) idx)
-               (nth-safe blocks idx))))))))
+     ([block n]
+     (loop [block block
+            n n]
+       (let [next-block (get-next-block-non-collapsed block)]
+         (if (or (zero? n) (not next-block))
+           block
+           (recur next-block (dec n))))))
+     ([block]
+      (when-let [blocks (get-blocks-noncollapse)]
+        (let [block-id (.-id block)
+              block-ids (mapv #(.-id %) blocks)]
+          (when-let [index (.indexOf block-ids block-id)]
+            (let [idx (inc index)]
+              (when (>= (count blocks) idx)
+                (nth-safe blocks idx)))))))))
+
+#?(:cljs
+   (defn block-compare
+     [a b comp-f]
+     (let [[a-id b-id] (map #(d/attr % "id") [a b])
+           block-ids (mapv #(.-id %) (get-blocks-noncollapse))]
+       (comp-f (.indexOf block-ids a-id) (.indexOf block-ids b-id)))))
+
+#?(:cljs
+   (defn is-block-before?
+     [a b]
+     (block-compare a b <=)))
+
+#?(:cljs
+   (defn is-block-after?
+     [a b]
+     (block-compare a b >=)))
+
+
+#?(:cljs
+   (defn get-next-nth-block-non-collapsed
+     [block n]
+     (loop [block block
+            n n]
+       (let [next-block (get-next-block-non-collapsed block)]
+         (if (or (zero? n) (not next-block))
+           block
+           (recur next-block (dec n)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip

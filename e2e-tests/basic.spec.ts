@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test'
+import { expect, Locator, Page } from '@playwright/test'
 import fs from 'fs/promises'
 import path from 'path'
 import { test } from './fixtures'
@@ -84,6 +84,69 @@ test('delete and backspace', async ({ page, block }) => {
 
 })
 
+test('pageup/pagedown, home/end', async ({page, block}) => {
+  await createRandomPage(page)
+
+  const totalBlocks = 30
+  for (let i = 0; i < totalBlocks; i++) {
+    await block.mustFill(`Block ${i}`)
+    if (i < totalBlocks - 1) await block.enterNext()
+  }
+  await block.escapeEditing()
+  await page.keyboard.press('ArrowUp')
+
+  const pressAndWaitForAnimation = async (page: Page, key: string) => {
+    await page.keyboard.press(key)
+    return page.waitForTimeout(100)
+  }
+  
+  let selectedBlock: Locator
+
+  // PageUp/PageDown
+  await pressAndWaitForAnimation(page, 'PageUp')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 12')
+  await expect(selectedBlock).toBeInViewport()
+  await expect(selectedBlock).toHaveCount(1)
+
+  await pressAndWaitForAnimation(page, 'PageUp')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 0')
+  await expect( selectedBlock ).toBeInViewport()
+  await expect( selectedBlock ).toHaveCount(1)
+
+  await pressAndWaitForAnimation(page, 'PageDown')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 16')
+  await expect( selectedBlock ).toBeInViewport()
+  await expect( selectedBlock ).toHaveCount(1)
+
+  await pressAndWaitForAnimation(page, 'PageDown')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 29')
+  await expect( selectedBlock ).toBeInViewport()
+  await expect( selectedBlock ).toHaveCount(1)
+
+  // Home/End
+  await pressAndWaitForAnimation(page, 'Home')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 0')
+  await expect(selectedBlock).toBeInViewport()
+  await expect(selectedBlock).toHaveCount(1)
+
+  await pressAndWaitForAnimation(page, 'End')
+  selectedBlock = page.locator('.ls-block.selected').getByText('Block 29')
+  await expect(selectedBlock).toBeInViewport()
+  await expect(selectedBlock).toHaveCount(1)
+
+  // Shift+PageUp/PageDown
+  await pressAndWaitForAnimation(page, 'Shift+PageUp')
+  selectedBlock = page.locator('.ls-block.selected')
+  await expect(selectedBlock).toHaveCount(16)
+  for (let i = 0; i < 16; i++) {
+    await expect(selectedBlock.getByText('Block ' + (29 - i))).toHaveCount(1)
+  }
+
+  await pressAndWaitForAnimation(page, 'Shift+PageDown')
+  selectedBlock = page.locator('.ls-block.selected')
+  await expect(selectedBlock).toHaveCount(1)
+  await expect(selectedBlock.getByText('Block 29')).toHaveCount(1)
+})
 
 test('block selection', async ({ page, block }) => {
   await createRandomPage(page)
