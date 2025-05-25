@@ -7,7 +7,7 @@
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui]
             [capacitor.handler :as handler]
-            [capacitor.ionic :as ionic]
+            [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
@@ -35,7 +35,7 @@
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
     [:<>
-     (ionic/ion-button
+     (ion/button
       {:fill "clear"
        :mode "ios"
        :class "border-none w-full rounded-lg"
@@ -62,18 +62,18 @@
 
 (rum/defc bottom-tabs
   []
-  (ionic/ion-tab-bar
+  (ion/tab-bar
    {:slot "bottom"}
-   (ionic/ion-tab-button
+   (ion/tab-button
     {:tab "home"
      :selected true}
-    (ionic/tabler-icon "home" {:size 22}) "Journals")
-   (ionic/ion-tab-button
+    (ion/tabler-icon "home" {:size 22}) "Journals")
+   (ion/tab-button
     {:tab "search"}
-    (ionic/tabler-icon "search" {:size 22}) "Search")
-   (ionic/ion-tab-button
+    (ion/tabler-icon "search" {:size 22}) "Search")
+   (ion/tab-button
     {:tab "settings"}
-    (ionic/tabler-icon "settings" {:size 22}) "Settings")))
+    (ion/tabler-icon "settings" {:size 22}) "Settings")))
 
 (rum/defc journals-list < rum/reactive db-mixins/query
   []
@@ -93,7 +93,7 @@
 
   [:div.py-4
    [:h1.text-4xl.flex.gap-1.items-center.mb-4.pt-2.font-mono
-    (ionic/tabler-icon "file" {:size 30}) "Contents"]
+    (ion/tabler-icon "file" {:size 30}) "Contents"]
    (cc-blocks/page-blocks "Contents")])
 
 (rum/defc keep-keyboard-open
@@ -103,8 +103,8 @@
 
 (rum/defc journals []
   (let [[reload set-reload!] (hooks/use-state 0)]
-    (ionic/ion-content
-     (ionic/ion-refresher
+    (ion/content
+     (ion/refresher
       {:slot "fixed"
        :pull-factor 0.5
        :pull-min 100
@@ -114,7 +114,7 @@
                           (fn [] (.complete (.-detail e))
                             (set-reload! (inc reload)))
                           1000))}
-      (ionic/ion-refresher-content))
+      (ion/refresher-content))
 
      [:div.pt-4.px-4
       [:main#app-container-wrapper.ls-fold-button-on-right
@@ -126,68 +126,68 @@
 (rum/defc home < rum/reactive
   []
   (let [db-restoring? (fstate/sub :db/restoring?)]
-    (ionic/ion-page
+    (ion/page
      {:id "app-main-content"}
-     (ionic/ion-header
-      (ionic/ion-toolbar
-       (ionic/ion-buttons {:slot "start"}
-                          (app-graphs-select))
+     (ion/header
+      (ion/toolbar
+       (ion/buttons {:slot "start"}
+                    (app-graphs-select))
 
-       (ionic/ion-buttons {:slot "end"}
-                          (ionic/ion-button
-                           {:size "small" :fill "clear"
-                            :on-click (fn []
-                                        (let [apply-date! (fn [date]
-                                                            (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. date)))
-                                                                  nav-to-journal! #(cc-utils/nav-to-block! % {:reload-pages! (fn [] ())})]
-                                                              (if-let [journal (handler/local-page page-name)]
-                                                                (nav-to-journal! journal)
-                                                                (-> (handler/<create-page! page-name)
-                                                                    (p/then #(nav-to-journal! (handler/local-page page-name)))))))]
+       (ion/buttons {:slot "end"}
+                    (ion/button
+                     {:size "small" :fill "clear"
+                      :on-click (fn []
+                                  (let [apply-date! (fn [date]
+                                                      (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. date)))
+                                                            nav-to-journal! #(cc-utils/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                        (if-let [journal (handler/local-page page-name)]
+                                                          (nav-to-journal! journal)
+                                                          (-> (handler/<create-page! page-name)
+                                                              (p/then #(nav-to-journal! (handler/local-page page-name)))))))]
 
-                                          (if (mobile-util/native-android?)
-                                            (-> (.showDatePicker mobile-util/ui-local)
-                                                (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
+                                    (if (mobile-util/native-android?)
+                                      (-> (.showDatePicker mobile-util/ui-local)
+                                          (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
 
-                                            (ui/open-modal!
-                                             (fn [{:keys [close!]}]
-                                               (ionic/ion-datetime
-                                                {:presentation "date"
-                                                 :onIonChange (fn [^js e]
-                                                                (let [val (.-value (.-detail e))]
-                                                                  (apply-date! val)
-                                                                  (close!)))}))))))}
-                           [:span {:slot "icon-only"} (ionic/tabler-icon "calendar-month" {:size 24})])
+                                      (ui/open-modal!
+                                       (fn [{:keys [close!]}]
+                                         (ion/datetime
+                                          {:presentation "date"
+                                           :onIonChange (fn [^js e]
+                                                          (let [val (.-value (.-detail e))]
+                                                            (apply-date! val)
+                                                            (close!)))}))))))}
+                     [:span {:slot "icon-only"} (ion/tabler-icon "calendar-month" {:size 24})])
 
-                          (ionic/ion-button {:fill "clear"}
-                                            (ionic/ion-nav-link
-                                             {:routerDirection "forward"
-                                              :class "w-full"
-                                              :component settings/page}
-                                             [:span {:slot "icon-only"} (ionic/tabler-icon "dots" {:size 24})])))))
+                    (ion/button {:fill "clear"}
+                                (ion/nav-link
+                                 {:routerDirection "forward"
+                                  :class "w-full"
+                                  :component settings/page}
+                                 [:span {:slot "icon-only"} (ion/tabler-icon "dots" {:size 24})])))))
 
        ;; main content
      (if db-restoring?
-       (ionic/ion-content
+       (ion/content
         [:strong.flex.justify-center.items-center.py-24
-         (ionic/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
+         (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
        (journals)))))
 
 (rum/defc search
   []
-  (ionic/ion-page
+  (ion/page
    {:id "search-tab"}
-   (ionic/ion-header
-    (ionic/ion-toolbar
+   (ion/header
+    (ion/toolbar
      "Search"))
    [:div.flex.flex-1.p-4 "Search results"]))
 
 (rum/defc settings
   []
-  (ionic/ion-page
+  (ion/page
    {:id "settings-tab"}
-   (ionic/ion-header
-    (ionic/ion-toolbar
+   (ion/header
+    (ion/toolbar
      "Settings"))
    [:div.flex.flex-1.p-4 "TODO..."]))
 
@@ -201,20 +201,20 @@
          (set-nav-root! nav))
        #())
      [(rum/deref nav-ref)])
-    (ionic/ion-tabs
-     (ionic/ion-tab
+    (ion/tabs
+     (ion/tab
       {:tab "home"}
-      (ionic/ion-nav {:ref nav-ref
-                      :root home                            ;;settings/page
-                      :animated true
-                      :swipeGesture true}))
-     (ionic/ion-tab
+      (ion/nav {:ref nav-ref
+                :root home                            ;;settings/page
+                :animated true
+                :swipeGesture true}))
+     (ion/tab
       {:tab "search"}
-      (ionic/ion-content
+      (ion/content
        (search)))
-     (ionic/ion-tab
+     (ion/tab
       {:tab "settings"}
-      (ionic/ion-content
+      (ion/content
        (settings)))
      (bottom-tabs)
 
