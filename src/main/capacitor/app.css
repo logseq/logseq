@@ -1,23 +1,23 @@
-html, body {
-  @apply text-[18px] leading-6 min-h-[unset];
-}
-#root {
-  @apply p-4;
-}
+/* html, body { */
+/*   @apply text-[18px] leading-6 min-h-[unset]; */
+/* } */
+/* #root { */
+/*   @apply p-4; */
+/* } */
 
-@media (platform: android) {
-  ion-content {
-    --ion-safe-area-top: 25px;
-  }
-}
+/* @media (platform: android) { */
+/*   ion-content { */
+/*     --ion-safe-area-top: 25px; */
+/*   } */
+/* } */
 
-html.plt-capacitor.plt-iphone {
-  --ion-safe-area-top: 40px;
+/* html.plt-capacitor.plt-iphone { */
+/*   --ion-safe-area-top: 40px; */
 
-  ion-toolbar {
-    @apply my-1 py-1;
-  }
-}
+/*   ion-toolbar { */
+/*     @apply my-1 py-1; */
+/*   } */
+/* } */
 
 html.plt-capacitor.plt-android {
   --ion-safe-area-top: 40px;

@@ -9,7 +9,8 @@ const config: CapacitorConfig = {
   webDir: 'static/capacitor',
   loggingBehavior: 'debug',
   server: {
-    androidScheme: 'http',
+      url: "https://192.168.10.208:3002",
+      cleartext: true
   },
   plugins: {
     StatusBar: {
