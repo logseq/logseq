@@ -1,7 +1,7 @@
 (ns capacitor.components.blocks
   (:require [capacitor.components.common :as cc-common]
             [capacitor.components.editor :as cc-editor]
-            [capacitor.ionic :as ionic]
+            [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [clojure.string :as string]
             [dommy.core :as dom]
@@ -38,50 +38,50 @@
        #())
      [])
 
-    (ionic/ion-page
-     (ionic/ion-header
-      (ionic/ion-toolbar
-       (ionic/ion-buttons {:slot "end"}
-                          (when (not (nil? (:db/id block)))
-                            (ionic/ion-button {:fill "clear"
-                                               :class "opacity-80 text-red-500"
-                                               :on-click (fn []
-                                                           (-> (editor-handler/delete-block-aux! block)
-                                                               (p/then (fn []
-                                                                         (close!)
-                                                                         (reload-page!)))))}
-                                              (ionic/tabler-icon "trash" {:size 26}))))
-       (ionic/ion-title (or title "Untitled"))))
+    (ion/page
+     (ion/header
+      (ion/toolbar
+       (ion/buttons {:slot "end"}
+                    (when (not (nil? (:db/id block)))
+                      (ion/button {:fill "clear"
+                                   :class "opacity-80 text-red-500"
+                                   :on-click (fn []
+                                               (-> (editor-handler/delete-block-aux! block)
+                                                   (p/then (fn []
+                                                             (close!)
+                                                             (reload-page!)))))}
+                                  (ion/tabler-icon "trash" {:size 26}))))
+       (ion/title (or title "Untitled"))))
 
-     (ionic/ion-content {:class "ion-padding"}
-                        [:div.py-2
-                         (ionic/ion-textarea {:placeholder "block content"
-                                              :ref *input
-                                              :class "bg-gray-100"
-                                              :auto-grow true
-                                              :autofocus true
-                                              :value (:block/title block)})]
-                        [:div.flex.py-2.justify-between
-                         (ionic/ion-button
-                          {:on-click #(close!)
-                           :fill "clear"}
-                          "Cancel")
-                         (ionic/ion-button
-                          {:on-click (fn []
-                                       (let [new? (nil? (:db/id block))
-                                             val (.-value (.querySelector (rum/deref *input) "textarea"))]
-                                         (if-let [page (and new? (:block/page block))]
-                                           (-> (editor-handler/api-insert-new-block! val {:page (:db/id page)
-                                                                                          :sibling? true})
-                                               (p/then (fn []
-                                                         (close!)
-                                                         (reload-page!))))
-                                           (-> (editor-handler/save-block! (fstate/get-current-repo)
-                                                                           (:block/uuid block) val)
-                                               (p/then (fn []
-                                                         (close!)
-                                                         (reload-page!)))))))
-                           :class ""} "Save")]))))
+     (ion/content {:class "ion-padding"}
+                  [:div.py-2
+                   (ion/textarea {:placeholder "block content"
+                                  :ref *input
+                                  :class "bg-gray-100"
+                                  :auto-grow true
+                                  :autofocus true
+                                  :value (:block/title block)})]
+                  [:div.flex.py-2.justify-between
+                   (ion/button
+                    {:on-click #(close!)
+                     :fill "clear"}
+                    "Cancel")
+                   (ion/button
+                    {:on-click (fn []
+                                 (let [new? (nil? (:db/id block))
+                                       val (.-value (.querySelector (rum/deref *input) "textarea"))]
+                                   (if-let [page (and new? (:block/page block))]
+                                     (-> (editor-handler/api-insert-new-block! val {:page (:db/id page)
+                                                                                    :sibling? true})
+                                         (p/then (fn []
+                                                   (close!)
+                                                   (reload-page!))))
+                                     (-> (editor-handler/save-block! (fstate/get-current-repo)
+                                                                     (:block/uuid block) val)
+                                         (p/then (fn []
+                                                   (close!)
+                                                   (reload-page!)))))))
+                     :class ""} "Save")]))))
 
 ;; handlers
 (defn insert-new-block!
@@ -310,34 +310,34 @@
        #())
      [])
 
-    (ionic/ion-page
-     (ionic/ion-header
-      (ionic/ion-toolbar
-       (ionic/ion-buttons {:slot "start"}
-                          (ionic/ion-button {:fill "clear"
-                                             :on-click #(.pop nav)}
-                                            (ionic/tabler-icon "arrow-left" {:size 26})))
+    (ion/page
+     (ion/header
+      (ion/toolbar
+       (ion/buttons {:slot "start"}
+                    (ion/button {:fill "clear"
+                                 :on-click #(.pop nav)}
+                                (ion/tabler-icon "arrow-left" {:size 26})))
 
-       (ionic/ion-buttons {:slot "end"}
-                          (ionic/ion-button {:fill "clear"
-                                             :class "opacity-80"
-                                             :on-click rerender!}
-                                            (ionic/tabler-icon "refresh" {:size 26}))
-                          (ionic/ion-button {:fill "clear"
-                                             :class "opacity-80 text-red-500"
-                                             :on-click (fn []
-                                                         (page-handler/<delete! (:block/uuid block)
-                                                                                (fn []
-                                                                                  (.pop nav)
-                                                                                  (when (fn? reload-pages!)
-                                                                                    (reload-pages!)))
-                                                                                {:error-handler (fn [^js e]
-                                                                                                  (js/console.error e))}))}
-                                            (ionic/tabler-icon "trash" {:size 26})))
+       (ion/buttons {:slot "end"}
+                    (ion/button {:fill "clear"
+                                 :class "opacity-80"
+                                 :on-click rerender!}
+                                (ion/tabler-icon "refresh" {:size 26}))
+                    (ion/button {:fill "clear"
+                                 :class "opacity-80 text-red-500"
+                                 :on-click (fn []
+                                             (page-handler/<delete! (:block/uuid block)
+                                                                    (fn []
+                                                                      (.pop nav)
+                                                                      (when (fn? reload-pages!)
+                                                                        (reload-pages!)))
+                                                                    {:error-handler (fn [^js e]
+                                                                                      (js/console.error e))}))}
+                                (ion/tabler-icon "trash" {:size 26})))
 
-       (ionic/ion-title title)))
+       (ion/title title)))
 
-     (ionic/ion-content {:class "ion-padding"}
-                        (if loading?
-                          [:p.text-xl.text-center "Loading ..."]
-                          (page-blocks-classic page))))))
+     (ion/content {:class "ion-padding"}
+                  (if loading?
+                    [:p.text-xl.text-center "Loading ..."]
+                    (page-blocks-classic page))))))
