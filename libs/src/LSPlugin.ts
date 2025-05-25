@@ -499,10 +499,17 @@ export interface IAppProxy {
   onGraphAfterIndexed: IUserHook<{ repo: string }>
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onThemeChanged: IUserHook<
-    Partial<{ name: string; mode: string; pid: string; url: string }>>
+    Partial<{ name: string; mode: string; pid: string; url: string }>
+  >
   onTodayJournalCreated: IUserHook<{ title: string }>
-  onBeforeCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
-  onAfterCommandInvoked: (condition: ExternalCommandType | string, callback: (e: IHookEvent) => void) => IUserOffHook
+  onBeforeCommandInvoked: (
+    condition: ExternalCommandType | string,
+    callback: (e: IHookEvent) => void
+  ) => IUserOffHook
+  onAfterCommandInvoked: (
+    condition: ExternalCommandType | string,
+    callback: (e: IHookEvent) => void
+  ) => IUserOffHook
 
   /**
    * provide ui slot to specific block with UUID
@@ -890,7 +897,9 @@ export interface IUIProxy {
   queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>
   queryElementById: (id: string) => Promise<string | boolean>
   checkSlotValid: (slot: UISlotIdentity['slot']) => Promise<boolean>
-  resolveThemeCssPropsVals: (props: string | Array<string>) => Promise<Record<string, string | undefined> | null>
+  resolveThemeCssPropsVals: (
+    props: string | Array<string>
+  ) => Promise<Record<string, string | undefined> | null>
 }
 
 /**
