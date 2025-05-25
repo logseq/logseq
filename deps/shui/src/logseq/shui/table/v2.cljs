@@ -334,9 +334,11 @@
                         (get-in opts [:dynamic-widths col-index]))]
     ;; Whenever the cell changes, we need to calculate new bounds for the given content 
     ;; -innerText is used here to strip out formatting, this may turn out to not work for all given block types
-    (rum/use-layout-effect! #(->> (.. cell-ref -current -innerText) 
-                                  (count) 
-                                  (handle-cell-width-change col-index))
+    (rum/use-layout-effect! #(as-> 
+                              (.. cell-ref -current -innerText) $
+                              (str/replace $  #"\\[a-zA-Z]+" "X")
+                              (count $)
+                              (handle-cell-width-change col-index $))
                             [cell])
 
     ;; Whenever the cell becomes focused, we set it's tabIndex. When the tabIndex is set, call focus on the element 
@@ -366,7 +368,8 @@
     [:div.grid.border.rounded {:style {:grid-template-columns grid-template-columns
                                        :gap (when borders? BORDER_WIDTH) 
                                        :width (when table-overflow? total-table-width)}
-                               :class (str (lsx 7) " " (lsx :border 7))
+                               :class [(lsx 7) (lsx :border 7)
+                                       "max-w-full" "overflow-x-auto"]
                                :data-testid "v2-table-container"
                                :on-pointer-leave #(set-cell-hover [])}
      children]))
