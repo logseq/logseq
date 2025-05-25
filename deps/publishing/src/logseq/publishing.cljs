@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.publishing
   "This node only ns provides api fns for exporting a publishing app"
-  (:require [logseq.publishing.html :as publish-html]
-            [logseq.publishing.export :as publish-export]))
+  (:require [logseq.publishing.export :as publish-export]
+            [logseq.publishing.html :as publish-html]))
 
 (defn- default-notification-fn [msg]
   (if (= "error" (:type msg))
@@ -14,8 +14,6 @@ configuration is done through logseq/config.edn. There are a few explicit option
 can be passed:
 * :ui/theme - Theme mode that can either be 'light' or 'dark'.
 * :ui/radix-color - Accent color. See available values in Settings.
-* :html-options - A map of values that are inserted into index.html. Map keys
-  can be icon, name, alias, title, description and url
 * :default-notification-fn - Configure how errors are reported when creating the export.
   Default is to throw an exception when it occurs."
   [db static-dir graph-dir output-dir {:keys [notification-fn dev?]
