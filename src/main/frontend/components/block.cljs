@@ -540,15 +540,17 @@
   (let [[mouse-down? set-mouse-down!] (rum/use-state false) ;; avoid click event after drag
         tag? (:tag? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (model/untitled-page? page-name)]
+        untitled? (model/untitled-page? page-name)
+        file-missing? (not (model/get-page-file page-name))
+        page-alias? (not (= page-name redirect-page-name))]
         ; gradient-styles (state/sub-color-gradient-text-styles :09)]
 
     [:a
      {:tabIndex "0"
       :class (cond-> (if tag? "tag" "page-ref")
-               (:property? config)
-               (str " page-property-key block-property")
-               untitled? (str " opacity-50"))
+               (:property? config) (str " page-property-key block-property")
+               untitled? (str " opacity-50")
+               file-missing? (str (if page-alias? " page-alias" " page-missing")))
       :data-ref page-name
       :draggable true
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
