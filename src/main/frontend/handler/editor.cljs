@@ -1573,7 +1573,8 @@
    "^" "^"
    "=" "="
    "/" "/"
-   "+" "+"})
+   "+" "+"
+   "$" "$"})
 ;; ":" ":"                              ; TODO: only properties editing and org mode tag
 
 (def reversed-autopair-map
@@ -1581,7 +1582,7 @@
           (keys autopair-map)))
 
 (def autopair-when-selected
-  #{"*" "^" "_" "=" "+" "/"})
+  #{"*" "^" "_" "=" "+" "/" "$"})
 
 (def delete-map
   (assoc autopair-map
@@ -2893,6 +2894,26 @@
              (= (get-current-input-char input) key))
         (do (util/stop e)
             (cursor/move-cursor-forward input))
+        
+        (let [sym "$"]
+          (and (= key sym)
+               (>= (count value) 1)
+               (> pos 0)
+               (= (nth value (dec pos)) sym)
+               (if (> (count value) pos)
+                 (not= (nth value pos) sym)
+                 true)))
+        (commands/simple-insert! input-id "$$" {:backward-pos 2})
+
+        (let [sym "^"]
+          (and (= key sym)
+               (>= (count value) 1)
+               (> pos 0)
+               (= (nth value (dec pos)) sym)
+               (if (> (count value) pos)
+                 (not= (nth value pos) sym)
+                 true)))
+        (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
@@ -2923,26 +2944,6 @@
           (if (and (= key "`") (= "`" curr) (not= "`" prev))
             (cursor/move-cursor-forward input)
             (autopair input-id key format nil)))
-
-        (let [sym "$"]
-          (and (= key sym)
-               (>= (count value) 1)
-               (> pos 0)
-               (= (nth value (dec pos)) sym)
-               (if (> (count value) pos)
-                 (not= (nth value pos) sym)
-                 true)))
-        (commands/simple-insert! input-id "$$" {:backward-pos 2})
-
-        (let [sym "^"]
-          (and (= key sym)
-               (>= (count value) 1)
-               (> pos 0)
-               (= (nth value (dec pos)) sym)
-               (if (> (count value) pos)
-                 (not= (nth value pos) sym)
-                 true)))
-        (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
         :else
         nil))))
