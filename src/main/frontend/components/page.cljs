@@ -186,7 +186,7 @@
       :tab-index 0}
      [:div.flex.flex-row
       [:div.flex.items-center {:style {:height 28
-                                       :margin-left 22}}
+                                       :margin-left (if (util/mobile?) 0 22)}}
        [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
         [:span.bullet]]]]]))
 
@@ -478,7 +478,7 @@
                          (state/get-current-repo)
                          (:db/id page)
                          :page)
-                        (util/capacitor-new?)
+                        (util/mobile?)
                         (route-handler/redirect-to-page! (:block/uuid page))
                         :else
                         nil))))}
@@ -487,7 +487,7 @@
       (component-block/block-container
        {:page-title? true
         :page-title-actions-cp (when (and with-actions?
-                                          (not (util/capacitor-new?))
+                                          (not (util/mobile?))
                                           (not= (:db/id (state/get-edit-block)) (:db/id page)))
                                  db-page-title-actions)
         :hide-title? sidebar?
@@ -703,7 +703,7 @@
 
             (when (or (not show-tabs?) tabs-rendered?)
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}}
+               {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
