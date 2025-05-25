@@ -253,16 +253,21 @@
         (b/indent))
       (w/with-page @*page2
         (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
-        (b/delete-blocks)
-        )
+        (b/delete-blocks))
       (w/with-page @*page1 (rtc/rtc-start))
       (w/with-page @*page2 (rtc/rtc-start))
-      ;; (validate-2-graphs)
-      ;; TODO: validate block contents which are not equal now(some BUG here)
-      )
-    ))
+      (w/with-page @*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx")))
+      (w/with-page @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy")))
+      (validate-2-graphs)
+      )))
 
 (comment
+  (do (w/with-page @*page1 (rtc/rtc-stop))
+      (w/with-page @*page2 (rtc/rtc-stop)))
+
+  (do (w/with-page @*page1 (rtc/rtc-start))
+      (w/with-page @*page2 (rtc/rtc-start)))
+
   (let [title-prefix "xxxx"
         property-type "Text"]
     (w/with-page @*page1

@@ -20,6 +20,8 @@
      ~@body
      (loop [i# 5]
        (when (zero? i#) (throw (ex-info "wait-tx-updated failed" {:old m# :new (get-rtc-tx)})))
+       (util/wait-timeout 500)
+       (w/wait-for "button.cloud.on.idle")
        (util/wait-timeout 1000)
        (let [new-m# (get-rtc-tx)
              new-local-tx# (or (:local-tx new-m#) 0)
