@@ -8,6 +8,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
@@ -185,17 +186,16 @@
                           (when (and (true? (get property :logseq.property/enable-history?))
                                      (:added d))
                             {:property property
-                             :value (:v d)}))) datoms)
-        created-at (tc/to-long (t/now))]
+                             :value (:v d)}))) datoms)]
     (map
      (fn [{:keys [property value]}]
        (let [ref? (= :db.type/ref (:db/valueType property))
              value-key (if ref? :logseq.property.history/ref-value :logseq.property.history/scalar-value)]
-         {:block/uuid (ldb/new-block-id)
-          value-key value
-          :logseq.property.history/block (:db/id entity)
-          :logseq.property.history/property (:db/id property)
-          :block/created-at created-at}))
+         (sqlite-util/block-with-timestamps
+          {:block/uuid (ldb/new-block-id)
+           value-key value
+           :logseq.property.history/block (:db/id entity)
+           :logseq.property.history/property (:db/id property)})))
      changes)))
 
 (defmethod handle-command :default [command _db entity datoms]
