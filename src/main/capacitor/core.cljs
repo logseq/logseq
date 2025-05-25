@@ -1,10 +1,9 @@
 (ns capacitor.core
   (:require ["react-dom/client" :as rdc]
-            [capacitor.app :as app]
-            [capacitor.components.nav-utils :as cc-utils]
+            [capacitor.components.app :as app]
+            [capacitor.nav :as nav]
             [frontend.components.page :as page]
             [frontend.components.user.login :as login]
-            ;[capacitor.bootstrap :as bootstrap]
             [frontend.handler :as fhandler]
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
@@ -40,7 +39,7 @@
        (let [id-str (get-in route [:path-params :name])]
          (when (util/uuid-string? id-str)
            (let [page-uuid (uuid id-str)]
-             (cc-utils/nav-to-block! {:block/uuid page-uuid} nil))))
+             (nav/nav-to-block! {:block/uuid page-uuid} nil))))
        :user-login
        nil
        nil))
@@ -53,7 +52,6 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[capacitor-new] init!")
-  ;(bootstrap/start! render!)
   (set-router!)
   (fhandler/start! render!))
 

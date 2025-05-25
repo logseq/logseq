@@ -1,20 +1,15 @@
-(ns capacitor.app
-  (:require ["./externals.js"]
+(ns capacitor.components.app
+  (:require ["../externals.js"]
             ["@capacitor/app" :refer [App]]
-            ["@capacitor/status-bar" :refer [StatusBar Style]]
-            [capacitor.components.blocks :as cc-blocks]
-            [capacitor.components.nav-utils :as cc-utils]
+            [capacitor.nav :as nav]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui]
-            [capacitor.handler :as handler]
             [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
-            [frontend.date :as frontend-date]
-            [frontend.db-mixins :as db-mixins]
+            [frontend.date :as date]
             [frontend.db.conn :as db-conn]
-            [frontend.db.utils :as db-util]
             [frontend.handler.repo :as repo-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
@@ -25,7 +20,9 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db :as db]
+            [frontend.handler.page :as page-handler]))
 
 (rum/defc app-graphs-select
   []
@@ -75,27 +72,6 @@
     {:tab "settings"}
     (ion/tabler-icon "settings" {:size 22}) "Settings")))
 
-(rum/defc journals-list < rum/reactive db-mixins/query
-  []
-  (let [journals (handler/sub-journals)]
-    [:ul.app-journals-list
-     (for [journal-id journals]
-       (let [journal (db-util/entity journal-id)]
-         [:li.flex.py-1.flex-col.w-full
-          [:h1.font-semibold.opacity-90.active:opacity-50
-           {:on-click #(cc-utils/nav-to-block! journal {:reload-pages! (fn [] ())})}
-           (:block/title journal)]
-          ;; blocks editor
-          (cc-blocks/page-blocks journal)]))]))
-
-(rum/defc contents-playground < rum/reactive db-mixins/query
-  []
-
-  [:div.py-4
-   [:h1.text-4xl.flex.gap-1.items-center.mb-4.pt-2.font-mono
-    (ion/tabler-icon "file" {:size 30}) "Contents"]
-   (cc-blocks/page-blocks "Contents")])
-
 (rum/defc keep-keyboard-open
   []
   [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
@@ -135,15 +111,16 @@
 
        (ion/buttons {:slot "end"}
                     (ion/button
-                     {:size "small" :fill "clear"
+                     {:size "small"
+                      :fill "clear"
                       :on-click (fn []
                                   (let [apply-date! (fn [date]
-                                                      (let [page-name (frontend-date/journal-name (gdate/Date. (js/Date. date)))
-                                                            nav-to-journal! #(cc-utils/nav-to-block! % {:reload-pages! (fn [] ())})]
-                                                        (if-let [journal (handler/local-page page-name)]
+                                                      (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))
+                                                            nav-to-journal! #(nav/nav-to-block! % {:reload-pages! (fn [] ())})]
+                                                        (if-let [journal (db/get-page page-name)]
                                                           (nav-to-journal! journal)
-                                                          (-> (handler/<create-page! page-name)
-                                                              (p/then #(nav-to-journal! (handler/local-page page-name)))))))]
+                                                          (-> (page-handler/<create! page-name {:redirect? false})
+                                                              (p/then #(nav-to-journal! (db/get-page page-name)))))))]
 
                                     (if (mobile-util/native-android?)
                                       (-> (.showDatePicker mobile-util/ui-local)
@@ -157,14 +134,15 @@
                                                           (let [val (.-value (.-detail e))]
                                                             (apply-date! val)
                                                             (close!)))}))))))}
-                     [:span {:slot "icon-only"} (ion/tabler-icon "calendar-month" {:size 24})])
+                     [:span.text-muted-foreground {:slot "icon-only"}
+                      (ion/tabler-icon "calendar-month" {:size 24})])
 
                     (ion/button {:fill "clear"}
                                 (ion/nav-link
                                  {:routerDirection "forward"
                                   :class "w-full"
                                   :component settings/page}
-                                 [:span {:slot "icon-only"} (ion/tabler-icon "dots" {:size 24})])))))
+                                 [:span.text-muted-foreground {:slot "icon-only"} (ion/tabler-icon "dots" {:size 24})])))))
 
        ;; main content
      (if db-restoring?
@@ -229,11 +207,10 @@
 (rum/defc main []
   (let [current-repo (frum/use-atom-in fstate/state :git/current-repo)]
     ;; global
+    ;; why need this
     (hooks/use-effect!
      (fn []
-       (some-> js/window.externalsjs (.settleStatusBar))
-       (some-> js/window.externalsjs
-               (.initGlobalListeners #js {:onKeyboardHide (fn [] (state/exit-editing!))})))
+       (some-> js/window.externalsjs (.settleStatusBar)))
      [current-repo])
 
     ;; navigation
@@ -241,19 +218,18 @@
      (fn []
        (let [handle-back!
              (fn []
+               (fstate/clear-edit!)
+               (fstate/clear-selection!)
                (cond
-                 (not (nil? (state/get-editing-block)))
-                 (state/exit-editing!)
-
                  (seq (ui/get-modal))
                  nil
 
                  :else
-                 (-> (cc-utils/nav-length?)
+                 (-> (nav/nav-length?)
                      (p/then (fn [len]
                                (if (= len 1)
                                  (.exitApp App)
-                                 (cc-utils/nav-pop!)))))))
+                                 (nav/nav-pop!)))))))
              ^js back-listener (.addListener App "backButton" handle-back!)]
          #(.remove back-listener)))
      [])
