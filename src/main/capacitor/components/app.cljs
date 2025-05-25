@@ -1,15 +1,17 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
             ["@capacitor/app" :refer [App]]
-            [capacitor.nav :as nav]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui]
             [capacitor.ionic :as ion]
+            [capacitor.nav :as nav]
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.conn :as db-conn]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
@@ -20,9 +22,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.db :as db]
-            [frontend.handler.page :as page-handler]))
+            [rum.core :as rum]))
 
 (rum/defc app-graphs-select
   []
@@ -92,11 +92,11 @@
                           1000))}
       (ion/refresher-content))
 
-     [:div.pt-4.px-4
+     [:div.pt-4
       [:main#app-container-wrapper.ls-fold-button-on-right
        [:div#app-container
         [:div#main-container.flex.flex-1
-         [:div#main-content-container.w-full
+         [:div#main-content-container.w-full.!px-0
           (journal/all-journals)]]]]])))
 
 (rum/defc home < rum/reactive

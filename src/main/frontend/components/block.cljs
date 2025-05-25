@@ -3627,7 +3627,10 @@
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
-                  {:margin-left (if page-icon -36 -30)})
+                  {:margin-left (cond
+                                  (util/mobile?) 0
+                                  page-icon -36
+                                  :else -30)})
          :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
          :on-mouse-enter (fn [e]
                            (block-mouse-over e block *control-show? block-id doc-mode?))
