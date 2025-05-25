@@ -7,7 +7,6 @@
    [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
-   [logseq.e2e.keyboard :as k]
    [logseq.e2e.locator :as loc]
    [logseq.e2e.outliner-basic-test :as outliner-basic-test]
    [logseq.e2e.page :as page]
@@ -258,8 +257,7 @@
       (w/with-page @*page2 (rtc/rtc-start))
       (w/with-page @*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx")))
       (w/with-page @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy")))
-      (validate-2-graphs)
-      )))
+      (validate-2-graphs))))
 
 (comment
   (do (w/with-page @*page1 (rtc/rtc-stop))
