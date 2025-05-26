@@ -35,11 +35,11 @@
   [command-handler {:keys [icon class]} & [event?]]
   [:div
    [:button.bottom-action
-    {:on-pointer-down (fn [e]
-                      (util/stop e)
+    {:on-mouse-down (fn [e]
                       (if event?
                         (command-handler e)
-                        (command-handler)))}
+                        (command-handler))
+                      (util/stop e))}
     (ui/icon icon {:size ui/icon-size :class class})]])
 
 (rum/defc timestamp-submenu
@@ -55,12 +55,6 @@
                                         (callback e))}
                       description])]
     [:div
-     [:button.bottom-action
-      {:on-pointer-down (fn [event]
-                        (util/stop event)
-                        (let [target (gdom/getElement "mobile-toolbar-timestamp-submenu")]
-                          (dom/add-class! target "show-submenu")))}
-      (ui/icon "calendar" {:size ui/icon-size})]
      [:div#mobile-toolbar-timestamp-submenu.submenu
       {:style {:bottom @util/keyboard-height}}
       (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]

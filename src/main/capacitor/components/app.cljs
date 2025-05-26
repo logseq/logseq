@@ -217,18 +217,20 @@
      (fn []
        (let [handle-back!
              (fn []
-               (fstate/clear-edit!)
-               (fstate/clear-selection!)
                (cond
                  (seq (ui/get-modal))
                  (ui/close-modal!)
 
+                 (seq (fstate/get-selection-blocks))
+                 (fstate/clear-selection!)
+
                  :else
                  (-> (nav/nav-length?)
-                     (p/then (fn [len]
-                               (if (= len 1)
-                                 (.exitApp App)
-                                 (nav/nav-pop!)))))))
+                   (p/then (fn [len]
+                             (if (= len 1)
+                               (.exitApp App)
+                               (nav/nav-pop!))))))
+               (fstate/clear-edit!))
              ^js back-listener (.addListener App "backButton" handle-back!)]
          #(.remove back-listener)))
      [])

@@ -2,7 +2,6 @@
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
-            [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.intent :as intent]
@@ -33,35 +32,6 @@
 (defn- android-init
   "Initialize Android-specified event listeners"
   []
-  ;; patch back navigation
-  (.addListener App "backButton"
-                #(let [href js/window.location.href]
-                   (when (true? (cond
-                                  (state/settings-open?)
-                                  (state/close-settings!)
-
-                                  (state/modal-opened?)
-                                  (state/close-modal!)
-
-                                  (state/get-left-sidebar-open?)
-                                  (state/set-left-sidebar-open! false)
-
-                                  (state/action-bar-open?)
-                                  (state/set-state! :mobile/show-action-bar? false)
-
-                                  (not-empty (state/get-selection-blocks))
-                                  (editor-handler/clear-selection!)
-
-                                  (state/editing?)
-                                  (editor-handler/escape-editing)
-
-                                  :else true))
-                     (if (or (string/ends-with? href "#/")
-                             (string/ends-with? href "/")
-                             (not (string/includes? href "#/")))
-                       (.exitApp App)
-                       (js/window.history.back)))))
-
   (.addEventListener js/window "sendIntentReceived"
                      #(intent/handle-received)))
 
