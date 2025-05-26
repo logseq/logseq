@@ -6,6 +6,7 @@
             [frontend.components.user.login :as login]
             [frontend.handler :as fhandler]
             [frontend.handler.route :as route-handler]
+            [frontend.mobile.core :as mobile]
             [frontend.util :as util]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
@@ -53,6 +54,7 @@
   ;; so it is available even in :advanced release builds
   (prn "[capacitor-new] init!")
   (set-router!)
+  (mobile/init!)
   (fhandler/start! render!))
 
 (defn ^:export stop! []
