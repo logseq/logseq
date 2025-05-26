@@ -57,9 +57,9 @@
                                                            (repo-handler/new-db! db-name)))
                                                        (when (string/starts-with? role "logseq_db_")
                                                          (fstate/pub-event! [:graph/switch role])))))})))}
-       [:span.flex.items-center.gap-2.opacity-95
-        (ion/tabler-icon "database" {:size 20})
-        [:strong.overflow-hidden.text-ellipsis.block.font-bold
+       [:span.flex.items-center.gap-2.opacity-95.pt-1
+        (ion/tabler-icon "database" {:size 22})
+        [:strong.overflow-hidden.text-ellipsis.block.font-semibold
          {:style {:max-width "40vw"}}
          short-repo-name]])]))
 
