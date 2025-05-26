@@ -85,8 +85,8 @@ jobs:
 
       - name: Run e2e tests
         run: cd clj-e2e && timeout 30m bb run-rtc-extra-test
-        env:
-          DEBUG: "pw:api"
+        # env:
+        # DEBUG: "pw:api"
 
       - name: Collect screenshots
         if: ${{ failure() }}

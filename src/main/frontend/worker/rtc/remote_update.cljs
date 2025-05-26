@@ -523,7 +523,8 @@ so need to pull earlier remote-data from websocket."})
     (let [r (check-block-pos @conn self parents block-order)]
       (case r
         :not-exist
-        (insert-or-move-block repo conn self parents block-order false op-value)
+        (do (insert-or-move-block repo conn self parents block-order false op-value)
+            (update-block-attrs repo conn self op-value))
         :wrong-pos
         (insert-or-move-block repo conn self parents block-order true op-value)
         ;; else

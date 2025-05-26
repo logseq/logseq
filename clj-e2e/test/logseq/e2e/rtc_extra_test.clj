@@ -7,7 +7,6 @@
    [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
-   [logseq.e2e.keyboard :as k]
    [logseq.e2e.locator :as loc]
    [logseq.e2e.outliner-basic-test :as outliner-basic-test]
    [logseq.e2e.page :as page]
@@ -186,9 +185,7 @@
                   (rtc/with-wait-tx-updated
                     (property-basic-test/add-new-properties title-prefix))]
               (reset! *latest-remote-tx remote-tx))))]
-    (testing "page1: rtc-stop
-page2: create some user properties with different type
-page1: rtc-start"
+    (testing "add different types user properties on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
         (with-stop-restart-rtc @*page1 #(insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-1"))
         (w/with-page @*page1
@@ -233,7 +230,42 @@ page1: rtc-start"
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))))
 
+(deftest rtc-outliner-conflict-update-test
+  (let [title-prefix "rtc-outliner-conflict-update-test"]
+    (testing "add some blocks, ensure them synced"
+      (let [*latest-remote-tx (atom nil)]
+        (w/with-page @*page1
+          (let [{:keys [_local-tx remote-tx]}
+                (rtc/with-wait-tx-updated
+                  (b/new-blocks (map #(str title-prefix "-" %) (range 10))))]
+            (reset! *latest-remote-tx remote-tx)))
+        (w/with-page @*page2
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-2-graphs)))
+    (testing "disconnect on page1 and page2, do some conflict updates, reconnect and check"
+      (w/with-page @*page1 (rtc/rtc-stop))
+      (w/with-page @*page2 (rtc/rtc-stop))
+
+      ;; TODO: more updates
+      (w/with-page @*page1
+        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
+        (b/indent))
+      (w/with-page @*page2
+        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
+        (b/delete-blocks))
+      (w/with-page @*page1 (rtc/rtc-start))
+      (w/with-page @*page2 (rtc/rtc-start))
+      (w/with-page @*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx")))
+      (w/with-page @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy")))
+      (validate-2-graphs))))
+
 (comment
+  (do (w/with-page @*page1 (rtc/rtc-stop))
+      (w/with-page @*page2 (rtc/rtc-stop)))
+
+  (do (w/with-page @*page1 (rtc/rtc-start))
+      (w/with-page @*page2 (rtc/rtc-start)))
+
   (let [title-prefix "xxxx"
         property-type "Text"]
     (w/with-page @*page1
