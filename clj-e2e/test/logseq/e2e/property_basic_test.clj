@@ -24,6 +24,7 @@
       (w/click (util/get-by-text (str title-prefix "-" property-type) true))
       (k/press "Control+e")
       (util/input-command "Add new property")
+      (w/click "input[placeholder]")
       (util/input property-name)
       (w/click (util/get-by-text "New option:" false))
       (assert/assert-is-visible (w/get-by-text "Select a property type"))
