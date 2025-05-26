@@ -4,7 +4,7 @@ on:
   # Path filters ensure jobs only kick off if a change is made to graph-parser or
   # its local dependencies
   push:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'deps/graph-parser/**'
       # db is a local dep that could break functionality in this lib and should trigger this
