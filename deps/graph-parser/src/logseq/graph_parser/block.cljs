@@ -698,23 +698,16 @@
                                                    (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                                (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page?
-  "For sanity check only.
-   For renaming file externally, the file is actually deleted and transacted before-hand."
-  [db block-uuid current-page-name]
-  (when (and db current-page-name)
-    (when-let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid])))]
-      (not= current-page-name block-page-name))))
-
 (defn fix-block-id-if-duplicated!
-  "If the block exists in another page, we need to fix it
-   If the block exists in the current extraction process, we also need to fix it"
-  [db page-name *block-exists-in-extraction block]
-  (let [block (if (or (@*block-exists-in-extraction (:block/uuid block))
-                      (block-exists-in-another-page? db (:block/uuid block) page-name))
+  "If the block exists in another page or the current page, we need to fix it"
+  [db page-name *extracted-block-ids block]
+  (let [existing-block (d/entity db [:block/uuid (:block/uuid block)])
+        block (if (and existing-block
+                       (or (not= (:block/name (:block/page existing-block)) page-name)
+                           (contains? @*extracted-block-ids (:block/uuid block))))
                 (fix-duplicate-id block)
                 block)]
-    (swap! *block-exists-in-extraction conj (:block/uuid block))
+    (swap! *extracted-block-ids conj (:block/uuid block))
     block))
 
 (defn extract-blocks
