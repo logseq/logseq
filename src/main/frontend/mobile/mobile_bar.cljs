@@ -87,12 +87,12 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (state/editing?)
-             (or (state/sub :mobile/show-toolbar?)
-                 (mobile-util/native-ipad?)))
+  (when (and (or (state/sub :mobile/show-toolbar?)
+               (mobile-util/native-ipad?))
+          (state/editing?))
     (let [parent-id (state/get-edit-input-id)
           commands' (commands parent-id)]
-      [:div#mobile-editor-toolbar.bg-base-2
+      [:div#mobile-editor-toolbar
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
         (indent-outdent true "indent-increase")
@@ -107,7 +107,7 @@
         (command #(do
                     (blur-if-compositing)
                     (editor-handler/cycle-todo!))
-                 {:icon "checkbox"} true)
+          {:icon "checkbox"} true)
         (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
         (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)

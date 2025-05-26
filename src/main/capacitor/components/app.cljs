@@ -14,6 +14,7 @@
             [frontend.db.conn :as db-conn]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
+            [frontend.mobile.mobile-bar :as mobile-bar ]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as fstate]
@@ -232,4 +233,6 @@
          #(.remove back-listener)))
      [])
 
-    (tabs)))
+    [:<>
+     (tabs)
+     (mobile-bar/mobile-bar)]))
