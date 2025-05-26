@@ -19,6 +19,7 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
+            [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.rtc.asset-db-listener]
@@ -794,6 +795,12 @@
 (def-thread-api :thread-api/fix-broken-graph
   [graph]
   (fix-broken-graph graph))
+
+(def-thread-api :thread-api/reset-file
+  [repo file-path content opts]
+  ;; (prn :debug :reset-file :file-path file-path :opts opts)
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (file-reset/reset-file! repo conn file-path content opts)))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
