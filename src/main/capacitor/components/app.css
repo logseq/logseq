@@ -10,11 +10,13 @@ html.plt-capacitor.plt-android {
     margin-top: 0;
   }
 
-  ion-nav {
-    .header-md {
-      box-shadow: 0 2px 8px #eee;
-      border-bottom: .5px solid rgba(0, 0, 0, .15);
-    }
+  .header-md {
+    box-shadow: 0 2px 8px #eee;
+    border-bottom: .5px solid rgba(0, 0, 0, .15);
+  }
+
+  .searchbar-input.sc-ion-searchbar-md {
+    @apply shadow-none;
   }
 }
 
@@ -44,6 +46,10 @@ ion-buttons {
       @apply whitespace-nowrap overflow-hidden font-semibold active:opacity-80 pr-8;
     }
   }
+}
+
+.app-login-modal {
+  @apply mx-8 p-0;
 }
 
 .ui__notifications {
