@@ -598,19 +598,22 @@
         hide-with-property-id (fn [property-id]
                                 (let [property (db/entity property-id)]
                                   (boolean
-                                   (when-not (or sidebar-properties? page-title?)
-                                     (cond
-                                       show-empty-and-hidden-properties?
-                                       false
-                                       root-block?
-                                       false
-                                       (and (:logseq.property/hide-empty-value property)
-                                            (nil? (get properties property-id)))
-                                       true
-                                       state-hide-empty-properties?
-                                       (nil? (get block property-id))
-                                       :else
-                                       (boolean (:logseq.property/hide? property)))))))
+                                   (cond
+                                     show-empty-and-hidden-properties?
+                                     false
+                                     state-hide-empty-properties?
+                                     (nil? (get block property-id))
+                                     :else
+                                     ;; For sidebar and page properties, ignore these checks
+                                     (when-not (or sidebar-properties? page-title?)
+                                       (cond
+                                         root-block?
+                                         false
+                                         (and (:logseq.property/hide-empty-value property)
+                                              (nil? (get properties property-id)))
+                                         true
+                                         :else
+                                         (boolean (:logseq.property/hide? property))))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
