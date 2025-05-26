@@ -7,7 +7,6 @@
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.handler.file-based.file :as file-handler]
-            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -38,7 +37,7 @@
         (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir pages-dir))
                 file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
           (when-not file-exists?
-            (reset-file-handler/reset-file! repo-url file-rpath default-content)))))))
+            (file-handler/reset-file! repo-url file-rpath default-content {})))))))
 
 (defn- create-custom-theme
   [repo-url]
@@ -50,7 +49,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath default-content)]
       (when-not file-exists?
-        (reset-file-handler/reset-file! repo-url path default-content)))))
+        (file-handler/reset-file! repo-url path default-content {})))))
 
 (comment
   (defn- create-dummy-notes-page
@@ -60,7 +59,7 @@
           file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
       (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
               _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
-        (reset-file-handler/reset-file! repo-url file-rpath content)))))
+        (file-handler/reset-file! repo-url file-rpath content {})))))
 
 (defn create-config-file-if-not-exists
   "Creates a default logseq/config.edn if it doesn't exist"
@@ -74,7 +73,7 @@
             path (str app-dir "/" config/config-file)]
         (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir "logseq/config.edn" default-content)]
           (when-not file-exists?
-            (reset-file-handler/reset-file! repo-url path default-content)
+            (file-handler/reset-file! repo-url path default-content {})
             (repo-config-handler/set-repo-config-state! repo-url default-content)))))))
 
 (defn- create-default-files!
@@ -89,36 +88,30 @@
            (create-custom-theme repo-url)
            (state/pub-event! [:page/create-today-journal repo-url]))))
 
-(defonce *file-tx (atom nil))
-
 (defn- parse-and-load-file!
   "Accept: .md, .org, .edn, .css"
-  [repo-url file {:keys [new-graph? verbose skip-db-transact? extracted-block-ids]
-                  :or {skip-db-transact? true}}]
-  (try
-    (reset! *file-tx
-            (file-handler/alter-file repo-url
-                                     (:file/path file)
-                                     (:file/content file)
-                                     (merge (:stat file)
-                                            {:new-graph? new-graph?
-                                             :re-render-root? false
-                                             :from-disk? true
-                                             :skip-db-transact? skip-db-transact?}
-                                            ;; To avoid skipping the `:or` bounds for keyword destructuring
-                                            (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
-                                            (when (some? verbose) {:verbose verbose}))))
-    (state/set-parsing-state! (fn [m]
-                                (update m :finished inc)))
-    @*file-tx
-    (catch :default e
-      (println "Parse and load file failed: " (str (:file/path file)))
-      (js/console.error e)
-      (state/set-parsing-state! (fn [m]
-                                  (update m :failed-parsing-files conj [(:file/path file) e])))
-      (state/set-parsing-state! (fn [m]
-                                  (update m :finished inc)))
-      nil)))
+  [repo-url file {:keys [new-graph? verbose]}]
+  (->
+   (p/let [result (file-handler/alter-file repo-url
+                                           (:file/path file)
+                                           (:file/content file)
+                                           (merge (:stat file)
+                                                  {:new-graph? new-graph?
+                                                   :re-render-root? false
+                                                   :from-disk? true}
+                                                  ;; To avoid skipping the `:or` bounds for keyword destructuring
+                                                  (when (some? verbose) {:verbose verbose})))]
+     (state/set-parsing-state! (fn [m]
+                                 (update m :finished inc)))
+     result)
+   (p/catch (fn [e]
+              (println "Parse and load file failed: " (str (:file/path file)))
+              (js/console.error e)
+              (state/set-parsing-state! (fn [m]
+                                          (update m :failed-parsing-files conj [(:file/path file) e])))
+              (state/set-parsing-state! (fn [m]
+                                          (update m :finished inc)))
+              nil))))
 
 (defn- after-parse
   [repo-url re-render? re-render-opts opts graph-added-chan]
@@ -145,8 +138,7 @@
         total (count supported-files)
         large-graph? (> total 1000)
         *page-names (atom #{})
-        *page-name->path (atom {})
-        *extracted-block-ids (atom #{})]
+        *page-name->path (atom {})]
     (when (seq delete-data) (db/transact! repo-url delete-data {:delete-files? true}))
     (state/set-current-repo! repo-url)
     (state/set-parsing-state! {:total (count supported-files)})
@@ -157,11 +149,9 @@
           (state/set-parsing-state! (fn [m]
                                       (assoc m
                                              :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file (assoc
-                                               (select-keys opts [:new-graph? :verbose])
-                                               :skip-db-transact? false)))
+          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
         (after-parse repo-url re-render? re-render-opts opts graph-added-chan))
-      (async/go-loop [tx []]
+      (async/go-loop []
         (if-let [item (async/<! chan)]
           (let [[idx file] item
                 whiteboard? (common-config/whiteboard? (:file/path file))
@@ -174,13 +164,9 @@
 
             (when yield-for-ui? (async/<! (async/timeout 1)))
 
-            (let [opts' (-> (select-keys opts [:new-graph? :verbose])
-                            (assoc :extracted-block-ids *extracted-block-ids))
+            (let [opts' (select-keys opts [:new-graph? :verbose])
                   ;; whiteboards might have conflicting block IDs so that db transaction could be failed
-                  opts' (if whiteboard?
-                          (assoc opts' :skip-db-transact? false)
-                          opts')
-                  result (parse-and-load-file! repo-url file opts')
+                  result (async/<! (p->c (parse-and-load-file! repo-url file opts')))
                   page-name (when (coll? result) ; result could be a promise
                               (some (fn [x] (when (and (map? x)
                                                        (:block/title x)
@@ -188,29 +174,19 @@
                                               (:block/name x)))
                                     result))
                   page-exists? (and page-name (get @*page-names page-name))
-                  tx' (cond
-                        whiteboard? tx
-                        page-exists? (do
-                                       (state/pub-event! [:notification/show
-                                                          {:content [:div
-                                                                     (util/format "The file \"%s\" will be skipped because another file \"%s\" has the same page title."
-                                                                                  (:file/path file)
-                                                                                  (get @*page-name->path page-name))]
-                                                           :status :warning
-                                                           :clear? false}])
-                                       tx)
-                        :else (concat tx result))
+                  _ (when page-exists?
+                      (state/pub-event! [:notification/show
+                                         {:content [:div
+                                                    (util/format "The file \"%s\" will be skipped because another file \"%s\" has the same page title."
+                                                                 (:file/path file)
+                                                                 (get @*page-name->path page-name))]
+                                          :status :warning
+                                          :clear? false}]))
                   _ (when (and page-name (not page-exists?))
                       (swap! *page-names conj page-name)
-                      (swap! *page-name->path assoc page-name (:file/path file)))
-                  tx' (if (zero? (rem (inc idx) 100))
-                        (do
-                          (async/<! (p->c (db/transact! repo-url tx' {:from-disk? true})))
-                          [])
-                        tx')]
-              (recur tx')))
+                      (swap! *page-name->path assoc page-name (:file/path file)))]
+              (recur)))
           (p/do!
-           (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
            (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
     graph-added-chan))
 
