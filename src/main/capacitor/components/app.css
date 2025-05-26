@@ -5,22 +5,9 @@
 /*   @apply p-4; */
 /* } */
 
-/* @media (platform: android) { */
-/*   ion-content { */
-/*     --ion-safe-area-top: 25px; */
-/*   } */
-/* } */
-
-/* html.plt-capacitor.plt-iphone { */
-/*   --ion-safe-area-top: 40px; */
-
-/*   ion-toolbar { */
-/*     @apply my-1 py-1; */
-/*   } */
-/* } */
-
 html.plt-capacitor.plt-android {
   --ion-safe-area-top: 40px;
+  --ion-safe-area-bottom: 16px;
 
   ion-button, ion-tab-button {
     --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
