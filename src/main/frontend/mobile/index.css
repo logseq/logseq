@@ -38,7 +38,7 @@
 }
 
 #mobile-editor-toolbar {
-  @apply fixed bottom-0 left-0 w-full z-[9999] flex justify-between bg-gray-100 border-t border-gray-200;
+  @apply fixed -bottom-1 left-0 w-full z-[9999] flex justify-between bg-gray-100 border-t border-gray-200;
 
   transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
 
