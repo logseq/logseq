@@ -34,9 +34,10 @@
           (when-let [block (db/entity [:block/uuid block-id])]
             (let [format (get block :block/format :markdown)
                   content (:block/title block)
-                  properties (:block/properties block)
+                  ;; FIXME: Remove not-empty if :block/properties stops returning '()
+                  properties* (not-empty (:block/properties block))
                   properties-text-values (:block/properties-text-values block)
-                  properties (-> (merge properties new-properties)
+                  properties (-> (merge properties* new-properties)
                                  common-util/remove-nils-non-nested)
                   properties-text-values (-> (merge properties-text-values new-properties)
                                              common-util/remove-nils-non-nested)
