@@ -32,7 +32,7 @@
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
-    [:<>
+    [:.app-graph-select
      (ion/button
       {:fill "clear"
        :mode "ios"
@@ -42,7 +42,7 @@
                                   (for [repo graphs]
                                     {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
                                      :role (:url repo)})
-                                  [{:text "Add new graph"
+                                  [{:text "+ Add new graph"
                                     :role "add-new-graph"}])]
                      (ui/open-modal! "Switch graph"
                                      {:type :action-sheet
@@ -56,7 +56,11 @@
                                                            (repo-handler/new-db! db-name)))
                                                        (when (string/starts-with? role "logseq_db_")
                                                          (fstate/pub-event! [:graph/switch role])))))})))}
-      short-repo-name)]))
+       [:span.flex.items-center.gap-2.opacity-95
+        (ion/tabler-icon "database" {:size 20})
+        [:strong.overflow-hidden.text-ellipsis.block.font-bold
+         {:style {:max-width "40vw"}}
+         short-repo-name]])]))
 
 (rum/defc bottom-tabs
   []
