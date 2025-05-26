@@ -6,7 +6,7 @@
 /* } */
 
 html.plt-capacitor.plt-android {
-  --ion-safe-area-top: 40px;
+  --ion-safe-area-top: 42px;
   --ion-safe-area-bottom: 16px;
 
   ion-button, ion-tab-button {
@@ -39,6 +39,20 @@ ion-textarea {
   }
 }
 
+ion-buttons {
+  &:has(.app-graph-select) {
+    @apply max-w-[60%] overflow-hidden;
+  }
+}
+
+.app-graph-select {
+  ion-button {
+    &::part(native) {
+      @apply whitespace-nowrap overflow-hidden font-semibold active:opacity-80 pr-8;
+    }
+  }
+}
+
 .ui__notifications {
   @apply fixed top-8 pointer-events-none w-full;
 
@@ -68,6 +82,6 @@ ion-textarea {
 }
 
 :root {
-    --ls-page-title-size: 26px;
-    --ion-color-primary: #000000;
+  --ls-page-title-size: 26px;
+  --ion-color-primary: #000000;
 }
