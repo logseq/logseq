@@ -7,7 +7,6 @@
             [frontend.db.file-based.model :as file-model]
             [frontend.fs :as fs]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
-            [frontend.handler.file-based.reset-file :as reset-file-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
@@ -32,6 +31,10 @@
     (fn [e]
       (println "Load file failed: " path)
       (js/console.error e)))))
+
+(defn reset-file!
+  [repo file-path content opts]
+  (state/<invoke-db-worker :thread-api/reset-file repo file-path content opts))
 
 (defn- load-multiple-files
   [repo-url paths]
@@ -133,7 +136,7 @@
 (defn alter-file
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
-                             skip-db-transact? extracted-block-ids ctime mtime]
+                             ctime mtime]
                       :fs/keys [event]
                       :or {reset? true
                            re-render-root? false
@@ -147,25 +150,22 @@
     (when (or config-valid? (not config-file?)) ; non-config file or valid config
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
-                  :skip-db-transact? skip-db-transact?
                   :fs/event event
                   :ctime ctime
-                  :mtime mtime}
-            result (if reset?
-                     (do
-                       (when-not skip-db-transact?
-                         (when-let [page-id (file-model/get-file-page-id path)]
-                           (db/transact! repo
-                                         [[:db/retract page-id :block/alias]
-                                          [:db/retract page-id :block/tags]]
-                                         opts)))
-                       (reset-file-handler/reset-file!
-                        repo path content (merge opts
-                                                 ;; To avoid skipping the `:or` bounds for keyword destructuring
-                                                 (when (some? extracted-block-ids) {:extracted-block-ids extracted-block-ids})
-                                                 (when (some? verbose) {:verbose verbose}))))
-                     (db/set-file-content! repo path content opts))]
-        (-> (p/let [_ (when-not from-disk?
+                  :mtime mtime}]
+        (-> (p/let [result (if reset?
+                             (p/do!
+                              (when-let [page-id (file-model/get-file-page-id path)]
+                                (db/transact! repo
+                                              [[:db/retract page-id :block/alias]
+                                               [:db/retract page-id :block/tags]]
+                                              opts))
+                              (reset-file!
+                               repo path content (merge opts
+                                                         ;; To avoid skipping the `:or` bounds for keyword destructuring
+                                                        (when (some? verbose) {:verbose verbose}))))
+                             (db/set-file-content! repo path content opts))
+                    _ (when-not from-disk?
                         (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
               (when re-render-root? (ui-handler/re-render-root!))
 
@@ -178,15 +178,16 @@
 
                 (= path "logseq/config.edn")
                 (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-                  (state/pub-event! [:shortcut/refresh]))))
+                  (state/pub-event! [:shortcut/refresh])))
+
+              result)
             (p/catch
              (fn [error]
                (println "Write file failed, path: " path ", content: " content)
                (log/error :write/failed error)
                (state/pub-event! [:capture-error
                                   {:error error
-                                   :payload {:type :write-file/failed-for-alter-file}}]))))
-        result))))
+                                   :payload {:type :write-file/failed-for-alter-file}}]))))))))
 
 (defn set-file-content!
   [repo path new-content]
@@ -234,10 +235,13 @@
                                 (map (fn [path] (db/get-file repo path)) paths)))]
     ;; update db
     (when update-db?
-      (doseq [[path content] files]
-        (if reset?
-          (reset-file-handler/reset-file! repo path content)
-          (db/set-file-content! repo path content))))
+      (p/all
+       (map
+        (fn [[path content]]
+          (if reset?
+            (reset-file! repo path content {})
+            (db/set-file-content! repo path content)))
+        files)))
     (alter-files-handler! repo files opts file->content)))
 
 (defn watch-for-current-graph-dir!

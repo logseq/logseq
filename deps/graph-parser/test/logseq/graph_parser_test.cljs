@@ -1,12 +1,12 @@
 (ns logseq.graph-parser-test
   (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
-            [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.db :as gp-db]
-            [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.graph-parser.property :as gp-property]))
 
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
@@ -78,7 +78,7 @@
                                                         (throw (js/Error "Testing unexpected failure")))]
         (try
           (parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098"
-                      {:delete-blocks-fn (fn [_db page _file _uuids]
+                      {:delete-blocks-fn (fn [page _file _uuids]
                                            (reset! deleted-page page))})
           (catch :default _)))
       (is (= nil @deleted-page)
