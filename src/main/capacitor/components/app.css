@@ -1,10 +1,3 @@
-/* html, body { */
-/*   @apply text-[18px] leading-6 min-h-[unset]; */
-/* } */
-/* #root { */
-/*   @apply p-4; */
-/* } */
-
 html.plt-capacitor.plt-android {
   --ion-safe-area-top: 42px;
   --ion-safe-area-bottom: 16px;
@@ -67,6 +60,19 @@ ion-buttons {
     @apply border;
 
     background-color: var(--ion-color-light-tint);
+  }
+}
+
+ion-tab-bar {
+  box-shadow: 0 0 1px #999999;
+  padding-top: 2px;
+
+  ion-tab-button {
+    @apply opacity-70;
+
+    &.tab-selected {
+      @apply opacity-100 text-accent-11 font-semibold;
+    }
   }
 }
 
