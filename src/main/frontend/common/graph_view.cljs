@@ -17,6 +17,26 @@
              :target (str to)}))
         links))
 
+(defn- node-property-links
+  "Returns a sequence of [from-id to-id] for all :node property links on the given entity.
+   Supports both single node maps and vectors of node maps, at any key."
+  [entity]
+  (let [from-id (:db/id entity)]
+    (mapcat
+      (fn [[_ v]]
+        (cond
+          ;; Single node map
+          (and (map? v) (:db/id v))
+          [[from-id (:db/id v)]]
+
+          ;; Vector of node maps
+          (and (vector? v) (every? #(and (map? %) (:db/id %)) v))
+          (map (fn [node] [from-id (:db/id node)]) v)
+
+          :else
+          []))
+      entity)))
+
 (defn- build-nodes
   [dark? current-page page-links tags nodes namespaces]
   (let [page-parents (set (map last namespaces))
@@ -98,7 +118,8 @@
                            (if db-based?
                              (get p :logseq.property/exclude-from-graph-view)
                              (get-in p [:block/properties :exclude-from-graph-view]))))))
-        links (concat relation tagged-pages namespaces)
+        node-prop-links (mapcat node-property-links full-pages')
+        links (concat relation tagged-pages namespaces node-prop-links)
         linked (set (mapcat identity links))
         build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
                             (map string/lower-case)
@@ -182,6 +203,7 @@
         ref-pages (get-page-referenced-pages db page-id)
         mentioned-pages (get-pages-that-mentioned-page db page-id show-journal)
         namespaces (gp-db/get-all-namespace-relation db)
+        node-prop-links (node-property-links page-entity)
         links (concat
                namespaces
                (map (fn [ref-page]
@@ -190,7 +212,8 @@
                       [page-id page]) mentioned-pages)
                (map (fn [tag]
                       [page-id tag])
-                    tags))
+                    tags)
+                    node-prop-links)
         other-pages-links (build-page-graph-other-page-links db (concat ref-pages mentioned-pages) show-journal)
         links (->> (concat links other-pages-links)
                    (remove nil?)
