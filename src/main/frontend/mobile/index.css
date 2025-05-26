@@ -38,10 +38,12 @@
 }
 
 #mobile-editor-toolbar {
-  @apply fixed bottom-0 left-0 w-full z-[9999] flex justify-between;
+  @apply fixed bottom-0 left-0 w-full z-[9999] flex justify-between bg-gray-100 border-t border-gray-200;
+
+  transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
 
   button {
-    @apply flex items-center py-2 px-2;
+    @apply flex items-center py-2 px-2 active:opacity-50;
   }
 
   .submenu {
@@ -62,8 +64,7 @@
   }
 
   .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
+    @apply border-l border-gray-200;
   }
 }
 
