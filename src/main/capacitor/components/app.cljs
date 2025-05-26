@@ -220,7 +220,7 @@
                (fstate/clear-selection!)
                (cond
                  (seq (ui/get-modal))
-                 nil
+                 (ui/close-modal!)
 
                  :else
                  (-> (nav/nav-length?)
