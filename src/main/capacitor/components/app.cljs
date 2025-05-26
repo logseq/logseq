@@ -192,7 +192,7 @@
      (ion/tab
       {:tab "settings"}
       (ion/content
-       (settings)))
+       (settings/page)))
      (bottom-tabs)
 
      (keep-keyboard-open)
@@ -220,6 +220,9 @@
                (cond
                  (seq (ui/get-modal))
                  (ui/close-modal!)
+
+                 (seq (shui-dialog/get-modal (shui-dialog/get-first-modal-id)))
+                 (shui-dialog/close!)
 
                  (seq (fstate/get-selection-blocks))
                  (fstate/clear-selection!)

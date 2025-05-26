@@ -9,6 +9,7 @@
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 
+@import "packages/amplify/dist/amplify.css";
 @import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";
 @import "src/main/frontend/components/icon.css";
@@ -22,5 +23,6 @@
 @import "src/main/frontend/components/views.css";
 @import "src/main/frontend/components/block/views.css";
 @import "src/main/frontend/components/journal.css";
+@import "src/main/frontend/components/user/login.css";
 
 @import-glob "src/main/capacitor/**/[!_]*.css";
