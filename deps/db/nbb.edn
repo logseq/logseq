@@ -7,7 +7,7 @@
   ;; Used by db scripts with outliner.cli
   borkdude/rewrite-edn {:mvn/version "0.4.9"}
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
-                                         :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
+                                         :sha     "fd8862bfe307abb726019ab88b5aa046ca90e1e0"}
   io.github.nextjournal/nbb-test-runner
   {:git/sha "012017a8a8983d05f905f38f631f5222f25b9ed9"}
   io.github.pez/baldr {:mvn/version "1.0.9"}}}
