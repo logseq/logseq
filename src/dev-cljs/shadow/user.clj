@@ -36,8 +36,16 @@
            runtime-id (apply (if (= :old runtime-id-or-which) min max) runtime-ids)]
        (worker-repl runtime-id)))))
 
-(defn runtime-id-list
+(defn capacitor-worker-repl
   []
-  (->> (api/repl-runtimes :app)
+  (when-let [runtime-id (->> (api/repl-runtimes :capacitor-new)
+                             (filter (fn [runtime] (= :browser-worker (:host runtime))))
+                             (map :client-id)
+                             (apply max))]
+    (api/repl :capacitor-new {:runtime-id runtime-id})))
+
+(defn runtime-id-list
+  [app]
+  (->> (api/repl-runtimes app)
        (filter (fn [runtime] (= :browser-worker (:host runtime))))
        (map :client-id)))
