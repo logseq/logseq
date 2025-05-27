@@ -83,7 +83,8 @@
                                      (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
-                                     (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
+                                     (when-not (util/capacitor-new?)
+                                       (state/pub-event! [:graph/pull-down-remote-graph repo]))))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
 
@@ -170,18 +171,19 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))
 
-       [:div.flex.flex-row.my-4
-        (if util/web-platform?
-          [:div.mr-8
-           (ui/button
-            "Create a new graph"
-            :on-click #(state/pub-event! [:graph/new-db-graph]))]
-          (when (or (nfs-handler/supported?)
-                    (mobile-util/native-platform?))
+       (when-not (util/capacitor-new?)
+         [:div.flex.flex-row.my-4
+          (if util/web-platform?
             [:div.mr-8
              (ui/button
-              (t :open-a-directory)
-              :on-click #(state/pub-event! [:graph/setup-a-repo]))]))]]
+              "Create a new graph"
+              :on-click #(state/pub-event! [:graph/new-db-graph]))]
+            (when (or (nfs-handler/supported?)
+                      (mobile-util/native-platform?))
+              [:div.mr-8
+               (ui/button
+                (t :open-a-directory)
+                :on-click #(state/pub-event! [:graph/setup-a-repo]))]))])]
 
       (when (and (or (file-sync/enable-sync?)
                      (state/enable-rtc?))
@@ -197,7 +199,8 @@
             :background "gray"
             :disabled remotes-loading?
             :on-click (fn []
-                        (file-sync/load-session-graphs)
+                        (when-not (util/capacitor-new?)
+                          (file-sync/load-session-graphs))
                         (p/do!
                          (rtc-handler/<get-remote-graphs)
                          (repo-handler/refresh-repos!))))]]
