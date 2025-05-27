@@ -596,7 +596,6 @@
                 :fn commit/show-commit-modal!}
 
    :dev/fix-broken-graph {:binding []
-                          :inactive (not (state/developer-mode?))
                           :db-graph? true
                           :fn #(repo-handler/fix-broken-graph! (state/get-current-repo))}
 

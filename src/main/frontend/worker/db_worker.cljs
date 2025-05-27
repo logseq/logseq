@@ -136,7 +136,8 @@
   (let [conn (worker-state/get-datascript-conn graph)
         sqlite-db (worker-state/get-sqlite-conn graph)]
     (when (and conn sqlite-db)
-      (rebuild-db-from-datoms! conn sqlite-db))))
+      (rebuild-db-from-datoms! conn sqlite-db)
+      (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
 
 (comment
   (defn- gc-kvs-table!
@@ -369,7 +370,7 @@
         ;; because it's slow for large graphs
         (when-not import-type
           (when-let [missing-addresses (seq (find-missing-addresses conn db))]
-            (worker-util/post-message :notification ["It seems that the DB has been broken, please export a backup and contact Logseq team for help." :error false])
+            (worker-util/post-message :notification ["It seems that the DB has been broken. Please run the command `Fix current broken graph`." :error false])
             (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
 
         (db-migrate/migrate conn search-db)

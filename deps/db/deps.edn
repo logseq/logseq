@@ -11,7 +11,7 @@
   ;; Any other deps should be added here and to nbb.edn
   logseq/common                {:local/root "../common"}
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
-                                         :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
+                                         :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
   borkdude/rewrite-edn {:mvn/version "0.4.9"}
   metosin/malli {:mvn/version "0.16.1"}
   medley/medley {:mvn/version "1.4.0"}}

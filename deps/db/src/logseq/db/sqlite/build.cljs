@@ -645,7 +645,7 @@
     @uuids))
 
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks properties auto-create-ontology?]
+  [{:keys [pages-and-blocks properties auto-create-ontology? build-existing-tx?]
     :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties (dissoc options :pages-and-blocks :properties))
         page-uuids (create-page-uuids pages-and-blocks')
@@ -662,6 +662,9 @@
                                            (mapv #(if (db-class/logseq-class? (:db/ident %))
                                                     %
                                                     (or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
+                                                        ;; Allow existing user classes to be specified as idents
+                                                        (when (and build-existing-tx? (some->> (:db/ident %) (get classes)))
+                                                          (:db/ident %))
                                                         (throw (ex-info (str "No :db/id found for :db/ident " (pr-str %)) {}))))
                                                  cs)))
                                  m))
