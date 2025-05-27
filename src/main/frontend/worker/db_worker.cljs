@@ -14,6 +14,7 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.worker.db-listener :as db-listener]
+            [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
@@ -407,13 +408,14 @@
 
 (defn- <list-all-dbs
   []
-  (let [dir? #(= (.-kind %) "directory")]
+  (let [dir? #(= (.-kind %) "directory")
+        db-dir-prefix ".logseq-pool-"]
     (p/let [^js root (.getDirectory js/navigator.storage)
             values-iter (when (dir? root) (.values root))
             values (when values-iter (iter->vec values-iter))
             current-dir-dirs (filter dir? values)
             db-dirs (filter (fn [file]
-                              (string/starts-with? (.-name file) ".logseq-pool-"))
+                              (string/starts-with? (.-name file) db-dir-prefix))
                             current-dir-dirs)]
       (prn :debug
            :db-dirs (map #(.-name %) db-dirs)
@@ -424,9 +426,8 @@
                                            ;; TODO: DRY
                                            (string/replace "+3A+" ":")
                                            (string/replace "++" "/"))
-                            metadata-file-handle (.getFileHandle dir "metadata.edn" #js {:create true})
-                            metadata-file (.getFile metadata-file-handle)
-                            metadata (.text metadata-file)]
+                            repo (str sqlite-util/db-version-prefix graph-name)
+                            metadata (worker-db-metadata/<get repo)]
                       {:name graph-name
                        :metadata (edn/read-string metadata)})) db-dirs)))))
 
