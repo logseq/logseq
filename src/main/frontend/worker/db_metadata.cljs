@@ -1,13 +1,17 @@
 (ns frontend.worker.db-metadata
   "Fns to read/write metadata.edn file for db-based."
-  (:require [frontend.worker.util :as worker-util]
-            [promesa.core :as p]))
+  (:require ["/frontend/idbkv" :as idb-keyval]))
+
+(defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
+
+(defn- gen-key
+  [repo]
+  (str "metadata###" repo))
 
 (defn <store
   [repo metadata-str]
-  (p/let [^js root (.getDirectory js/navigator.storage)
-          dir-handle (.getDirectoryHandle root (str "." (worker-util/get-pool-name repo)))
-          file-handle (.getFileHandle dir-handle "metadata.edn" #js {:create true})
-          writable (.createWritable file-handle)
-          _ (.write writable metadata-str)]
-    (.close writable)))
+  (idb-keyval/set (gen-key repo) metadata-str @store))
+
+(defn <get
+  [repo]
+  (idb-keyval/get (gen-key repo) @store))
