@@ -113,6 +113,31 @@
                                           (update m :finished inc)))
               nil))))
 
+(defn- parse-and-load-file-test-version!
+  "Accept: .md, .org, .edn, .css"
+  [repo-url file {:keys [new-graph? verbose]}]
+  (try
+    (let [result (file-handler/alter-file-test-version
+                  repo-url
+                  (:file/path file)
+                  (:file/content file)
+                  (merge (:stat file)
+                         {:new-graph? new-graph?
+                          :re-render-root? false
+                          :from-disk? true}
+                                                  ;; To avoid skipping the `:or` bounds for keyword destructuring
+                         (when (some? verbose) {:verbose verbose})))]
+      (state/set-parsing-state! (fn [m]
+                                  (update m :finished inc)))
+      result)
+    (catch :default e
+      (println "Parse and load file failed: " (str (:file/path file)))
+      (js/console.error e)
+      (state/set-parsing-state! (fn [m]
+                                  (update m :failed-parsing-files conj [(:file/path file) e])))
+      (state/set-parsing-state! (fn [m]
+                                  (update m :finished inc))))))
+
 (defn- after-parse
   [repo-url re-render? re-render-opts opts graph-added-chan]
   (when (or (:new-graph? opts) (not (:refresh? opts)))
@@ -149,7 +174,7 @@
           (state/set-parsing-state! (fn [m]
                                       (assoc m
                                              :current-parsing-file (:file/path file))))
-          (parse-and-load-file! repo-url file (select-keys opts [:new-graph? :verbose])))
+          (parse-and-load-file-test-version! repo-url file (select-keys opts [:new-graph? :verbose])))
         (after-parse repo-url re-render? re-render-opts opts graph-added-chan))
       (async/go-loop []
         (if-let [item (async/<! chan)]
@@ -186,8 +211,7 @@
                       (swap! *page-names conj page-name)
                       (swap! *page-name->path assoc page-name (:file/path file)))]
               (recur)))
-          (p/do!
-           (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
+          (after-parse repo-url re-render? re-render-opts opts graph-added-chan))))
     graph-added-chan))
 
 (defn- parse-files-and-create-default-files!
