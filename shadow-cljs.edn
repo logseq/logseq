@@ -101,7 +101,12 @@
                                                 :redef false}
                                      :cross-chunk-method-motion false}
                   :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
-                  :closure-defines {} ;; set by git-revision-hook
+                  :closure-defines
+                  {
+                   ;; Set to switch file sync server to dev, set this to false in `yarn watch`
+                   frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+                   frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
+                   }
 
                   ;; NOTE: electron, browser/mobile-app use different asset-paths.
                   ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
@@ -154,48 +159,48 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options    {;; handle `require(xxx.css)`
-                               :ignore-asset-requires true
-                               :resolve {"react" {:target :global
-                                                  :global "React"}
-                                         "react-dom" {:target :global
-                                                      :global "ReactDOM"}}}
-               :modules       {:shared
-                               {:entries []}
-                               :main
-                               {:init-fn    frontend.publishing/init
-                                :depends-on #{:shared}}
-                               :code-editor
-                               {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :excalidraw
-                               {:entries    [frontend.extensions.excalidraw]
-                                :depends-on #{:main}}
-                               :tldraw
-                               {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}
-                               :db-worker
-                               {:init-fn   frontend.worker.db-worker/init
-                                :depends-on #{:shared}
-                                :web-worker true}}
+               :js-options {;; handle `require(xxx.css)`
+                            :ignore-asset-requires true
+                            :resolve {"react" {:target :global
+                                               :global "React"}
+                                      "react-dom" {:target :global
+                                                   :global "ReactDOM"}}}
+               :modules {:shared
+                         {:entries []}
+                         :main
+                         {:init-fn frontend.publishing/init
+                          :depends-on #{:shared}}
+                         :code-editor
+                         {:entries [frontend.extensions.code]
+                          :depends-on #{:main}}
+                         :excalidraw
+                         {:entries [frontend.extensions.excalidraw]
+                          :depends-on #{:main}}
+                         :tldraw
+                         {:entries [frontend.extensions.tldraw]
+                          :depends-on #{:main}}
+                         :db-worker
+                         {:init-fn frontend.worker.db-worker/init
+                          :depends-on #{:shared}
+                          :web-worker true}}
 
-               :output-dir       "./static/js/publishing"
-               :asset-path       "static/js"
-               :closure-defines  {logseq.common.config/PUBLISHING true
-                                  goog.debug.LOGGING_ENABLED true}
-               :compiler-options {:infer-externs      :auto
+               :output-dir "./static/js/publishing"
+               :asset-path "static/js"
+               :closure-defines {logseq.common.config/PUBLISHING true
+                                 goog.debug.LOGGING_ENABLED true}
+               :compiler-options {:infer-externs :auto
                                   :output-feature-set :es-next
                                   :source-map true
-                                  :externs            ["datascript/externs.js"
-                                                       "externs.js"]
-                                  :warnings           {:fn-deprecated false
-                                                       :redef false}
+                                  :externs ["datascript/externs.js"
+                                            "externs.js"]
+                                  :warnings {:fn-deprecated false
+                                             :redef false}
                                   ;; https://github.com/thheller/shadow-cljs/issues/611#issuecomment-620845276
                                   ;; fixes cljs.spec bug with code splitting
                                   :cross-chunk-method-motion false}
-               :devtools         {:before-load frontend.core/stop
-                                  :after-load  frontend.core/start
-                                  :preloads    [devtools.preload]}}
+               :devtools {:before-load frontend.core/stop
+                          :after-load frontend.core/start
+                          :preloads [devtools.preload]}}
 
   :stories-dev {:target :npm-module
                 :entries [logseq.shui.storybook]
