@@ -14,6 +14,7 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.worker.file.reset :as file-reset]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -160,7 +161,7 @@
                                               [[:db/retract page-id :block/alias]
                                                [:db/retract page-id :block/tags]]
                                               opts))
-                              (reset-file!
+                              (file-reset/reset-file!
                                repo path content (merge opts
                                                          ;; To avoid skipping the `:or` bounds for keyword destructuring
                                                         (when (some? verbose) {:verbose verbose}))))
@@ -188,6 +189,63 @@
                (state/pub-event! [:capture-error
                                   {:error error
                                    :payload {:type :write-file/failed-for-alter-file}}]))))))))
+
+(defn alter-file-test-version
+  "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
+  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
+                             ctime mtime]
+                      :fs/keys [event]
+                      :or {reset? true
+                           re-render-root? false
+                           from-disk? false
+                           skip-compare? false}}]
+  (let [path (common-util/path-normalize path)
+        config-file? (= path "logseq/config.edn")
+        _ (when config-file?
+            (detect-deprecations path content))
+        config-valid? (and config-file? (validate-file path content))]
+    (when (or config-valid? (not config-file?)) ; non-config file or valid config
+      (let [opts {:new-graph? new-graph?
+                  :from-disk? from-disk?
+                  :fs/event event
+                  :ctime ctime
+                  :mtime mtime}
+            result (if reset?
+                     (p/do!
+                      (when-let [page-id (file-model/get-file-page-id path)]
+                        (db/transact! repo
+                                      [[:db/retract page-id :block/alias]
+                                       [:db/retract page-id :block/tags]]
+                                      opts))
+                      (reset-file!
+                       repo path content (merge opts
+                                                         ;; To avoid skipping the `:or` bounds for keyword destructuring
+                                                (when (some? verbose) {:verbose verbose}))))
+                     (db/set-file-content! repo path content opts))]
+        (-> (p/let [_ (when-not from-disk?
+                        (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
+              (when re-render-root? (ui-handler/re-render-root!))
+
+              (cond
+                (= path "logseq/custom.css")
+                (do
+                  ;; ui-handler will load css from db and config
+                  (db/set-file-content! repo path content)
+                  (ui-handler/add-style-if-exists!))
+
+                (= path "logseq/config.edn")
+                (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
+                  (state/pub-event! [:shortcut/refresh])))
+
+              result)
+            (p/catch
+             (fn [error]
+               (println "Write file failed, path: " path ", content: " content)
+               (log/error :write/failed error)
+               (state/pub-event! [:capture-error
+                                  {:error error
+                                   :payload {:type :write-file/failed-for-alter-file}}]))))
+        result))))
 
 (defn set-file-content!
   [repo path new-content]
