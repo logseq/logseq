@@ -9,16 +9,20 @@
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
+            [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.mobile.mobile-bar :as mobile-bar ]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.mobile-bar :as mobile-bar]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as fstate]
             [goog.date :as gdate]
+            [logseq.db :as ldb]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -57,11 +61,11 @@
                                                            (repo-handler/new-db! db-name)))
                                                        (when (string/starts-with? role "logseq_db_")
                                                          (fstate/pub-event! [:graph/switch role])))))})))}
-       [:span.flex.items-center.gap-2.opacity-95.pt-1
-        (ion/tabler-icon "database" {:size 22})
-        [:strong.overflow-hidden.text-ellipsis.block.font-semibold
-         {:style {:max-width "40vw"}}
-         short-repo-name]])]))
+      [:span.flex.items-center.gap-2.opacity-95.pt-1
+       (ion/tabler-icon "database" {:size 22})
+       [:strong.overflow-hidden.text-ellipsis.block.font-semibold
+        {:style {:max-width "40vw"}}
+        short-repo-name]])]))
 
 (rum/defc bottom-tabs
   []
@@ -85,9 +89,9 @@
 
 (rum/defc journals []
   (ion/content
-    (ui/classic-app-container-wrap
-      [:div.pt-3
-       (journal/all-journals)])))
+   (ui/classic-app-container-wrap
+    [:div.pt-3
+     (journal/all-journals)])))
 
 (rum/defc home < rum/reactive
   []
@@ -98,6 +102,22 @@
       (ion/toolbar
        (ion/buttons {:slot "start"}
                     (app-graphs-select))
+
+       (let [repo (fstate/get-current-repo)]
+         [:div.flex.flex-row.items-center.gap-2
+          (when (and repo
+                     (ldb/get-graph-rtc-uuid (db/get-db))
+                     (user-handler/logged-in?)
+                     (config/db-based-graph? repo)
+                     (user-handler/team-member?))
+            [:<>
+            ;; (rum/with-key (rtc-collaborators)
+            ;;   (str "collab-" repo))
+             (rtc-indicator/indicator)
+             (when (user-handler/logged-in?)
+               (rtc-indicator/downloading-detail))
+             (when (user-handler/logged-in?)
+               (rtc-indicator/uploading-detail))])])
 
        (ion/buttons {:slot "end"}
                     (ion/button
@@ -213,10 +233,10 @@
 
                  :else
                  (-> (nav/nav-length?)
-                   (p/then (fn [len]
-                             (if (= len 1)
-                               (.exitApp App)
-                               (nav/nav-pop!))))))
+                     (p/then (fn [len]
+                               (if (= len 1)
+                                 (.exitApp App)
+                                 (nav/nav-pop!))))))
                (fstate/clear-edit!))
              ^js back-listener (.addListener App "backButton" handle-back!)]
          #(.remove back-listener)))
