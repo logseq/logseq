@@ -70,7 +70,7 @@ Options available:
                             :as options}]
    (let [format (common-util/get-format file-path)
          file-content [{:file/path file-path}]
-         {:keys [tx]}
+         {:keys [tx ast]}
          (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                         :date-formatter "MMM do, yyyy"
                                         :uri-encoded? false
@@ -109,7 +109,9 @@ Options available:
                           (assoc :file/created-at (or ctime (js/Date.)))
                           mtime
                           (assoc :file/last-modified-at mtime))])]
-     (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?])))))
+     (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?]))
+     {:tx tx
+      :ast ast})))
 
 (defn filter-files
   "Filters files in preparation for parsing. Only includes files that are
