@@ -163,7 +163,8 @@
         db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
         db-dir (if (= 1 (count init-conn-args)) (node-path/dirname (first init-conn-args)) (second init-conn-args))
         file-graph' (resolve-path file-graph)
-        conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)}))
+        conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)
+                                                                 :import-type :cli/db-import}))
         directory? (.isDirectory (fs/statSync file-graph'))
         user-options (cond-> (merge {:all-tags false} (dissoc options :verbose :files :help :continue))
                        ;; coerce option collection into strings
