@@ -5,6 +5,7 @@
             [frontend.components.page :as page]
             [frontend.components.user.login :as login]
             [frontend.handler :as fhandler]
+            [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.core :as mobile]
             [frontend.util :as util]
