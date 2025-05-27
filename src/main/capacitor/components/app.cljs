@@ -84,26 +84,10 @@
    {:id "app-keep-keyboard-open-input"}])
 
 (rum/defc journals []
-  (let [[reload set-reload!] (hooks/use-state 0)]
-    (ion/content
-     (ion/refresher
-      {:slot "fixed"
-       :pull-factor 0.5
-       :pull-min 100
-       :pull-max 200
-       :on-ion-refresh (fn [^js e]
-                         (js/setTimeout
-                          (fn [] (.complete (.-detail e))
-                            (set-reload! (inc reload)))
-                          1000))}
-      (ion/refresher-content))
-
-     [:div.pt-4
-      [:main#app-container-wrapper.ls-fold-button-on-right
-       [:div#app-container
-        [:div#main-container.flex.flex-1
-         [:div#main-content-container.w-full.!px-0
-          (journal/all-journals)]]]]])))
+  (ion/content
+    (ui/classic-app-container-wrap
+      [:div.pt-3
+       (journal/all-journals)])))
 
 (rum/defc home < rum/reactive
   []
