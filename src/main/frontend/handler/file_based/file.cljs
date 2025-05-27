@@ -35,7 +35,9 @@
 
 (defn reset-file!
   [repo file-path content opts]
-  (state/<invoke-db-worker :thread-api/reset-file repo file-path content opts))
+  (if util/node-test?
+    (file-reset/reset-file! repo (db/get-db repo false) file-path content opts)
+    (state/<invoke-db-worker :thread-api/reset-file repo file-path content opts)))
 
 (defn- load-multiple-files
   [repo-url paths]
@@ -161,7 +163,7 @@
                                               [[:db/retract page-id :block/alias]
                                                [:db/retract page-id :block/tags]]
                                               opts))
-                              (file-reset/reset-file!
+                              (reset-file!
                                repo path content (merge opts
                                                          ;; To avoid skipping the `:or` bounds for keyword destructuring
                                                         (when (some? verbose) {:verbose verbose}))))
@@ -211,16 +213,16 @@
                   :ctime ctime
                   :mtime mtime}
             result (if reset?
-                     (p/do!
-                      (when-let [page-id (file-model/get-file-page-id path)]
-                        (db/transact! repo
-                                      [[:db/retract page-id :block/alias]
-                                       [:db/retract page-id :block/tags]]
-                                      opts))
-                      (reset-file!
-                       repo path content (merge opts
+                     (do
+                       (when-let [page-id (file-model/get-file-page-id path)]
+                         (db/transact! repo
+                                       [[:db/retract page-id :block/alias]
+                                        [:db/retract page-id :block/tags]]
+                                       opts))
+                       (reset-file!
+                        repo path content (merge opts
                                                          ;; To avoid skipping the `:or` bounds for keyword destructuring
-                                                (when (some? verbose) {:verbose verbose}))))
+                                                 (when (some? verbose) {:verbose verbose}))))
                      (db/set-file-content! repo path content opts))]
         (-> (p/let [_ (when-not from-disk?
                         (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
