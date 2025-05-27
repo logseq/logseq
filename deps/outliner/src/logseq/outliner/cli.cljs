@@ -1,15 +1,16 @@
 (ns ^:node-only logseq.outliner.cli
   "Primary ns for outliner CLI fns"
-  (:require [borkdude.rewrite-edn :as rewrite]
-            [clojure.string :as string]
-            [datascript.core :as d]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.outliner.db-pipeline :as db-pipeline]
+  (:require ["child_process" :as child-process]
             ["fs" :as fs]
             ["path" :as node-path]
-            [logseq.common.config :as common-config]))
+            [borkdude.rewrite-edn :as rewrite]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (defn- find-on-classpath [classpath rel-path]
   (some (fn [dir]
@@ -26,6 +27,14 @@
               m)
       str))
 
+(defn- get-git-sha
+  []
+  (let [res (child-process/spawnSync "git"
+                                     #js ["rev-parse" "--short" "HEAD"]
+                                     #js {})]
+    (when (zero? (.-status res))
+      (string/trim (str (.-stdout res))))))
+
 (defn- setup-init-data
   "Setup initial data same as frontend.handler.repo/create-db"
   [conn {:keys [additional-config classpath import-type]
@@ -37,8 +46,11 @@
           true
           (common-config/create-config-for-db-graph)
           additional-config
-          (pretty-print-merge additional-config))]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content {:import-type import-type}))))
+          (pretty-print-merge additional-config))
+        git-sha (get-git-sha)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content
+                                                                 (merge {:import-type import-type}
+                                                                        (when git-sha {:graph-git-sha git-sha}))))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
