@@ -86,23 +86,34 @@
        :block/title ""})]))
 
 (defn- get-page-by-parent-name
-  [db parent-title child-title]
+  [db parent-title child-title class?]
   (some->>
    (d/q
     '[:find [?b ...]
-      :in $ ?parent-name ?child-name
+      :in $ ?attribute ?parent-name ?child-name
       :where
-      [?b :logseq.property/parent ?p]
+      [?b ?attribute ?p]
       [?b :block/name ?child-name]
       [?p :block/name ?parent-name]]
     db
+    (if class? :logseq.property.class/extends :block/parent)
     (common-util/page-name-sanity-lc parent-title)
     (common-util/page-name-sanity-lc child-title))
    first
    (d/entity db)))
 
+(defn- page-with-parent-and-order
+  "Apply to namespace pages"
+  [db page & {:keys [parent]}]
+  (let [library (ldb/get-built-in-page db "Library")]
+    (when (nil? library)
+      (throw (ex-info "Library page doesn't exist" {})))
+    (assoc page
+           :block/parent (or parent (:db/id library))
+           :block/order (db-order/gen-key))))
+
 (defn- split-namespace-pages
-  [db page date-formatter]
+  [db page date-formatter create-class?]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
     (->>
      (if (and (or (entity-util/class? page)
@@ -112,20 +123,19 @@
              parts (->> (string/split title ns-util/parent-re)
                         (map string/trim)
                         (remove string/blank?))
-             pages (doall
-                    (map-indexed
-                     (fn [idx part]
-                       (let [last-part? (= idx (dec (count parts)))
-                             page (if (zero? idx)
-                                    (ldb/get-page db part)
-                                    (get-page-by-parent-name db (nth parts (dec idx)) part))
-                             result (or page
-                                        (gp-block/page-name->map part db true date-formatter
-                                                                 {:page-uuid (when last-part? block-uuid)
-                                                                  :skip-existing-page-check? true
-                                                                  :class? class?}))]
-                         result))
-                     parts))]
+             pages (map-indexed
+                    (fn [idx part]
+                      (let [last-part? (= idx (dec (count parts)))
+                            page (if (zero? idx)
+                                   (ldb/get-page db part)
+                                   (get-page-by-parent-name db (nth parts (dec idx)) part create-class?))
+                            result (or page
+                                       (gp-block/page-name->map part db true date-formatter
+                                                                {:page-uuid (when last-part? block-uuid)
+                                                                 :skip-existing-page-check? true
+                                                                 :class? class?}))]
+                        result))
+                    parts)]
          (cond
            (and (not class?) (not (every? ldb/internal-page? pages)))
            (throw (ex-info "Cannot create this page unless all parents are pages"
@@ -148,7 +158,7 @@
                 (if class?
                   (cond
                     (and (de/entity? page) (ldb/class? page))
-                    (assoc page :logseq.property/parent parent-eid)
+                    (assoc page :logseq.property.class/extends parent-eid)
 
                     (de/entity? page) ; page exists but not a class, avoid converting here because this could be troublesome.
                     nil
@@ -157,10 +167,10 @@
                     (db-class/build-new-class db page)
 
                     :else
-                    (db-class/build-new-class db (assoc page :logseq.property/parent parent-eid)))
-                  (if (or (de/entity? page) (zero? idx))
+                    (db-class/build-new-class db (assoc page :logseq.property.class/extends parent-eid)))
+                  (if (de/entity? page)
                     page
-                    (assoc page :logseq.property/parent parent-eid)))))
+                    (page-with-parent-and-order db page {:parent parent-eid})))))
             pages)))
        [page])
      (remove nil?))))
@@ -201,12 +211,12 @@
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
              :tx-data tx-data})))
-      (let [page      (gp-block/page-name->map title db true date-formatter
-                                               {:class? class?
-                                                :page-uuid (when (uuid? uuid) uuid)
-                                                :skip-existing-page-check? true})
+      (let [page           (gp-block/page-name->map title db true date-formatter
+                                                    {:class? class?
+                                                     :page-uuid (when (uuid? uuid) uuid)
+                                                     :skip-existing-page-check? true})
             [page parents] (if (and (text/namespace-page? title) split-namespace?)
-                             (let [pages (split-namespace-pages db page date-formatter)]
+                             (let [pages (split-namespace-pages db page date-formatter class?)]
                                [(last pages) (butlast pages)])
                              [page nil])]
         (when (and page (or (nil? (:db/ident page))

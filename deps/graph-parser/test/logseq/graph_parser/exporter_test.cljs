@@ -9,8 +9,8 @@
             [logseq.common.graph :as common-graph]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.validate :as db-validate]
@@ -326,7 +326,7 @@
              (:block/alias (db-test/readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
           "alias set correctly")
       (is (= ["y"]
-             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :logseq.property/parent]]
+             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :block/parent]]
                        @conn)
                   first
                   (d/entity @conn)
@@ -390,14 +390,15 @@
 
     (testing "namespaces"
       (let [expand-children (fn expand-children [ent parent]
-                              (if-let [children (:logseq.property/_parent ent)]
+                              (if-let [children (:block/_parent ent)]
                                 (cons {:parent (:block/title parent) :child (:block/title ent)}
                                       (mapcat #(expand-children % ent) children))
                                 [{:parent (:block/title parent) :child (:block/title ent)}]))]
+        ;; check pages only
         (is (= [{:parent "n1" :child "x"}
                 {:parent "x" :child "z"}
                 {:parent "x" :child "y"}]
-               (rest (expand-children (db-test/find-page-by-title @conn "n1") nil)))
+               (take 3 (rest (expand-children (db-test/find-page-by-title @conn "n1") nil))))
             "First namespace tests duplicate parent page name")
         (is (= [{:parent "n2" :child "x"}
                 {:parent "x" :child "z"}
@@ -590,7 +591,8 @@
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %)
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
-                       "pages/Whiteboard___Arrow_head_toggle.md"])
+                       "pages/Whiteboard___Arrow_head_toggle.md"
+                       "pages/Library.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
@@ -675,9 +677,9 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property/parent :block/title]))
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property.class/extends :block/title]))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property.class/extends :block/title]))
         "New page correctly set as class parent")))
 
 (deftest-async export-files-with-property-pages-disabled

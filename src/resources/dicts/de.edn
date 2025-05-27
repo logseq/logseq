@@ -235,7 +235,6 @@
  :page/copy-page-url "Seiten-URL kopieren"
  :page/created-at "Erstellt am"
  :page/delete "Seite löschen"
- :page/delete-confirmation "Diese Seite und die zugehörige Datei löschen?"
  :page/illegal-page-name "Seitenname nicht zulässig!"
  :page/logseq-is-having-a-problem "Logseq hat ein Problem festgestellt. Versuche zurückzukehren ..."
  :page/make-private "Privat machen"

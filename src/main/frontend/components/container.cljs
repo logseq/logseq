@@ -155,8 +155,11 @@
         (block/inline-text :markdown (:block/title page))
         untitled? (t :untitled)
         :else (let [title' (pdf-utils/fix-local-asset-pagename title)
-                    parent (:logseq.property/parent page)]
-                (if (and parent (not (ldb/class? page)))
+                    parent (:block/parent page)]
+                (if (and parent
+                         (not (or (ldb/class? page)
+                                  (and (:logseq.property/built-in? parent)
+                                       (= (:block/title parent) "Library")))))
                   (str (:block/title parent) ns-util/parent-char title')
                   title')))]
 
