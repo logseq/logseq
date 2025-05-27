@@ -193,7 +193,7 @@
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content & {:keys [import-type]}]
+  [config-content & {:keys [import-type graph-git-sha]}]
   (assert (string? config-content))
   (let [initial-data (cond->
                       [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -204,7 +204,9 @@
                        {:db/ident :logseq.property/empty-placeholder
                         :block/uuid (common-uuid/gen-uuid :builtin-block-uuid :logseq.property/empty-placeholder)}]
                        import-type
-                       (into (sqlite-util/import-tx import-type)))
+                       (into (sqlite-util/import-tx import-type))
+                       graph-git-sha
+                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha)))
         initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

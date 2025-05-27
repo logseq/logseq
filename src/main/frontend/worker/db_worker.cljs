@@ -326,7 +326,7 @@
   (.exec db "PRAGMA journal_mode=WAL"))
 
 (defn- create-or-open-db!
-  [repo {:keys [config import-type datoms]}]
+  [repo {:keys [config import-type datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
@@ -363,7 +363,7 @@
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data config
-                                                                        (when import-type {:import-type import-type}))]
+                                                                        (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
 
         ;; TODO: remove this once we can ensure there's no bug for missing addresses
@@ -467,7 +467,6 @@
 ;; [graph service]
 (defonce *service (atom []))
 (defonce fns {"remoteInvoke" thread-api/remote-function})
-(declare <init-service!)
 
 (defn- start-db!
   [repo {:keys [close-other-db?]
@@ -846,14 +845,14 @@
            (js/console.error (str "DB is not found for " repo))))))))
 
 (defn- on-become-master
-  [repo config import?]
+  [repo start-opts]
   (js/Promise.
    (m/sp
-     (c.m/<? (init-sqlite-module!))
-     (when-not import?
-       (c.m/<? (start-db! repo {:config config}))
-       (assert (some? (worker-state/get-datascript-conn repo))))
-     (m/? (rtc.core/new-task--rtc-start true)))))
+    (c.m/<? (init-sqlite-module!))
+    (when-not (:import-type start-opts)
+      (c.m/<? (start-db! repo start-opts))
+      (assert (some? (worker-state/get-datascript-conn repo))))
+    (m/? (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
@@ -866,7 +865,7 @@
          :rtc-sync-state])))
 
 (defn- <init-service!
-  [graph config import?]
+  [graph start-opts]
   (let [[prev-graph service] @*service]
     (some-> prev-graph close-db!)
     (when graph
@@ -874,9 +873,9 @@
         service
         (p/let [service (shared-service/<create-service graph
                                                         (bean/->js fns)
-                                                        #(on-become-master graph config import?)
+                                                        #(on-become-master graph start-opts)
                                                         broadcast-data-types
-                                                        {:import? import?})]
+                                                        {:import? (:import-type? start-opts)})]
           (assert (p/promise? (get-in service [:status :ready])))
           (reset! *service [graph service])
           service)))))
@@ -897,7 +896,7 @@
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph (:config opts) (some? (:import-type opts)))]
+                                  (p/let [service (<init-service! graph opts)]
                                     (get-in service [:status :ready])
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
