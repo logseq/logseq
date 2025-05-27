@@ -20,6 +20,13 @@
     (merge {:class "ion-padding"} content-props)
     content)))
 
+(rum/defc classic-app-container-wrap
+  [content]
+  [:main#app-container-wrapper.ls-fold-button-on-right
+   [:div#app-container.pt-2
+    [:div#main-container.flex.flex-1
+     [:div#main-content-container.w-full.!px-0 content]]]])
+
 (rum/defc notification-clear-all
   []
   [:div.ui__notifications-content
