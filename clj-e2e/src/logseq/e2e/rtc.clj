@@ -54,3 +54,21 @@
 (defn rtc-stop
   []
   (util/search-and-click "(Dev) RTC Stop"))
+
+(defmacro with-stop-restart-rtc
+  "- rtc stop on `stop-pw-pages` in order
+  - run `body`
+  - rtc start and exec `after-start-body` in order"
+  [stop-pw-pages start-pw-page+after-start-body & body]
+  (let [after-body
+        (cons
+         'do
+         (for [[p body] (partition 2 start-pw-page+after-start-body)]
+           `(w/with-page ~p
+              (rtc-start)
+              ~body)))]
+    `(do
+       (doseq [p# ~stop-pw-pages]
+         (w/with-page p# (rtc-stop)))
+       ~@body
+       ~after-body)))
