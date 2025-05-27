@@ -702,9 +702,8 @@
   "If the block exists in another page or the current page, we need to fix it"
   [db page-name *extracted-block-ids block]
   (let [existing-block (d/entity db [:block/uuid (:block/uuid block)])
-        block (if (and existing-block
-                       (or (not= (:block/name (:block/page existing-block)) page-name)
-                           (contains? @*extracted-block-ids (:block/uuid block))))
+        block (if (or (and existing-block (not= (:block/name (:block/page existing-block)) page-name))
+                      (contains? @*extracted-block-ids (:block/uuid block)))
                 (fix-duplicate-id block)
                 block)]
     (swap! *extracted-block-ids conj (:block/uuid block))
