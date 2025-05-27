@@ -24,5 +24,6 @@
 @import "src/main/frontend/components/block/views.css";
 @import "src/main/frontend/components/journal.css";
 @import "src/main/frontend/components/user/login.css";
+@import "src/main/frontend/components/file_sync.css";
 
 @import-glob "src/main/capacitor/**/[!_]*.css";

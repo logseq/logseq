@@ -1,16 +1,13 @@
 (ns capacitor.components.settings
   (:require [capacitor.ionic :as ion]
             [capacitor.state :as state]
+            [frontend.components.repo :as repo]
             [frontend.components.user.login :as login]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as fstate]
-            [logseq.shui.ui :as ui]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
-
-(rum/defc all-pages
-  [])
 
 (rum/defc all-graphs < rum/reactive
   []
@@ -18,11 +15,11 @@
     [:div.py-4
      [:div.flex.justify-between.items-center
       [:h2.text-xl.font-medium.my-3.flex.gap-2.items-center.opacity-80
-       (ui/tabler-icon "server" {:size 22}) "Your RTC graphs"]
+       (shui/tabler-icon "server" {:size 22}) "Your RTC graphs"]
 
       (ion/button
-        {:mode "ios" :size "small" :color "secondary"
-         :on-click (fn [] (rtc-handler/<get-remote-graphs))} "refresh")]
+       {:mode "ios" :size "small" :color "secondary"
+        :on-click (fn [] (rtc-handler/<get-remote-graphs))} "refresh")]
 
      [:ul
       (for [{:keys [url GraphName GraphSchemaVersion]} graphs]
@@ -36,9 +33,9 @@
     (if-not login?
       [:h1.text-3xl.font-bold.underline
        [:a {:on-click #(shui/dialog-open! login/page-impl
-                         {:close-btn? false
-                          :align :top
-                          :content-props {:class "app-login-modal"}})} "login"]]
+                                          {:close-btn? false
+                                           :align :top
+                                           :content-props {:class "app-login-modal"}})} "login"]]
       [:div.py-2
        [:h2.py-3.flex.justify-between.items-center
         [:strong.text-4xl.font-semibold (user-handler/username)]
@@ -49,24 +46,24 @@
   []
   (let [[^js nav] (state/use-nav-root)]
     (ion/page
-      (ion/header
-        (ion/toolbar
-          (ion/title "Settings")
-          (ion/buttons {:slot "end"}
-            (ion/button {:fill "clear"
-                         :on-click #(.pop nav)}
-              (ion/tabler-icon "help" {:size 26})))))
+     (ion/header
+      (ion/toolbar
+       (ion/title "Settings")
+       (ion/buttons {:slot "end"}
+                    (ion/button {:fill "clear"
+                                 :on-click #(.pop nav)}
+                                (ion/tabler-icon "help" {:size 26})))))
 
-      (ion/content {:class "ion-padding"}
-        (ion/refresher
-          {:slot "fixed"
-           :pull-factor 0.5
-           :pull-min 100
-           :pull-max 200
-           :on-ion-refresh (fn [^js e]
-                             (js/setTimeout
-                               #(.complete (.-detail e))
-                               3000))}
-          (ion/refresher-content))
-        (user-profile)
-        (all-graphs)))))
+     (ion/content {:class "ion-padding"}
+                  (ion/refresher
+                   {:slot "fixed"
+                    :pull-factor 0.5
+                    :pull-min 100
+                    :pull-max 200
+                    :on-ion-refresh (fn [^js e]
+                                      (js/setTimeout
+                                       #(.complete (.-detail e))
+                                       3000))}
+                   (ion/refresher-content))
+                  (user-profile)
+                  (repo/repos-cp)))))
