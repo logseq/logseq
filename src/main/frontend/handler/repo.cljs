@@ -180,7 +180,8 @@
   (->
    (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
            _ (persist-db/<new full-graph-name
-                              (cond-> {:config config}
+                              (cond-> {:config config
+                                       :graph-git-sha config/revision}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
