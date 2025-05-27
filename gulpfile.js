@@ -157,8 +157,7 @@ const common = {
   async runCapWithLocalDevServerEntry (cb) {
     const mode = process.env.PLATFORM || 'ios'
 
-    const IP = ip.address()
-    const LOGSEQ_APP_SERVER_URL = `http://${IP}:3002`
+    const LOGSEQ_APP_SERVER_URL = `http://localhost:3002`
 
     if (typeof global.fetch === 'function') {
       try {
