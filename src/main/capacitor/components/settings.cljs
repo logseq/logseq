@@ -2,11 +2,48 @@
   (:require [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [frontend.components.user.login :as login]
+            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.state :as fstate]
+            [logseq.shui.ui :as ui]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
 (rum/defc all-pages
   [])
+
+(rum/defc all-graphs < rum/reactive
+  []
+  (let [graphs (fstate/sub :rtc/graphs)]
+    [:div.py-4
+     [:div.flex.justify-between.items-center
+      [:h2.text-xl.font-medium.my-3.flex.gap-2.items-center.opacity-80
+       (ui/tabler-icon "server" {:size 22}) "Your RTC graphs"]
+
+      (ion/button
+        {:mode "ios" :size "small" :color "secondary"
+         :on-click (fn [] (rtc-handler/<get-remote-graphs))} "refresh")]
+
+     [:ul
+      (for [{:keys [url GraphName GraphSchemaVersion]} graphs]
+        [:li
+         [:p.inline-flex.items-center.gap-1
+          [:a.text-lg.mr-2 GraphName]] [:code "ver." GraphSchemaVersion]])]]))
+
+(rum/defc user-profile < rum/reactive
+  []
+  (let [login? (and (fstate/sub :auth/id-token) (user-handler/logged-in?))]
+    (if-not login?
+      [:h1.text-3xl.font-bold.underline
+       [:a {:on-click #(shui/dialog-open! login/page-impl
+                         {:close-btn? false
+                          :align :top
+                          :content-props {:class "app-login-modal"}})} "login"]]
+      [:div.py-2
+       [:h2.py-3.flex.justify-between.items-center
+        [:strong.text-4xl.font-semibold (user-handler/username)]
+        (ion/button {:size "small" :mode "ios" :fill "outline" :color "danger"} "logout")]
+       [:code (user-handler/email)]])))
 
 (rum/defc page
   []
@@ -31,10 +68,5 @@
                                #(.complete (.-detail e))
                                3000))}
           (ion/refresher-content))
-
-        [:h1.text-3xl.font-bold.underline
-         [:a {:on-click #(shui/dialog-open! login/page-impl
-                           {:close-btn? false
-                            :align :top
-                            :content-props {:class "app-login-modal"}})} "login"]]
-        ))))
+        (user-profile)
+        (all-graphs)))))
