@@ -1,6 +1,7 @@
 (ns capacitor.components.page
   (:require [capacitor.ionic :as ion]
             [capacitor.state :as state]
+            [capacitor.components.ui :as ui]
             [frontend.components.page :as cp-page]
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
@@ -57,7 +58,8 @@
 
        (ion/title title)))
 
-     (ion/content {:class "ion-padding"}
-                  (if loading?
-                    [:p.text-xl.text-center "Loading ..."]
-                    (cp-page/page-blocks-cp page {}))))))
+      (ion/content {:class "ion-padding"}
+        (ui/classic-app-container-wrap
+          (if loading?
+            [:p.text-xl.text-center "Loading ..."]
+            (cp-page/page-blocks-cp page {})))))))
