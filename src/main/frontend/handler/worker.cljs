@@ -49,6 +49,12 @@
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
 
+(defmethod handle :backup-file [_ _worker data]
+  (state/pub-event! [:graph/backup-file data]))
+
+(defmethod handle :notify-existing-file  [_ _worker data]
+  (state/pub-event! [:graph/notify-existing-file data]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 
