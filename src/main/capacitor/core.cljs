@@ -12,7 +12,6 @@
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
-(set! (. js/window -isCapacitorNew) true)
 (defonce ^js root (rdc/createRoot (.getElementById js/document "root")))
 
 (defn ^:export render!
