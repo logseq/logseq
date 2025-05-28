@@ -194,7 +194,7 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(defn- get-page-icon
+(defn get-page-icon
   [entity]
   (cond
     (ldb/class? entity)
