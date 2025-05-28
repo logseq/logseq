@@ -86,7 +86,7 @@
           (state/editing?))
     (let [parent-id (state/get-edit-input-id)
           commands' (commands parent-id)]
-      [:div#mobile-editor-toolbar
+      [:div#mobile-editor-toolbar.fade-in.delay
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
         (indent-outdent true "indent-increase")
