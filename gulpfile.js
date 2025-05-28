@@ -77,7 +77,7 @@ const common = {
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/amplify/dist/amplify.js',
-        'packages/ui/dist/ui.js',
+        'packages/ui/dist/ui/ui.js',
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
@@ -125,7 +125,8 @@ const common = {
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
         'packages/amplify/dist/amplify.js',
-        'packages/ui/dist/ui.js',
+        'packages/ui/dist/ui/ui.js',
+        'packages/ui/dist/ionic/*.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
       () => gulp.src([
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
