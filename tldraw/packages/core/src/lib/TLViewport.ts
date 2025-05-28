@@ -2,6 +2,7 @@ import { Vec } from '@tldraw/vec'
 import { action, computed, makeObservable, observable } from 'mobx'
 import { FIT_TO_SCREEN_PADDING, ZOOM_UPDATE_FACTOR } from '../constants'
 import type { TLBounds } from '../types'
+import type { TLSettings } from './TLSettings'
 
 const ease = (x: number) => {
   return -(Math.cos(Math.PI * x) - 1) / 2
@@ -12,7 +13,7 @@ const elapsedProgress = (t: number, duration = 100) => {
 }
 
 export class TLViewport {
-  constructor() {
+  constructor(private settings?: TLSettings) {
     makeObservable(this)
   }
 
@@ -65,7 +66,9 @@ export class TLViewport {
 
   @action update = ({ point, zoom }: Partial<{ point: number[]; zoom: number }>): this => {
     if (point !== undefined && !isNaN(point[0]) && !isNaN(point[1])) this.camera.point = point
-    if (zoom !== undefined && !isNaN(zoom)) this.camera.zoom = Math.min(4, Math.max(0.1, zoom))
+    if (zoom !== undefined && !isNaN(zoom) && !this.settings?.zoomLocked) {
+      this.camera.zoom = Math.min(4, Math.max(0.1, zoom))
+    }
     return this
   }
 
@@ -97,6 +100,7 @@ export class TLViewport {
   }
 
   onZoom = (point: number[], zoom: number, animate = false): this => {
+    if (this.settings?.zoomLocked) return this
     return this.pinchZoom(point, [0, 0], zoom, animate)
   }
 
@@ -109,6 +113,8 @@ export class TLViewport {
    * @param zoom The new zoom level
    */
   pinchZoom = (point: number[], delta: number[], zoom: number, animate = false): this => {
+    if (this.settings?.zoomLocked) return this
+    
     const { camera } = this
 
     const nextPoint = Vec.sub(camera.point, Vec.div(delta, camera.zoom))
@@ -128,22 +134,26 @@ export class TLViewport {
   }
 
   setZoom = (zoom: number, animate = false) => {
+    if (this.settings?.zoomLocked) return
     const { bounds } = this
     const center = [bounds.width / 2, bounds.height / 2]
     this.onZoom(center, zoom, animate)
   }
 
   zoomIn = () => {
+    if (this.settings?.zoomLocked) return
     const { camera } = this
     this.setZoom(camera.zoom / ZOOM_UPDATE_FACTOR, true)
   }
 
   zoomOut = () => {
+    if (this.settings?.zoomLocked) return
     const { camera } = this
     this.setZoom(camera.zoom * ZOOM_UPDATE_FACTOR, true)
   }
 
   resetZoom = (): this => {
+    if (this.settings?.zoomLocked) return this
     this.setZoom(1, true)
     return this
   }
