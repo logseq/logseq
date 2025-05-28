@@ -187,7 +187,8 @@
                 :on-click #(state/pub-event! [:graph/setup-a-repo]))]))])]
 
       (when (and (or (file-sync/enable-sync?)
-                     (state/enable-rtc?))
+                     (state/enable-rtc?)
+                     (user-handler/team-member?))
                  login?)
         [:div
          [:hr]
