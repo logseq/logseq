@@ -3,29 +3,29 @@
             [capacitor.state :as state]
             [frontend.components.repo :as repo]
             [frontend.components.user.login :as login]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as fstate]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
-(rum/defc all-graphs < rum/reactive
-  []
-  (let [graphs (fstate/sub :rtc/graphs)]
-    [:div.py-4
-     [:div.flex.justify-between.items-center
-      [:h2.text-xl.font-medium.my-3.flex.gap-2.items-center.opacity-80
-       (shui/tabler-icon "server" {:size 22}) "Your RTC graphs"]
+(comment
+  (rum/defc all-graphs < rum/reactive
+    []
+    (let [graphs (fstate/sub :rtc/graphs)]
+      [:div.py-4
+       [:div.flex.justify-between.items-center
+        [:h2.text-xl.font-medium.my-3.flex.gap-2.items-center.opacity-80
+         (shui/tabler-icon "server" {:size 22}) "Your RTC graphs"]
 
-      (ion/button
-       {:mode "ios" :size "small" :color "secondary"
-        :on-click (fn [] (rtc-handler/<get-remote-graphs))} "refresh")]
+        (ion/button
+         {:mode "ios" :size "small" :color "secondary"
+          :on-click (fn [] (rtc-handler/<get-remote-graphs))} "refresh")]
 
-     [:ul
-      (for [{:keys [url GraphName GraphSchemaVersion]} graphs]
-        [:li
-         [:p.inline-flex.items-center.gap-1
-          [:a.text-lg.mr-2 GraphName]] [:code "ver." GraphSchemaVersion]])]]))
+       [:ul
+        (for [{:keys [url GraphName GraphSchemaVersion]} graphs]
+          [:li
+           [:p.inline-flex.items-center.gap-1
+            [:a.text-lg.mr-2 GraphName]] [:code "ver." GraphSchemaVersion]])]])))
 
 (rum/defc user-profile < rum/reactive
   []
@@ -66,4 +66,5 @@
                                        3000))}
                    (ion/refresher-content))
                   (user-profile)
-                  (repo/repos-cp)))))
+                  [:div.mt-8
+                   (repo/repos-cp)]))))
