@@ -2,14 +2,6 @@ name: Clojure RTC E2E
 
 on:
   push:
-    branches: [master]
-    paths:
-      - 'clj-e2e/**'
-      - '.github/workflows/clj-rtc-e2e.yml'
-      - src/**
-      - deps/**
-      - packages/**
-  pull_request:
     branches: [master, "feat/db"]
     paths:
       - 'clj-e2e/**'
