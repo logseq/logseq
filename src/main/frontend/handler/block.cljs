@@ -278,6 +278,7 @@
                                             :logical-outdenting? (state/logical-outdenting?)})))))
 
 (def *swipe (atom nil))
+(def *swiped? (atom false))
 
 (def *touch-start (atom nil))
 
@@ -338,8 +339,9 @@
                              direction)
                     (.preventDefault goog-event)
                     (let [left (if (= direction :right)
-                                 (if (>= dx 0) (min dx 60) (max dx 0))
-                                 (if (<= dx 0) (- (min (js/Math.abs dx) 60)) (min dx 60)))]
+                                 (if (>= dx 0) (min dx 48) (max dx 0))
+                                 (if (<= dx 0) (- (min (js/Math.abs dx) 48)) (min dx 48)))]
+                      (reset! *swiped? true)
                       (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
 (defn on-touch-end
@@ -347,20 +349,23 @@
   (util/stop-propagation event)
   (when @*swipe
     (let [target (.-target event)
+          swiped? @*swiped?
           {:keys [x0 y0 tx ty]} @*swipe
           dy (- ty y0)
           dx (- tx x0)
-          block-container (util/rec-get-node target "ls-block")]
+          block-container (util/rec-get-node target "ls-block")
+          select? (and (> (. js/Math abs dx) (. js/Math abs dy))
+                       (> (. js/Math abs dx) 10))]
       (try
-        (when (and (> (. js/Math abs dx) (. js/Math abs dy))
-                   (> (. js/Math abs dx) 10))
+        (when (or select? swiped?)
           (dom/set-style! block-container :transform "translateX(0)")
-          (if (contains? (set (state/get-selection-blocks)) block-container)
-            (state/drop-selection-block! block-container)
-            (do
-              (state/clear-edit!)
-              (state/conj-selection-block! block-container nil)))
-          (haptics/haptics)
+          (when select?
+            (if (contains? (set (state/get-selection-blocks)) block-container)
+              (state/drop-selection-block! block-container)
+              (do
+                (state/clear-edit!)
+                (state/conj-selection-block! block-container nil)))
+            (haptics/haptics))
 
             ;; (haptics/with-haptics-impact
             ;;   (do (state/set-state! :mobile/show-action-bar? true)
@@ -368,6 +373,7 @@
             ;;       (select-block! uuid))
             ;;   :light)
           )
+        (reset! *swiped? false)
         (catch :default e
           (js/console.error e))
         (finally
@@ -377,4 +383,5 @@
 (defn on-touch-cancel
   [_e]
   (reset! *swipe nil)
+  (reset! *swiped? nil)
   (reset! *touch-start nil))
