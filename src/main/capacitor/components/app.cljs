@@ -17,6 +17,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.mobile-bar :as mobile-bar]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
@@ -86,11 +87,15 @@
   [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
    {:id "app-keep-keyboard-open-input"}])
 
-(rum/defc journals []
-  (ion/content
-   (ui/classic-app-container-wrap
-    [:div.pt-3
-     (journal/all-journals)])))
+(rum/defc journals < rum/reactive
+  []
+  (let [show-action-bar? (fstate/sub :mobile/show-action-bar?)]
+    (ion/content
+     (ui/classic-app-container-wrap
+      [:div.pt-3
+       (journal/all-journals)])
+     (when show-action-bar?
+       (action-bar/action-bar)))))
 
 (rum/defc home < rum/reactive
   []
@@ -147,7 +152,7 @@
                           ;;   (rtc-indicator/uploading-detail))
                           ])]))))
 
-       ;; main content
+     ;; main content
      (if db-restoring?
        (ion/content
         [:strong.flex.justify-center.items-center.py-24
