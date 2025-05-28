@@ -171,17 +171,20 @@
   [*property *private-property? *find *tree opts loc values {:keys [db-graph?]}]
   (let [values' (cons {:label "Select all"
                        :value "Select all"}
-                      values)
+                      (map #(hash-map :value (str (:value %))
+                                      ;; Preserve original-value as non-string values like boolean do not display in select
+                                      :original-value (:value %))
+                           values))
         find' (rum/react *find)]
     (select values'
-            (fn [{:keys [value]}]
+            (fn [{:keys [value original-value]}]
               (let [k (cond
                         db-graph? (if @*private-property? :private-property :property)
                         (= find' :page) :page-property
                         :else :property)
                     x (if (= value "Select all")
                         [k @*property]
-                        [k @*property value])]
+                        [k @*property original-value])]
                 (reset! *property nil)
                 (append-tree! *tree opts loc x))))))
 
@@ -193,7 +196,7 @@
      (fn [_property]
        (p/let [result (if db-graph?
                         (p/let [result (db-async/<get-property-values @*property)]
-                          (map (fn [{:keys [label _value]}]
+                          (map (fn [{:keys [label]}]
                                  {:label label
                                   :value label})
                                result))
