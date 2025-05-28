@@ -100,7 +100,9 @@
              (.querySelector "[part=scroll]"))))
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (gdom/getElement "main-content-container"))
+            (if (capacitor-new?)
+              (current-page-scroll)
+              (gdom/getElement "main-content-container")))
            ([el]
             (if (capacitor-new?)
               (current-page-scroll)
