@@ -238,17 +238,23 @@
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))
     (testing "page1: indent block1 as child of block0, page2: delete block0"
-        (rtc/with-stop-restart-rtc
-          [@*page1 @*page2]
-          [@*page1 (rtc/with-wait-tx-updated (b/new-block "page1-done-1"))
-           @*page2 (rtc/with-wait-tx-updated (b/new-block "page2-done-1"))]
-          (w/with-page @*page1
-            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
-            (b/indent))
-          (w/with-page @*page2
-            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
-            (b/delete-blocks)))
-        (validate-2-graphs))
+      (rtc/with-stop-restart-rtc
+        [@*page1 @*page2]
+        [@*page1 (rtc/with-wait-tx-updated
+                   (k/esc)
+                   (assert/assert-in-normal-mode?)
+                   (b/new-block "page1-done-1"))
+         @*page2 (rtc/with-wait-tx-updated
+                   (k/esc)
+                   (assert/assert-in-normal-mode?)
+                   (b/new-block "page2-done-1"))]
+        (w/with-page @*page1
+          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
+          (b/indent))
+        (w/with-page @*page2
+          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
+          (b/delete-blocks)))
+      (validate-2-graphs))
     (comment
       "this case is failing now"
       (testing "
@@ -265,22 +271,21 @@ page2:
 - block4
   - block3"
         (rtc/with-stop-restart-rtc
-            [@*page1 @*page2]
-            [@*page1 (rtc/with-wait-tx-updated (b/new-block "page1-done-2"))
-             @*page2 (rtc/with-wait-tx-updated (b/new-block "page2-done-2"))]
-            (w/with-page @*page1
-              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
-              (b/indent)
-              (k/arrow-down)
-              (b/indent)
-              (b/indent))
-            (w/with-page @*page2
-              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 2)))
-              (b/delete-blocks)
-              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
-              (k/shift+arrow-down)
-              (k/meta+shift+arrow-down)
-              (k/enter)
-              (b/indent)))
-        (validate-2-graphs)
-        ))))
+          [@*page1 @*page2]
+          [@*page1 (rtc/with-wait-tx-updated (b/new-block "page1-done-2"))
+           @*page2 (rtc/with-wait-tx-updated (b/new-block "page2-done-2"))]
+          (w/with-page @*page1
+            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
+            (b/indent)
+            (k/arrow-down)
+            (b/indent)
+            (b/indent))
+          (w/with-page @*page2
+            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 2)))
+            (b/delete-blocks)
+            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
+            (k/shift+arrow-down)
+            (k/meta+shift+arrow-down)
+            (k/enter)
+            (b/indent)))
+        (validate-2-graphs)))))

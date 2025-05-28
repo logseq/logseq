@@ -22,7 +22,7 @@
 (reset! config/*port 3001)
 ;; show ui
 (reset! config/*headless false)
-(reset! config/*slow-mo 50)
+(reset! config/*slow-mo 30)
 
 (def *futures (atom {}))
 
