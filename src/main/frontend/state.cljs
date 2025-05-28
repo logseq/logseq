@@ -214,7 +214,6 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/actioned-block                 nil
       :mobile/show-toolbar?                  false
       :mobile/show-recording-bar?            false
       :mobile/show-tabbar?                   false
