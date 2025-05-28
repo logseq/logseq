@@ -7,6 +7,7 @@
    [logseq.e2e.custom-report :as custom-report]
    [logseq.e2e.fixtures :as fixtures :refer [*page1 *page2]]
    [logseq.e2e.graph :as graph]
+   [logseq.e2e.keyboard :as k]
    [logseq.e2e.locator :as loc]
    [logseq.e2e.outliner-basic-test :as outliner-basic-test]
    [logseq.e2e.page :as page]
@@ -236,15 +237,50 @@
         (w/with-page @*page2
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))
-    (testing "disconnect on page1 and page2, do some conflict updates, reconnect and check"
-      (rtc/with-stop-restart-rtc
-        [@*page1 @*page2]
-        [@*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx"))
-         @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy"))]
-        (w/with-page @*page1
-          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
-          (b/indent))
-        (w/with-page @*page2
-          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
-          (b/delete-blocks)))
-      (validate-2-graphs))))
+    (testing "page1: indent block1 as child of block0, page2: delete block0"
+        (rtc/with-stop-restart-rtc
+          [@*page1 @*page2]
+          [@*page1 (rtc/with-wait-tx-updated (b/new-block "page1-done-1"))
+           @*page2 (rtc/with-wait-tx-updated (b/new-block "page2-done-1"))]
+          (w/with-page @*page1
+            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
+            (b/indent))
+          (w/with-page @*page2
+            (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
+            (b/delete-blocks)))
+        (validate-2-graphs))
+    (comment
+      "this case is failing now"
+      (testing "
+origin:
+- block2
+- block3
+- block4
+page1:
+- block2
+  - block3
+    - block4
+page2:
+;; block2 deleted
+- block4
+  - block3"
+        (rtc/with-stop-restart-rtc
+            [@*page1 @*page2]
+            [@*page1 (rtc/with-wait-tx-updated (b/new-block "page1-done-2"))
+             @*page2 (rtc/with-wait-tx-updated (b/new-block "page2-done-2"))]
+            (w/with-page @*page1
+              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
+              (b/indent)
+              (k/arrow-down)
+              (b/indent)
+              (b/indent))
+            (w/with-page @*page2
+              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 2)))
+              (b/delete-blocks)
+              (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 3)))
+              (k/shift+arrow-down)
+              (k/meta+shift+arrow-down)
+              (k/enter)
+              (b/indent)))
+        (validate-2-graphs)
+        ))))
