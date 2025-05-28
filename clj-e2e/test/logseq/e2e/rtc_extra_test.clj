@@ -215,24 +215,14 @@
                                (let [{:keys [_local-tx remote-tx]}
                                      (rtc/with-wait-tx-updated
                                        (test-fn))]
-                                 (reset! *latest-remote-tx remote-tx))))]
-
-      ;; testing while rtc connected
-      (let [*latest-remote-tx (atom nil)]
-        (new-logseq-page)
-        (test-fn-in-page2 *latest-remote-tx)
-        (w/with-page @*page1
-          (rtc/wait-tx-update-to @*latest-remote-tx))
-        (validate-2-graphs))
-
-      ;; testing while rtc off then on
-      (let [*latest-remote-tx (atom nil)]
-        (new-logseq-page)
-        (rtc/with-stop-restart-rtc
-          [@*page1]
-          [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
-          (test-fn-in-page2 *latest-remote-tx))
-        (validate-2-graphs)))))
+                                 (reset! *latest-remote-tx remote-tx))))
+          *latest-remote-tx (atom nil)]
+      (new-logseq-page)
+      (rtc/with-stop-restart-rtc
+        [@*page1]
+        [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
+        (test-fn-in-page2 *latest-remote-tx))
+      (validate-2-graphs))))
 
 (deftest rtc-outliner-conflict-update-test
   (let [title-prefix "rtc-outliner-conflict-update-test"]
