@@ -1,7 +1,12 @@
 (ns frontend.worker.debug
   "For debug usage"
-  (:require [frontend.worker.state :as worker-state]
-            [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [frontend.worker.state :as worker-state]))
+
+(defn get-sqlite-conn
+  "Get current sqlite conn"
+  []
+  (worker-state/get-sqlite-conn (worker-state/get-current-repo)))
 
 (defn get-conn
   "Get current db conn"

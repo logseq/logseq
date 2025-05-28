@@ -2,6 +2,8 @@
   "Provides common sqlite util fns for file and DB graphs. These fns work on
   browser and node"
   (:require ["path" :as node-path]
+            [cljs-bean.core :as bean]
+            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]))
@@ -9,7 +11,45 @@
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
   [sqlite-db]
-  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)"))
+  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON, refCount INTEGER NOT NULL DEFAULT 0)"))
+
+(defn set-ref-count-for-addrs!
+  "Migrate existing db to add refCount for addrs"
+  [db]
+  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                       :rowMode "array"})
+                        bean/->clj
+                        ffirst
+                        sqlite-util/transit-read)
+        ;; internal addrs including root, tail and three index
+        ;; those addrs won't be changed
+        internal-addrs #{0 1 (:eavt schema) (:avet schema) (:aevt schema)}
+        result (->> (.exec db #js {:sql "select addr, addresses from kvs"
+                                   :rowMode "array"})
+                    bean/->clj
+                    (map (fn [[addr addresses]]
+                           [addr (bean/->clj (js/JSON.parse addresses))])))
+
+        addrs (set/difference (set (map first result)) internal-addrs)
+        addr-ref-count (->> (mapcat second result)
+                            frequencies)
+        addr-refs-count (map (fn [addr] [addr (get addr-ref-count addr 0)]) addrs)]
+    (.transaction
+     db
+     (fn [tx]
+       ;; internal addrs will not be decremented since they're not children for any node
+       (doseq [addr internal-addrs]
+         (.exec tx #js {:sql "UPDATE kvs SET refCount = 1 WHERE addr = ?"
+                        :bind #js [addr]}))
+
+       (doseq [[addr refs-count] addr-refs-count]
+         (.exec tx #js {:sql "UPDATE kvs SET refCount = $refCount WHERE addr = $addr"
+                        :bind #js {:$refCount refs-count
+                                   :$addr addr}}))))))
+
+(defn add-ref-count-to-kvs-table!
+  [sqlite-db]
+  (.exec sqlite-db "ALTER TABLE kvs ADD COLUMN refCount INTEGER NOT NULL DEFAULT 0"))
 
 (defn get-storage-conn
   "Given a datascript storage, returns a datascript connection for it"
