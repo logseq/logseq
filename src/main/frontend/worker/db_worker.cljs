@@ -141,28 +141,34 @@
       (rebuild-db-from-datoms! conn sqlite-db)
       (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
 
-(comment
-  (defn- gc-kvs-table!
-    [^Object db]
-    (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
-                                         :rowMode "array"})
-                          bean/->clj
-                          ffirst
-                          sqlite-util/transit-read)
-          result (->> (.exec db #js {:sql "select addr, addresses from kvs"
-                                     :rowMode "array"})
-                      bean/->clj
-                      (map (fn [[addr addresses]]
-                             [addr (bean/->clj (js/JSON.parse addresses))])))
-          used-addresses (set (concat (mapcat second result)
-                                      [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))
-          unused-addresses (clojure.set/difference (set (map first result)) used-addresses)]
-      (when unused-addresses
-        (prn :debug :db-gc :unused-addresses unused-addresses)
-        (.transaction db (fn [tx]
-                           (doseq [addr unused-addresses]
-                             (.exec tx #js {:sql "Delete from kvs where addr = ?"
-                                            :bind #js [addr]}))))))))
+(defonce get-non-refed-addrs-sql
+  "WITH all_referenced AS (
+     SELECT CAST(value AS INTEGER) AS addr
+     FROM kvs, json_each(kvs.addresses)
+  )
+  SELECT kvs.addr
+  FROM kvs
+  WHERE kvs.addr NOT IN (SELECT addr FROM all_referenced)")
+
+(defn- gc-kvs-table!
+  [^Object db]
+  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                       :rowMode "array"})
+                        bean/->clj
+                        ffirst
+                        sqlite-util/transit-read)
+        internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
+        non-refed-addrs (->> (.exec db #js {:sql get-non-refed-addrs-sql
+                                            :rowMode "array"})
+                             (map first)
+                             set)
+        unused-addresses (clojure.set/difference non-refed-addrs internal-addrs)]
+    (when unused-addresses
+      (prn :debug :db-gc :unused-addresses unused-addresses)
+      (.transaction db (fn [tx]
+                         (doseq [addr unused-addresses]
+                           (.exec tx #js {:sql "Delete from kvs where addr = ?"
+                                          :bind #js [addr]})))))))
 
 (defn- find-missing-addresses
   [conn ^Object db & {:keys [delete-addrs]}]
@@ -199,22 +205,7 @@
     (.transaction db (fn [tx]
                        (doseq [item data]
                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                        :bind item}))))
-    ;; (when (seq delete-addrs)
-    ;;   (let [result (.exec db #js {:sql get-to-delete-unused-addresses-sql
-    ;;                               :bind (js/JSON.stringify (clj->js delete-addrs))
-    ;;                               :rowMode "array"})
-    ;;         non-refed-addrs (map #(aget % 0) result)]
-    ;;     (when (seq non-refed-addrs)
-    ;;       (.transaction db (fn [tx]
-    ;;                          (doseq [addr non-refed-addrs]
-    ;;                            (.exec tx #js {:sql "Delete from kvs where addr = ?"
-    ;;                                           :bind #js [addr]})))))
-    ;;     (let [missing-addrs (when worker-util/dev?
-    ;;                           (seq (find-missing-addresses nil db {:delete-addrs non-refed-addrs})))]
-    ;;       (when (seq missing-addrs)
-    ;;         (worker-util/post-message :notification [(str "Bug!! Missing addresses: " missing-addrs) :error false])))))
-    ))
+                                        :bind item}))))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -353,6 +344,9 @@
                 initial-data (sqlite-create-graph/build-db-initial-data config
                                                                         (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
+
+        (worker-util/profile "gc kvs db" (gc-kvs-table! db))
+        (worker-util/profile "gc client ops db" (gc-kvs-table! client-ops-db))
 
         ;; TODO: remove this once we can ensure there's no bug for missing addresses
         ;; because it's slow for large graphs
