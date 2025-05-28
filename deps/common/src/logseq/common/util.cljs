@@ -292,13 +292,13 @@
       (:block/name page)))
 
 (defn string-join-path
-  #_:clj-kondo/ignore
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]
+  #_:clj-kondo/ignore
   (string/join "/" parts))
 
-(def escape-chars "[]{}().+*?|$")
+(def ^:private escape-chars "\\[]{}().+*?|$^")
 
 (defn escape-regex-chars
   "Escapes characters in string `old-value"
