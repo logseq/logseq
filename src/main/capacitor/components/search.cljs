@@ -26,11 +26,6 @@
                           (cmdk/block-item repo block nil input))) blocks)]
     items))
 
-(rum/defc result-item
-  [item]
-  [:div.flex.flex-1
-   (:text item)])
-
 (rum/defc search
   []
   (let [*ref (hooks/use-ref nil)
@@ -61,7 +56,7 @@
              (when header
                [:div.opacity-50.text-sm
                 header])
-             [:div.flex.flex-row.items-center.gap-2
+             [:div.flex.flex-row.items-center.gap-1
               (when icon (ui/icon icon {:size 14
                                         :class "text-muted-foreground"}))
               [:div text]]]))))))))

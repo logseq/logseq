@@ -287,11 +287,8 @@
 (defn block-item
   [repo block current-page input]
   (let [id (:block/uuid block)
-        text (block-handler/block-unique-title block)
-        icon "letter-n"]
-    {:icon icon
-     :icon-theme :gray
-     :text (highlight-content-query text input)
+        text (block-handler/block-unique-title block)]
+    {:text (highlight-content-query text input)
      :header (when-not (db/page? block) (block/breadcrumb {:search? true} repo id {}))
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
