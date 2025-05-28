@@ -30,11 +30,16 @@ const css = {
     })
   },
 
-
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
       css._optimizeCSSForRelease,
+    )(...params)
+  },
+
+  buildCapacitorCSS (...params) {
+    return gulp.series(
+      () => exec(`yarn css:capacitor-new-build`, {}),
     )(...params)
   },
 
@@ -125,7 +130,7 @@ const common = {
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
       () => gulp.src([
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
-      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor')))
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor'))),
     )(...params)
   },
 
@@ -260,8 +265,10 @@ exports.watch = gulp.series(common.syncResourceFile,
   common.syncAssetFiles, common.syncAllStatic,
   common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
-exports.capacitorNewWatch = gulp.series(common.syncResourceFile,
+exports.watchCapacitorNew = gulp.series(common.syncResourceFile,
   common.syncAssetFiles, common.syncAllStatic,
   gulp.parallel(common.keepSyncResourceFile, css.watchCapacitorNewCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
+exports.buildCapacitorNew = gulp.series(common.clean, common.syncResourceFile,
+  common.syncAssetFiles, css.buildCapacitorCSS)
