@@ -190,10 +190,27 @@
      :logseq.property/hide? true
      :logseq.property/built-in? true})])
 
+(defn- build-initial-files [config-content]
+  [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
+    :file/path (str "logseq/" "config.edn")
+    :file/content config-content
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
+    :file/path (str "logseq/" "custom.css")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
+    :file/path (str "logseq/" "custom.js")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}])
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content & {:keys [import-type]}]
+  [config-content & {:keys [import-type graph-git-sha]}]
   (assert (string? config-content))
   (let [initial-data (cond->
                       [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -204,22 +221,10 @@
                        {:db/ident :logseq.property/empty-placeholder
                         :block/uuid (common-uuid/gen-uuid :builtin-block-uuid :logseq.property/empty-placeholder)}]
                        import-type
-                       (into (sqlite-util/import-tx import-type)))
-        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
-                        :file/path (str "logseq/" "config.edn")
-                        :file/content config-content
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
-                        :file/path (str "logseq/" "custom.css")
-                        :file/content ""
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
-                        :file/path (str "logseq/" "custom.js")
-                        :file/content ""
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}]
+                       (into (sqlite-util/import-tx import-type))
+                       graph-git-sha
+                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha)))
+        initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)
         default-classes (build-initial-classes db-ident->properties)

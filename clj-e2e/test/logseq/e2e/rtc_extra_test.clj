@@ -145,17 +145,19 @@
               (reset! *latest-remote-tx remote-tx))))]
     (testing "add some task blocks while rtc disconnected on page1"
       (let [*latest-remote-tx (atom nil)]
-        (with-stop-restart-rtc @*page1 #(insert-task-blocks-in-page2 *latest-remote-tx))
-        (w/with-page @*page1
-          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (rtc/with-stop-restart-rtc
+          [@*page1]
+          [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
+          (insert-task-blocks-in-page2 *latest-remote-tx))
         (validate-task-blocks)
         (validate-2-graphs)))
 
     (testing "update task blocks while rtc disconnected on page1"
       (let [*latest-remote-tx (atom nil)]
-        (with-stop-restart-rtc @*page1 #(update-task-blocks-in-page2 *latest-remote-tx))
-        (w/with-page @*page1
-          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (rtc/with-stop-restart-rtc
+          [@*page1]
+          [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
+          (update-task-blocks-in-page2 *latest-remote-tx))
         (validate-task-blocks)
         (validate-2-graphs)))
 
@@ -187,9 +189,10 @@
               (reset! *latest-remote-tx remote-tx))))]
     (testing "add different types user properties on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
-        (with-stop-restart-rtc @*page1 #(insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-1"))
-        (w/with-page @*page1
-          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (rtc/with-stop-restart-rtc
+          [@*page1]
+          [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
+          (insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-1"))
         (validate-2-graphs)))
 
     (new-logseq-page)
@@ -225,9 +228,10 @@
       ;; testing while rtc off then on
       (let [*latest-remote-tx (atom nil)]
         (new-logseq-page)
-        (with-stop-restart-rtc @*page1 #(test-fn-in-page2 *latest-remote-tx))
-        (w/with-page @*page1
-          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (rtc/with-stop-restart-rtc
+          [@*page1]
+          [@*page1 (rtc/wait-tx-update-to @*latest-remote-tx)]
+          (test-fn-in-page2 *latest-remote-tx))
         (validate-2-graphs)))))
 
 (deftest rtc-outliner-conflict-update-test
@@ -243,30 +247,14 @@
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))
     (testing "disconnect on page1 and page2, do some conflict updates, reconnect and check"
-      (w/with-page @*page1 (rtc/rtc-stop))
-      (w/with-page @*page2 (rtc/rtc-stop))
-
-      ;; TODO: more updates
-      (w/with-page @*page1
-        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
-        (b/indent))
-      (w/with-page @*page2
-        (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
-        (b/delete-blocks))
-      (w/with-page @*page1 (rtc/rtc-start))
-      (w/with-page @*page2 (rtc/rtc-start))
-      (w/with-page @*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx")))
-      (w/with-page @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy")))
+      (rtc/with-stop-restart-rtc
+        [@*page1 @*page2]
+        [@*page1 (rtc/with-wait-tx-updated (b/new-block "xxxx"))
+         @*page2 (rtc/with-wait-tx-updated (b/new-block "yyyy"))]
+        (w/with-page @*page1
+          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 1)))
+          (b/indent))
+        (w/with-page @*page2
+          (w/click (format ".ls-block :text('%s')" (str title-prefix "-" 0)))
+          (b/delete-blocks)))
       (validate-2-graphs))))
-
-(comment
-  (do (w/with-page @*page1 (rtc/rtc-stop))
-      (w/with-page @*page2 (rtc/rtc-stop)))
-
-  (do (w/with-page @*page1 (rtc/rtc-start))
-      (w/with-page @*page2 (rtc/rtc-start)))
-
-  (let [title-prefix "xxxx"
-        property-type "Text"]
-    (w/with-page @*page1
-      (b/new-block (str title-prefix "-" property-type)))))
