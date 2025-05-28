@@ -22,14 +22,18 @@
 
 (defn new-block
   [title]
-  (let [editor (util/get-editor)
-        blocks-count (util/blocks-count)]
+  (let [editor (util/get-editor)]
     (when-not editor (open-last-block))
     (assert/assert-editor-mode)
-    (k/enter)
-    (assert/assert-have-count ".ls-block" (inc blocks-count))
-    (assert/assert-editor-mode)
-    (save-block title)))
+    (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
+      (is (some? last-id))
+      (k/enter)
+      (assert/assert-is-visible
+       (loc/filter ".editor-wrapper"
+                   :has "textarea"
+                   :has-not (str "#" last-id)))
+      (assert/assert-editor-mode)
+      (save-block title))))
 
 ;; TODO: support tree
 (defn new-blocks
@@ -38,7 +42,7 @@
     (when-not editor? (open-last-block))
     (assert/assert-editor-mode)
     (let [value (util/get-edit-content)]
-      (if (string/blank? value)           ; empty block
+      (if (string/blank? value)         ; empty block
         (save-block (first titles))
         (new-block (first titles))))
     (doseq [title (rest titles)]
