@@ -88,7 +88,7 @@
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
 
-     [:div.controls.hidden.sm:flex
+     [:div.controls
       [:div.flex.flex-row.items-center
        (when (util/electron?)
          [:a.text-xs.items-center.text-gray-08.hover:underline.hidden.group-hover:flex
