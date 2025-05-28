@@ -39,7 +39,11 @@
       [:div.py-2
        [:h2.py-3.flex.justify-between.items-center
         [:strong.text-4xl.font-semibold (user-handler/username)]
-        (ion/button {:size "small" :mode "ios" :fill "outline" :color "danger"} "logout")]
+        (ion/button {:size "small"
+                     :mode "ios"
+                     :fill "outline"
+                     :color "danger"
+                     :on-click user-handler/logout} "logout")]
        [:code (user-handler/email)]])))
 
 (rum/defc page
