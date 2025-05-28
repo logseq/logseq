@@ -178,8 +178,8 @@
         ;; fullpath will be encoded
         (path/prepend-protocol "assets:" full-path)
 
-        (mobile-util/native-platform?)
-        (mobile-util/convert-file-src full-path)
+        ;(mobile-util/native-platform?)
+        ;(mobile-util/convert-file-src full-path)
 
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
         (p/let [binary (fs/read-file repo-dir path {})
