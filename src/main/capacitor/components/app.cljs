@@ -61,9 +61,8 @@
                                                            (repo-handler/new-db! db-name)))
                                                        (when (string/starts-with? role "logseq_db_")
                                                          (fstate/pub-event! [:graph/switch role])))))})))}
-      [:span.flex.items-center.gap-2.opacity-95.pt-1
-       (ion/tabler-icon "database" {:size 22})
-       [:strong.overflow-hidden.text-ellipsis.block.font-semibold
+      [:span.flex.items-center.gap-2.opacity-80.pt-1
+       [:strong.overflow-hidden.text-ellipsis.block.font-normal
         {:style {:max-width "40vw"}}
         short-repo-name]])]))
 
@@ -132,7 +131,7 @@
                       (ion/tabler-icon "calendar-month" {:size 24})])
 
                     (let [repo (fstate/get-current-repo)]
-                      [:div.flex.flex-row.items-center.gap-2
+                      [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
                        (when (and repo
                                   (ldb/get-graph-rtc-uuid (db/get-db))
                                   (user-handler/logged-in?)
