@@ -365,14 +365,11 @@
               (do
                 (state/clear-edit!)
                 (state/conj-selection-block! block-container nil)))
-            (haptics/haptics))
-
-            ;; (haptics/with-haptics-impact
-            ;;   (do (state/set-state! :mobile/show-action-bar? true)
-            ;;       (state/set-state! :mobile/actioned-block block)
-            ;;       (select-block! uuid))
-            ;;   :light)
-          )
+            (when (seq (state/get-selection-blocks))
+              (state/set-state! :mobile/show-action-bar? true)
+              ;; (state/set-state! :mobile/actioned-block )
+              )
+            (haptics/haptics)))
         (reset! *swiped? false)
         (catch :default e
           (js/console.error e))
