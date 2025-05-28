@@ -476,7 +476,10 @@
                                    [label value] (cond ref-type?
                                                        [(db-property/property-value-content e)
                                                         (select-keys e [:db/id :block/uuid])]
-                                                       (= :datetime (:logseq.property/type property))
+                                                       ;; FIXME: Move query concerns out of :label as UI labels are usually strings
+                                                       ;; All non-string values need to be passed to the query builder since non-ref prop values use the actual value
+                                                       ;; This check is less fragile than listing all the property types to support e.g. :datetime, :checkbox, :keyword, :any
+                                                       (not (string? v))
                                                        [v v]
                                                        :else
                                                        [(str v) v])]
