@@ -162,7 +162,8 @@
         repos (remove #(= (:url %) config/demo-repo) repos)
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
-     [:h1.title (t :graph/all-graphs)]
+     (when-not (util/capacitor-new?)
+       [:h1.title (t :graph/all-graphs)])
 
      [:div.pl-1.content.mt-3
 
