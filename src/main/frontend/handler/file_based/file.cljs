@@ -193,14 +193,12 @@
                                    :payload {:type :write-file/failed-for-alter-file}}]))))))))
 
 (defn alter-file-test-version
-  "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
-  [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
+  "Test version of alter-file that is synchronous"
+  [repo path content {:keys [reset? from-disk? new-graph? verbose
                              ctime mtime]
                       :fs/keys [event]
                       :or {reset? true
-                           re-render-root? false
-                           from-disk? false
-                           skip-compare? false}}]
+                           from-disk? false}}]
   (let [path (common-util/path-normalize path)
         config-file? (= path "logseq/config.edn")
         _ (when config-file?
@@ -224,29 +222,6 @@
                                                          ;; To avoid skipping the `:or` bounds for keyword destructuring
                                                  (when (some? verbose) {:verbose verbose}))))
                      (db/set-file-content! repo path content opts))]
-        (-> (p/let [_ (when-not from-disk?
-                        (write-file-aux! repo path content {:skip-compare? skip-compare?}))]
-              (when re-render-root? (ui-handler/re-render-root!))
-
-              (cond
-                (= path "logseq/custom.css")
-                (do
-                  ;; ui-handler will load css from db and config
-                  (db/set-file-content! repo path content)
-                  (ui-handler/add-style-if-exists!))
-
-                (= path "logseq/config.edn")
-                (p/let [_ (repo-config-handler/restore-repo-config! repo content)]
-                  (state/pub-event! [:shortcut/refresh])))
-
-              result)
-            (p/catch
-             (fn [error]
-               (println "Write file failed, path: " path ", content: " content)
-               (log/error :write/failed error)
-               (state/pub-event! [:capture-error
-                                  {:error error
-                                   :payload {:type :write-file/failed-for-alter-file}}]))))
         result))))
 
 (defn set-file-content!
