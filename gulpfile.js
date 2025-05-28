@@ -117,7 +117,6 @@ const common = {
       () => gulp.src([
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
-        'node_modules/@ionic/core/dist/ionic/**',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
