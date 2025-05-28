@@ -3,7 +3,7 @@
             ["@capacitor/app" :refer [App]]
             [capacitor.components.search :as search]
             [capacitor.components.settings :as settings]
-            [capacitor.components.ui :as ui]
+            [capacitor.components.ui :as ui-component]
             [capacitor.ionic :as ion]
             [capacitor.nav :as nav]
             [capacitor.state :as state]
@@ -22,6 +22,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as fstate]
+            [frontend.ui :as ui]
             [goog.date :as gdate]
             [logseq.db :as ldb]
             [logseq.shui.dialog.core :as shui-dialog]
@@ -50,18 +51,18 @@
                                      :role (:url repo)})
                                   [{:text "+ Add new graph"
                                     :role "add-new-graph"}])]
-                     (ui/open-modal! "Switch graph"
-                                     {:type :action-sheet
-                                      :buttons buttons
-                                      :inputs []
-                                      :on-action (fn [e]
-                                                   (when-let [role (:role e)]
-                                                     (if (= "add-new-graph" role)
-                                                       (when-let [db-name (js/prompt "Create new db")]
-                                                         (when-not (string/blank? db-name)
-                                                           (repo-handler/new-db! db-name)))
-                                                       (when (string/starts-with? role "logseq_db_")
-                                                         (fstate/pub-event! [:graph/switch role])))))})))}
+                     (ui-component/open-modal! "Switch graph"
+                                               {:type :action-sheet
+                                                :buttons buttons
+                                                :inputs []
+                                                :on-action (fn [e]
+                                                             (when-let [role (:role e)]
+                                                               (if (= "add-new-graph" role)
+                                                                 (when-let [db-name (js/prompt "Create new db")]
+                                                                   (when-not (string/blank? db-name)
+                                                                     (repo-handler/new-db! db-name)))
+                                                                 (when (string/starts-with? role "logseq_db_")
+                                                                   (fstate/pub-event! [:graph/switch role])))))})))}
       [:span.flex.items-center.gap-2.opacity-80.pt-1
        [:strong.overflow-hidden.text-ellipsis.block.font-normal
         {:style {:max-width "40vw"}}
@@ -91,13 +92,16 @@
   []
   (let [show-action-bar? (fstate/sub :mobile/show-action-bar?)]
     (ion/content
-     (ui/classic-app-container-wrap
+     (ui-component/classic-app-container-wrap
       [:div.pt-3
        (journal/all-journals)])
      (when show-action-bar?
        (action-bar/action-bar)))))
 
 (rum/defc home < rum/reactive
+  {:did-mount (fn [state]
+                (ui/inject-document-devices-envs!)
+                state)}
   []
   (let [db-restoring? (fstate/sub :db/restoring?)]
     (ion/page
@@ -124,7 +128,7 @@
                                       (-> (.showDatePicker mobile-util/ui-local)
                                           (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
 
-                                      (ui/open-modal!
+                                      (ui-component/open-modal!
                                        (fn [{:keys [close!]}]
                                          (ion/datetime
                                           {:presentation "date"
@@ -198,8 +202,8 @@
      (bottom-tabs)
 
      (keep-keyboard-open)
-     (ui/install-notifications)
-     (ui/install-modals)
+     (ui-component/install-notifications)
+     (ui-component/install-modals)
 
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
@@ -220,8 +224,8 @@
        (let [handle-back!
              (fn []
                (cond
-                 (seq (ui/get-modal))
-                 (ui/close-modal!)
+                 (seq (ui-component/get-modal))
+                 (ui-component/close-modal!)
 
                  (seq (shui-dialog/get-modal (shui-dialog/get-first-modal-id)))
                  (shui-dialog/close!)
