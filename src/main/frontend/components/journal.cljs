@@ -34,7 +34,7 @@
     (when (seq data)
       [:div#journals
        (ui/virtualized-list
-        {:custom-scroll-parent (gdom/getElement "main-content-container")
+        {:custom-scroll-parent (util/app-scroll-container-node)
          :increase-viewport-by {:top 300 :bottom 300}
          :compute-item-key (fn [idx]
                              (let [id (util/nth-safe data idx)]
