@@ -10,7 +10,8 @@
             [datascript.core :as d]
             [clojure.edn :as edn]
             ["path" :as node-path]
-            ["fs" :as fs]))
+            ["fs" :as fs]
+            [frontend.worker.state :as worker-state]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -19,7 +20,7 @@
         _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.9")
         repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
         files (#'gp-cli/build-graph-files graph-dir repo-config)
-        _ (test-helper/with-config repo-config
+        _ (with-redefs [worker-state/get-config (constantly repo-config)]
             (file-repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
