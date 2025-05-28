@@ -701,8 +701,8 @@
 (defn fix-block-id-if-duplicated!
   "If the block exists in another page or the current page, we need to fix it"
   [db page-name *extracted-block-ids block]
-  (let [existing-block (d/entity db [:block/uuid (:block/uuid block)])
-        block (if (or (and existing-block (not= (:block/name (:block/page existing-block)) page-name))
+  (let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid (:block/uuid block)])))
+        block (if (or (and block-page-name (not= block-page-name page-name))
                       (contains? @*extracted-block-ids (:block/uuid block)))
                 (fix-duplicate-id block)
                 block)]
