@@ -1,15 +1,11 @@
 (ns capacitor.ionic
   (:refer-clojure :exclude [list])
   (:require ["@capacitor/camera" :as ionicCamera]
-            ["@ionic/react" :as ionicReact]
             [logseq.shui.icon.v2 :as shui-icon]
             [logseq.shui.util :as shui-util]))
 
-;; initialize ionic react
-(.setupIonicReact ionicReact)
-
 ;(def define-custom-component ionicLoader/defineCustomElements)
-(def ^js ionic-react ionicReact)
+(def ^js ionic-react js/window.LSIonic)
 (def ^js camera (.-Camera ionicCamera))
 (def ^js camera-result-type (.-CameraResultType ionicCamera))
 
