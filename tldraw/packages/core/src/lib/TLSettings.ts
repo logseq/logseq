@@ -8,6 +8,7 @@ export interface TLSettingsProps {
   snapToGrid: boolean
   color: string
   scaleLevel: string
+  zoomLocked: boolean
 }
 
 export class TLSettings implements TLSettingsProps {
@@ -21,6 +22,7 @@ export class TLSettings implements TLSettingsProps {
   @observable penMode = false
   @observable scaleLevel = 'md'
   @observable color = ''
+  @observable zoomLocked = false
 
   @action update(props: Partial<TLSettingsProps>): void {
     Object.assign(this, props)

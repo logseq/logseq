@@ -14,6 +14,7 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
   return (
     <DropdownMenuPrimitive.Root>
       <DropdownMenuPrimitive.Trigger className="tl-button text-sm px-2 important" id="tl-zoom">
+        {app.settings.zoomLocked && '🔒 '}
         {(app.viewport.camera.zoom * 100).toFixed(0) + '%'}
       </DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Content
@@ -62,6 +63,19 @@ export const ZoomMenu = observer(function ZoomMenu(): JSX.Element {
         >
           Reset zoom
           <KeyboardShortcut action="whiteboard/reset-zoom" />
+        </DropdownMenuPrimitive.Item>
+        <DropdownMenuPrimitive.Separator className="tl-menu-divider" />
+        <DropdownMenuPrimitive.Item
+          className="tl-menu-item"
+          onSelect={preventEvent}
+          onClick={() => app.settings.update({ zoomLocked: !app.settings.zoomLocked })}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '18px', textAlign: 'center' }}>
+              {app.settings.zoomLocked ? '✓' : ''}
+            </span>
+            Lock zoom
+          </span>
         </DropdownMenuPrimitive.Item>
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Root>

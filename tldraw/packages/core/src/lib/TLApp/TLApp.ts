@@ -41,6 +41,12 @@ export class TLApp<
   S extends TLShape = TLShape,
   K extends TLEventMap = TLEventMap
 > extends TLRootState<S, K> {
+  readonly api: TLApi<S, K>
+  readonly inputs = new TLInputs<K>()
+  readonly cursors = new TLCursors()
+  readonly viewport: TLViewport
+  readonly settings = new TLSettings()
+  
   constructor(
     serializedApp?: TLDocumentModel<S>,
     Shapes?: TLShapeConstructor<S>[],
@@ -48,6 +54,7 @@ export class TLApp<
     readOnly?: boolean
   ) {
     super()
+    this.viewport = new TLViewport(this.settings)
     this._states = [TLSelectTool, TLMoveTool]
     this.readOnly = readOnly
     this.history.pause()
@@ -75,12 +82,6 @@ export class TLApp<
 
   static id = 'app'
   static initial = 'select'
-
-  readonly api: TLApi<S, K>
-  readonly inputs = new TLInputs<K>()
-  readonly cursors = new TLCursors()
-  readonly viewport = new TLViewport()
-  readonly settings = new TLSettings()
 
   Tools: TLToolConstructor<S, K>[] = []
 
