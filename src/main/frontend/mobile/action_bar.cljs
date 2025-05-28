@@ -38,7 +38,6 @@
      [:div.action-bar-commands
       (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks false))
       (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
-      (action-command "trash" "Delete" #(editor-handler/cut-selection-blocks false))
       (action-command "registered" "Copy ref"
                       (fn [_event] (editor-handler/copy-block-refs)))
       (action-command "link" "Copy url"

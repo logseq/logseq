@@ -210,8 +210,20 @@
      (shui-popup/install-popups))))
 
 (rum/defc main []
-  (let [current-repo (frum/use-atom-in fstate/state :git/current-repo)]
+  (let [current-repo (frum/use-atom-in fstate/state :git/current-repo)
+        ;; TODO: support dark theme
+        theme "light"]
     ;; global
+    (hooks/use-effect!
+     #(let [^js doc js/document.documentElement
+            ^js cls (.-classList doc)
+            ^js cls-body (.-classList js/document.body)]
+        (.setAttribute doc "data-theme" theme)
+        (if (= theme "dark") ;; for tailwind dark mode
+          (do (.add cls "dark") (doto cls-body (.remove "light-theme") (.add "dark-theme")))
+          (do (.remove cls "dark") (doto cls-body (.remove "dark-theme") (.add "light-theme")))))
+     [theme])
+
     ;; why need this
     (hooks/use-effect!
      (fn []
