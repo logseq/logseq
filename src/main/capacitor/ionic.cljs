@@ -5,6 +5,9 @@
             [logseq.shui.icon.v2 :as shui-icon]
             [logseq.shui.util :as shui-util]))
 
+;; initialize ionic react
+(.setupIonicReact ionicReact)
+
 ;(def define-custom-component ionicLoader/defineCustomElements)
 (def ^js ionic-react ionicReact)
 (def ^js camera (.-Camera ionicCamera))
