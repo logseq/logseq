@@ -103,22 +103,6 @@
        (ion/buttons {:slot "start"}
                     (app-graphs-select))
 
-       (let [repo (fstate/get-current-repo)]
-         [:div.flex.flex-row.items-center.gap-2
-          (when (and repo
-                     (ldb/get-graph-rtc-uuid (db/get-db))
-                     (user-handler/logged-in?)
-                     (config/db-based-graph? repo)
-                     (user-handler/team-member?))
-            [:<>
-            ;; (rum/with-key (rtc-collaborators)
-            ;;   (str "collab-" repo))
-             (rtc-indicator/indicator)
-             (when (user-handler/logged-in?)
-               (rtc-indicator/downloading-detail))
-             (when (user-handler/logged-in?)
-               (rtc-indicator/uploading-detail))])])
-
        (ion/buttons {:slot "end"}
                     (ion/button
                      {:size "small"
@@ -147,12 +131,22 @@
                      [:span.text-muted-foreground {:slot "icon-only"}
                       (ion/tabler-icon "calendar-month" {:size 24})])
 
-                    (ion/button {:fill "clear"}
-                                (ion/nav-link
-                                 {:routerDirection "forward"
-                                  :class "w-full"
-                                  :component settings/page}
-                                 [:span.text-muted-foreground {:slot "icon-only"} (ion/tabler-icon "dots" {:size 24})])))))
+                    (let [repo (fstate/get-current-repo)]
+                      [:div.flex.flex-row.items-center.gap-2
+                       (when (and repo
+                                  (ldb/get-graph-rtc-uuid (db/get-db))
+                                  (user-handler/logged-in?)
+                                  (config/db-based-graph? repo)
+                                  (user-handler/team-member?))
+                         [:<>
+                          ;; (rum/with-key (rtc-collaborators)
+                          ;;   (str "collab-" repo))
+                          (rtc-indicator/indicator)
+                          ;; (when (user-handler/logged-in?)
+                          ;;   (rtc-indicator/downloading-detail))
+                          ;; (when (user-handler/logged-in?)
+                          ;;   (rtc-indicator/uploading-detail))
+                          ])]))))
 
        ;; main content
      (if db-restoring?
