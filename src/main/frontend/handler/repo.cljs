@@ -131,7 +131,8 @@
 (defn combine-local-&-remote-graphs
   [local-repos remote-repos]
   (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
-                                        (let [graph-id (some-> (or (:kv/value metadata) (second sync-meta)) str)]
+                                        (let [graph-id (some-> (or (:kv/value metadata)
+                                                                   (second sync-meta)) str)]
                                           (if graph-id (assoc repo :GraphUUID graph-id) repo)))
                                       local-repos)
                                  (some->> remote-repos
@@ -181,7 +182,8 @@
   (->
    (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
            _ (persist-db/<new full-graph-name
-                              (cond-> {:config config}
+                              (cond-> {:config config
+                                       :graph-git-sha config/revision}
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
