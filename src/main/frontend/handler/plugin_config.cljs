@@ -3,22 +3,23 @@
   global-config component. This component is only enabled? if both the
   global-config and plugin components are enabled. plugin.edn is automatically updated
 when a plugin is installed, updated or removed"
-  (:require [frontend.handler.global-config :as global-config-handler]
-            [logseq.common.path :as path]
-            [promesa.core :as p]
-            [borkdude.rewrite-edn :as rewrite]
-            [frontend.fs :as fs]
-            [frontend.state :as state]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.common.plugin :as plugin-common-handler]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [cljs-bean.core :as bean]
             [clojure.edn :as edn]
-            [clojure.set :as set]
             [clojure.pprint :as pprint]
+            [clojure.set :as set]
+            [frontend.fs :as fs]
+            [frontend.handler.common.plugin :as plugin-common-handler]
+            [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.schema.handler.plugin-config :as plugin-config-schema]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [logseq.common.path :as path]
             [malli.core :as m]
             [malli.error :as me]
-            [frontend.schema.handler.plugin-config :as plugin-config-schema]
-            [cljs-bean.core :as bean]
-            [lambdaisland.glogi :as log]))
+            [promesa.core :as p]))
 
 (defn plugin-config-path
   "Full path to plugins.edn"
@@ -74,6 +75,10 @@ returns map of plugins to install and uninstall"
                       (set/difference edn-plugins-set installed-plugins-set))
        :uninstall (vec (set/difference installed-plugins-set edn-plugins-set))})))
 
+(defn open-install-plugin-from-github-modal
+  []
+  (state/pub-event! [:go/install-plugin-from-github]))
+
 (defn open-replace-plugins-modal
   []
   (p/catch
@@ -103,14 +108,15 @@ returns map of plugins to install and uninstall"
     (plugin-common-handler/unregister-plugin (name (:id plugin))))
   (log/info :install-plugins (:install plugins))
   (doseq [plugin (:install plugins)]
-    (plugin-common-handler/install-marketplace-plugin
+    (plugin-common-handler/install-marketplace-plugin!
      ;; Add :name so that install notifications are readable
      (assoc plugin :name (name (:id plugin))))))
 
 (defn setup-install-listener!
   "Sets up a listener for the lsp-installed event to update plugins.edn"
   []
-  (let [listener (fn listener [_ e]
+  (let [channel (name :lsp-updates)
+        listener (fn listener [_ e]
                    (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (when (and (= status "completed") (not only-check))
                        (let [{:keys [theme effect]} payload]
@@ -118,10 +124,15 @@ returns map of plugins to install and uninstall"
                           (assoc payload
                                  :version (:installed-version payload)
                                  :effect (boolean effect)
-                                 ;; Manual installation doesn't have theme field but
-                                 ;; plugin.edn requires this field
+                             ;; Manual installation doesn't have theme field but
+                             ;; plugin.edn requires this field
                                  :theme (boolean theme)))))))]
-    (js/window.apis.addListener (name :lsp-updates) listener)))
+    (when (util/electron?)
+      (js/window.apis.addListener channel listener))
+    ;;teardown
+    (fn []
+      (when (util/electron?)
+        (js/window.apis.removeListener channel listener)))))
 
 (defn start
   "This component has just one responsibility on start, to create a plugins.edn

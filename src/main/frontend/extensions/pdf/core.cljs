@@ -1,24 +1,30 @@
 (ns frontend.extensions.pdf.core
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.components.svg :as svg]
+            [datascript.impl.entity :as de]
+            [frontend.commands :as commands]
             [frontend.components.block :as block]
+            [frontend.components.svg :as svg]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db.async :as db-async]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.toolbar :refer [pdf-toolbar *area-dashed? *area-mode? *highlight-mode? *highlights-ctx*]]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [frontend.handler.notification :as notification]
-            [frontend.config :as config]
+            [frontend.handler.property :as property-handler]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.commands :as commands]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.functions :refer [debounce]]
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [rum.core :as rum]))
 
 (declare pdf-container system-embed-playground)
 
@@ -33,7 +39,7 @@
 
 (rum/defcs pdf-highlight-finder
   < rum/static rum/reactive
-    (rum/local false ::mounted?)
+  (rum/local false ::mounted?)
   [state ^js viewer]
   (let [*mounted? (::mounted? state)]
     (when viewer
@@ -52,7 +58,7 @@
 
 (rum/defc pdf-page-finder < rum/static
   [^js viewer]
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (when viewer
        (when-let [_ (:pdf/current @state/state)]
@@ -70,15 +76,16 @@
   [^js viewer]
   (let [el-ref   (rum/use-ref nil)
         adjust-main-size!
-                 (util/debounce
-                  200 (fn [width]
-                        (let [root-el js/document.documentElement]
-                          (.setProperty (.-style root-el) "--ph-view-container-width" width)
-                          (pdf-utils/adjust-viewer-size! viewer))))
+        (util/debounce
+         (fn [width]
+           (let [root-el js/document.documentElement]
+             (.setProperty (.-style root-el) "--ph-view-container-width" width)
+             (pdf-utils/adjust-viewer-size! viewer)))
+         200)
         group-id (.-$groupIdentity viewer)]
 
     ;; draggable handler
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
          (-> (js/interact el)
@@ -109,7 +116,7 @@
    {:keys [highlight point ^js selection]}
    {:keys [clear-ctx-menu! add-hl! upd-hl! del-hl!]}]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [cb  #(clear-ctx-menu!)
            doc (pdf-windows/resolve-own-document viewer)]
@@ -124,6 +131,8 @@
 
   (let [*el (rum/use-ref nil)
         ^js cnt (.-container viewer)
+        ^js body (some-> (.-ownerDocument cnt) (.-body))
+        key-alt? (= (some-> body (.-dataset) (.-activeKeystroke)) "Alt")
         head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.-scrollTop cnt)) head-height)
         left (+ (:x point) (.-scrollLeft cnt))
@@ -131,13 +140,14 @@
         new? (nil? id)
         new-&-highlight-mode? (and @*highlight-mode? new?)
         show-ctx-menu? (and (not new-&-highlight-mode?)
-                            (or (not selection) (and selection (state/sub :pdf/auto-open-ctx-menu?))))
+                            (or (not selection) (and selection (or (state/sub :pdf/auto-open-ctx-menu?) key-alt?))))
         content (:content highlight)
         area? (not (string/blank? (:image content)))
         action-fn! (fn [action clear?]
                      (when-let [action (and action (name action))]
                        (let [highlight (if (fn? highlight) (highlight) highlight)
-                             content (:content highlight)]
+                             content (:content highlight)
+                             ^js owner-win (pdf-windows/resolve-own-window viewer)]
                          (case action
                            "ref"
                            (pdf-assets/copy-hl-ref! highlight viewer)
@@ -145,8 +155,8 @@
                            "copy"
                            (do
                              (util/copy-to-clipboard!
-                               (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
-                               :owner-window (pdf-windows/resolve-own-window viewer))
+                              (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
+                              :owner-window owner-win)
                              (pdf-utils/clear-all-selection))
 
                            "link"
@@ -168,18 +178,18 @@
                                (let [highlight (merge highlight
                                                       {:id         (pdf-utils/gen-uuid)
                                                        :properties properties})]
-                                 (add-hl! highlight)
-                                 (pdf-utils/clear-all-selection)
-                                 (pdf-assets/copy-hl-ref! highlight viewer))
+                                 (p/let [highlight' (add-hl! highlight)]
+                                   (pdf-utils/clear-all-selection owner-win)
+                                   (pdf-assets/copy-hl-ref! highlight' viewer)))
 
-                               ;; update highlight
+;; update highlight
                                (upd-hl! (assoc highlight :properties properties)))
 
                              (reset! *highlight-last-color (keyword action)))))
 
                        (and clear? (js/setTimeout #(clear-ctx-menu!) 68))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if new-&-highlight-mode?
          ;; wait for selection cleared ...
@@ -205,7 +215,6 @@
       (for [it ["yellow", "red", "green", "blue", "purple"]]
         [:a {:key it :data-color it :data-action it} it])]
 
-
      (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
      (and (not area?) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
@@ -225,8 +234,7 @@
 
                                     (when (true? (:clearSelection extras))
                                       (pdf-utils/clear-all-selection)))}
-          label]))
-     ]))
+          label]))]))
 
 (rum/defc pdf-highlights-text-region
   [^js viewer vw-hl hl {:keys [show-ctx-menu!]}]
@@ -247,7 +255,7 @@
         (fn [^js e]
           (when-let [^js dt (and id (.-dataTransfer e))]
             (reset! block/*dragging? true)
-            (pdf-assets/ensure-ref-block! (state/get-current-pdf) hl)
+            (pdf-assets/ensure-ref-block! (state/get-current-pdf) hl nil)
             (.setData dt "text/plain" (str "((" id "))"))))]
 
     [:div.extensions__pdf-hls-text-region
@@ -285,13 +293,13 @@
                               (.setData dt "text/plain" (str "((" id "))"))))
         update-hl!        (fn [hl] (some-> (rum/deref *ops-ref) (:upd-hl!) (apply [hl])))]
 
-    (rum/use-effect!
-      (fn []
-        (rum/set-ref! *ops-ref ops))
-      [ops])
+    (hooks/use-effect!
+     (fn []
+       (rum/set-ref! *ops-ref ops))
+     [ops])
 
     ;; resizable
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js el (rum/deref *el)
              ^js it (-> (js/interact el)
@@ -323,19 +331,21 @@
                                                   (let [hl' (assoc hl :position to-sc-pos)
                                                         hl' (assoc-in hl' [:content :image] (js/Date.now))]
 
-                                                    (p/then
-                                                     (pdf-assets/persist-hl-area-image$ viewer
-                                                                                        (:pdf/current @state/state)
-                                                                                        hl' hl (:bounding to-vw-pos))
-                                                     (fn [] (js/setTimeout
-                                                             #(do
-                                                                ;; reset dom effects
-                                                                (set! (.. target -style -transform) (str "translate(0, 0)"))
-                                                                (.removeAttribute target "data-x")
-                                                                (.removeAttribute target "data-y")
+                                                    (p/let [result (pdf-assets/persist-hl-area-image$ viewer
+                                                                                                      (:pdf/current @state/state)
+                                                                                                      hl' hl (:bounding to-vw-pos))]
 
-                                                                (update-hl! hl')) 200))))
-
+                                                      (js/setTimeout
+                                                       #(do
+                                                           ;; reset dom effects
+                                                          (set! (.. target -style -transform) (str "translate(0, 0)"))
+                                                          (.removeAttribute target "data-x")
+                                                          (.removeAttribute target "data-y")
+                                                          (let [hl' (if (de/entity? result)
+                                                                      (assoc-in hl' [:content :image] (:db/id result))
+                                                                      hl')]
+                                                            (update-hl! hl')))
+                                                       200)))
 
                                                   (js/setTimeout #(rum/set-ref! *dirty false))))
 
@@ -358,12 +368,10 @@
 
                                                     ;; cache pos
                                                     (.setAttribute target "data-x" ax)
-                                                    (.setAttribute target "data-y" ay))
-                                                  ))}
+                                                    (.setAttribute target "data-y" ay))))}
                            :modifiers [(js/interact.modifiers.restrict
-                                         (bean/->js {:restriction (.closest el ".page")}))]
-                           :inertia   true})
-                         ))]
+                                        (bean/->js {:restriction (.closest el ".page")}))]
+                           :inertia   true})))]
          ;; destroy
          #(.unset it)))
      [hl])
@@ -391,8 +399,7 @@
          (if (get-in hl [:content :image])
            (pdf-highlight-area-region viewer vw-hl hl ops)
            (pdf-highlights-text-region viewer vw-hl hl ops))
-         (:id hl))
-       ))])
+         (:id hl))))])
 
 (rum/defc ^:large-vars/cleanup-todo pdf-highlight-area-selection
   [^js viewer {:keys [show-ctx-menu!]}]
@@ -460,74 +467,74 @@
 
         disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")
 
-        fn-move                 (rum/use-callback
-                                  (fn [^js/MouseEvent e]
-                                    (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
-                                  [])]
+        fn-move                 (hooks/use-callback
+                                 (fn [^js/MouseEvent e]
+                                   (set-end! (calc-coords! (.-pageX e) (.-pageY e))))
+                                 [])]
 
-    (rum/use-effect!
-      (fn []
-        (when-let [^js/HTMLElement root cnt-el]
-          (let [fn-start (fn [^js/MouseEvent e]
-                           (if (should-start e)
-                             (let [target (.-target e)
-                                   page-el (.closest target ".page")
-                                   [x y] [(.-pageX e) (.-pageY e)]]
-                               (rum/set-ref! *start-el target)
-                               (rum/set-ref! *start-xy [x y])
-                               (rum/set-ref! *page-el page-el)
-                               (rum/set-ref! *page-rect (some-> page-el (.getBoundingClientRect) (.toJSON) (bean/->clj)))
-                               (set-start! (calc-coords! x y))
-                               (disable-text-selection! true)
+    (hooks/use-effect!
+     (fn []
+       (when-let [^js/HTMLElement root cnt-el]
+         (let [fn-start (fn [^js/MouseEvent e]
+                          (if (should-start e)
+                            (let [target (.-target e)
+                                  page-el (.closest target ".page")
+                                  [x y] [(.-pageX e) (.-pageY e)]]
+                              (rum/set-ref! *start-el target)
+                              (rum/set-ref! *start-xy [x y])
+                              (rum/set-ref! *page-el page-el)
+                              (rum/set-ref! *page-rect (some-> page-el (.getBoundingClientRect) (.toJSON) (bean/->clj)))
+                              (set-start! (calc-coords! x y))
+                              (disable-text-selection! true)
 
-                               (.addEventListener root "mousemove" fn-move))
+                              (.addEventListener root "mousemove" fn-move))
 
                              ;; reset
-                             (do (reset-coords!)
-                                 (disable-text-selection! false))))
+                            (do (reset-coords!)
+                                (disable-text-selection! false))))
 
-                fn-end   (fn [^js/MouseEvent e]
-                           (when-let [start-el (rum/deref *start-el)]
-                             (let [end  (calc-coords! (.-pageX e) (.-pageY e))
-                                   rect (calc-rect start end)]
+               fn-end   (fn [^js/MouseEvent e]
+                          (when-let [start-el (rum/deref *start-el)]
+                            (let [end  (calc-coords! (.-pageX e) (.-pageY e))
+                                  rect (calc-rect start end)]
 
-                               (if (and (> (:width rect) 10)
-                                        (> (:height rect) 10))
+                              (if (and (> (:width rect) 10)
+                                       (> (:height rect) 10))
 
-                                 (when-let [^js page-el (.closest start-el ".page")]
-                                   (let [page-number (int (.-pageNumber (.-dataset page-el)))
-                                         page-pos    (merge rect {:top  (- (:top rect) (.-offsetTop page-el))
-                                                                  :left (- (:left rect) (.-offsetLeft page-el))})
-                                         vw-pos      {:bounding page-pos :rects [] :page page-number}
-                                         sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos)
+                                (when-let [^js page-el (.closest start-el ".page")]
+                                  (let [page-number (int (.-pageNumber (.-dataset page-el)))
+                                        page-pos    (merge rect {:top  (- (:top rect) (.-offsetTop page-el))
+                                                                 :left (- (:left rect) (.-offsetLeft page-el))})
+                                        vw-pos      {:bounding page-pos :rects [] :page page-number}
+                                        sc-pos      (pdf-utils/vw-to-scaled-pos viewer vw-pos)
 
-                                         point       {:x (.-clientX e) :y (.-clientY e)}
-                                         hl          {:id         nil
-                                                      :page       page-number
-                                                      :position   sc-pos
-                                                      :content    {:text "[:span]" :image (js/Date.now)}
-                                                      :properties {}}]
+                                        point       {:x (.-clientX e) :y (.-clientY e)}
+                                        hl          {:id         nil
+                                                     :page       page-number
+                                                     :position   sc-pos
+                                                     :content    {:text "" :image (js/Date.now)}
+                                                     :properties {}}]
 
                                      ;; ctx tips for area
-                                     (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords!)}))
+                                    (show-ctx-menu! viewer hl point {:reset-fn #(reset-coords!)}))
 
-                                   (set-area-mode! false))
+                                  (set-area-mode! false))
 
                                  ;; reset
-                                 (reset-coords!)))
+                                (reset-coords!)))
 
-                             (disable-text-selection! false)
-                             (.removeEventListener root "mousemove" fn-move)))]
+                            (disable-text-selection! false)
+                            (.removeEventListener root "mousemove" fn-move)))]
 
-            (doto root
-              (.addEventListener "mousedown" fn-start)
-              (.addEventListener "mouseup" fn-end #js {:once true}))
+           (doto root
+             (.addEventListener "mousedown" fn-start)
+             (.addEventListener "mouseup" fn-end #js {:once true}))
 
             ;; destroy
-            #(doto root
-               (.removeEventListener "mousedown" fn-start)
-               (.removeEventListener "mouseup" fn-end)))))
-      [start])
+           #(doto root
+              (.removeEventListener "mousedown" fn-start)
+              (.removeEventListener "mouseup" fn-end)))))
+     [start])
 
     [:div.extensions__pdf-area-selection
      {:ref *el}
@@ -537,47 +544,56 @@
 (rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
-  (let [^js doc         (.-ownerDocument el)
-        ^js win         (.-defaultView doc)
-        *mounted        (rum/use-ref false)
+  (let [^js doc (.-ownerDocument el)
+        ^js win (.-defaultView doc)
+        *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:selection nil :range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [ctx-menu-state, set-ctx-menu-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
 
-        clear-ctx-menu! (rum/use-callback
+        clear-ctx-menu! (hooks/use-callback
                          #(let [reset-fn (:reset-fn ctx-menu-state)]
                             (set-ctx-menu-state! {})
                             (and (fn? reset-fn) (reset-fn)))
                          [ctx-menu-state])
 
-        show-ctx-menu!  (fn [^js viewer hl point & ops]
-                          (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
-                            (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
+        show-ctx-menu! (fn [^js viewer hl point & ops]
+                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
+                           (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
         add-hl! (fn [hl]
                   (when (:id hl)
                     ;; fix js object
-                    (let [highlights (pdf-utils/fix-nested-js highlights)]
-                      (set-highlights! (conj highlights hl)))
+                    (let [highlights (pdf-utils/fix-nested-js highlights)
+                          highlights' (conj highlights hl)]
+                      (set-highlights! highlights')
 
-                    (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                      (if-let [vw-pos (and (pdf-assets/area-highlight? hl)
                                            (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
-                      ;; exceptions
-                      (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                         hl nil (:bounding vw-pos)))))
+                        ;; exceptions
+                        (->
+                         (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                                                           hl nil (:bounding vw-pos))]
+                           (if (de/entity? result)
+                             (let [hl' (assoc-in hl [:content :image] (:db/id result))]
+                               (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
+                               hl')
+                             (throw (js/Error. (str "[pdf] unexpected persist asset image return:" result)))))
+                         (p/catch (fn [e] (js/console.error e))))
+                        hl))))
+        upd-hl! (fn [hl]
+                  (let [highlights (pdf-utils/fix-nested-js highlights)]
+                    (when-let [[target-idx] (medley/find-first
+                                             #(= (:id (second %)) (:id hl))
+                                             (medley/indexed highlights))]
+                      (set-highlights! (assoc-in highlights [target-idx] hl))
+                      (pdf-assets/update-hl-block! hl))))
 
-        upd-hl!         (fn [hl]
-                          (let [highlights (pdf-utils/fix-nested-js highlights)]
-                            (when-let [[target-idx] (medley/find-first
-                                                     #(= (:id (second %)) (:id hl))
-                                                     (medley/indexed highlights))]
-                              (set-highlights! (assoc-in highlights [target-idx] hl))
-                              (pdf-assets/update-hl-block! hl))))
-
-        del-hl!         (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
+        del-hl! (fn [hl] (when-let [id (:id hl)]
+                           (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
     ;; consume dirtied
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (if (rum/deref *mounted)
          (set-dirty-hls! highlights)
@@ -585,7 +601,7 @@
      [highlights])
 
     ;; selection events
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [fn-selection-ok
              (fn [^js/MouseEvent e]
@@ -640,7 +656,7 @@
      [viewer])
 
     ;; selection context menu
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js/Range sel-range (and (not (:collapsed sel-state)) (:range sel-state))]
          (let [^js point               (:point sel-state)
@@ -667,20 +683,20 @@
      [(:range sel-state)])
 
     ;; render hls
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [grouped-hls (and (sequential? highlights) (group-by :page highlights))]
          (doseq [page loaded-pages]
            (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
-             (let [page-hls (get grouped-hls page)]
-
-               (rum/mount
-                (pdf-highlights-region-container
-                 viewer page-hls {:show-ctx-menu! show-ctx-menu!
-                                  :upd-hl!        upd-hl!})
-
-                hls-layer)))))
-
+             (let [page-hls (get grouped-hls page)
+                   hls-render (pdf-highlights-region-container
+                               viewer page-hls {:show-ctx-menu! show-ctx-menu!
+                                                :upd-hl! upd-hl!})
+                   ^js mounted-root (.-mountedRoot hls-layer)]
+               (if (nil? mounted-root)
+                 (->> (rum/mount hls-render hls-layer)
+                      (set! (. hls-layer -mountedRoot)))
+                 (.render mounted-root hls-render))))))
        ;; destroy
        #())
      [loaded-pages highlights])
@@ -692,9 +708,9 @@
        (js/ReactDOM.createPortal
         (pdf-highlights-ctx-menu viewer ctx-menu-state
                                  {:clear-ctx-menu! clear-ctx-menu!
-                                  :add-hl!         add-hl!
-                                  :del-hl!         del-hl!
-                                  :upd-hl!         upd-hl!})
+                                  :add-hl! add-hl!
+                                  :del-hl! del-hl!
+                                  :upd-hl! upd-hl!})
 
         (.querySelector el ".pp-holder")))
 
@@ -715,9 +731,8 @@
      (pdf-highlight-area-selection
       viewer
       {:clear-ctx-menu! clear-ctx-menu!
-       :show-ctx-menu!  show-ctx-menu!
-       :add-hl!         add-hl!
-       })]))
+       :show-ctx-menu! show-ctx-menu!
+       :add-hl! add-hl!})]))
 
 (rum/defc ^:large-vars/data-var pdf-viewer
   [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-error]} ops]
@@ -729,7 +744,7 @@
         [area-dashed?, _set-area-dashed?] (use-atom *area-dashed?)]
 
     ;; instant pdfjs viewer
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js event-bus    (js/pdfjsViewer.EventBus.)
              ^js link-service (js/pdfjsViewer.PDFLinkService. #js {:eventBus event-bus :externalLinkTarget 2})
@@ -780,7 +795,7 @@
      [])
 
     ;; update window title
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js viewer (:viewer state)]
          (when (pdf-windows/check-viewer-in-system-win? viewer)
@@ -789,7 +804,7 @@
      [(:viewer state)])
 
     ;; interaction events
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js viewer (:viewer state)]
          (let [fn-textlayer-ready
@@ -809,7 +824,7 @@
     (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
       [:div.extensions__pdf-viewer-cnt.visible-scrollbar
-       [:div.extensions__pdf-viewer.overflow-x-auto
+       [:div.extensions__pdf-viewer.overflow-x-auto.absolute
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
@@ -819,10 +834,10 @@
 
         (when (and page-ready? viewer (not initial-error))
           [(rum/with-key
-            (pdf-highlights
-             (:el state) viewer
-             initial-hls (:loaded-pages ano-state)
-             ops) "pdf-highlights")])]
+             (pdf-highlights
+              (:el state) viewer
+              initial-hls (:loaded-pages ano-state)
+              ops) "pdf-highlights")])]
 
        (when (and page-ready? viewer)
          [(when-not in-system-window?
@@ -847,14 +862,28 @@
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button
-        "Submit"
-        {:on-click (fn []
-                     (let [password @password]
-                       (confirm-fn password)))})]]))
+       "Submit"
+       {:on-click (fn []
+                    (let [password @password]
+                      (confirm-fn password)))})]]))
+
+(defonce debounced-set-property!
+  (debounce property-handler/set-block-property! 300))
+
+(defn- debounce-set-last-visit-page!
+  [asset last-visit-page]
+  (when (and (number? last-visit-page)
+             (> last-visit-page 0))
+    (debounced-set-property! (state/get-current-repo)
+                             (:db/id asset)
+                             :logseq.property.asset/last-visit-page
+                             last-visit-page)))
 
 (rum/defc ^:large-vars/data-var pdf-loader
   [{:keys [url hls-file identity filename] :as pdf-current}]
-  (let [*doc-ref       (rum/use-ref nil)
+  (let [repo           (state/get-current-repo)
+        db-based?      (config/db-based-graph?)
+        *doc-ref       (rum/use-ref nil)
         [loader-state, set-loader-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil :extra nil :loaded false :error nil})
         [doc-password, set-doc-password!] (rum/use-state nil) ;; use nil to handle empty string
@@ -862,72 +891,89 @@
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
                          (set-hls-state! #(merge % {:initial-hls [] :latest-hls latest-hls})))
         set-hls-extra! (fn [extra]
-                         (set-hls-state! #(merge % {:extra extra})))]
+                         (if db-based?
+                           (debounce-set-last-visit-page! (:block pdf-current) (:page extra))
+                           (set-hls-state! #(merge % {:extra extra}))))]
 
     ;; current pdf effects
-    (rum/use-effect!
-     (fn []
-       (when pdf-current
-         (pdf-assets/ensure-ref-page! pdf-current)))
-     [pdf-current])
+    (when-not db-based?
+      (hooks/use-effect!
+       (fn []
+         (when pdf-current
+           (pdf-assets/file-based-ensure-ref-page! pdf-current)))
+       [pdf-current]))
 
     ;; load highlights
-    (rum/use-effect!
-     (fn []
-       (p/catch
-        (p/let [data (pdf-assets/load-hls-data$ pdf-current)
-                {:keys [highlights extra]} data]
-          (set-initial-page! (or (when-let [page (:page extra)]
-                                   (util/safe-parse-int page)) 1))
-          (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
+    (if db-based?
+      (hooks/use-effect!
+       (fn []
+         (when pdf-current
+           (let [pdf-block (:block pdf-current)]
+             (p/let [data (db-async/<get-pdf-annotations repo (:db/id pdf-block))
+                     highlights (map :logseq.property.pdf/hl-value data)]
+               (set-initial-page! (or
+                                   (:logseq.property.asset/last-visit-page pdf-block)
+                                   1))
+               (set-hls-state! {:initial-hls highlights :latest-hls highlights :loaded true})))))
+       [pdf-current])
+      (hooks/use-effect!
+       (fn []
+         (p/catch
+          (p/let [data (pdf-assets/file-based-load-hls-data$ pdf-current)
+                  {:keys [highlights extra]} data]
+            (set-initial-page! (or (when-let [page (:page extra)]
+                                     (util/safe-parse-int page)) 1))
+            (set-hls-state! {:initial-hls highlights :latest-hls highlights :extra extra :loaded true}))
 
-        ;; error
-        (fn [^js e]
-          (js/console.error "[load hls error]" e)
+          ;; error
+          (fn [^js e]
+            (js/console.error "[load hls error]" e)
 
-          (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
-                                      (:hls-file pdf-current))
-                         e)]
-            (notification/show! msg :error)
-            (set-hls-state! {:loaded true :error e}))))
+            (let [msg (str (util/format "Error: failed to load the highlights file: \"%s\". \n"
+                                        (:hls-file pdf-current))
+                           e)]
+              (notification/show! msg :error)
+              (set-hls-state! {:loaded true :error e}))))
 
-       ;; cancel
-       #())
-     [hls-file])
+         ;; cancel
+         #())
+       [hls-file]))
 
     ;; cache highlights
-    (let [persist-hls-data!
-          (rum/use-callback
-           (util/debounce
-            4000 (fn [latest-hls extra]
-                   (pdf-assets/persist-hls-data$
-                    pdf-current latest-hls extra))) [pdf-current])]
+    (when-not db-based?
+      (let [persist-hls-data!
+            (hooks/use-callback
+             (util/debounce
+              (fn [latest-hls extra]
+                (pdf-assets/file-based-persist-hls-data$
+                 pdf-current latest-hls extra))
+              4000) [pdf-current])]
 
-      (rum/use-effect!
-       (fn []
-         (when (= :completed (:status loader-state))
-           (p/catch
-            (when-not (:error hls-state)
-              (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
+        (hooks/use-effect!
+         (fn []
+           (when (= :completed (:status loader-state))
+             (p/catch
+              (when-not (:error hls-state)
+                (p/do! (persist-hls-data! (:latest-hls hls-state) (:extra hls-state))))
 
             ;; write hls file error
-            (fn [e]
-              (js/console.error "[write hls error]" e)))))
+              (fn [e]
+                (js/console.error "[write hls error]" e)))))
 
-       [(:latest-hls hls-state) (:extra hls-state)]))
+         [(:latest-hls hls-state) (:extra hls-state)])))
 
     ;; load document
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (let [^js loader-el (rum/deref *doc-ref)
              get-doc$      (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
              opts          {:url           url
                             :password      (or doc-password "")
                             :ownerDocument (.-ownerDocument loader-el)
-                            :cMapUrl       "./js/pdfjs/cmaps/"
+                            :cMapUrl       (str (if (some-> js/location.host (string/ends-with? "logseq.com"))
+                                                  "./static/" "./") "js/pdfjs/cmaps/")
                             ;:cMapUrl       "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.9.179/cmaps/"
-                            :cMapPacked    true}]
-
+                            :cMapPacked true}]
          (set-loader-state! {:status :loading})
 
          (-> (get-doc$ (clj->js opts))
@@ -937,7 +983,7 @@
          #()))
      [url doc-password])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [error (:error loader-state)]
          (js/console.error "[PDF loader]" (:error loader-state))
@@ -963,12 +1009,13 @@
            "PasswordException"
            (do
              (set-loader-state! {:error nil})
-             (state/set-modal! (fn [close-fn]
-                                 (let [on-password-fn
-                                       (fn [password]
-                                         (close-fn)
-                                         (set-doc-password! password))]
-                                   (pdf-password-input on-password-fn)))))
+             (shui/dialog-open!
+              (fn [{:keys [close]}]
+                (let [on-password-fn
+                      (fn [password]
+                        (close)
+                        (set-doc-password! password))]
+                  (pdf-password-input on-password-fn)))))
 
            (do
              (notification/show!
@@ -1013,7 +1060,7 @@
         [ready set-ready!] (rum/use-state false)]
 
     ;; load assets
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (p/then
         (pdf-utils/load-base-assets$)
@@ -1021,7 +1068,7 @@
      [])
 
     ;; refresh loader
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (js/setTimeout #(set-ready! true) 100)
        #(set-ready! false))
@@ -1035,7 +1082,7 @@
 (rum/defc playground-effects
   [active]
 
-  (rum/use-effect!
+  (hooks/use-effect!
    (fn []
      (let [flg     "is-pdf-active"
            ^js cls (.-classList js/document.body)]
@@ -1058,9 +1105,9 @@
 
      (when (and (not system-win?) pdf-current)
        (js/ReactDOM.createPortal
-         (pdf-container-outer
-           (pdf-container pdf-current))
-         (js/document.querySelector "#app-single-container")))]))
+        (pdf-container-outer
+         (pdf-container pdf-current))
+        (js/document.querySelector "#app-single-container")))]))
 
 (rum/defcs system-embed-playground
   < rum/reactive

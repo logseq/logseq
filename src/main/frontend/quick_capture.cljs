@@ -9,7 +9,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.text :as text-util]))
+            [frontend.util.text :as text-util]
+            [promesa.core :as p]))
 
 (defn- is-tweet-link
   [url]
@@ -86,11 +87,11 @@
         (editor-handler/insert content)
         (editor-handler/insert (str "\n" content)))
 
-      (do
+      (p/do!
         (editor-handler/escape-editing)
         (when (not= page (state/get-current-page))
-          (page-handler/create! page {:redirect? redirect-page?}))
-                             ;; Or else this will clear the newly inserted content
+          (page-handler/<create! page {:redirect? redirect-page?}))
+        ;; Or else this will clear the newly inserted content
         (js/setTimeout #(editor-handler/api-insert-new-block! content {:page page
                                                                        :edit-block? true
                                                                        :replace-empty-target? true})

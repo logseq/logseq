@@ -98,10 +98,8 @@ h1.title.whiteboard-dashboard-title {
   color: var(--ls-primary-text-color);
 }
 
-.single-block > :is(.block-content-wrapper, .editor-wrapper) {
-  width: 100% !important;
-  padding: 8px 12px;
-  border-radius: 8px;
+.single-block {
+  padding: 4px 8px;
 }
 
 .tl-logseq-cp-container > .page {
@@ -146,14 +144,12 @@ input.tl-text-input {
 }
 
 .whiteboard-page-title-root {
-  @apply shadow-md flex items-center;
+  @apply shadow-md flex items-center gap-1;
   position: absolute;
   left: 2.5rem;
   top: 0;
-  padding: 4px;
   border-radius: 0 0 12px 12px;
   z-index: 2000;
-  gap: 4px;
   line-height: 1.4;
   background: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
 }
@@ -175,30 +171,21 @@ input.tl-text-input {
     overflow: hidden;
   }
 
-  .page-title-sizer-wrapper {
-    width: calc(100% - 20px);
+  .ls-page-title {
+     @apply p-0 m-0;
 
-    > .title {
-      @apply whitespace-nowrap min-w-[100px];
-    }
+      .page-title {
+        font-size: 16px;
+      }
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    background-color: transparent;
+    @apply h-full w-full p-0 border-none shadow-none bg-transparent;
   }
 }
 
 .whiteboard-page-title:hover {
   background-color: var(--ls-tertiary-background-color);
-}
-
-.whiteboard-page-title:focus-within {
-  border: 1px solid var(--ls-border-color);
-  box-shadow: 0 0 0 4px var(--ls-focus-ring-color);
 }
 
 .whiteboard-page-refs-count-label {

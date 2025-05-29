@@ -14,12 +14,11 @@
 (defn is-file-url?
   [s]
   (and (string? s)
-       (or (string/starts-with? s "file://") ;; mobile platform
-           (string/starts-with? s "content://") ;; android only
-           (string/starts-with? s "assets://") ;; Electron asset, urlencoded
-           (string/starts-with? s "logseq://") ;; reserved for future fs protocol
-           (string/starts-with? s "memory://") ;; special memory fs
-           (string/starts-with? s "s3://"))))
+       (or
+        (string/starts-with? s "memory://") ;; special memory fs
+        (string/starts-with? s "assets://") ;; Electron asset, urlencoded
+        (string/starts-with? s "file://") ;; Electron files
+        )))
 
 (defn filename
   "File name of a path or URL.
@@ -143,12 +142,13 @@
          (join-fn))))
 
 (defn url-join
-  "Segments are not URL-ecoded"
+  "Segments are not URL-encoded"
   [base-url & segments]
-  (let [^js url (js/URL. base-url)
+  (let [^js url (js/URL. (safe-decode-uri-component base-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "")
-        path (safe-decode-uri-component (.-pathname url))
+        path (.-pathname url)
+        domain (or (not-empty (.-host url))
+                 (if (string/starts-with? path "/") "" "/"))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
 
@@ -196,10 +196,10 @@
 
 (defn url-normalize
   [origin-url]
-  (let [^js url (js/URL. origin-url)
+  (let [^js url (js/URL. (safe-decode-uri-component origin-url))
         scheme (.-protocol url)
-        domain (or (not-empty (.-host url)) "")
-        path (safe-decode-uri-component (.-pathname url))
+        domain (or (not-empty (.-host url)) "/")
+        path (.-pathname url)
         encoded-new-path (uri-path-join-internal path)]
     (str scheme "//" domain encoded-new-path)))
 
@@ -226,7 +226,7 @@
                                         (str "original-url: " original-url
                                              " url: " (string/replace (safe-decode-uri-component original-url) "assets://" "file://")))
                       (throw e)))
-          path (safe-decode-uri-component (.-pathname url))
+          path (.-pathname url)
           host (.-host url)
           path (if (string/starts-with? path "///")
                  (subs path 2)

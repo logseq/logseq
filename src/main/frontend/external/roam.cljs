@@ -6,8 +6,8 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [goog.string :as gstring]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]))
 
 (defonce all-refed-uids (atom #{}))
@@ -37,7 +37,7 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
-                                       (let [[name arg] (gp-util/split-first ":" text)]
+                                       (let [[name arg] (common-util/split-first ":" text)]
                                          (if name
                                            (let [name (text/page-ref-un-brackets! name)]
                                              (gstring/format "{{%s %s}}" name arg))

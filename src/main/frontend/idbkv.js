@@ -16,7 +16,8 @@ class Store {
         return;
       }
       this._dbp = new Promise((resolve, reject) => {
-        const openreq = window.indexedDB.open(this._dbName, this._version);
+        let idb = typeof window == 'object' ? window.indexedDB : indexedDB;
+        const openreq = idb.open(this._dbName, this._version);
         openreq.onerror = () => reject(openreq.error);
         openreq.onsuccess = () => resolve(openreq.result);
         // First time setup: create an empty object store
@@ -131,7 +132,12 @@ function close(store = getDefaultStore()) {
     return store._close();
 }
 
-exports.Store = Store;
+function newStore(dbName = 'keyval-store', storeName = 'keyval', version = 1) {
+    return new Store(dbName, storeName, version);
+}
+
+exports.newStore = newStore;
+// exports.Store = Store; // use newStore instead
 exports.get = get;
 exports.set = set;
 exports.setBatch = setBatch;

@@ -1,10 +1,10 @@
 ## Description
 
-This library provides common util namespaces to share between the frontend and
-other non-frontend namespaces. This library is not supposed to depend on other logseq
-libraries. This library is compatible with ClojureScript and with
-node/[nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively provide
-frontend and Electron/commandline functionality.
+This library provides common util namespaces and resources to share between the
+frontend and other non-frontend contexts. This library is not supposed to depend
+on other logseq libraries. This library is compatible with ClojureScript and
+with node/[nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively
+provide frontend and Electron/commandline functionality.
 
 
 ## API

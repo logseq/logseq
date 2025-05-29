@@ -4,57 +4,39 @@
   --ls-color-file-sync-idle: var(--color-green-600);
 }
 
-.cp__file-sync {
+.cp__file-sync, .cp__rtc-sync {
   &-indicator {
-    a.cloud {
-      position: relative;
-      opacity: 1 !important;
-      cursor: pointer;
+      .ui__button.cloud {
+          @apply relative;
 
-      &:active {
-        opacity: .5 !important;
-      }
+          &.on {
+              @apply after:content-['*'];
 
-      .ti {
-        opacity: .5;
-      }
+              &:after {
+                  @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
 
-      &:hover .ti {
-        opacity: .9;
-      }
+                  background-color: var(--ls-color-file-sync-pending);
+              }
 
-      &.on {
-        &:after {
-          content: " ";
-          position: absolute;
-          bottom: 10px;
-          right: 8px;
-          width: 7px;
-          height: 7px;
-          background-color: var(--ls-color-file-sync-pending);
-          border-radius: 100%;
-          opacity: 1;
-        }
+              &.syncing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
 
-        &.syncing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
+              &.queuing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
+
+              &.idle {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-idle);
+                  }
+              }
           }
-        }
-
-        &.queuing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
-          }
-        }
-
-        &.idle {
-          &:after {
-            background-color: var(--ls-color-file-sync-idle);
-          }
-        }
       }
-    }
 
     .debug-status {
       position: absolute;
@@ -551,12 +533,6 @@
         }
       }
     }
-  }
-}
-
-div[label=modal-page-histories] {
-  .panel-content {
-    overflow: hidden;
   }
 }
 

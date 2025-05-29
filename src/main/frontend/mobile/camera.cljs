@@ -4,7 +4,6 @@
             [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.assets :as assets-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [goog.object :as gobj]
@@ -28,7 +27,7 @@
                   ;; NOTE: For iOS and Android, only jpeg format will be returned as base64 string.
                   ;; See-also: https://capacitorjs.com/docs/apis/camera#galleryphoto
                   (p/let [filename (str (date/get-date-time-string-2) ".jpeg")
-                          image-path (editor-handler/get-asset-path filename)
+                          image-path (assets-handler/get-asset-path filename)
                           _ret (.writeFile Filesystem (clj->js {:data (.-base64String photo)
                                                                 :path image-path
                                                                 :recursive true}))]
@@ -50,7 +49,7 @@
                        nil
 
                        :else " ")
-        format (:block/format block)]
+        format (get block :block/format :markdown)]
     (p/let [filename (take-or-choose-photo)]
       (when (not-empty filename)
         (commands/simple-insert!

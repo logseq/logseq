@@ -1,9 +1,9 @@
 (ns frontend.util.marker-test
   (:require [cljs.test :refer [are deftest]]
-            [frontend.util.marker :as marker]))
+            [frontend.handler.file-based.status :as status]))
 
 (deftest add-or-update-marker-markdown
-  (are [content marker expect] (= expect (marker/add-or-update-marker content :markdown marker))
+  (are [content marker expect] (= expect (status/add-or-update-marker content :markdown marker))
     "test content" "TODO" "TODO test content"
     "\nxxx\n" "TODO" "TODO xxx\n"
     "## xxx" "TODO" "## TODO xxx"
@@ -17,7 +17,7 @@
     "TODO #test content" "DONE" "DONE #test content"))
 
 (deftest add-or-update-marker-org
-  (are [content marker expect] (= expect (marker/add-or-update-marker content :org marker))
+  (are [content marker expect] (= expect (status/add-or-update-marker content :org marker))
     "test content" "TODO" "TODO test content"
     "\nxxx\n" "TODO" "TODO xxx\n"
     "" "TODO" "TODO "

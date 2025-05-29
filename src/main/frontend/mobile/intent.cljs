@@ -1,7 +1,7 @@
 (ns frontend.mobile.intent
-  (:require ["@capacitor/filesystem" :refer [Filesystem]]
+  (:require ["@capacitor/action-sheet" :refer [ActionSheet]]
+            ["@capacitor/filesystem" :refer [Filesystem]]
             ["@capacitor/share" :refer [^js Share]]
-            ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["path" :as node-path]
             ["send-intent" :refer [^js SendIntent]]
             [clojure.pprint :as pprint]
@@ -14,14 +14,14 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
+            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
 (defn open-or-share-file
@@ -83,13 +83,12 @@
   (let [args (transform-args args)]
     (state/pub-event! [:editor/quick-capture args])))
 
-
 (defn- embed-asset-file [url format]
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
           time (date/get-current-time)
           date-ref-name (date/today)
-          path (editor-handler/get-asset-path basename)
+          path (assets-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
                  (fn [error]
@@ -111,18 +110,18 @@
   (p/let [time (date/get-current-time)
           date-ref-name (date/today)
           title (some-> (or title (node-path/basename url))
-                        gp-util/safe-decode-uri-component
+                        common-util/safe-decode-uri-component
                         util/node-path.name
                         ;; make the title more user friendly
-                        gp-util/page-name-sanity)
+                        common-util/page-name-sanity)
           path (node-path/join (config/get-repo-dir (state/get-current-repo))
                                (config/get-pages-directory)
-                               (str (js/encodeURI (fs-util/file-name-sanity title)) (node-path/extname url)))
+                               (str (js/encodeURI (fs-util/file-name-sanity title :markdown)) (node-path/extname url)))
           _ (p/catch
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]
                (log/error :copy-file-error {:error error})))
-          url (page-ref/->page-ref title)
+          url (ref/->page-ref title)
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]
@@ -149,7 +148,7 @@
           format (db/get-page-format page)
           application-type (last (string/split type "/"))
           content (cond
-                    (gp-config/mldoc-support? application-type)
+                    (common-config/mldoc-support? application-type)
                     (embed-text-file url title)
 
                     (contains? (set/union config/doc-formats config/media-formats)
@@ -180,13 +179,13 @@
 
                       :else
                       (if (mobile-util/native-ios?)
-                        (gp-util/safe-decode-uri-component v)
+                        (common-util/safe-decode-uri-component v)
                         v))])))
 
 (defn- handle-asset-file [url format]
   (p/let [basename (node-path/basename url)
           label (-> basename util/node-path.name)
-          path (editor-handler/get-asset-path basename)
+          path (assets-handler/get-asset-path basename)
           _file (p/catch
                  (.copy Filesystem (clj->js {:from url :to path}))
                  (fn [error]
@@ -264,7 +263,6 @@
                                                                            :edit-block? true
                                                                            :replace-empty-target? true})
                            100)))))))
-
 
 (defn handle-result
   "Mobile share intent handler v1, legacy. Only for Android"

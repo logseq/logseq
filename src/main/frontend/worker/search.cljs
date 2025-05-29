@@ -1,0 +1,417 @@
+(ns frontend.worker.search
+  "Full-text and fuzzy search"
+  (:require ["fuse.js" :as fuse]
+            [cljs-bean.core :as bean]
+            [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [frontend.common.search-fuzzy :as fuzzy]
+            [goog.object :as gobj]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.namespace :as ns-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.text :as text]))
+
+;; TODO: use sqlite for fuzzy search
+;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
+(defonce fuzzy-search-indices (atom {}))
+
+(defn- add-blocks-fts-triggers!
+  "Table bindings of blocks tables and the blocks FTS virtual tables"
+  [db]
+  (let [triggers [;; delete
+                  "CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
+                  BEGIN
+                      DELETE from blocks_fts where id = old.id;
+                  END;"
+                  ;; insert
+                  "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
+                  BEGIN
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
+                  END;"
+                  ;; update
+                  "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
+                  BEGIN
+                      DELETE from blocks_fts where id = old.id;
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
+                  END;"]]
+    (doseq [trigger triggers]
+      (.exec db trigger))))
+
+(defn- create-blocks-table!
+  [db]
+  ;; id -> block uuid, page -> page uuid
+  (.exec db "CREATE TABLE IF NOT EXISTS blocks (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        page TEXT)"))
+
+(defn- create-blocks-fts-table!
+  [db]
+  ;; The trigram tokenizer extends FTS5 to support substring matching in general, instead of the usual token matching. When using the trigram tokenizer, a query or phrase token may match any sequence of characters within a row, not just a complete token.
+  ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
+  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
+
+(defn create-tables-and-triggers!
+  "Open a SQLite db for search index"
+  [db]
+  (try
+    (create-blocks-table! db)
+    (create-blocks-fts-table! db)
+    (add-blocks-fts-triggers! db)
+    (catch :default e
+      (prn "Failed to create tables and triggers")
+      (js/console.error e)
+      ;; FIXME:
+      ;; (try
+      ;;   ;; unlink db
+      ;;   (catch :default e
+      ;;     (js/console.error "cannot unlink search db:" e)))
+      )))
+
+(defn drop-tables-and-triggers!
+  [db]
+  (.exec db "
+DROP TABLE IF EXISTS blocks;
+DROP TABLE IF EXISTS blocks_fts;
+DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+"))
+
+(defn- clj-list->sql
+  "Turn clojure list into SQL list
+   '(1 2 3 4)
+   ->
+   \"('1','2','3','4')\""
+  [ids]
+  (str "(" (->> (map (fn [id] (str "'" id "'")) ids)
+                (string/join ", ")) ")"))
+
+(defn upsert-blocks!
+  [^Object db blocks]
+  (.transaction db (fn [tx]
+                     (doseq [item blocks]
+                       (if (and (common-util/uuid-string? (.-id item))
+                                (common-util/uuid-string? (.-page item)))
+                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
+                                        :bind #js {:$id (.-id item)
+                                                   :$title (.-title item)
+                                                   :$page (.-page item)}})
+                         (do
+                           (js/console.error "Upsert blocks wrong data: ")
+                           (js/console.dir item)
+                           (throw (ex-info "Search upsert-blocks wrong data: "
+                                           (bean/->clj item)))))))))
+
+(defn delete-blocks!
+  [db ids]
+  (let [sql (str "DELETE from blocks WHERE id IN " (clj-list->sql ids))]
+    (.exec db sql)))
+
+(defonce max-snippet-length 250)
+
+(defn- snippet-by
+  [content length]
+  (str (subs content 0 length) (when (> (count content) max-snippet-length) "...")))
+
+(defn- get-snippet-result
+  [snippet]
+  (let [;; Cut snippet to limited size chars for non-matched results
+        flag-highlight "$pfts_2lqh>$ "
+        snippet (if (string/includes? snippet flag-highlight)
+                  snippet
+                  (snippet-by snippet max-snippet-length))]
+    snippet))
+
+(defn- get-match-input
+  [q]
+  (let [match-input (-> q
+                        (string/replace " and " " AND ")
+                        (string/replace " & " " AND ")
+                        (string/replace " or " " OR ")
+                        (string/replace " | " " OR ")
+                        (string/replace " not " " NOT "))]
+    (cond
+      (and (re-find #"[^\w\s]" q) (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"])))            ; punctuations
+      (str "\"" match-input "\"*")
+      (not= q match-input)
+      (string/replace match-input "," "")
+      :else
+      match-input)))
+
+(defn- search-blocks-aux
+  [db sql q input page limit enable-snippet?]
+  (try
+    (let [namespace? (ns-util/namespace-page? q)
+          last-part (when namespace?
+                      (some-> (text/get-namespace-last-part q)
+                              get-match-input))
+          bind (cond
+                 (and namespace? page)
+                 [page input last-part limit]
+                 page
+                 [page input limit]
+                 namespace?
+                 [input last-part limit]
+                 :else
+                 [input limit])
+          result (.exec db (bean/->js
+                            {:sql sql
+                             :bind bind
+                             :rowMode "array"}))
+          blocks (bean/->clj result)]
+      (map (fn [block]
+             (let [[id page title snippet] (if enable-snippet?
+                                             (update block 3 get-snippet-result)
+                                             block)]
+               {:id id
+                :page page
+                :title title
+                :snippet snippet})) blocks))
+    (catch :default e
+      (prn :debug "Search blocks failed: ")
+      (js/console.error e))))
+
+(defn exact-matched?
+  "Check if two strings points toward same search result"
+  [q match]
+  (when (and (string? q) (string? match))
+    (boolean
+     (reduce
+      (fn [coll char']
+        (let [coll' (drop-while #(not= char' %) coll)]
+          (if (seq coll')
+            (rest coll')
+            (reduced false))))
+      (seq (fuzzy/search-normalize match true))
+      (seq (fuzzy/search-normalize q true))))))
+
+(defn- page-or-object?
+  [entity]
+  (and (or (ldb/page? entity) (ldb/object? entity))
+       (not (ldb/hidden? entity))
+       (not (ldb/hidden? (:block/page entity)))))
+
+(defn get-all-fuzzy-supported-blocks
+  "Only pages and objects are supported now."
+  [db]
+  (let [page-ids (->> (d/datoms db :avet :block/name)
+                      (map :e))
+        object-ids (when (ldb/db-based-graph? db)
+                     (->> (d/datoms db :avet :block/tags)
+                          (map :e)))
+        blocks (->> (distinct (concat page-ids object-ids))
+                    (map #(d/entity db %)))]
+    (->> blocks
+         (remove ldb/hidden?)
+         (remove #(ldb/hidden? (:block/page %))))))
+
+(defn- sanitize
+  [content]
+  (some-> content
+          (fuzzy/search-normalize true)))
+
+(defn block->index
+  "Convert a block to the index for searching"
+  [{:block/keys [uuid page title] :as block}]
+  (when-not (or
+             (ldb/closed-value? block)
+             (and (string? title) (> (count title) 10000))
+             (string/blank? title))        ; empty page or block
+    (let [title (-> block
+                    (update :block/title ldb/get-title-with-parents)
+                    db-content/recur-replace-uuid-in-block-title)]
+      (when uuid
+        {:id (str uuid)
+         :page (str (or (:block/uuid page) uuid))
+         :title (if (page-or-object? block) title (sanitize title))}))))
+
+(defn build-fuzzy-search-indice
+  "Build a block title indice from scratch.
+   Incremental page title indice is implemented in frontend.search.sync-search-indice!"
+  [repo db]
+  (let [blocks (->> (get-all-fuzzy-supported-blocks db)
+                    (map block->index)
+                    (bean/->js))
+        indice (fuse. blocks
+                      (clj->js {:keys ["title"]
+                                :shouldSort true
+                                :tokenize true
+                                :distance 1024
+                                :threshold 0.5 ;; search for 50% match from the start
+                                :minMatchCharLength 1}))]
+    (swap! fuzzy-search-indices assoc repo indice)
+    indice))
+
+(defn fuzzy-search
+  "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
+  options:
+   * :limit - Number of result to limit search results. Defaults to 100"
+  [repo db q {:keys [limit]
+              :or {limit 100}}]
+  (when repo
+    (let [q (fuzzy/search-normalize q true)
+          q (fuzzy/clean-str q)
+          q (if (= \# (first q)) (subs q 1) q)]
+      (when-not (string/blank? q)
+        (let [indice (or (get @fuzzy-search-indices repo)
+                         (build-fuzzy-search-indice repo db))
+              result (->> (.search indice q (clj->js {:limit limit}))
+                          (bean/->clj))]
+          (->> (map :item result)
+               (filter (fn [{:keys [title]}]
+                         (exact-matched? q title)))))))))
+
+(defn search-blocks
+  "Options:
+   * :page - the page to specifically search on
+   * :limit - Number of result to limit search results. Defaults to 100
+   * :dev? - Allow all nodes to be seen for development. Defaults to false
+   * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only?]
+                          :as option
+                          :or {enable-snippet? true}}]
+  (when-not (string/blank? q)
+    (let [match-input (get-match-input q)
+          page-count (count (d/datoms @conn :avet :block/name))
+          large-graph? (> page-count 2500)
+          non-match-input (when (<= (count q) 2)
+                            (str "%" (string/replace q #"\s+" "%") "%"))
+          limit  (or limit 100)
+            ;; https://www.sqlite.org/fts5.html#the_highlight_function
+            ;; the 2nd column in blocks_fts (content)
+            ;; pfts_2lqh is a key for retrieval
+            ;; highlight and snippet only works for some matching with high rank
+          snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
+          select (if enable-snippet?
+                   (str "select id, page, title, " snippet-aux " from blocks_fts where ")
+                   "select id, page, title from blocks_fts where ")
+          pg-sql (if page "page = ? and" "")
+          match-sql (if (ns-util/namespace-page? q)
+                      (str select pg-sql " title match ? or title match ? order by rank limit ?")
+                      (str select pg-sql " title match ? order by rank limit ?"))
+          non-match-sql (str select pg-sql " title like ? limit ?")
+          matched-result (when-not page-only?
+                           (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
+          non-match-result (when (and (not page-only?) non-match-input)
+                             (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
+           ;; fuzzy is too slow for large graphs
+          fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
+          result (->> (concat fuzzy-result matched-result non-match-result)
+                      (common-util/distinct-by :id)
+                      (keep (fn [result]
+                              (let [{:keys [id page title snippet]} result
+                                    block-id (uuid id)]
+                                (when-let [block (d/entity @conn [:block/uuid block-id])]
+                                  (when (if dev?
+                                          true
+                                          (if built-in?
+                                            (or (not (ldb/built-in? block))
+                                                (not (ldb/private-built-in-page? block))
+                                                (ldb/class? block))
+                                            (or (not (ldb/built-in? block))
+                                                (ldb/class? block))))
+                                    {:db/id (:db/id block)
+                                     :block/uuid block-id
+                                     :block/title (if (ldb/page? block)
+                                                    (ldb/get-title-with-parents block)
+                                                    (or snippet title))
+                                     :block/page (if (common-util/uuid-string? page)
+                                                   (uuid page)
+                                                   nil)
+                                     :block/tags (seq (map :db/id (:block/tags block)))
+                                     :page? (ldb/page? block)}))))))
+          page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
+      (->>
+       (concat page-or-object-result
+               (remove (fn [b] (or (:page? b) (:block/tags result))) result))
+       (common-util/distinct-by :block/uuid)))))
+
+(defn truncate-table!
+  [db]
+  (drop-tables-and-triggers! db)
+  (create-tables-and-triggers! db))
+
+(defn get-all-blocks
+  [db]
+  (when db
+    (->> (d/datoms db :avet :block/uuid)
+         (map :v)
+         (keep #(d/entity db [:block/uuid %]))
+         (remove (fn [e]
+                   (or (ldb/hidden? e)
+                       (ldb/hidden? (:block/page e))))))))
+
+(defn build-blocks-indice
+  [repo db]
+  (build-fuzzy-search-indice repo db)
+  (->> (get-all-blocks db)
+       (keep block->index)))
+
+(defn- get-blocks-from-datoms-impl
+  [repo {:keys [db-after db-before]} datoms]
+  (when (seq datoms)
+    (let [blocks-to-add-set (->> (filter :added datoms)
+                                 (map :e)
+                                 (set))
+          blocks-to-remove-set (->> (remove :added datoms)
+                                    (filter #(= :block/uuid (:a %)))
+                                    (map :e)
+                                    (set))
+          blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
+                               (->> blocks-to-add-set
+                                    (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
+                                    (concat blocks-to-add-set)
+                                    set)
+                               blocks-to-add-set)]
+      {:blocks-to-remove     (->>
+                              (keep #(d/entity db-before %) blocks-to-remove-set))
+       :blocks-to-add        (->>
+                              (keep #(d/entity db-after %) blocks-to-add-set')
+                              (remove ldb/hidden?)
+                              (remove #(ldb/hidden? (:block/page %))))})))
+
+(defn- get-affected-blocks
+  [repo tx-report]
+  (let [data (:tx-data tx-report)
+        datoms (filter
+                (fn [datom]
+                  ;; Capture any direct change on page display title, page ref or block content
+                  (contains? #{:block/uuid :block/name :block/title :block/properties} (:a datom)))
+                data)]
+    (when (seq datoms)
+      (get-blocks-from-datoms-impl repo tx-report datoms))))
+
+(defn sync-search-indice
+  [repo tx-report]
+  (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks repo tx-report)]
+    ;; update page title indice
+    (let [fuzzy-blocks-to-add (filter page-or-object? blocks-to-add)
+          fuzzy-blocks-to-remove (filter page-or-object? blocks-to-remove)]
+      (when (or (seq fuzzy-blocks-to-add) (seq fuzzy-blocks-to-remove))
+        (swap! fuzzy-search-indices update repo
+               (fn [indice]
+                 (when indice
+                   (doseq [page-entity fuzzy-blocks-to-remove]
+                     (.remove indice (fn [page] (= (str (:block/uuid page-entity)) (gobj/get page "id")))))
+                   (doseq [page fuzzy-blocks-to-add]
+                     (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
+                     (.add indice (bean/->js (block->index page))))
+                   indice)))))
+
+    ;; update block indice
+    (when (or (seq blocks-to-add) (seq blocks-to-remove))
+      (let [blocks-to-add' (keep block->index blocks-to-add)
+            blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
+                                          (->>
+                                           (set/difference
+                                            (set (map :block/uuid blocks-to-add))
+                                            (set (map :block/uuid blocks-to-add')))
+                                           (map str))))]
+        {:blocks-to-remove-set blocks-to-remove
+         :blocks-to-add        blocks-to-add'}))))

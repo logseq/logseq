@@ -24,6 +24,7 @@
   [repo relative-path]
   (get-backup-dir* repo relative-path version-file-dir))
 
+;; TODO: add interval support like days
 (defn- truncate-old-versioned-files!
   "reserve the latest 6 version files"
   [dir]
@@ -37,15 +38,24 @@
   "backup CONTENT under DIR :backup-dir or :version-file-dir
   :backup-dir = `backup-dir`
   :version-file-dir = `version-file-dir`"
-  [repo dir relative-path ext content]
+  [repo dir relative-path ext content & {:keys [add-desktop? skip-backup-fn]
+                                         :or {add-desktop? true}}]
   {:pre [(contains? #{:backup-dir :version-file-dir} dir)]}
   (let [dir* (case dir
                :backup-dir (get-backup-dir repo relative-path)
                :version-file-dir (get-version-file-dir repo relative-path))
-        new-path (node-path/join dir*
-                                 (str (string/replace (.toISOString (js/Date.)) ":" "_")
-                                      ".Desktop" ext))]
-    (fs-extra/ensureDirSync dir*)
-    (fs/writeFileSync new-path content)
-    (fs/statSync new-path)
-    (truncate-old-versioned-files! dir*)))
+        _ (fs-extra/ensureDirSync dir*)
+        backups (fs/readdirSync dir*)
+        latest-backup-size (when (seq backups)
+                             (some->> (nth backups (dec (count backups)))
+                                      (node-path/join dir*)
+                                      (fs/statSync)
+                                      (.-size)))]
+    (when-not (and (fn? skip-backup-fn) latest-backup-size (skip-backup-fn latest-backup-size))
+      (let [new-path (node-path/join dir*
+                                     (str (string/replace (.toISOString (js/Date.)) ":" "_")
+                                          (when add-desktop? ".Desktop")
+                                          ext))]
+        (fs/writeFileSync new-path content)
+        (fs/statSync new-path)
+        (truncate-old-versioned-files! dir*)))))

@@ -1,9 +1,9 @@
 (ns frontend.extensions.zotero.setting
-  (:require [clojure.string :as str]
-            [promesa.core :as p]
+  (:require [clojure.string :as string]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
-            [frontend.storage :as storage]))
+            [frontend.storage :as storage]
+            [promesa.core :as p]))
 
 (def default-settings
   {:type                                    :user
@@ -27,17 +27,17 @@
         default #{"default"}]
     (if (empty? profiles) default profiles)))
 
-(defn profile []
+(defn get-profile []
   (let [profile (storage/get :zotero/setting-profile)]
     (if (and profile (contains? (all-profiles) profile))
       profile
       (first (all-profiles)))))
 
 (defn api-key []
-  (get (storage/get :zotero/api-key-v2) (profile)))
+  (get (storage/get :zotero/api-key-v2) (get-profile)))
 
 (defn set-api-key [key]
-  (let [profile (profile)
+  (let [profile (get-profile)
         api-key-map (storage/get :zotero/api-key-v2)]
     (storage/set :zotero/api-key-v2 (assoc api-key-map profile key))))
 
@@ -57,19 +57,19 @@
     (config-handler/set-config! :zotero/settings-v2 settings)))
 
 (defn set-setting! [k v]
-  (let [profile (profile)
+  (let [profile (get-profile)
         new-settings (update (sub-zotero-config)
                              profile
                              #(assoc % k v))]
     (config-handler/set-config! :zotero/settings-v2 new-settings)))
 
 (defn setting [k]
-  (let [profile (profile)]
+  (let [profile (get-profile)]
     (-> (sub-zotero-config)
         (get profile)
         (get k (get default-settings k)))))
 
 (defn valid? []
   (and
-   (not (str/blank? (api-key)))
-   (not (str/blank? (setting :type-id)))))
+   (not (string/blank? (api-key)))
+   (not (string/blank? (setting :type-id)))))

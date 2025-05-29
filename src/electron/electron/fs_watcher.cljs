@@ -37,7 +37,7 @@
       ;; notify every windows
       (doseq [win wins] (send-fn win))
 
-      ;; Should only send to one window; then dbsync will do his job
+      ;; Should only send to one window
       ;; If no window is on this graph, just ignore
       (let [sent? (some send-fn wins)]
         (when-not sent? (logger/warn ::send

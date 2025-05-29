@@ -31,13 +31,13 @@
 
 .fade-in {
   opacity: 0; /* make things invisible upon start */
-  animation: fadeIn ease-in 1; /* call our keyframe named fadeIn, use animattion ease-in and repeat it only 1 time */
+  animation: fadeIn ease-in 1; /* call our keyframe named fadeIn, use animation ease-in and repeat it only 1 time */
   animation-fill-mode: forwards; /* this makes sure that after animation is done we remain at the last keyframe value (opacity: 1) */
-  animation-duration: 1s;
-}
+  animation-duration: 0.5s;
 
-.faster-fade-in {
-  animation-duration: 0.3s;
+  &.faster {
+    animation-duration: 0.3s;
+  }
 }
 
 /* page transition */

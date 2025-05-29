@@ -1,6 +1,6 @@
 (ns frontend.fs-test
   (:require [clojure.test :refer [is use-fixtures]]
-            [frontend.test.fixtures :as fixtures]
+            [frontend.test.node-fixtures :as node-fixtures]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.node-helper :as test-node-helper]
             [frontend.fs :as fs]
@@ -8,7 +8,7 @@
             ["fs" :as fs-node]
             ["path" :as node-path]))
 
-(use-fixtures :once fixtures/redef-get-fs)
+(use-fixtures :once node-fixtures/redef-get-fs)
 
 (deftest-async create-if-not-exists-creates-correctly
   ;; dir needs to be an absolute path for fn to work correctly

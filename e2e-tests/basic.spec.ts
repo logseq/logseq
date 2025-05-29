@@ -48,13 +48,7 @@ test('create page and blocks, save to disk', async ({ page, block, graphDir }) =
     path.join(graphDir, `pages/${pageTitle}.md`),
     'utf8'
   )
-  expect(contentOnDisk.trim()).toEqual(`
-- first bullet
-- second bullet
-	- third bullet
-	- continue editing
-	  second line
-- test ok`.trim())
+  expect(contentOnDisk.trim()).toEqual('- first bullet\n- second bullet\n\t- third bullet\n\t- continue editing\n\t  second line\n- test ok'.trim())
 })
 
 
@@ -114,6 +108,7 @@ test('block selection', async ({ page, block }) => {
 
   // shift+up/down
   await page.keyboard.down('Shift')
+
   await page.keyboard.press('ArrowUp')
   await block.waitForSelectedBlocks(1)
   let locator = page.locator('.ls-block >> nth=8')
@@ -126,6 +121,7 @@ test('block selection', async ({ page, block }) => {
 
   await page.keyboard.press('ArrowDown')
   await block.waitForSelectedBlocks(2)
+
   await page.keyboard.up('Shift')
 
   // mod+click select or deselect
@@ -168,6 +164,7 @@ test('template', async ({ page, block }) => {
   await block.mustFill('template test\ntemplate:: ')
   await page.keyboard.type(randomTemplate, { delay: 100 })
   await page.keyboard.press('Enter')
+  await page.keyboard.press('Escape')
   await block.clickNext()
 
   expect(await block.indent()).toBe(true)

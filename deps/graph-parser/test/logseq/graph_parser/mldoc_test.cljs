@@ -138,8 +138,8 @@ line 4"]
     
 
 (deftest ^:integration test->edn
-  (let [graph-dir "test/docs-0.9.2"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
+  (let [graph-dir "test/resources/docs-0.10.9"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.9")
         files (#'gp-cli/build-graph-files graph-dir {})
         asts-by-file (->> files
                           (map (fn [{:file/keys [path content]}]
@@ -149,20 +149,20 @@ line 4"]
                                     (gp-mldoc/->edn content
                                                     (gp-mldoc/default-config format))])))
                           (into {}))]
-    (is (= {"Custom" 50,
-            "Displayed_Math" 1,
+    (is (= {"Custom" 62,
+            "Displayed_Math" 2,
             "Drawer" 1,
-            "Example" 20,
+            "Example" 22,
             "Footnote_Definition" 2,
-            "Heading" 5648,
+            "Heading" 6716,
             "Hiccup" 9,
-            "List" 22,
-            "Paragraph" 571,
-            "Properties" 87,
-            "Property_Drawer" 423,
-            "Quote" 24,
+            "List" 25,
+            "Paragraph" 626,
+            "Properties" 85,
+            "Property_Drawer" 509,
+            "Quote" 28,
             "Raw_Html" 18,
-            "Src" 79,
+            "Src" 82,
             "Table" 8}
            (->> asts-by-file (mapcat val) (map ffirst) frequencies))
         "AST node type counts")))

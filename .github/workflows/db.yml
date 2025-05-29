@@ -9,7 +9,7 @@ on:
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
   pull_request:
-    branches: [master]
+    branches: [master, "feat/db"]
     paths:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
@@ -56,6 +56,9 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
+      - name: Run nbb-logseq tests
+        run: yarn test
+
       # In this job because it depends on an npm package
       - name: Load namespaces into nbb-logseq
         run: bb test:load-all-namespaces-with-nbb .
@@ -80,16 +83,16 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --parallel --lint src
+        run: clojure -M:clj-kondo --lint src test
 
       - name: Carve lint for unused vars
-        run: bb lint:carve 2>/dev/null
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: bb lint:large-vars 2>/dev/null
+        run: bb lint:large-vars
 
       - name: Lint datalog rules
         run: bb lint:rules
 
       - name: Lint for namespaces that aren't documented
-        run: bb lint:ns-docstrings 2>/dev/null
+        run: bb lint:ns-docstrings

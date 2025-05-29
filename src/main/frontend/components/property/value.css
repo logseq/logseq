@@ -1,0 +1,38 @@
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]) {
+  @apply cursor-pointer;
+  &:hover, .as-scalar-value-wrap:hover {
+    @apply bg-gray-02 rounded transition-[background-color] duration-300;
+  }
+}
+
+.ls-property-input {
+  @apply min-w-[224px];
+}
+
+.ls-property-dialog {
+  .ls-property-key {
+    @apply overflow-y-hidden h-[286px];
+
+    .cp__select-main {
+      .item-results-wrap {
+        @apply max-h-[250px];
+      }
+    }
+  }
+}
+
+.overdue {
+  @apply text-yellow-rx-08 dark:text-yellow-rx-10;
+  :not(.ls-datetime) .page-ref {
+    @apply text-yellow-rx-08 dark:text-yellow-rx-10;
+  }
+}
+
+.ls-property-key .cp__select-input, .property-select .cp__select-input {
+    @apply text-sm;
+}
+
+.ls-number {
+  @apply cursor-text;
+  min-height: 20px;
+}

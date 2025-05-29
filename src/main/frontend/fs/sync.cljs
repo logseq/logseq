@@ -1,7 +1,6 @@
 (ns frontend.fs.sync
   "Main ns for providing file sync functionality"
-  (:require ["@capawesome/capacitor-background-task" :refer [BackgroundTask]]
-            ["path" :as node-path]
+  (:require ["path" :as node-path]
             [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -15,6 +14,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.common.async-util :as async-util]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -22,12 +22,10 @@
             [frontend.diff :as diff]
             [frontend.encrypt :as encrypt]
             [frontend.fs :as fs]
-            [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.fs.diff-merge :as diff-merge]
-            [frontend.handler.file :as file-handler]
+            [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.user :as user]
-            [frontend.mobile.util :as mobile-util]
             [frontend.pubsub :as pubsub]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -36,7 +34,7 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [medley.core :refer [dedupe-by]]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -512,13 +510,7 @@
   (let [path-string? (string? (first paths))
         f (if path-string?
             fs-util/include-reserved-chars?
-            #(fs-util/include-reserved-chars? (-relative-path %)))
-        reserved-paths (filter f paths)]
-    (when (seq reserved-paths)
-      (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
-        (when (seq paths)
-          (state/pub-event! [:ui/notify-outdated-filename-format paths]))
-        (prn "Skipped uploading those file paths with reserved chars: " paths)))
+            #(fs-util/include-reserved-chars? (-relative-path %)))]
     (vec (remove f paths))))
 
 (defn- diffs->filetxns
@@ -545,11 +537,11 @@
    (partition-filetxns n)))
 
 (defn- filepath+checksum->diff
-  [index {:keys [relative-path checksum user-uuid graph-uuid]}]
+  [index {relative-path' :relative-path :keys [checksum user-uuid graph-uuid]}]
   {:post [(s/valid? ::diff %)]}
   {:TXId (inc index)
    :TXType "update_files"
-   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path]) nil checksum]]})
+   :TXContent [[(util/string-join-path [user-uuid graph-uuid relative-path']) nil checksum]]})
 
 (defn filepath+checksum-coll->partitioned-filetxns
   "transducer.
@@ -723,7 +715,7 @@
 ;;; ### path-normalize
 (def path-normalize
 
-  gp-util/path-normalize)
+  common-util/path-normalize)
 
 ;;; ### APIs
 ;; `RSAPI` call apis through rsapi package, supports operations on files
@@ -916,148 +908,9 @@
   (<add-new-version [_this repo path content]
     (p->c (ipc/ipc "addVersionFile" (config/get-local-dir repo) path content))))
 
-(deftype ^:large-vars/cleanup-todo CapacitorAPI [^:mutable graph-uuid' ^:mutable private-key ^:mutable public-key']
-  IToken
-  (<get-token [_this]
-    (user/<wrap-ensure-id&access-token
-     (state/get-auth-id-token)))
-
-  IRSAPI
-  (rsapi-ready? [_ graph-uuid] (and (= graph-uuid graph-uuid') private-key public-key'))
-  (<key-gen [_]
-    (go (let [r (<! (p->c (.keygen mobile-util/file-sync #js {})))]
-          (-> r
-              (js->clj :keywordize-keys true)))))
-  (<set-env [_ graph-uuid prod? secret-key public-key]
-    (set! graph-uuid' graph-uuid)
-    (set! private-key secret-key)
-    (set! public-key' public-key)
-    (p->c (.setEnv mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                   :env (if prod? "prod" "dev")
-                                                   :secretKey secret-key
-                                                   :publicKey public-key}))))
-
-  (<get-local-all-files-meta [this graph-uuid base-path]
-    (go
-      (let [r (<! (p->c (.getLocalAllFilesMeta mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                                               :basePath base-path}))))]
-        (or (guard-ex r)
-            (<! (<build-local-file-metadatas this graph-uuid (.-result r)))))))
-
-  (<get-local-files-meta [this graph-uuid base-path filepaths]
-    (go
-      (let [r (<! (p->c (.getLocalFilesMeta mobile-util/file-sync
-                                            (clj->js {:graphUUID graph-uuid
-                                                      :basePath base-path
-                                                      :filePaths filepaths}))))]
-        (assert (not (instance? ExceptionInfo r)) "get-local-files-meta shouldn't return exception")
-        (<! (<build-local-file-metadatas this graph-uuid (.-result r))))))
-
-  (<rename-local-file [_ graph-uuid base-path from to]
-    (p->c (.renameLocalFile mobile-util/file-sync
-                            (clj->js {:graphUUID graph-uuid
-                                      :basePath base-path
-                                      :from (path-normalize from)
-                                      :to (path-normalize to)}))))
-
-  (<update-local-files [this graph-uuid base-path filepaths]
-    (go
-      (let [token-or-exp (<! (<get-token this))
-            filepaths' (map path-normalize filepaths)]
-        (or (guard-ex token-or-exp)
-            (<! (p->c (.updateLocalFiles mobile-util/file-sync (clj->js {:graphUUID graph-uuid
-                                                                         :basePath base-path
-                                                                         :filePaths filepaths'
-                                                                         :token token-or-exp}))))))))
-  (<fetch-remote-files [this graph-uuid base-path filepaths]
-    (go
-      (let [token-or-exp (<! (<get-token this))]
-        (or (guard-ex token-or-exp)
-            (js->clj
-             (.-value
-              (<! (<retry-rsapi
-                   #(p->c (.fetchRemoteFiles mobile-util/file-sync
-                                             (clj->js {:graphUUID graph-uuid
-                                                       :basePath base-path
-                                                       :filePaths filepaths
-                                                       :token token-or-exp})))))))))))
-  (<download-version-files [this graph-uuid base-path filepaths]
-    (go
-      (let [token-or-exp (<! (<get-token this))]
-        (or (guard-ex token-or-exp)
-            (<! (<retry-rsapi
-                 #(p->c (.updateLocalVersionFiles mobile-util/file-sync
-                                                  (clj->js {:graphUUID graph-uuid
-                                                            :basePath base-path
-                                                            :filePaths filepaths
-                                                            :token token-or-exp})))))))))
-
-  (<delete-local-files [_ graph-uuid base-path filepaths]
-    (let [normalized-filepaths (mapv path-normalize filepaths)]
-      (go
-        (let [r (<! (<retry-rsapi #(p->c (.deleteLocalFiles mobile-util/file-sync
-                                                            (clj->js {:graphUUID graph-uuid
-                                                                      :basePath base-path
-                                                                      :filePaths normalized-filepaths})))))]
-          r))))
-
-  (<update-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv path-normalize filepaths)]
-      (go
-        (let [token-or-exp (<! (<get-token this))
-              r (or (guard-ex token-or-exp)
-                    (<! (p->c (.updateRemoteFiles mobile-util/file-sync
-                                                  (clj->js {:graphUUID graph-uuid
-                                                            :basePath base-path
-                                                            :filePaths normalized-filepaths
-                                                            :txid local-txid
-                                                            :token token-or-exp
-                                                            :fnameEncryption true})))))]
-          (or (guard-ex r)
-              (get (js->clj r) "txid"))))))
-
-  (<delete-remote-files [this graph-uuid base-path filepaths local-txid]
-    (let [normalized-filepaths (mapv path-normalize filepaths)]
-      (go
-        (let [token-or-exp (<! (<get-token this))
-              r (or (guard-ex token-or-exp)
-                    (<! (p->c (.deleteRemoteFiles mobile-util/file-sync
-                                                  (clj->js {:graphUUID graph-uuid
-                                                            :basePath base-path
-                                                            :filePaths normalized-filepaths
-                                                            :txid local-txid
-                                                            :token token-or-exp})))))]
-          (or (guard-ex r)
-              (get (js->clj r) "txid"))))))
-
-  (<encrypt-fnames [_ graph-uuid fnames]
-    (go
-      (let [r (<! (p->c (.encryptFnames mobile-util/file-sync
-                                        (clj->js {:graphUUID graph-uuid
-                                                  :filePaths fnames}))))]
-        (or (guard-ex r)
-            (get (js->clj r) "value")))))
-  (<decrypt-fnames [_ graph-uuid fnames]
-    (go (let [r (<! (p->c (.decryptFnames mobile-util/file-sync
-                                          (clj->js {:graphUUID graph-uuid
-                                                    :filePaths fnames}))))]
-          (if (instance? ExceptionInfo r)
-            (ex-info "decrypt-failed" {:fnames fnames} (ex-cause r))
-            (get (js->clj r) "value")))))
-  (<cancel-all-requests [_]
-    (p->c (.cancelAllRequests mobile-util/file-sync)))
-  (<add-new-version [_this repo path content]
-    (p->c (capacitor-fs/backup-file repo :version-file-dir path content))))
-
 (def rsapi (cond
              (util/electron?)
              (->RSAPI nil nil nil)
-
-             (mobile-util/native-ios?)
-             (->CapacitorAPI nil nil nil)
-
-             (mobile-util/native-android?)
-             (->CapacitorAPI nil nil nil)
 
              :else
              nil))
@@ -1440,14 +1293,14 @@
          (= #{:value :expired-at} (set (keys v)))]}
   (swap! *get-graph-salt-memoize-cache conj [graph-uuid v]))
 
-(defn <get-graph-salt-memoize [remoteapi graph-uuid]
+(defn <get-graph-salt-memoize [remoteapi' graph-uuid]
   (go
     (let [r          (get @*get-graph-salt-memoize-cache graph-uuid)
           expired-at (:expired-at r)
           now        (tc/to-long (t/now))]
       (if (< now expired-at)
         r
-        (let [r (<! (<get-graph-salt remoteapi graph-uuid))]
+        (let [r (<! (<get-graph-salt remoteapi' graph-uuid))]
           (or (guard-ex r)
               (do (swap! *get-graph-salt-memoize-cache conj [graph-uuid r])
                   r)))))))
@@ -1458,11 +1311,11 @@
          (= #{:public-key :encrypted-private-key} (set (keys v)))]}
   (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid v]))
 
-(defn <get-graph-encrypt-keys-memoize [remoteapi graph-uuid]
+(defn <get-graph-encrypt-keys-memoize [remoteapi' graph-uuid]
   (go
     (or (get @*get-graph-encrypt-keys-memoize-cache graph-uuid)
         (let [{:keys [public-key encrypted-private-key] :as r}
-              (<! (<get-graph-encrypt-keys remoteapi graph-uuid))]
+              (<! (<get-graph-encrypt-keys remoteapi' graph-uuid))]
           (when (and public-key encrypted-private-key)
             (swap! *get-graph-encrypt-keys-memoize-cache conj [graph-uuid r]))
           r))))
@@ -1503,12 +1356,12 @@
   (go-loop []
     (if @*paused
       {:pause true}
-      (let [{:keys [timeout val]}
+      (let [{timeout' :timeout :keys [val]}
             (async/alt! ch ([v] {:val v})
                         (timeout 1000) {:timeout true})]
         (cond
           val val
-          timeout (recur))))))
+          timeout' (recur))))))
 
 (defn- assert-local-txid<=remote-txid
   []
@@ -1580,7 +1433,7 @@
                       (map (fn [rpath]
                              (p/let [base-file (path/path-join "logseq/version-files/base" rpath)
                                      current-change-file rpath
-                                     format (gp-util/get-format current-change-file)
+                                     format (common-util/get-format current-change-file)
                                      repo (state/get-current-repo)
                                      repo-dir (config/get-repo-dir repo)
                                      base-exists? (fs/file-exists? repo-dir base-file)]
@@ -1615,7 +1468,7 @@
                                   (p/let [incoming-file (path/path-join "logseq/version-files/incoming" rpath)
                                           base-file (path/path-join "logseq/version-files/base" rpath)
                                           current-change-file rpath
-                                          format (gp-util/get-format current-change-file)
+                                          format (common-util/get-format current-change-file)
                                           repo (state/get-current-repo)
                                           repo-dir (config/get-repo-dir repo)
                                           base-exists? (fs/file-exists? repo-dir base-file)]
@@ -1926,14 +1779,14 @@
 
 (defn local-changes-revised-chan-builder
   "return chan"
-  [local-changes-chan rename-page-event-chan]
+  [local-changes-chan' rename-page-event-chan]
   (let [*rename-events (atom #{})
         ch (chan 1000)]
     (go-loop []
       (let [{:keys [rename-event local-change]}
             (async/alt!
               rename-page-event-chan ([v] {:rename-event v}) ;; {:repo X :old-path X :new-path}
-              local-changes-chan ([v] {:local-change v}))]
+              local-changes-chan' ([v] {:local-change v}))]
         (cond
           rename-event
           (let [repo-dir (config/get-repo-dir (:repo rename-event))
@@ -2176,13 +2029,13 @@
 (defn- <ensure-set-env&keys
   [graph-uuid *stopped?]
   (go-loop []
-    (let [{:keys [change timeout]}
+    (let [{timeout' :timeout :keys [change]}
           (async/alt! (get-graph-pwd-changed-chan graph-uuid) {:change true}
                       (timeout 10000) {:timeout true})]
       (cond
         @*stopped? nil
         change (<! (<set-env&keys config/FILE-SYNC-PROD? graph-uuid))
-        timeout (recur)))))
+        timeout' (recur)))))
 
 ;;; ### chans to control sync process
 (def full-sync-chan
@@ -2215,8 +2068,8 @@
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
-(def last-input-time-cursor (rum/cursor state/state :editor/last-input-time))
-(add-watch last-input-time-cursor "sync"
+(def last-input-time-atom (get @state/state :editor/last-input-time))
+(add-watch last-input-time-atom "sync"
            (fn [_ _ _ _]
              (offer! recent-edited-chan true)))
 
@@ -2246,7 +2099,7 @@
   [graph-uuid]
   (swap! *resume-state dissoc graph-uuid))
 
-(defn sync-state
+(defn new-sync-state
   "create a new sync-state"
   []
   {:post [(s/valid? ::sync-state %)]}
@@ -2380,7 +2233,7 @@
   if local-txid != remote-txid, return {:need-sync-remote true}"))
 
 (defrecord ^:large-vars/cleanup-todo
- Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *txid-for-get-deletion-log *sync-state remoteapi
+ Remote->LocalSyncer [user-uuid graph-uuid base-path repo *txid *txid-for-get-deletion-log *sync-state remoteapi'
                       ^:mutable local->remote-syncer *stopped *paused]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
@@ -2419,7 +2272,7 @@
   (<sync-remote->local! [_]
     (go
       (let [r
-            (let [diff-r (<! (<get-diff remoteapi graph-uuid @*txid))]
+            (let [diff-r (<! (<get-diff remoteapi' graph-uuid @*txid))]
               (or (guard-ex diff-r)
                   (let [[diff-txns latest-txid min-txid] diff-r]
                     (if (> (dec min-txid) @*txid) ;; min-txid-1 > @*txid, need to remote->local-full-sync
@@ -2456,7 +2309,7 @@
 
   (<sync-remote->local-all-files! [this]
     (go
-      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
+      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi' graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)]
         (if (or (storage-exceed-limit? remote-all-files-meta-or-exp)
@@ -2477,7 +2330,7 @@
                 sorted-diff-remote-files
                 (sort-by
                  (sort-file-metadata-fn :recent-days-range recent-10-days-range) > diff-remote-files)
-                remote-txid-or-ex       (<! (<get-remote-txid remoteapi graph-uuid))
+                remote-txid-or-ex       (<! (<get-remote-txid remoteapi' graph-uuid))
                 latest-txid             (:TXId remote-txid-or-ex)]
             (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? latest-txid))
               (do (put-sync-event! {:event :get-remote-graph-failed
@@ -2618,7 +2471,7 @@
          local-files-meta-map))))
 
 (defrecord ^:large-vars/cleanup-todo
- Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi
+ Local->RemoteSyncer [user-uuid graph-uuid base-path repo *sync-state remoteapi'
                       ^:mutable rate *txid *txid-for-get-deletion-log
                       ^:mutable remote->local-syncer stop-chan *stopped *paused
                        ;; control chans
@@ -2658,7 +2511,7 @@
 
   (<ratelimit [this from-chan]
     (let [<fast-filter-e-fn (.filter-file-change-events-fn this)]
-      (util/<ratelimit
+      (async-util/<ratelimit
        from-chan rate
        :filter-fn
        (fn [e]
@@ -2716,7 +2569,7 @@
 
               (need-reset-local-txid? r*) ;; TODO: this cond shouldn't be true,
               ;; but some potential bugs cause local-txid > remote-txid
-              (let [remote-txid-or-ex (<! (<get-remote-txid remoteapi graph-uuid))
+              (let [remote-txid-or-ex (<! (<get-remote-txid remoteapi' graph-uuid))
                     remote-txid             (:TXId remote-txid-or-ex)]
                 (if (or (instance? ExceptionInfo remote-txid-or-ex) (nil? remote-txid))
                   (do (put-sync-event! {:event :get-remote-graph-failed
@@ -2755,9 +2608,9 @@
 
   (<sync-local->remote-all-files! [this]
     (go
-      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi graph-uuid)
+      (let [remote-all-files-meta-c      (<get-remote-all-files-meta remoteapi' graph-uuid)
             local-all-files-meta-c       (<get-local-all-files-meta rsapi graph-uuid base-path)
-            deletion-logs-c              (<get-deletion-logs remoteapi graph-uuid @*txid-for-get-deletion-log)
+            deletion-logs-c              (<get-deletion-logs remoteapi' graph-uuid @*txid-for-get-deletion-log)
             remote-all-files-meta-or-exp (<! remote-all-files-meta-c)
             deletion-logs-or-exp         (<! deletion-logs-c)]
         (cond
@@ -2849,7 +2702,7 @@
 
 (defrecord ^:large-vars/cleanup-todo
  SyncManager [user-uuid graph-uuid base-path *sync-state
-              ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi
+              ^Local->RemoteSyncer local->remote-syncer ^Remote->LocalSyncer remote->local-syncer remoteapi'
               ^:mutable ratelimit-local-changes-chan
               *txid *txid-for-get-deletion-log
               ^:mutable state ^:mutable remote-change-chan ^:mutable *ws *stopped? *paused?
@@ -2925,7 +2778,7 @@
           remote->local
           (let [txid
                 (if (true? remote->local)
-                  (let [r (<! (<get-remote-txid remoteapi graph-uuid))]
+                  (let [r (<! (<get-remote-txid remoteapi' graph-uuid))]
                     (when-not (guard-ex r) {:txid (:TXId r)}))
                   remote->local)]
             (when (some? txid)
@@ -3232,9 +3085,7 @@
         local->remote-syncer (->Local->RemoteSyncer user-uuid graph-uuid
                                                     base-path
                                                     repo *sync-state remoteapi-with-stop
-                                                    (if (mobile-util/native-platform?)
-                                                      2000
-                                                      10000)
+                                                    10000
                                                     *txid *txid-for-get-deletion-log nil (chan) *stopped? *paused?
                                                     (chan 1) (chan 1))
         remote->local-syncer (->Remote->LocalSyncer user-uuid graph-uuid base-path
@@ -3264,11 +3115,6 @@
       (println "[SyncManager]" "stopped"))
 
     (reset! current-sm-graph-uuid nil)))
-
-(defn <sync-local->remote-now []
-  (go
-    (when-let [_sm ^SyncManager (state/get-file-sync-manager (state/get-current-file-sync-graph-uuid))]
-      (offer! immediately-local->remote-chan true))))
 
 (defn sync-need-password!
   []
@@ -3373,7 +3219,7 @@
                    (<! (<connectivity-testing)))
         (reset! *sync-starting false)
         (try
-          (let [*sync-state                 (atom (sync-state))
+          (let [*sync-state                 (atom (new-sync-state))
                 current-user-uuid           (<! (user/<user-uuid))
               ;; put @graph-uuid & get-current-repo together,
               ;; prevent to get older repo dir and current graph-uuid.
@@ -3415,51 +3261,7 @@
           (finally
             (reset! *sync-starting false)))))))
 
-(defn- restart-if-stopped!
-  [is-active?]
-  (cond
-    (and is-active? (graph-sync-off? (second @graphs-txid)))
-    (<sync-start)
-
-    :else
-    (offer! pause-resume-chan is-active?)))
-
-(def app-state-changed-cursor (rum/cursor state/state :mobile/app-state-change))
-
 (def finished-local->remote-chan (chan 1))
-
-(add-watch app-state-changed-cursor "sync"
-           (fn [_ _ _ {:keys [is-active?]}]
-             (cond
-               (mobile-util/native-android?)
-               (when-not is-active?
-                 (<sync-local->remote-now))
-
-               (mobile-util/native-ios?)
-               (let [*task-id (atom nil)]
-                 (if is-active?
-                   (restart-if-stopped! is-active?)
-                   (when (state/get-current-file-sync-graph-uuid)
-                     (p/let [task-id (.beforeExit ^js BackgroundTask
-                                                  (fn []
-                                                    (go
-                                                      ;; Wait for file watcher events
-                                                      (<! (timeout 2000))
-                                                      (util/drain-chan finished-local->remote-chan)
-                                                      (<! (<sync-local->remote-now))
-                                                      ;; wait at most 20s
-                                                      (async/alts! [finished-local->remote-chan (timeout 20000)])
-                                                      (p/let [active? (mobile-util/app-active?)]
-                                                        (when-not active?
-                                                          (offer! pause-resume-chan is-active?)))
-                                                      (<! (timeout 5000))
-                                                      (prn "finish task: " @*task-id)
-                                                      (let [opt #js {:taskId @*task-id}]
-                                                        (.finish ^js BackgroundTask opt)))))]
-                       (reset! *task-id task-id)))))
-
-               :else
-               nil)))
 
 ;;; ### some add-watches
 

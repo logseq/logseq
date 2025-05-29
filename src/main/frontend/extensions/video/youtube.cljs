@@ -1,13 +1,13 @@
 (ns frontend.extensions.video.youtube
-  (:require [rum.core :as rum]
-            [cljs.core.async :refer [<! chan go] :as a]
+  (:require [cljs.core.async :refer [<! chan go] :as a]
+            [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.handler.notification :as notification]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [clojure.string :as str]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.handler.notification :as notification]))
+            [rum.core :as rum]))
 
 (defn- load-yt-script []
   (js/console.log "load yt script")
@@ -59,7 +59,7 @@
         url (if start
               (str url "&start=" start)
               url)]
-    [:iframe
+    [:iframe.aspect-video
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
       :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
@@ -79,7 +79,7 @@
                          (when (or (> idx 0)
                                    (not= v "00"))
                            v)))
-         (str/join ":"))))
+         (string/join ":"))))
 
 (defn dom-after-video-node? [video-node target]
   (not (zero?
@@ -92,13 +92,12 @@
                          (filter
                           (fn [node]
                             (let [src (gobj/get node "src" "")]
-                              (str/includes? src "youtube.com"))))
+                              (string/includes? src "youtube.com"))))
                          (filter #(dom-after-video-node? % target))
                          last)]
     (let [id (gobj/get iframe "id" "")
-          id (str/replace-first id #"youtube-player-" "")]
+          id (string/replace-first id #"youtube-player-" "")]
       (get (get @state/state :youtube/players) id))))
-
 
 (rum/defc timestamp
   [seconds]
@@ -121,14 +120,13 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
        false)
       nil)))
 
-
-(defn parse-timestamp [timestamp]
+(defn parse-timestamp [timestamp']
   (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
         reg-number #"^\d+$"
-        timestamp (str timestamp)
-        total-seconds (some-> (re-matches reg-number timestamp)
+        timestamp'' (str timestamp')
+        total-seconds (some-> (re-matches reg-number timestamp'')
                               util/safe-parse-int)
-        [_ hours minutes seconds] (re-matches reg timestamp)
+        [_ hours minutes seconds] (re-matches reg timestamp'')
         [hours minutes seconds] (map #(if (nil? %) 0 (util/safe-parse-int %)) [hours minutes seconds])]
     (cond
       total-seconds
@@ -145,13 +143,13 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
   (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
   (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
 
- (parse-timestamp "01:23")                                  ;; => 83
+  (parse-timestamp "01:23")                                  ;; => 83
 
- (parse-timestamp "01:01:23")                               ;; => 3683
+  (parse-timestamp "01:01:23")                               ;; => 3683
 
  ;; seconds->display
  ;; https://stackoverflow.com/questions/1322732/convert-seconds-to-hh-mm-ss-with-javascript
- (seconds->display 129600)                                  ;; => "36:00:00"
- (seconds->display 13545)                                   ;; => "03:45:45"
- (seconds->display 18)                                      ;; => "00:18"
- )
+  (seconds->display 129600)                                  ;; => "36:00:00"
+  (seconds->display 13545)                                   ;; => "03:45:45"
+  (seconds->display 18)                                      ;; => "00:18"
+  )

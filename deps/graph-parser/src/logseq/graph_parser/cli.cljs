@@ -1,14 +1,13 @@
 (ns ^:node-only logseq.graph-parser.cli
-  "Primary ns to parse graphs with node.js based CLIs"
+  "For file graphs, primary ns to parse graphs with node.js based CLIs"
   (:require ["fs" :as fs]
             ["path" :as path]
             [clojure.edn :as edn]
-            [logseq.common.graph :as common-graph]
             [logseq.common.config :as common-config]
+            [logseq.common.graph :as common-graph]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser :as graph-parser]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.db :as ldb]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (defn- slurp
   "Return file contents like clojure.core/slurp"
@@ -29,25 +28,24 @@
   [dir* config]
   (let [dir (path/resolve dir*)]
     (->> (common-graph/get-files dir)
-        (map #(hash-map :file/path %))
-        graph-parser/filter-files
-        (remove-hidden-files dir config)
-        (mapv #(assoc % :file/content (slurp (:file/path %)))))))
+         (map #(hash-map :file/path %))
+         graph-parser/filter-files
+         (remove-hidden-files dir config)
+         (mapv #(assoc % :file/content (slurp (:file/path %)))))))
 
 (defn- read-config
   "Reads repo-specific config from logseq/config.edn"
   [dir]
-  (let [config-file (str dir "/" gp-config/app-name "/config.edn")]
+  (let [config-file (str dir "/" common-config/app-name "/config.edn")]
     (if (fs/existsSync config-file)
       (-> config-file fs/readFileSync str edn/read-string)
       {})))
 
 (defn- parse-files
   [conn files {:keys [config] :as options}]
-  (let [extract-options (merge {:date-formatter (gp-config/get-date-formatter config)
+  (let [extract-options (merge {:date-formatter (common-config/get-date-formatter config)
                                 :user-config config
-                                :filename-format (or (:file/name-format config) :legacy)
-                                :extracted-block-ids (atom #{})}
+                                :filename-format (or (:file/name-format config) :legacy)}
                                (select-keys options [:verbose]))]
     (mapv
      (fn [{:file/keys [path content]}]
@@ -55,7 +53,7 @@
              (let [parse-file-options
                    (merge {:extract-options
                            (assoc extract-options
-                                  :block-pattern (gp-config/get-block-pattern (gp-util/get-format path)))}
+                                  :block-pattern (common-config/get-block-pattern (common-util/get-format path)))}
                           (:parse-file-options options))]
                (graph-parser/parse-file conn path content parse-file-options))]
          {:file path :ast ast}))
@@ -75,7 +73,7 @@
   ([dir options]
    (let [config (read-config dir)
          files (or (:files options) (build-graph-files dir config))
-         conn (or (:conn options) (ldb/start-conn))
+         conn (or (:conn options) (gp-db/start-conn))
          _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]
      {:conn conn

@@ -40,10 +40,10 @@ const config: CapacitorConfig = {
   }
 }
 
-if (process.env.LOGSEQ_APP_SERVER_URL) {
+if ("http://192.168.199.216:3001") {
   Object.assign(config, {
     server: {
-      url: process.env.LOGSEQ_APP_SERVER_URL,
+      url: "http://192.168.199.216:3001",
       cleartext: true
     }
   })

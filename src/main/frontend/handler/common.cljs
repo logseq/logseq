@@ -1,19 +1,23 @@
 (ns frontend.handler.common
   "Common fns for handlers"
-  (:require [cljs-bean.core :as bean]
+  (:require ["ignore" :as Ignore]
+            [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.property :as property]
-            [goog.object :as gobj]
-            ["ignore" :as Ignore]))
+            [goog.dom :as gdom]
+            [goog.functions :refer [debounce]]
+            [goog.object :as gobj]))
 
 (defn copy-to-clipboard-without-id-property!
-  [format raw-text html blocks]
-  (util/copy-to-clipboard! (property/remove-id-property format raw-text)
-                           :html html
-                           :blocks blocks))
+  [repo format raw-text html blocks]
+  (let [blocks' (map (fn [b] (assoc b :block/title (:block/raw-title (db/entity (:db/id b))))) blocks)]
+    (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
+                             :html html
+                             :graph repo
+                             :blocks blocks')))
 
 (defn config-with-document-mode
   [config]
@@ -38,46 +42,18 @@
         (println error-message-or-handler))
       {})))
 
-(defn get-page-default-properties
-  [page-name]
-  {:title page-name
-   ;; :date (date/get-date-time-string)
-   })
-
-(defn fix-pages-timestamps
-  [pages]
-  (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]
-         (cond->
-           p
-
-           (nil? created-at)
-           (assoc :block/created-at
-                  (if journal-day
-                    (date/journal-day->ts journal-day)
-                    (util/time-ms)))
-
-           (nil? updated-at)
-           (assoc :block/updated-at
-                  ;; Not exact true
-                  (if journal-day
-                    (date/journal-day->ts journal-day)
-                    (util/time-ms)))))
-    pages))
-
-(defn show-custom-context-menu! [e context-menu-content]
-  (util/stop e)
-  (let [position [(gobj/get e "clientX") (gobj/get e "clientY")]]
-    (state/show-custom-context-menu! context-menu-content position)))
-
 (defn listen-to-scroll!
   [element]
-  (let [*scroll-timer (atom nil)]
-    (.addEventListener element "scroll"
-                       (fn []
-                         (when @*scroll-timer
-                           (js/clearTimeout @*scroll-timer))
-                         (state/set-state! :ui/scrolling? true)
-                         (state/save-scroll-position! (util/scroll-top))
-                         (reset! *scroll-timer (js/setTimeout
-                                                (fn [] (state/set-state! :ui/scrolling? false)) 500)))
-                       false)))
+  (let [*scroll-timer (atom nil)
+        on-scroll (fn []
+                    (when @*scroll-timer
+                      (js/clearTimeout @*scroll-timer))
+                    (state/set-state! :ui/scrolling? true)
+                    (state/save-scroll-position! (util/scroll-top))
+                    (state/save-main-container-position!
+                     (-> (gdom/getElement "main-content-container")
+                         (gobj/get "scrollTop")))
+                    (reset! *scroll-timer (js/setTimeout
+                                           (fn [] (state/set-state! :ui/scrolling? false)) 500)))
+        debounced-on-scroll (debounce on-scroll 100)]
+    (.addEventListener element "scroll" debounced-on-scroll false)))

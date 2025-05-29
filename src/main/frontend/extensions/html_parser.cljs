@@ -33,8 +33,8 @@
         block-pattern (if (= format :markdown)
                         "#"
                         (config/get-block-pattern format))
-        map-join (fn [children & {:keys [list?]}]
-                   (let [opts' (if list?
+        map-join (fn [children & {list?' :list?}]
+                   (let [opts' (if list?'
                                  (let [level (inc (or (:level opts) 0))]
                                    (assoc opts :level level))
                                  opts)]

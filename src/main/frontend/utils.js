@@ -2,12 +2,27 @@ import path from 'path/path.js'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
 import { Capacitor } from '@capacitor/core'
-import { StatusBar, Style } from '@capacitor/status-bar'
 import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
 
 if (typeof window === 'undefined') {
   global.window = {}
 }
+
+// js patches
+;(function () {
+  if (!window?.console) return
+  const originalError = console.error
+  console.error = (...args) => {
+    if (typeof args[0] === 'string' && args[0].startsWith(
+      `Warning: Each child in a list should have a unique "key" prop`)) {
+      console.groupCollapsed('[React] ⚠️ key warning!')
+      console.warn(...args)
+      console.groupEnd()
+      return
+    }
+    originalError(...args)
+  }
+})();
 
 // Copy from https://github.com/primetwig/react-nestable/blob/dacea9dc191399a3520f5dc7623f5edebc83e7b7/dist/utils.js
 export const closest = (target, selector) => {

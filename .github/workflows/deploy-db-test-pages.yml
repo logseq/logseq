@@ -1,0 +1,71 @@
+name: Deploy DB Test Version to Cloud
+
+on:
+  push:
+    branches: ["test/db"]
+
+env:
+  CLOJURE_VERSION: "1.11.1.1413"
+  NODE_VERSION: '22'
+  JAVA_VERSION: "11"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@11.0
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Fetch yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+
+      - name: Build Released-Web
+        run: |
+          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}'
+          rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
+          ls -lR ./public && mkdir r2 && mv ./public/static/js/main.js.map ./r2/db-test.main.js.map
+          sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/static/js/main.js
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Upload to R2
+        uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: 2553ea8236c11ea0f88de28fce1cbfee
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: ${{ secrets.R2_ASSETS_BUCKET }}
+          source-dir: r2
+          destination-dir: ./
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 2553ea8236c11ea0f88de28fce1cbfee
+          projectName: " logseq-db-test"
+          directory: "public"
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: "main"
