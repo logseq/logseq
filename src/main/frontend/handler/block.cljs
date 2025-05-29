@@ -360,15 +360,15 @@
         (when (or select? swiped?)
           (dom/set-style! block-container :transform "translateX(0)")
           (when select?
-            (if (contains? (set (state/get-selection-blocks)) block-container)
+            (if (contains? (set (state/get-selection-block-ids)) (some-> (.getAttribute block-container "blockid") uuid))
               (state/drop-selection-block! block-container)
               (do
                 (state/clear-edit!)
                 (state/conj-selection-block! block-container nil)))
-            (when (seq (state/get-selection-blocks))
+            (if (seq (state/get-selection-blocks))
               (state/set-state! :mobile/show-action-bar? true)
-              ;; (state/set-state! :mobile/actioned-block )
-              )
+              (when (:mobile/show-action-bar? @state/state)
+                (state/set-state! :mobile/show-action-bar? false)))
             (haptics/haptics)))
         (reset! *swiped? false)
         (catch :default e
