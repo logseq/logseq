@@ -1,13 +1,7 @@
 (ns frontend.components.onboarding
   (:require [frontend.context.i18n :refer [t]]
-            [rum.core :as rum]
             [frontend.ui :as ui]
-            [frontend.state :as state]
-            [frontend.components.onboarding.setups :as setups]))
-
-(rum/defc intro
-  [onboarding-and-home?]
-  (setups/picker onboarding-and-home?))
+            [frontend.state :as state]))
 
 (defn help
   []

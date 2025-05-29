@@ -4,6 +4,7 @@
 
 (def ignored
   #{"ResizeObserver loop limit exceeded"
+    "ResizeObserver loop completed with undelivered notifications"
     "Uncaught TypeError:"})
 
 (defn ignored?

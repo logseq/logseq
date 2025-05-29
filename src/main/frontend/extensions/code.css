@@ -26,7 +26,7 @@
 
   &-calc {
     @apply text-sm;
-    padding: 23px 0.25em 0.25em 0.25em;
+    padding: 0.35em 0.25em 0.25em 0.25em;
     width: max-content;
     text-align: right;
 
@@ -40,15 +40,11 @@
 
 .CodeMirror {
   height: auto;
+  max-height: 1024px;
   width: 100%;
   font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
   border-radius: 2px;
   line-height: 1.45em;
-
-  &-scroll {
-    padding-top: 14px;
-    padding-bottom: 62px;
-  }
 
   &:not(.CodeMirror-focused) {
     .CodeMirror-activeline-background {

@@ -1,7 +1,7 @@
 {
   "name": "Logseq",
   "productName": "Logseq",
-  "version": "0.10.12",
+  "version": "0.11.0",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
@@ -25,7 +25,6 @@
     "@logseq/rsapi": "0.0.92",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
-    "better-sqlite3": "11.9.1",
     "chokidar": "^3.5.1",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
@@ -57,7 +56,8 @@
     "@electron/rebuild": "3.7.2",
     "electron": "34.5.6",
     "electron-builder": "26.0.12",
-    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git"
+    "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
+    "electron-devtools-installer": "^3.2.0"
   },
   "resolutions": {
     "**/electron": "34.5.6",

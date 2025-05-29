@@ -1,19 +1,20 @@
 (ns frontend.mobile.action-bar
   "Block Action bar, activated when swipe on a block"
-  (:require
-   [frontend.db :as db]
-   [frontend.extensions.srs :as srs]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.mixins :as mixins]
-   [frontend.state :as state]
-   [frontend.ui :as ui]
-   [frontend.util :as util]
-   [frontend.util.url :as url-util]
-   [goog.dom :as gdom]
-   [goog.object :as gobj]
-   [rum.core :as rum]
-   [logseq.graph-parser.util.block-ref :as block-ref]
-   [frontend.mobile.util :as mobile-util]))
+  (:require [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.extensions.fsrs :as fsrs]
+            [frontend.extensions.srs :as srs]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.mixins :as mixins]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.util.ref :as ref]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [frontend.util.url :as url-util]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [rum.core :as rum]))
 
 (defn- action-command
   [icon description command-handler]
@@ -56,12 +57,14 @@
           (.scrollBy (util/app-scroll-container-node) #js {:top (- 10 delta)})))
       [:div.action-bar
        [:div.action-bar-commands
-        (action-command "infinity" "Card" #(srs/make-block-a-card! (:block/uuid block)))
+        (action-command "infinity" "Card" #(if (config/db-based-graph? (state/get-current-repo))
+                                             (fsrs/batch-make-cards! [(:block/uuid block)])
+                                             (srs/batch-make-cards! [(:block/uuid block)])))
         (action-command "copy" "Copy" #(editor-handler/copy-selection-blocks false))
         (action-command "cut" "Cut" #(editor-handler/cut-selection-blocks true))
-        (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block true))
+        (action-command "trash" "Delete" #(editor-handler/delete-block-aux! block))
         (action-command "registered" "Copy ref"
-                        (fn [_event] (editor-handler/copy-block-ref! uuid block-ref/->block-ref)))
+                        (fn [_event] (editor-handler/copy-block-ref! uuid ref/->block-ref)))
         (action-command "link" "Copy url"
                         (fn [_event] (let [current-repo (state/get-current-repo)
                                            tap-f (fn [block-id]

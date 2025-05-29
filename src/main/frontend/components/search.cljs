@@ -13,7 +13,7 @@
                            :block? true
                            :search? true}
                           repo
-                          (clojure.core/uuid uuid)
+                          uuid
                           {:indent? false})])
      [:div {:class "font-medium" :key "content"}
       (search-handler/highlight-exact-query content q)]]))

@@ -1,0 +1,17 @@
+.ls-cards {
+  .ls-card-item {
+    @apply dark:shadow-gray-700 shadow-md rounded-md p-4 h-[15rem] w-full overflow-auto;
+  }
+
+  > div[data-virtuoso-scroller] {
+    @apply w-full;
+  }
+
+  .virtuoso-grid-list {
+    @apply flex flex-wrap gap-3;
+  }
+
+  .virtuoso-grid-item {
+    @apply flex w-[290px];
+  }
+}

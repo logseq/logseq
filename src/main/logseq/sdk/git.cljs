@@ -1,10 +1,10 @@
 (ns logseq.sdk.git
   (:require [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [frontend.state :as state]
-            [frontend.handler.shell :as shell]
             [frontend.config :as config]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [frontend.handler.shell :as shell]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (defn ^:export exec_command
   [^js args]

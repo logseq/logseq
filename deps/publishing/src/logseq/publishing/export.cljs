@@ -8,7 +8,10 @@
 
 (def ^:api js-files
   "js files from publishing release build"
-  ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"])
+  (->> ["shared.js" "main.js" "code-editor.js" "excalidraw.js" "tldraw.js" "db-worker.js"]
+       ;; Add source maps for all js files as it doesn't affect initial load time
+       (mapcat #(vector % (str % ".map")))
+       vec))
 
 (def ^:api static-dirs
   "dirs under static dir to copy over"
@@ -42,11 +45,7 @@
                 (fs/symlinkSync (node-path/join source-static-dir "js" "publishing" "cljs-runtime")
                                 (node-path/join output-static-dir "js" "cljs-runtime")))
             ;; remove publishing-dir
-            _ (when-not dev? (fse/remove publishing-dir))
-            ;; remove source map files
-            _ (p/all (map (fn [file]
-                            (fs/rmSync (node-path/join output-static-dir "js" (str file ".map")) #js {:force true}))
-                          ["main.js" "code-editor.js" "excalidraw.js"]))])))
+            _ (when-not dev? (fse/remove publishing-dir))])))
 
 (defn- copy-static-files-and-assets
   [static-dir repo-path output-dir {:keys [log-error-fn asset-filenames]
@@ -97,8 +96,8 @@
                 custom-js (if (fs/existsSync custom-js-path) (str (fs/readFileSync custom-js-path)) "")
                 _ (fs/writeFileSync (node-path/join output-static-dir "js" "custom.js") custom-js)
                 _ (cleanup-js-dir output-static-dir static-dir options)]
-               (notification-fn {:type "success"
-                                 :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
+          (notification-fn {:type "success"
+                            :payload (str "Export public pages and publish assets to " output-dir " successfully 🎉")}))
         (p/catch (fn [error]
                    (notification-fn {:type "error"
                                      :payload (str "Export public pages unexpectedly failed with: " error)}))))))

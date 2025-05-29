@@ -1,19 +1,21 @@
 (ns frontend.mobile.graph-picker
   (:require
    [clojure.string :as string]
-   [rum.core :as rum]
-   [frontend.ui :as ui]
+   [frontend.components.svg :as svg]
+   [frontend.fs :as fs]
+   [frontend.handler.file-based.native-fs :as nfs-handler]
    [frontend.handler.notification :as notification]
-   [frontend.handler.web.nfs :as web-nfs]
    [frontend.handler.page :as page-handler]
-   [frontend.util :as util]
+   [frontend.mobile.util :as mobile-util]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.state :as state]
-   [frontend.mobile.util :as mobile-util]
-   [frontend.fs :as fs]
-   [frontend.components.svg :as svg]
+   [frontend.ui :as ui]
+   [frontend.util :as util]
+   [logseq.common.path :as path]
+   [logseq.shui.hooks :as hooks]
+   [logseq.shui.ui :as shui]
    [promesa.core :as p]
-   [logseq.common.path :as path]))
+   [rum.core :as rum]))
 
 (defn validate-graph-dirname
   [root dirname]
@@ -22,14 +24,14 @@
 (rum/defc toggle-item
   [{:keys [on? title on-toggle]}]
   (ui/button
-    [:span.flex.items-center.justify-between.w-full.py-1
-     [:strong title]
-     (ui/toggle on? (fn []) true)]
-    :class (str "toggle-item " (when on? "is-on"))
-    :intent "logseq"
-    :on-mouse-down #(util/stop %)
-    :on-click #(when (fn? on-toggle)
-                 (on-toggle (not on?)))))
+   [:span.flex.items-center.justify-between.w-full.py-1
+    [:strong title]
+    (ui/toggle on? (fn []) true)]
+   :class (str "toggle-item " (when on? "is-on"))
+   :intent "logseq"
+   :on-pointer-down #(util/stop %)
+   :on-click #(when (fn? on-toggle)
+                (on-toggle (not on?)))))
 
 (rum/defc ^:large-vars/cleanup-todo graph-picker-cp
   [{:keys [onboarding-and-home? logged? native-icloud?] :as opts}]
@@ -63,7 +65,7 @@
                                                    (p/resolved nil))))
                                        (p/then
                                         (fn []
-                                          (web-nfs/ls-dir-files-with-path!
+                                          (nfs-handler/ls-dir-files-with-path!
                                            graph-path (merge
                                                        {:ok-handler
                                                         (fn []
@@ -75,7 +77,7 @@
                                                   (notification/show! (str e) :error)
                                                   (js/console.error e)))))))))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when-let [^js input (and onboarding-and-home?
                                  (rum/deref *input-ref))]
@@ -116,7 +118,7 @@
 
          :intent "logseq"
          :on-click (fn []
-                     (state/close-modal!)
+                     (shui/dialog-close!)
                      (page-handler/ls-dir-files! shortcut/refresh!
                                                  {:dir (when native-ios?
                                                          (or
@@ -125,7 +127,7 @@
 
        ;; step 1
        :new-graph
-       [:div.flex.flex-col.w-full.space-y-3.faster-fade-in
+       [:div.flex.flex-col.w-full.space-y-3.faster.fade-in
         [:input.form-input.block
          {:auto-focus  true
           :ref         *input-ref

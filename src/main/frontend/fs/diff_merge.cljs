@@ -2,7 +2,7 @@
   "Implementation of text (file) based content diff & merge for conflict resolution"
   (:require ["@logseq/diff-merge" :refer [attach_uuids Differ Merger]]
             [cljs-bean.core :as bean]
-            [frontend.db.model :as db-model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.utils :as db-utils]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -29,12 +29,12 @@
    page-name: string"
   [page-name]
   {:pre (string? page-name)}
-  (let [walked (db-model/get-sorted-page-block-ids-and-levels page-name)
-        blocks (db-utils/pull-many [:block/uuid :block/content :block/level] (map :id walked))
+  (let [walked (file-model/get-sorted-page-block-ids-and-levels page-name)
+        blocks (db-utils/pull-many [:block/uuid :block/title :block/level] (map :id walked))
         levels (map :level walked)
         blocks (map (fn [block level]
                       {:uuid   (str (:block/uuid block)) ;; Force to be string
-                       :body   (:block/content block)
+                       :body   (:block/title block)
                        :level  level})
                     blocks levels)]
     blocks))

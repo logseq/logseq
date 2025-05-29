@@ -4,15 +4,15 @@
 
 (def query
   {:init
-   (fn [state]
+   (fn query-mixin-init [state]
      (assoc state :reactive-queries (atom #{})))
    :wrap-render
-   (fn [render-fn]
+   (fn query-mixin-wrap-render [render-fn]
      (fn [state]
        (binding [react/*query-component* (:rum/react-component state)
                  react/*reactive-queries* (:reactive-queries state)]
          (render-fn state))))
    :will-unmount
-   (fn [state]
+   (fn query-mixin-will-unmount [state]
      (react/remove-query-component! (:rum/react-component state))
      state)})

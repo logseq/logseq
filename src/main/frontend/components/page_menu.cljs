@@ -1,75 +1,64 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [electron.ipc :as ipc]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
+            [frontend.handler.shell :as shell]
+            [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
-            [frontend.handler.shell :as shell]
-            [frontend.mobile.util :as mobile-util]
-            [electron.ipc :as ipc]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.file-sync :as file-sync-handler]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [logseq.db :as ldb]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]))
 
 (defn- delete-page!
-  [page-name]
-  (page-handler/delete! page-name
-                        (fn []
-                          (notification/show! (str "Page " page-name " was deleted successfully!")
-                                              :success)))
-  (state/close-modal!)
-  (route-handler/redirect-to-home!))
+  [page]
+  (page-handler/<delete! (:block/uuid page)
+                         (fn []
+                           (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
+                                               :success))
+                         {:error-handler (fn [{:keys [msg]}]
+                                           (notification/show! msg :warning))}))
 
-(defn delete-page-dialog
-  [page-name]
-  (fn [close-fn]
-    [:div
-     [:div.sm:flex.items-center
-      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
-       [:span.text-error.text-xl
-        (ui/icon "alert-triangle")]]
-      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium
-        (t :page/delete-confirmation)]]]
-
-     [:div.mt-5.sm:mt-4.flex.gap-4
-      (ui/button
-       (t :cancel)
-       {:theme :gray
-        :on-click close-fn})
-      (ui/button
-       (t :yes)
-       {:class "ui__modal-enter"
-        :on-click (fn []
-                    (delete-page! page-name))
-        :button-props {:autoFocus "on"}})]]))
+(defn delete-page-confirm!
+  [page]
+  (when page
+    (-> (shui/dialog-confirm!
+         {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                  [:span.top-1.relative
+                   (shui/tabler-icon "alert-triangle")]
+                  (if (config/db-based-graph? (state/get-current-repo))
+                    (t :page/db-delete-confirmation)
+                    (t :page/delete-confirmation))]
+          :content [:p.opacity-60 (str "- " (:block/title page))]
+          :outside-cancel? true})
+        (p/then #(delete-page! page))
+        (p/catch #()))))
 
 (defn ^:large-vars/cleanup-todo page-menu
-  [page-name]
-  (when-let [page-name (or
-                        page-name
-                        (state/get-current-page)
-                        (state/get-current-whiteboard))]
-    (let [page-name (util/page-name-sanity-lc page-name)
-          repo (state/sub :git/current-repo)
-          page (db/entity repo [:block/name page-name])
-          page-original-name (:block/original-name page)
-          whiteboard? (= "whiteboard" (:block/type page))
+  [page]
+  (when-let [page-name (and page (db/page? page) (:block/name page))]
+    (let [repo (state/sub :git/current-repo)
+          db-based? (config/db-based-graph? repo)
+          page-title (if db-based? (str (:block/uuid page)) (:block/title page))
+          whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          properties (:block/properties page)
-          public? (true? (:public properties))
-          favorites (:favorites (state/sub-config))
-          favorited? (contains? (set (map util/page-name-sanity-lc favorites))
-                                page-name)
+          public? (if db-based?
+                    (:logseq.property/publishing-public? page)
+                    (get-in page [:block/properties :public]))
+          _favorites-updated? (state/sub :favorites/updated?)
+          favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
@@ -78,7 +67,7 @@
                                     ;; FIXME: Sync state is not cleared when switching to a new graph
                                     (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))]
-      (when (and page (not block?))
+      (when (not block?)
         (->>
          [(when-not config/publishing?
             {:title   (if favorited?
@@ -87,8 +76,8 @@
              :options {:on-click
                        (fn []
                          (if favorited?
-                           (page-handler/unfavorite-page! page-original-name)
-                           (page-handler/favorite-page! page-original-name)))}})
+                           (page-handler/<unfavorite-page! page-title)
+                           (page-handler/<favorite-page! page-title)))}})
 
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
@@ -108,21 +97,14 @@
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click #(page-handler/copy-page-url page-original-name)}})
+             :options {:on-click #(page-handler/copy-page-url (if db-based? (:block/uuid page) page-title))}})
 
           (when-not (or contents?
-                        config/publishing?)
+                        config/publishing?
+                        (and db-based?
+                             (:logseq.property/built-in? page)))
             {:title   (t :page/delete)
-             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-
-          (when (and (not (mobile-util/native-platform?))
-                     (state/get-current-page))
-            {:title (t :page/slide-view)
-             :options {:on-click (fn []
-                                   (state/sidebar-add-block!
-                                    repo
-                                    (:db/id page)
-                                    :page-slide-view))}})
+             :options {:on-click #(delete-page-confirm! page)}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -136,20 +118,22 @@
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 
-          (when (or (state/get-current-page) whiteboard?)
+          (when page
             {:title   (t :export-page)
-             :options {:on-click #(state/set-modal!
+             :options {:on-click #(shui/dialog-open!
                                    (fn []
-                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?})))}})
+                                     (export/export-blocks [(:block/uuid page)] {:whiteboard? whiteboard?
+                                                                                 :export-type :page}))
+                                   {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
              :options {:on-click
                        (fn []
                          (page-handler/update-public-attribute!
-                          page-name
-                          (if public? false true))
-                         (state/close-modal!))}})
+                          repo
+                          page
+                          (if public? false true)))}})
 
           (when (and (util/electron?) file-rpath
                      (not (file-sync-handler/synced-file-graph? repo)))
@@ -164,17 +148,29 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
+          (when (and db-based? (ldb/internal-page? page))
+            {:title (t :page/convert-to-tag)
+             :options {:on-click (fn []
+                                   (db-page-handler/convert-to-tag! page))}})
+
+          (when (and db-based? (ldb/class? page) (not (:logseq.property/built-in? page)))
+            {:title (t :page/convert-tag-to-page)
+             :options {:on-click (fn []
+                                   (db-page-handler/convert-tag-to-page! page))}})
+
           (when developer-mode?
             {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
                                    (dev-common-handler/show-entity-data (:db/id page)))}})
 
-          (when developer-mode?
+          (when (and developer-mode?
+                     ;; Remove when we have an easy way to fetch file content for a DB graph
+                     (not db-based?))
             {:title   (t :dev/show-page-ast)
              :options {:on-click (fn []
                                    (let [page (db/pull '[:block/format {:block/file [:file/content]}] (:db/id page))]
                                      (dev-common-handler/show-content-ast
                                       (get-in page [:block/file :file/content])
-                                      (:block/format page))))}})]
+                                      (get page :block/format :markdown))))}})]
          (flatten)
          (remove nil?))))))

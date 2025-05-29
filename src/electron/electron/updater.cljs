@@ -62,10 +62,10 @@
                         (when (and (. semver valid remote-version)
                                    (. semver lt electron-version remote-version)) artifact))
 
-             url (if-not artifact (do (emit "update-not-available" nil) (throw nil)) (:url artifact))
+             url (if-not artifact (do (emit "update-not-available" nil) (throw (js/Error. "update not available"))) (:url artifact))
              _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
                ;; start download FIXME: user's preference about auto download
-             _ (when-not auto-download (throw nil))
+             _ (when-not auto-download (throw (js/Error. "no auto download")))
              ^js dl-res (fetch url)
              _ (when-not (.-ok dl-res) (throw (js/Error. "download resource not available")))
              dest-info (p/create

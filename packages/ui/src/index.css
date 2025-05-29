@@ -89,6 +89,10 @@
     &-purple {
       --primary: var(--rx-purple-10-hsl);
     }
+
+    &-logseq {
+      --primary: 200 97% 37%;;
+    }
   }
 }
 
@@ -109,6 +113,14 @@
     &.as-outline {
       --accent: var(--rx-gray-02-hsl);
       --accent-foreground: var(--rx-gray-12-hsl);
+    }
+
+    &[data-button="icon"] {
+      @apply box-content p-1 overflow-hidden h-6 w-6;
+
+      &.as-ghost:hover {
+        background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+      }
     }
   }
 

@@ -12,12 +12,12 @@ test('create file on disk then delete', async ({ page, block, graphDir }) => {
   const testCases = [
     {pageTitle: "User:John", fileName: "User%3AJohn"},
     // invalid url decode escaping as %ff is not parsable but match the common URL encode regex
-    {pageTitle: "#%ff", fileName: "#%ff"},
+    {pageTitle: "%ff", fileName: "%ff"},
     // valid url decode escaping
-    {pageTitle: "#%23", fileName: "#%2523"},
-    {pageTitle: "@!#%", fileName: "@!#%"},
+    {pageTitle: "%23", fileName: "%2523"},
+    {pageTitle: "@!%", fileName: "@!%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
-    {pageTitle: "#%gggg", fileName: "#%gggg"}
+    {pageTitle: "%gggg", fileName: "%gggg"}
   ]
   if (!IsWindows)
     testCases.push({pageTitle: "User:Bob", fileName: "User:Bob"})
@@ -65,8 +65,8 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
     {pageTitle: "User:John", fileName: "User%3AJohn",
     newPageTitle: "User/John", newFileName: "User___John"},
     // NameSpace -> Normal
-    {pageTitle: "#/%23", fileName: "#___%2523",
-    newPageTitle: "#%23", newFileName: "#%2523"}
+    {pageTitle: "!/%23", fileName: "!___%2523",
+    newPageTitle: "%23", newFileName: "%2523"}
   ]
   if (!IsWindows)
     testCases.push({pageTitle: "User:Bob", fileName: "User:Bob",
@@ -114,10 +114,10 @@ test("Rename file on disk", async ({ page, block, graphDir }) => {
 test('special page names', async ({ page, block, graphDir }) => {
   const testCases = [
     {pageTitle: "User:John", fileName: "User%3AJohn"},
-    {pageTitle: "_#%ff", fileName: "_%23%25ff"},
-    {pageTitle: "@!#%", fileName: "@!%23%"},
+    {pageTitle: "_%ff", fileName: "_%25ff"},
+    {pageTitle: "@!%", fileName: "@!%"},
     {pageTitle: "aàáâ", fileName: "aàáâ"},
-    {pageTitle: "_#%gggg", fileName: "_%23%gggg"}
+    {pageTitle: "_%gggg", fileName: "_%gggg"}
   ]
 
   // Test putting files on disk

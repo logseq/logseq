@@ -1,8 +1,6 @@
 (ns frontend.handler.export-test
-  (:require [cljs.test :refer [are async deftest is use-fixtures]]
-            [clojure.edn :as edn]
+  (:require [cljs.test :refer [are async deftest use-fixtures]]
             [clojure.string :as string]
-            [frontend.handler.export :as export]
             [frontend.handler.export.text :as export-text]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
@@ -129,47 +127,6 @@
 	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
-(deftest export-blocks-as-markdown-no-indent
-  (are [expect content]
-      (= (string/trim expect)
-         (string/trim (#'export-text/export-helper (string/trim content) :markdown {:indent-style "no-indent"})))
-      "
-1
-2
-3
-4
-5"
-      "
-- 1
-  2
-  3
-  - 4
-    5"
-"
-some inner code
-```jsx
-import React;
-
-function main() {
-  return 0;
-}
-
-export default main;
-```
-"
-    "
-- some inner code
-  - ```jsx
-    import React;
-
-    function main() {
-      return 0;
-    }
-
-    export default main;
-    ```
-"))
-
 
 (deftest-async export-files-as-markdown
   (p/do!
@@ -182,11 +139,13 @@ export default main;
        [["pages/page2.md" "- 3\n\t- 1\n\t\t- 2\n\t\t\t- 3\n\t\t\t- 3\n\t- 4\n"]]
        [{:path "pages/page2.md" :content (:file/content (nth test-files 1)) :names ["page2"] :format :markdown}])))
 
-(deftest-async export-repo-as-edn-str
-  (p/do!
-   (let [edn-output (edn/read-string
-                     (@#'export/export-repo-as-edn-str (state/get-current-repo)))]
-     (is (= #{:version :blocks} (set (keys edn-output)))
-         "Correct top-level keys")
-     (is (= ["page1" "page2"] (map :block/page-name (:blocks edn-output)))
-         "Correct pages"))))
+;; Disabled because this requires db worker
+#_(deftest-async export-repo-as-edn-str
+    (p/let [result (@#'export/<export-repo-as-edn-str (state/get-current-repo))
+                      edn-output (edn/read-string result)]
+          (is (= #{:version :blocks} (set (keys edn-output)))
+                      "Correct top-level keys")
+          (is (= (sort (concat (map :block/title gp-db/built-in-pages)
+                                                            ["page1" "page2"]))
+                                (sort (map :block/page-name (:blocks edn-output))))
+                          "Correct pages")))
