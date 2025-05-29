@@ -16,13 +16,14 @@
             [logseq.e2e.property-basic-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.repl :as repl]))
+            [wally.repl :as repl]
+            [logseq.e2e.locator :as loc]))
 
 ;; Use port 3001 for local testing
 (reset! config/*port 3001)
 ;; show ui
 (reset! config/*headless false)
-(reset! config/*slow-mo 50)
+(reset! config/*slow-mo 30)
 
 (def *futures (atom {}))
 

@@ -367,3 +367,15 @@
             nil
             template
             {:target page})))))))
+
+(defmethod events/handle :graph/backup-file [[_ repo file-path db-content]]
+  (p/let [disk-content (fs/read-file "" file-path)]
+    (fs/backup-db-file! repo file-path db-content disk-content)))
+
+(defmethod events/handle :graph/notify-existing-file [[_ data]]
+  (let [{:keys [current-file-path file-path]} data
+        error (t :file/validate-existing-file-error current-file-path file-path)]
+    (state/pub-event! [:notification/show
+                       {:content error
+                        :status :error
+                        :clear? false}])))
