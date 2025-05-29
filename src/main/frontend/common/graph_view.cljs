@@ -29,9 +29,10 @@
           (and (map? v) (:db/id v))
           [[from-id (:db/id v)]]
 
-          ;; Vector of node maps
-          (and (vector? v) (every? #(and (map? %) (:db/id %)) v))
-          (map (fn [node] [from-id (:db/id node)]) v)
+          ; Handle sets or vectors of maps with db/id
+          (or (and (vector? v) (every? #(contains? % :db/id) v))
+              (and (set? v) (every? #(contains? % :db/id) v)))
+          (map (fn [node] [from-id (:db/id node)]) (if (set? v) (vec v) v))
 
           :else
           []))
