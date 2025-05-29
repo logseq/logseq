@@ -1271,7 +1271,7 @@ Similar to re-frame subscriptions"
 
 (defn drop-selection-block!
   [block]
-  (set-selection-blocks-aux! (-> (remove #(= block %) (get-unsorted-selection-blocks))
+  (set-selection-blocks-aux! (-> (remove #(= (.-id block) (.-id %)) (get-unsorted-selection-blocks))
                                  vec)))
 
 (defn drop-selection-blocks-starts-with!
