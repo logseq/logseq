@@ -13,7 +13,6 @@
             [goog.dom :as gdom]
             [rum.core :as rum]))
 
-
 (defn- blur-if-compositing
   "Call blur on the textarea if it is in composition mode, let the IME commit the composing text"
   []
@@ -26,9 +25,9 @@
   [:div
    [:button.bottom-action
     {:on-pointer-down (fn [e]
-                      (util/stop e)
-                      (blur-if-compositing)
-                      (editor-handler/indent-outdent indent?))}
+                        (util/stop e)
+                        (blur-if-compositing)
+                        (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:size ui/icon-size})]])
 
 (rum/defc command
@@ -51,8 +50,8 @@
         command-cp (fn [action description]
                      [:button
                       {:on-pointer-down (fn [e]
-                                        (action)
-                                        (callback e))}
+                                          (action)
+                                          (callback e))}
                       description])]
     [:div
      [:div#mobile-toolbar-timestamp-submenu.submenu
@@ -81,12 +80,13 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (or (state/sub :mobile/show-toolbar?)
-               (mobile-util/native-ipad?))
-          (state/editing?))
+  (when (util/capacitor-new?)
+      ;; (and (or (state/sub :mobile/show-toolbar?)
+      ;;          (mobile-util/native-ipad?))
+      ;;     (state/editing?))
     (let [parent-id (state/get-edit-input-id)
           commands' (commands parent-id)]
-      [:div#mobile-editor-toolbar.fade-in.delay
+      [:div#mobile-editor-toolbar
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
         (indent-outdent true "indent-increase")
@@ -101,7 +101,7 @@
         (command #(do
                     (blur-if-compositing)
                     (editor-handler/cycle-todo!))
-          {:icon "checkbox"} true)
+                 {:icon "checkbox"} true)
         (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
         (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)

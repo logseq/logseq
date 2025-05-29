@@ -214,9 +214,7 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/show-toolbar?                  false
       :mobile/show-recording-bar?            false
-      :mobile/show-tabbar?                   false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?

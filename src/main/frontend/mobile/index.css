@@ -1,20 +1,3 @@
-.cp__footer {
-  @apply fixed bottom-0 left-0 px-5 py-2.5 z-10 flex flex-auto whitespace-nowrap h-20 items-start
-  bg-[var(--ls-primary-background-color)];
-
-  .bottom-action {
-    @apply w-6 h-6;
-  }
-
-  .ti, .timer {
-    color: var(--ls-primary-text-color);
-  }
-
-  .timer {
-    @apply absolute left-10;
-  }
-}
-
 .action-bar {
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
   shadow-md bg-[var(--ls-secondary-background-color)] z-[100];
@@ -45,10 +28,13 @@
 #mobile-editor-toolbar {
   @apply fixed -bottom-1 left-0 w-full z-[9999] flex justify-between bg-gray-100 border-t border-gray-200;
 
+  will-change: transform;
   transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
+  opacity: var(--ls-native-toolbar-opacity, 0);
+  transition: transform 250ms ease-out, opacity 50ms ease-out;
 
   button {
-    @apply flex items-center py-2 px-2 active:opacity-50;
+    @apply flex items-center py-2 px-2 opacity-70 active:opacity-80;
   }
 
   .submenu {
@@ -74,16 +60,8 @@
 }
 
 html.is-native-ipad {
-  .cp__footer {
-    @apply h-[55px] right-0 shadow-none flex-1 z-0;
-  }
-
   .action-bar {
     @apply w-[70%] min-w-[550px];
-
-    .action-bar-commands {
-      @apply w-full;
-    }
 
     @media (orientation: landscape) {
       @apply w-1/2;
@@ -108,10 +86,6 @@ html.is-native-iphone {
       right: 15%;
       width: 70%;
       min-width: 450px;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 }
@@ -134,10 +108,6 @@ html.is-native-android {
       left: 15%;
       right: 15%;
       width: 70%;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 
