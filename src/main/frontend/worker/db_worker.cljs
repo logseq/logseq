@@ -199,13 +199,12 @@
 
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
-  [db data delete-addrs*]
-  (let [_delete-addrs (clojure.set/difference (set delete-addrs*) #{0 1})]
-    (assert (some? db) "sqlite db not exists")
-    (.transaction db (fn [tx]
-                       (doseq [item data]
-                         (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                        :bind item}))))))
+  [db data]
+  (assert (some? db) "sqlite db not exists")
+  (.transaction db (fn [tx]
+                     (doseq [item data]
+                       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                                      :bind item})))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -227,15 +226,8 @@
   "Update sqlite-cli/new-sqlite-storage when making changes"
   [^Object db]
   (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
-      (let [used-addrs (set (mapcat
-                             (fn [[addr data]]
-                               (cons addr
-                                     (when (map? data)
-                                       (:addresses data))))
-                             addr+data-seq))
-            delete-addrs (remove used-addrs delete-addrs)
-            data (map
+    (-store [_ addr+data-seq _delete-addrs]
+      (let [data (map
                   (fn [[addr data]]
                     (let [data' (if (map? data) (dissoc data :addresses) data)
                           addresses (when (map? data)
@@ -245,7 +237,7 @@
                            :$content (sqlite-util/transit-write data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data delete-addrs)))
+        (upsert-addr-content! db data)))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
@@ -304,6 +296,19 @@
   (.exec db "PRAGMA locking_mode=exclusive")
   (.exec db "PRAGMA journal_mode=WAL"))
 
+(defn- gc-sqlite-dbs!
+  "Gc main db weekly and rtc ops db each time when opening it"
+  [sqlite-db client-ops-db datascript-conn]
+  (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
+    (when (or (nil? last-gc-at)
+              (not (number? last-gc-at))
+              (> (- (common-util/time-ms) last-gc-at) (* 7 24 3600 1000))) ; 1 week ago
+      (prn :debug "gc current graph")
+      (gc-kvs-table! sqlite-db)
+      (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
+                                     :kv/value (common-util/time-ms)}])))
+  (gc-kvs-table! client-ops-db))
+
 (defn- create-or-open-db!
   [repo {:keys [config import-type datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
@@ -345,8 +350,7 @@
                                                                         (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (worker-util/profile "gc kvs db" (gc-kvs-table! db))
-        (worker-util/profile "gc client ops db" (gc-kvs-table! client-ops-db))
+        (gc-sqlite-dbs! db client-ops-db conn)
 
         ;; TODO: remove this once we can ensure there's no bug for missing addresses
         ;; because it's slow for large graphs
