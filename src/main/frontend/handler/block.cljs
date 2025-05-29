@@ -300,7 +300,6 @@
                 y (.-clientY touch)]
             (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
 
-;; FIXME: disable scroll
 (defn on-touch-move
   [^js goog-event]
   (let [event (.-event_ goog-event)]
