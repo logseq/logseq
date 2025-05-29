@@ -152,23 +152,26 @@
 
 (defn- gc-kvs-table!
   [^Object db]
-  (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
-                                       :rowMode "array"})
-                        bean/->clj
-                        ffirst
-                        sqlite-util/transit-read)
-        internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
-        non-refed-addrs (->> (.exec db #js {:sql get-non-refed-addrs-sql
-                                            :rowMode "array"})
-                             (map first)
-                             set)
-        unused-addresses (clojure.set/difference non-refed-addrs internal-addrs)]
-    (when unused-addresses
-      (prn :debug :db-gc :unused-addresses unused-addresses)
-      (.transaction db (fn [tx]
-                         (doseq [addr unused-addresses]
-                           (.exec tx #js {:sql "Delete from kvs where addr = ?"
-                                          :bind #js [addr]})))))))
+  (when db
+    (let [schema (some->> (.exec db #js {:sql "select content from kvs where addr = 0"
+                                         :rowMode "array"})
+                          bean/->clj
+                          ffirst
+                          sqlite-util/transit-read)
+          internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
+          non-refed-addrs (->> (.exec db #js {:sql get-non-refed-addrs-sql
+                                              :rowMode "array"})
+                               (map first)
+                               set)
+          unused-addresses (clojure.set/difference non-refed-addrs internal-addrs)]
+      (if (seq unused-addresses)
+        (do
+          (prn :debug :db-gc :unused-addresses unused-addresses)
+          (.transaction db (fn [tx]
+                             (doseq [addr unused-addresses]
+                               (.exec tx #js {:sql "Delete from kvs where addr = ?"
+                                              :bind #js [addr]})))))
+        (prn :debug :db-gc "There's no garbage data that needs to be collected.")))))
 
 (defn- find-missing-addresses
   [conn ^Object db & {:keys [delete-addrs]}]
@@ -298,9 +301,10 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db client-ops-db datascript-conn]
+  [sqlite-db client-ops-db datascript-conn {:keys [from-user?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
-    (when (or (nil? last-gc-at)
+    (when (or from-user?
+              (nil? last-gc-at)
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 7 24 3600 1000))) ; 1 week ago
       (prn :debug "gc current graph")
@@ -350,7 +354,7 @@
                                                                         (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (gc-sqlite-dbs! db client-ops-db conn)
+        (gc-sqlite-dbs! db client-ops-db conn {})
 
         ;; TODO: remove this once we can ensure there's no bug for missing addresses
         ;; because it's slow for large graphs
@@ -774,6 +778,13 @@
   ;; (prn :debug :reset-file :file-path file-path :opts opts)
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (file-reset/reset-file! repo conn file-path content opts)))
+
+(def-thread-api :thread-api/gc-graph
+  [repo]
+  (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
+        conn (get @*datascript-conns repo)]
+    (when (and db conn)
+      (gc-sqlite-dbs! db client-ops conn {:from-user? true}))))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
