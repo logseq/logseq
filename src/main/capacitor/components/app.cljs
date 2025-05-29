@@ -94,9 +94,9 @@
     (ion/content
      (ui-component/classic-app-container-wrap
       [:div.pt-3
-       (journal/all-journals)])
-     (when show-action-bar?
-       (action-bar/action-bar)))))
+       (journal/all-journals)
+       (when show-action-bar?
+         (action-bar/action-bar))]))))
 
 (rum/defc home < rum/reactive
   {:did-mount (fn [state]
