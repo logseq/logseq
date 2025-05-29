@@ -585,11 +585,6 @@ should be done through this fn in order to get global config and config defaults
     "LATER"
     "TODO"))
 
-(defn get-filename-format
-  ([] (get-filename-format (get-current-repo)))
-  ([repo]
-   (:file/name-format (get-config repo))))
-
 (defn get-date-formatter
   []
   (let [repo (get-current-repo)]
