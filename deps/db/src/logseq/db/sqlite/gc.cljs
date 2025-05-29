@@ -22,6 +22,8 @@
                           bean/->clj
                           ffirst
                           sqlite-util/transit-read)
+          ;; 0: Datascript sets 0 as the address to store the db's meta, including addresses for :eavt, :avet, and aevt index.
+          ;; 1: Datascript sets 1 for tail, to improve the performance
           internal-addrs (set [0 1 (:eavt schema) (:avet schema) (:aevt schema)])
           non-refed-addrs (->> (.exec db #js {:sql get-non-refed-addrs-sql
                                               :rowMode "array"})
