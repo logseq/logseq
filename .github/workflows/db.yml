@@ -9,7 +9,7 @@ on:
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
