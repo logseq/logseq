@@ -20,11 +20,11 @@
   shadow-md bg-[var(--ls-secondary-background-color)] z-[100];
 
   .action-bar-commands {
-    @apply relative flex justify-around w-[120%];
+    @apply relative flex w-full;
 
 
     .ti, .tie {
-      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-50;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-60;
     }
 
     .description {
@@ -32,7 +32,12 @@
     }
 
     button {
-      @apply py-1 px-2;
+        flex: 1;
+        display: flex;
+        flex-direction: column;   /* Stack icon and label */
+        align-items: center;      /* Center horizontally */
+        justify-content: center;  /* Center vertically */
+        padding: 10px;
     }
   }
 }
