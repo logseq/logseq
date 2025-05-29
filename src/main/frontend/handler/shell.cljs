@@ -1,13 +1,14 @@
 (ns frontend.handler.shell
   "Git related handler fns"
-  (:require [clojure.string :as string]
-            [electron.ipc :as ipc]
-            [frontend.db :as db]
+  (:require [electron.ipc :as ipc]
+            [clojure.string :as string]
+            [logseq.common.util :as common-util]
             [frontend.handler.notification :as notification]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
-            [promesa.core :as p]))
+            [frontend.util :as util]))
 
 (defn run-git-command!
   [command]
@@ -43,7 +44,7 @@
   [command]
   (let [[command args]
         (if (and (string? command) (string/includes? command " "))
-          (gp-util/split-first " " command)
+          (common-util/split-first " " command)
           [command ""])
         command (and command (string/lower-case command))
         args (-> args str string/trim)]
@@ -76,7 +77,7 @@
   [username email]
   (p/let [_r1 (run-git-command! ["config" "--global" "user.name" username])
           _r2 (run-git-command! ["config" "--global" "user.email" email])]
-    (state/close-modal!)
+    (shui/dialog-close!)
     (notification/show!
      [:div "git config successfully!"]
      :success)))

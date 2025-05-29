@@ -76,7 +76,6 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-
         red: mapRadixColorToTailwind('red'),
         pink: mapRadixColorToTailwind('pink'),
         orange: mapRadixColorToTailwind('orange'),

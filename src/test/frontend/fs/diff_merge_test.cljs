@@ -3,9 +3,8 @@
             [cljs.test :refer [are deftest is]]
             [frontend.db.conn :as conn]
             [frontend.fs.diff-merge :as fs-diff]
-            [frontend.handler.common.file :as file-common-handler]
-            [logseq.db :as ldb]
             [logseq.graph-parser :as graph-parser]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.text :as text]))
 
@@ -25,13 +24,13 @@
   (are [text diff-blocks]
        (= (org-text->diffblocks text)
           diff-blocks)
-        ":PROPERTIES:
+    ":PROPERTIES:
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
 #+tItLe: Well parsed!"
-[{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!"
-  :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b"
-  :level 1}]
+    [{:body ":PROPERTIES:\n:ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b\n:END:\n#+tItLe: Well parsed!"
+      :uuid "72289d9a-eb2f-427b-ad97-b605a4b8c59b"
+      :level 1}]
 
     "#+title: Howdy"
     [{:body "#+title: Howdy" :uuid nil :level 1}]
@@ -44,7 +43,7 @@
       :level 1}]))
 
 (deftest db<->ast-diff-blocks-test
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         text                                    ":PROPERTIES:
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
@@ -62,37 +61,37 @@
   (are [text diff-blocks]
        (= (text->diffblocks text)
           diff-blocks)
-  "- a
+    "- a
 \t- b
 \t\t- c"
-  [{:body "a" :uuid nil :level 1}
-   {:body "b" :uuid nil :level 2}
-   {:body "c" :uuid nil :level 3}]
+    [{:body "a" :uuid nil :level 1}
+     {:body "b" :uuid nil :level 2}
+     {:body "c" :uuid nil :level 3}]
 
-"- a
+    "- a
 \t- b
 \t\t- c
 \t\t  multiline
 - d"
-[{:body "a" :uuid nil :level 1}
- {:body "b" :uuid nil :level 2}
- {:body "c\nmultiline" :uuid nil :level 3}
- {:body "d" :uuid nil :level 1}]
+    [{:body "a" :uuid nil :level 1}
+     {:body "b" :uuid nil :level 2}
+     {:body "c\nmultiline" :uuid nil :level 3}
+     {:body "d" :uuid nil :level 1}]
 
-  "## hello
+    "## hello
 \t- world
 \t\t- nice
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-  [{:body "## hello" :uuid nil :level 1}
-   {:body "world" :uuid nil :level 2}
-   {:body "nice" :uuid nil :level 3}
-   {:body "nice" :uuid nil :level 4}
-   {:body "bingo" :uuid nil :level 4}
-   {:body "world" :uuid nil :level 4}]
+    [{:body "## hello" :uuid nil :level 1}
+     {:body "world" :uuid nil :level 2}
+     {:body "nice" :uuid nil :level 3}
+     {:body "nice" :uuid nil :level 4}
+     {:body "bingo" :uuid nil :level 4}
+     {:body "world" :uuid nil :level 4}]
 
-  "# a
+    "# a
 ## b
 ### c
 #### d
@@ -102,27 +101,27 @@
 \t\t- h
 \t- i
 - j"
-  [{:body "# a" :uuid nil :level 1}
-   {:body "## b" :uuid nil :level 1}
-   {:body "### c" :uuid nil :level 1}
-   {:body "#### d" :uuid nil :level 1}
-   {:body "### e" :uuid nil :level 1}
-   {:body "f" :uuid nil :level 1}
-   {:body "g" :uuid nil :level 2}
-   {:body "h" :uuid nil :level 3}
-   {:body "i" :uuid nil :level 2}
-   {:body "j" :uuid nil :level 1}]
+    [{:body "# a" :uuid nil :level 1}
+     {:body "## b" :uuid nil :level 1}
+     {:body "### c" :uuid nil :level 1}
+     {:body "#### d" :uuid nil :level 1}
+     {:body "### e" :uuid nil :level 1}
+     {:body "f" :uuid nil :level 1}
+     {:body "g" :uuid nil :level 2}
+     {:body "h" :uuid nil :level 3}
+     {:body "i" :uuid nil :level 2}
+     {:body "j" :uuid nil :level 1}]
 
     "- a\n  id:: 63e25526-3612-4fb1-8cf9-f66db1254a58
 \t- b
 \t\t- c"
-[{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58"
-  :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
- {:body "b" :uuid nil :level 2}
- {:body "c" :uuid nil :level 3}]
+    [{:body "a\nid:: 63e25526-3612-4fb1-8cf9-f66db1254a58"
+      :uuid "63e25526-3612-4fb1-8cf9-f66db1254a58" :level 1}
+     {:body "b" :uuid nil :level 2}
+     {:body "c" :uuid nil :level 3}]
 
-  "alias:: ⭐️\nicon:: ⭐️"
-[{:body "alias:: ⭐️\nicon:: ⭐️", :level 1, :uuid nil}]))
+    "alias:: ⭐️\nicon:: ⭐️"
+    [{:body "alias:: ⭐️\nicon:: ⭐️", :level 1, :uuid nil}]))
 
 (defn text->diffblocks-alt
   [text]
@@ -206,7 +205,7 @@
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-      "## Halooooo
+    "## Halooooo
 \t- world
 \t\t- nice
 \t\t\t- nice
@@ -216,26 +215,26 @@
     ;; See https://github.com/logseq/diff-merge#usage
     [[]
      [[-1 {:body "## hello"
-          :level 1
-          :uuid nil}]
+           :level 1
+           :uuid nil}]
       [1  {:body "## Halooooo"
-          :level 1
+           :level 1
+           :uuid nil}]]
+     [[0 {:body "world"
+          :level 2
+          :uuid nil}]]
+     [[0 {:body "nice"
+          :level 3
+          :uuid nil}]]
+     [[0 {:body "nice"
+          :level 4
+          :uuid nil}]]
+     [[0 {:body "bingo"
+          :level 4
           :uuid nil}]]
      [[0 {:body "world"
-         :level 2
-         :uuid nil}]]
-     [[0 {:body "nice"
-         :level 3
-         :uuid nil}]]
-     [[0 {:body "nice"
-         :level 4
-         :uuid nil}]]
-     [[0 {:body "bingo"
-         :level 4
-         :uuid nil}]]
-     [[0 {:body "world"
-         :level 4
-         :uuid nil}]]]
+          :level 4
+          :uuid nil}]]]
 
     "## hello
 \t- world
@@ -244,7 +243,7 @@
 \t\t\t- nice
 \t\t\t- bingo
 \t\t\t- world"
-"## Halooooo
+    "## Halooooo
 \t- world
 \t\t- nice
 \t\t\t- nice
@@ -252,40 +251,40 @@
 \t\t\t- world"
 ;; Empty op, because no insertion op before the first base block required
 ;; See https://github.com/logseq/diff-merge#usage
-[[]
- [[-1 {:body "## hello"
-       :level 1
-       :uuid nil}]
-  [1  {:body "## Halooooo"
-       :level 1
-       :uuid nil}]
-  [1 {:body "world"
-      :level 2
-      :uuid nil}]]
- [[-1 {:body "world\nid:: 63e25526-3612-4fb1-8cf9-abcd12354abc"
-      :level 2
-      :uuid "63e25526-3612-4fb1-8cf9-abcd12354abc"}]]
- [[0 {:body "nice"
-      :level 3
-      :uuid nil}]]
- [[0 {:body "nice"
-      :level 4
-      :uuid nil}]]
- [[0 {:body "bingo"
-      :level 4
-      :uuid nil}]]
- [[0 {:body "world"
-      :level 4
-      :uuid nil}]]]
+    [[]
+     [[-1 {:body "## hello"
+           :level 1
+           :uuid nil}]
+      [1  {:body "## Halooooo"
+           :level 1
+           :uuid nil}]
+      [1 {:body "world"
+          :level 2
+          :uuid nil}]]
+     [[-1 {:body "world\nid:: 63e25526-3612-4fb1-8cf9-abcd12354abc"
+           :level 2
+           :uuid "63e25526-3612-4fb1-8cf9-abcd12354abc"}]]
+     [[0 {:body "nice"
+          :level 3
+          :uuid nil}]]
+     [[0 {:body "nice"
+          :level 4
+          :uuid nil}]]
+     [[0 {:body "bingo"
+          :level 4
+          :uuid nil}]]
+     [[0 {:body "world"
+          :level 4
+          :uuid nil}]]]
 
-""
-"- abc def"
-[[[1 {:body "abc def"
-      :level 1
-      :uuid nil}]]]))
+    ""
+    "- abc def"
+    [[[1 {:body "abc def"
+          :level 1
+          :uuid nil}]]]))
 
 (deftest db->diffblocks
-  (let [conn (ldb/start-conn)]
+  (let [conn (gp-db/start-conn)]
     (graph-parser/parse-file conn
                              "foo.md"
                              (str "- abc
@@ -351,7 +350,7 @@
           diff-blocks)
     [[["Property_Drawer" [["foo" "#bar" [["Tag" [["Plain" "bar"]]]]] ["baz" "#bing" [["Tag" [["Plain" "bing"]]]]]]] {:start_pos 0, :end_pos 22}]]
     "foo:: #bar\nbaz:: #bing"
-     [{:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]))
+    [{:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]))
 
 (deftest ast-empty-diff-test
   (are [ast text diff-ops]
@@ -360,95 +359,7 @@
           diff-ops)
     [[["Property_Drawer" [["foo" "#bar" [["Tag" [["Plain" "bar"]]]]] ["baz" "#bing" [["Tag" [["Plain" "bing"]]]]]]] {:start_pos 0, :end_pos 22}]]
     "foo:: #bar\nbaz:: #bing"
-     [[[1 {:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]]]))
-
-;; Ensure diff-merge-uuids follows the id:: in the content
-(deftest diff-merge-uuid-extract-test
-  (let [conn (ldb/start-conn)
-        foo-content (str "- abc
-  id:: 11451400-0000-0000-0000-000000000000\n"
-                 "- def
-  id:: 63246324-6324-6324-6324-632463246324\n")
-        bar-content (str "- ghi
-  id:: 11451411-1111-1111-1111-111111111111\n"
-                         "\t- jkl
-\t  id:: 63241234-1234-1234-1234-123412341234\n") ]
-    (graph-parser/parse-file conn "foo.md" foo-content {})
-    (graph-parser/parse-file conn "bar.md" bar-content {})
-    (are [ast content page-name uuids]
-         (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
-                                                                             :block-pattern "-"}))
-            uuids)
-
-      (gp-mldoc/->edn (str foo-content "- newline\n") (gp-mldoc/default-config :markdown))
-      (str foo-content "- newline\n")
-      "foo"
-      ["11451400-0000-0000-0000-000000000000"
-       "63246324-6324-6324-6324-632463246324"
-       nil]
-
-      (gp-mldoc/->edn (str bar-content "- newline\n") (gp-mldoc/default-config :markdown))
-      (str bar-content "- newline\n")
-      "bar"
-      ["11451411-1111-1111-1111-111111111111"
-       "63241234-1234-1234-1234-123412341234"
-       nil])))
-
-;; Ensure diff-merge-uuids keeps the block uuids unchanged at best effort
-(deftest diff-merge-uuid-persist-test
-  (let [conn (ldb/start-conn)
-        foo-content (str "- abc\n"
-                         "- def\n")
-        bar-content (str "- ghi\n"
-                         "\t- jkl\n")
-        foo-new-content (str foo-content "- newline\n")
-        new-bar-content (str  "- newline\n" bar-content)]
-    (graph-parser/parse-file conn "foo-persist.md" foo-content {})
-    (graph-parser/parse-file conn "bar-persist.md" bar-content {})
-    ;; Compare if the uuids are the same as those inside DB when the modified content (adding new line) is parsed
-    (are [ast content page-name DB-uuids->new-uuids-fn]
-         (= (with-redefs [conn/get-db (constantly @conn)]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
-                                                                             :block-pattern "-"}))
-            ;; Get all uuids under the page
-            (->> page-name
-                 (test-db->diff-blocks conn)
-                 (map :uuid)
-                 (vec)
-                 (DB-uuids->new-uuids-fn)))
-
-      ;; Append a new line to foo
-      (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
-      foo-new-content
-      "foo-persist"
-      (fn [db-uuids] (conj db-uuids nil))
-
-      ;; Prepend a new line to bar
-      (gp-mldoc/->edn new-bar-content (gp-mldoc/default-config :markdown))
-      new-bar-content
-      "bar-persist"
-      (fn [db-uuids] (cons nil db-uuids)))))
-
-(deftest diff-merge-error-capture-test
-  ;; Any exception thrown in diff-merge-uuids-2ways should be captured and returned a nil
-  (let [conn (ldb/start-conn)
-        foo-content (str "- abc\n"
-                         "- def\n")
-        foo-new-content (str foo-content "- newline\n")]
-    (graph-parser/parse-file conn "foo-error-cap.md" foo-content {})
-    (are [ast content page-name]
-         (= (with-redefs [conn/get-db (constantly @conn)
-                                ;; Hijack the function to throw an exception
-                          fs-diff/db->diff-blocks #(throw (js/Error. "intentional exception for testing diff-merge-uuids-2ways error capture"))]
-              (#'file-common-handler/diff-merge-uuids-2ways :markdown ast content {:page-name page-name
-                                                                                   :block-pattern "-"}))
-            nil)
-
-            ;; Append a new line to foo
-      (gp-mldoc/->edn foo-new-content (gp-mldoc/default-config :markdown))
-      foo-new-content
-      "foo-error-cap")))
+    [[[1 {:body "foo:: #bar\nbaz:: #bing", :level 1, :uuid nil}]]]))
 
 (deftest test-remove-indentation-spaces
   (is (= "" (gp-mldoc/remove-indentation-spaces "" 0 false)))

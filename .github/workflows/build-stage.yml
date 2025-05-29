@@ -25,8 +25,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      asset-path: ${GITHUB_REF##*/}/static/js/
 
     steps:
       - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
@@ -52,10 +50,15 @@ jobs:
       - name: Fetch yarn deps
         run: yarn cache clean && yarn install --frozen-lockfile
 
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=false" >> $GITHUB_ENV
+
       - name: Build Released-Web
         run: |
-          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:asset-path "${{env.asset-path}}" :compiler-options {:source-map-include-sources-content false :source-map-detail-level :symbols}}'
-          ls -ah ./public
+          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content false :source-map-detail-level :symbols}}'
+          rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
+          ls -lR ./public
 
       - name: Publish to Cloudflare Pages
         uses: cloudflare/pages-action@1

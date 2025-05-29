@@ -1,24 +1,24 @@
 (ns frontend.handler.command-palette
   "System-component-like ns for command palette's functionality"
   (:require [cljs.spec.alpha :as s]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec :as spec]
             [frontend.state :as state]
-            [lambdaisland.glogi :as log]
-            [frontend.storage :as storage]))
+            [frontend.storage :as storage]
+            [lambdaisland.glogi :as log]))
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
 (s/def :command/action fn?)
-(s/def :command/shortcut string?)
+(s/def :command/shortcut (s/or :nil nil? :keybinding string?))
 (s/def :command/tag vector?)
 
 (s/def :command/command
   (s/keys :req-un [:command/id :command/action]
           ;; :command/desc is optional for internal commands since view
           ;; checks translation ns first
-          :opt-un [:command/desc :command/shortcut :command/tag]))
+          :opt-un [:command/desc :command/shortcut :command/tag :command/handler-id]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global
@@ -27,12 +27,12 @@
        (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
-  (->> (get @state/state :command-palette/commands)
+  (->> @(get @state/state :command-palette/commands)
        (sort-by :id)))
 
 (defn get-commands-unique []
   (reduce #(assoc %1 (:id %2) %2) {}
-          (get @state/state :command-palette/commands)))
+          @(get @state/state :command-palette/commands)))
 
 (defn history
   ([] (or (try (storage/get "commands-history")
@@ -56,7 +56,6 @@
 
 (defn invoke-command [{:keys [id action] :as cmd}]
   (add-history cmd)
-  (state/close-modal!)
   (plugin-handler/hook-lifecycle-fn! id action))
 
 (defn top-commands [limit]

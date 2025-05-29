@@ -39,6 +39,16 @@
        (map fix-win-path!)
        (vec)))
 
+(defn read-directories
+  "Given a dir, returns all the sub-directories"
+  [root-dir]
+  (let [files (fs/readdirSync root-dir #js {:withFileTypes true})]
+    (->> files
+         (remove #(.isSymbolicLink ^js %))
+         (remove #(string/starts-with? (.-name ^js %) "."))
+         (filter #(.isDirectory %))
+         (map #(.-name %)))))
+
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher

@@ -22,6 +22,7 @@ export function Toaster() {
         description,
         action,
         icon,
+        onDismiss, // remove from toast props
         ...props
       }) {
         const duration = props?.duration

@@ -51,15 +51,10 @@
   }
 }
 
-.ui__modal[label=user-login] {
-  @apply flex items-center top-0;
+.ui__dialog-content[label=user-login] {
+  @apply flex items-center top-0 p-0 border-none w-auto;
 
-  .ui__modal-panel {
-    transition: transform .3s;
-    transform: translateY(-50px);
-  }
-
-  .panel-content {
+  .ui__dialog-main-content {
     @apply p-0 min-w-fit relative max-w-[600px] sm:max-w-[90vw] sm:w-[500px];
   }
 
@@ -123,16 +118,6 @@
     .amplify-text--error {
       color: var(--ls-error-text-color);
     }
-  }
-}
-
-html {
-  &.is-mobile .ui__modal[label=user-login] .panel-content {
-    @apply pt-0;
-  }
-
-  &.has-mobile-keyboard .ui__modal[label=user-login] {
-    transform: translateY(calc(-50px - 6%));
   }
 }
 

@@ -1,1 +1,0 @@
-table-example:: true

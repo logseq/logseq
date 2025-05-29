@@ -2,10 +2,10 @@
   "Runs a benchmark"
   (:require [clojure.edn :as edn]
             [frontend.macros :refer [slurped]]
-            [frontend.modules.file.uprint :as up]
             [clojure.pprint :as pprint]
             [clojure.test :refer [deftest testing]]
-            [fipp.edn :as fipp]))
+            [fipp.edn :as fipp]
+            [frontend.common.file.util :as wfu]))
 
 (def onboarding
   (edn/read-string (slurped "resources/whiteboard/onboarding.edn")))
@@ -19,10 +19,10 @@
                       (with-out-str (fipp/pprint onboarding))
                       10)
     (simple-benchmark []
-                      (up/ugly-pr-str onboarding)
+                      (wfu/ugly-pr-str onboarding)
                       10)
     (simple-benchmark []
                       (pr-str onboarding)
                       10)
     ;; uncomment to see the output
-    #_(println (up/ugly-pr-str onboarding))))
+    #_(println (wfu/ugly-pr-str onboarding))))

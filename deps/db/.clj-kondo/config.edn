@@ -1,0 +1,39 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+  :shadowed-var {:level :warning
+                 ;; FIXME: Remove these as shadowing core fns isn't a good practice
+                 :exclude [val key]}
+
+  :consistent-alias
+  {:aliases {clojure.string string
+             logseq.db ldb
+             logseq.db.common.entity-plus entity-plus
+             logseq.db.common.entity-util common-entity-util
+             logseq.db.common.order db-order
+             logseq.db.common.property-util db-property-util
+             logseq.db.common.sqlite common-sqlite
+             logseq.db.common.view db-view
+             logseq.db.frontend.content db-content
+             logseq.db.frontend.class db-class
+             logseq.db.frontend.db db-db
+             logseq.db.frontend.db-ident db-ident
+             logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.property db-property
+             logseq.db.frontend.property.build db-property-build
+             logseq.db.frontend.property.type db-property-type
+             logseq.db.file-based.rules file-rules
+             logseq.db.file-based.schema file-schema
+             logseq.db.file-based.entity-util file-entity-util
+             logseq.db.frontend.rules rules
+             logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
+             logseq.db.sqlite.build sqlite-build
+             logseq.db.common.initial-data common-initial-data
+             logseq.db.common.sqlite-cli sqlite-cli
+             logseq.db.sqlite.create-graph sqlite-create-graph
+             logseq.db.sqlite.export sqlite-export
+             logseq.db.sqlite.util sqlite-util}}}
+ :skip-comments true
+ :output {:progress true}}

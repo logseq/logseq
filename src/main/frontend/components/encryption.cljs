@@ -14,7 +14,7 @@
   [*show-password?]
   [:div.flex.flex-row.items-center
    [:label.px-1 {:for "show-password"}
-    (ui/checkbox {:checked   @*show-password?
+    (ui/checkbox {:value @*show-password?
                   :on-change (fn [e]
                                (reset! *show-password? (util/echecked? e)))
                   :id        "show-password"})

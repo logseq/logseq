@@ -6,20 +6,19 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
-            [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [logseq.common.path :as path]))
 
-(defn- contents-matched?
+(defn- <contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
     (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defn- write-file-impl!
-  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare?]} stat]
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare? skip-transact?]} stat]
   (let [file-fpath (path/path-join dir rpath)]
     (if skip-compare?
       (p/catch
@@ -38,32 +37,21 @@
                                             (js/console.error error)
                                             nil))))
               disk-content (or disk-content "")
-              ext (string/lower-case (util/get-file-ext rpath))
               db-content (or old-content (db/get-file repo rpath) "")
-              contents-matched? (contents-matched? disk-content db-content)]
-        (cond
-          (and
-           (not= stat :not-found)         ; file on the disk was deleted
-           (not contents-matched?)
-           (not (contains? #{"excalidraw" "edn" "css"} ext))
-           (not (string/includes? rpath "/.recycle/")))
-          (state/pub-event! [:file/not-matched-from-disk rpath disk-content content])
-
-          :else
-          (->
-           (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
-                   mtime (gobj/get result "mtime")]
-             (when-not contents-matched?
-               (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
-             (db/set-file-last-modified-at! repo rpath mtime)
-             (db/set-file-content! repo rpath content)
-             (when ok-handler
-               (ok-handler repo rpath result))
-             result)
-           (p/catch (fn [error]
-                      (if error-handler
-                        (error-handler error)
-                        (log/error :write-file-failed error))))))))))
+              contents-matched? (<contents-matched? disk-content db-content)]
+        (->
+         (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
+                 mtime (gobj/get result "mtime")]
+           (when-not contents-matched?
+             (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
+           (when-not skip-transact? (db/set-file-last-modified-at! repo rpath mtime))
+           (when ok-handler
+             (ok-handler repo rpath result))
+           result)
+         (p/catch (fn [error]
+                    (if error-handler
+                      (error-handler error)
+                      (log/error :write-file-failed error)))))))))
 
 (defn- open-dir
   "Open a new directory"

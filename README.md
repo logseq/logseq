@@ -54,6 +54,7 @@
 
 ## Table of Contents
 
+  * [<g-emoji class="g-emoji" alias="database" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f680.png">🚀</g-emoji> Database Version](#-database-version)
   * [<g-emoji class="g-emoji" alias="thinking" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png">🤔</g-emoji> Why Logseq?](#-why-logseq)
   * [<g-emoji class="g-emoji" alias="eyes" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f440.png">👀</g-emoji> How can I use it?](#-how-can-i-use-it)
   * [<g-emoji class="g-emoji" alias="books" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f4da.png">📚</g-emoji> Learn more](#-learn-more)
@@ -64,6 +65,14 @@
     * [<g-emoji class="g-emoji" alias="hammer_and_wrench" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f6e0.png">🛠️</g-emoji> Setting Up a Development Environment](#️-setting-up-a-development-environment)
   * [<g-emoji class="g-emoji" alias="sparkles" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/2728.png">✨</g-emoji> Inspiration](#-inspiration)
 * [<g-emoji class="g-emoji" alias="pray" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f64f.png">🙏</g-emoji> Thank You](#-thank-you)
+
+## 🚀 Database Version
+
+The Database version (DB version) of Logseq introduces DB graphs while maintaining support for file graphs. [See this page](https://github.com/logseq/docs/blob/feat/db/db-version.md) to get an overview of the main features for DB graphs. If you are an existing user, [see this page](https://github.com/logseq/docs/blob/feat/db/db-version-changes.md) to get an overview of changes with the DB version.
+
+The DB version of Logseq is alpha software. When using DB graphs, we recommend you create a dedicated test graph and choose one project/workflow (that’s not crucial for you) to test with it. **Data loss is possible**, which is why we recommend [automated backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#automated-backup) or making [regular SQLite DB backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#graph-export). When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using file graphs if you are making regular backups with git.
+
+To try the latest web version, go to https://test.logseq.com/.
 
 ## 🤔 Why Logseq?
 

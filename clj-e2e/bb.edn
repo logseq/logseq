@@ -1,0 +1,29 @@
+{:deps {org.babashka/http-server {:mvn/version "0.1.13"}
+        org.babashka/cli {:mvn/version "0.2.23"}}
+ :tasks
+ {:requires ([babashka.cli :as cli])
+  :init (def cli-opts (cli/parse-opts *command-line-args* {:coerce {:port :int :headers :edn}}))
+
+  serve {:doc "Serve static assets"
+         :requires ([babashka.http-server :as server])
+         :task (server/exec (merge {:port 3002
+                                    :dir "../public"}
+                                   cli-opts))}
+
+  prn {:task (clojure "-X clojure.core/prn" cli-opts)}
+
+  test {:doc "run tests (ns'es ending in '-basic-test')"
+        :task (do (clojure "-M:test -r \".*\\-basic\\-test$\"")
+                  (System/exit 0))}
+
+  rtc-extra-test {:doc "run rtc-extra-test"
+                  :task (do (clojure "-M:test -n logseq.e2e.rtc-extra-test")
+                            (System/exit 0))}
+
+  -run-rtc-extra-test {:depends [serve prn rtc-extra-test]}
+  run-rtc-extra-test {:task (run '-run-rtc-extra-test {:parallel true})}
+
+  -dev {:depends [serve prn test]}
+
+  dev {:doc "serve and test"
+       :task (run '-dev {:parallel true})}}}

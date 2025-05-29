@@ -6,15 +6,17 @@
                                         :unresolved-symbol {:level :off}}}})
   (:require #?(:org.babashka/nbb ["mldoc$default" :refer [Mldoc]]
                :default ["mldoc" :refer [Mldoc]])
-            #?(:org.babashka/nbb [logseq.graph-parser.log :as log]
+            #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
             [goog.object :as gobj]
             [cljs-bean.core :as bean]
             [logseq.graph-parser.utf8 :as utf8]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
+            [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
+            #_:clj-kondo/ignore
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -46,7 +48,7 @@
 (defn get-references
   [text config]
   (when-not (string/blank? text)
-    (gp-util/json->clj (getReferences text config))))
+    (common-util/json->clj (getReferences text config))))
 
 (defn ast-export-markdown
   [ast config references]
@@ -54,9 +56,9 @@
                      config
                      (or references default-references)))
 
-(defn default-config
+(defn default-config-map
   ([format]
-   (default-config format {:export-heading-to-list? false}))
+   (default-config-map format {:export-heading-to-list? false}))
   ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options parse_outline_only?]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
@@ -70,9 +72,15 @@
            :export_md_remove_options
            (convert-export-md-remove-options export-md-remove-options)}
           (filter #(not (nil? (second %))))
-          (into {})
-          (bean/->js)
-          js/JSON.stringify))))
+          (into {})))))
+
+(defn default-config
+  ([format]
+   (default-config format {:export-heading-to-list? false}))
+  ([format opts]
+   (->> (default-config-map format opts)
+        bean/->js
+        js/JSON.stringify)))
 
 (defn remove-indentation-spaces
   "Remove the indentation spaces from the content. Only for markdown.
@@ -90,9 +98,9 @@
                     ;; Check if the indentation area only contains white spaces
                     ;; Level = ast level + 1, 1-based indentation level
                     ;; For markdown in Logseq, the indentation area for the non-first line of multi-line block is (ast level - 1) * "\t" + 2 * "(space)"
-                    (if (string/blank? (gp-util/safe-subs line 0 level))
+                    (if (string/blank? (common-util/safe-subs line 0 level))
                       ;; If valid, then remove the indentation area spaces. Keep the rest of the line (might contain leading spaces)
-                      (gp-util/safe-subs line level)
+                      (common-util/safe-subs line level)
                       ;; Otherwise, trim these invalid spaces
                       (string/triml line)))
                (if remove-first-line? lines r))
@@ -130,22 +138,38 @@
         (cons [["Properties" properties] nil] other-ast)
         original-ast))))
 
+(defn get-default-config
+  "Gets a mldoc default config for the given format. Works for DB and file graphs"
+  [repo format]
+  (let [db-based? (sqlite-util/db-based-graph? repo)]
+    (->>
+     (cond-> (default-config-map format)
+       db-based?
+       (assoc :enable_drawers false
+              :parse_marker false
+              :parse_priority false))
+     bean/->js
+     js/JSON.stringify)))
+
 (defn ->edn
-  {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
-  [content config]
-  (if (string? content)
-    (try
-      (if (string/blank? content)
-        []
-        (-> content
-            (parse-json config)
-            (gp-util/json->clj)
-            (update-src-full-content content)
-            (collect-page-properties config)))
-      (catch :default e
-        (log/error :unexpected-error e)
-        []))
-    (log/error :edn/wrong-content-type content)))
+  ;; TODO: Re-enable schema
+  ;; {:malli/schema [:=> [:cat :string :string] mldoc-schema/block-ast-with-pos-coll-schema]}
+  ([content config]
+   (if (string? content)
+     (try
+       (if (string/blank? content)
+         []
+         (-> content
+             (parse-json config)
+             (common-util/json->clj)
+             (update-src-full-content content)
+             (collect-page-properties config)))
+       (catch :default e
+         (log/error :unexpected-error e)
+         []))
+     (log/error :edn/wrong-content-type content)))
+  ([repo content format]
+   (->edn content (get-default-config repo format))))
 
 (defn inline->edn
   [text config]
@@ -154,7 +178,7 @@
       {}
       (-> text
           (inline-parse-json config)
-          (gp-util/json->clj)))
+          (common-util/json->clj)))
     (catch :default _e
       [])))
 
@@ -169,10 +193,10 @@
           (and (contains? #{"Page_ref"} ref-type)
                (or
                 ;; 2. excalidraw link
-                (gp-config/draw? ref-value)
+                (common-config/draw? ref-value)
 
                 ;; 3. local asset link
-                (boolean (gp-config/local-asset? ref-value))))))))
+                (boolean (common-config/local-asset? ref-value))))))))
 
 (defn link?
   [format link]
@@ -189,3 +213,28 @@
      (let [result' (first result)]
        (or (contains? #{"Nested_link"} (first result'))
            (contains? #{"Page_ref" "Block_ref" "Complex"} (first (:url (second result')))))))))
+
+(defn properties?
+  [ast]
+  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
+
+(defn block-with-title?
+  [type]
+  (contains? #{"Paragraph"
+               "Raw_Html"
+               "Hiccup"
+               "Heading"} type))
+
+(defn- has-title?
+  [repo content format]
+  (let [ast (->edn repo content format)]
+    (block-with-title? (ffirst (map first ast)))))
+
+(defn get-title&body
+  "parses content and returns [title body]
+   returns nil if no title"
+  [repo content format]
+  (let [lines (string/split-lines content)]
+    (if (has-title? repo content format)
+      [(first lines) (string/join "\n" (rest lines))]
+      [nil (string/join "\n" lines)])))

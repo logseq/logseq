@@ -107,51 +107,6 @@ contextBridge.exposeInMainWorld('apis', {
     )
   },
 
-  /**
-   * When from is empty. The resource maybe from
-   * client paste or screenshoot.
-   * @param repoPathRoot
-   * @param to
-   * @param from?
-   * @returns {Promise<void>}
-   */
-  async copyFileToAssets (repoPathRoot, to, from) {
-    if (from && fs.statSync(from).isDirectory()) {
-      throw new Error('not support copy directory')
-    }
-
-    const dest = path.join(repoPathRoot, to)
-    const assetsRoot = path.dirname(dest)
-
-    await fs.promises.mkdir(assetsRoot, { recursive: true })
-
-    from = from || getFilePathFromClipboard()
-
-    if (from) {
-      try {
-        // console.debug('copy file: ', from, dest)
-        await fs.promises.copyFile(from, dest)
-        return path.basename(from)
-      } catch (e) {
-        from = decodeURIComponent(from)
-        await fs.promises.copyFile(from, dest)
-        return path.basename(from)
-      }
-    }
-
-    // support image
-    // console.debug('read image: ', from, dest)
-    const nImg = clipboard.readImage()
-
-    if (nImg && !nImg.isEmpty()) {
-      const rawExt = path.extname(dest)
-      return await fs.promises.writeFile(
-        dest.replace(rawExt, '.png'),
-        nImg.toPNG()
-      )
-    }
-  },
-
   toggleMaxOrMinActiveWindow (isToggleMin = false) {
     ipcRenderer.invoke('toggle-max-or-min-active-win', isToggleMin)
   },

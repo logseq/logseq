@@ -50,7 +50,7 @@ test('switch to auto heading', async ({ page }) => {
 
   await page.keyboard.press('Escape', { delay: 50 })
 
-  expect(await page.locator('.ls-block .block-content >> nth=0').innerHTML()).toContain('<h2>foo</h2>')
+  expect(await page.locator('.ls-block .block-content >> nth=0').innerHTML()).toContain('<h1>foo</h1>')
 })
 
 test('set heading of nested block to auto', async ({ page }) => {
@@ -59,15 +59,17 @@ test('set heading of nested block to auto', async ({ page }) => {
 
   await page.type('textarea >> nth=0', 'bar')
 
-  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab", { delay: 100 })
 
-  await page.keyboard.press('Escape', { delay: 50 })
+  await page.keyboard.press('Escape', { delay: 100 })
 
   await page.locator('span.bullet-container >> nth=1').click({button: "right"})
 
   await page.locator('#custom-context-menu .to-heading-button[title="Auto heading"]').click()
 
-  expect(await page.locator('.ls-block .block-content >> nth=1').innerHTML()).toContain('<h3>bar</h3>')
+  await page.waitForTimeout(100)
+
+  expect(await page.locator('.ls-block .block-content >> nth=1').innerHTML()).toContain('<h2>bar</h2>')
 })
 
 test('view nested block on a dedicated page', async ({ page }) => {

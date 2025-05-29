@@ -2,7 +2,7 @@
   (:require [clojure.test :refer [is use-fixtures testing deftest]]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [frontend.test.node-helper :as test-node-helper]
-            [frontend.test.fixtures :as fixtures]
+            [frontend.test.node-fixtures :as node-fixtures]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.schema.handler.plugin-config :as plugin-config-schema]
@@ -14,7 +14,7 @@
             [clojure.string :as string]
             [frontend.handler.notification :as notification]))
 
-(use-fixtures :once fixtures/redef-get-fs)
+(use-fixtures :once node-fixtures/redef-get-fs)
 
 (defn- create-global-config-dir
   []
@@ -67,16 +67,14 @@
         error-message (atom nil)]
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path) "{:id {}")
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Malformed plugins.edn")
             "User sees correct notification"))
-       (p/finally #(do
-                     (reset)
-                     (delete-global-config-dir dir)))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (deftest-async open-replace-plugins-modal-invalid-edn
   (let [dir (create-global-config-dir)
@@ -85,16 +83,14 @@
     (fs-node/writeFileSync (plugin-config-handler/plugin-config-path)
                            (pr-str {:id {:theme true :repo "user/repo"}}))
 
-    (test-helper/with-reset reset
+    (p/with-redefs
       [notification/show! (fn [msg _] (reset! error-message msg))]
       (->
        (p/do!
         (plugin-config-handler/open-replace-plugins-modal)
         (is (string/starts-with? @error-message "Invalid plugins.edn")
             "User sees correct notification"))
-       (p/finally #(do
-                     (reset)
-                     (delete-global-config-dir dir)))))))
+       (p/finally #(delete-global-config-dir dir))))))
 
 (defn- installed-plugins->edn-plugins
   "Converts installed plugins state to edn.plugins format"

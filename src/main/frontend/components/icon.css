@@ -1,0 +1,170 @@
+.cp__emoji-icon-picker {
+  --ls-color-icon-preset: "inherit";
+
+  @apply w-[380px] max-h-[408px] relative flex flex-col overflow-hidden;
+
+  > .hd {
+    @apply absolute w-full pt-2.5 pb-1 px-3 top-[38px] left-0;
+  }
+
+  > .bd {
+    @apply pt-[96px] py-1 h-full;
+
+    &.all {
+      @apply overflow-y-auto;
+    }
+  }
+
+  > .ft {
+    @apply absolute w-full py-3 px-3 bg-gray-02 top-[-1px] left-0;
+    @apply flex items-center border-t h-[40px] overflow-hidden;
+
+    .tab-item {
+      @apply opacity-50 hover:opacity-100;
+
+      &.active {
+        @apply opacity-100;
+      }
+    }
+  }
+
+  .search-input {
+    @apply relative;
+
+    .ls-icon-search {
+      @apply absolute left-2.5 top-[8px] opacity-50;
+    }
+
+    > .x {
+      @apply flex items-center h-full px-2 opacity-50;
+      @apply absolute right-0 top-0 hover:opacity-80;
+    }
+
+    .ui__input {
+      @apply leading-none pl-8 outline-none border-none bg-gray-03;
+      @apply focus:!shadow-accent-06 focus:bg-gray-02 !h-8;
+    }
+
+    &:focus-within {
+      .ls-icon-search {
+        @apply opacity-75;
+      }
+    }
+  }
+
+  .pane-section {
+    @apply pl-2 overflow-y-auto h-full;
+
+    color: var(--ls-color-icon-preset);
+
+    > .its, .icons-row {
+      @apply flex gap-1 py-1 flex-wrap;
+
+      > button {
+        @apply flex items-center justify-center rounded-full hover:bg-gray-03 active:opacity-70;
+
+        @apply focus:outline-accent-09;
+      }
+    }
+
+    &.has-virtual-list {
+      @apply h-[300px] overflow-y-visible;
+
+      &.searching-result {
+        @apply h-auto;
+      }
+    }
+
+    .virtuoso-item-list {
+      @apply pb-4;
+    }
+  }
+
+  .icons .ui__icon {
+    vertical-align: middle;
+  }
+
+  .hover-preview {
+    @apply flex flex-1 items-center justify-between leading-none;
+
+    > strong {
+      @apply opacity-60 text-base whitespace-nowrap font-normal
+      overflow-ellipsis overflow-hidden mr-2;
+    }
+  }
+
+  .color-picker {
+    @apply rounded-md w-[24px] h-[24px] overflow-hidden flex relative p-0;
+
+    > strong {
+      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
+      hover:opacity-100 font-normal text-sm;
+
+      .ui__icon {
+        @apply opacity-90 scale-90;
+      }
+    }
+  }
+
+  .ui__button {
+    &[data-action=del] {
+      @apply !w-6 !h-6 overflow-hidden rounded-md ml-1 opacity-60
+      hover:text-red-rx-09 hover:opacity-90;
+    }
+  }
+}
+
+.color-picker-presets {
+  @apply flex flex-row gap-[2px];
+
+  .it {
+    @apply w-[18px] h-[18px] overflow-hidden p-0
+    opacity-90 hover:opacity-100 active:opacity-80;
+  }
+}
+
+.dropdown-wrapper .cp__emoji-icon-picker {
+  @apply -m-4;
+}
+
+.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker) {
+  @apply flex;
+}
+
+.ui__dropdown-menu-content .cp__emoji-icon-picker {
+  @apply -m-1;
+}
+
+.ls-icon {
+  &-Backlog {
+    @apply text-gray-05;
+  }
+
+  &-Todo {
+    @apply text-gray-10;
+  }
+
+  &-InProgress50 {
+    @apply text-yellow-rx-08;
+  }
+
+  &-InReview {
+    @apply text-blue-rx-09;
+  }
+
+  &-Done {
+    @apply text-green-rx-08;
+  }
+
+  &-Cancelled {
+    @apply text-red-rx-08;
+  }
+}
+
+.ls-icon-picker {
+  @apply w-auto overflow-hidden;
+}
+
+.ls-icon-color-wrap em-emoji {
+  @apply !w-auto !h-auto;
+}

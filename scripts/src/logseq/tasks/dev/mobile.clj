@@ -24,7 +24,8 @@
 (defn- set-system-env
   "Updates capacitor.config.ts serve url with IP from ifconfig"
   []
-  (let [ip (string/trim (:out (shell {:out :string} "ipconfig getifaddr en0")))
+  (let [ip (string/trim (:out (or (shell {:out :string :continue true} "ipconfig getifaddr en0")
+                                  (shell {:out :string} "ipconfig getifaddr en1"))))
         logseq-app-server-url (format "%s://%s:%s" "http" ip "3001")]
     (println "Server URL:" logseq-app-server-url)
     (shell "git checkout capacitor.config.ts")

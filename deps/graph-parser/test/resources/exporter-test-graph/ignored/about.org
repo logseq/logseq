@@ -1,0 +1,65 @@
+#+TITLE: About
+
+** Hi, welcome to [[https://logseq.com][Logseq]].
+
+  *Logseq* is a /local-only/, /non-linear/, /outliner/ notebook for organizing and
+  [[https://logseq.com/blog][sharing]] your personal knowledge base.
+
+  Use it to organize your todo list, to write your journals, or to record your unique
+  life.
+
+  The server will never store or analyze your private notes. Your data are
+  plain text files, we support both Markdown and Emacs Org mode for the time being. Even if the website is down or can't be maintained, your data is always yours.
+
+  *Logseq* is hugely inspired by [[https://roamresearch.com/][Roam Research]], [[https://orgmode.org/][Org Mode]], [[https://tiddlywiki.com/][Tiddlywiki]] and [[https://workflowy.com/][Workflowy]], hats off to all of them!
+[[https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA][2020_07_25_Screenshot 2020-07-25 13-29-49 +0800.png]]
+** Where are my notes saved?
+   Your notes will be stored in the local browser storage. We are using IndexedDB.
+** How do I use it?
+*** 1. Sync between multiple devices
+    Currently, we only support syncing through Github, more options (e.g.
+    Gitlab, Dropbox, Google Drive, WebDAV, etc.) will be added soon.
+
+    We are using an excellent web git client called [[https://isomorphic-git.org/][isomorphic-git]].
+**** Step 1
+     Click the button /Login with Github/.
+**** Step 2
+     Set your Github personal access token, the token will be encrypted and
+     stored in the browser local storage, our server will never store it.
+
+     If you know nothing about either Git or the personal access token, no worries,
+     just follow the steps here: https://logseq.com/blog/faq#How_to_create_a_Github_personal_access_token-3f-
+**** Step 3
+     Start writing!
+*** 2. Use it locally (no need to login)
+    Just remember to backup your notes periodically (we'll provide export and import soon)!
+** Features
+   - Backlinks between ~[[Page]]~s
+   - Block embed
+   - Page embed
+   - Graph visualization
+   - Heading properties
+   - Datalog queries, the notes db is powered by [[https://github.com/tonsky/datascript][Datascript]]
+   - Custom view component
+   - Document built-in supports:
+     * Code highlights
+     * Katex latex
+     * Raw [[https://github.com/weavejester/hiccup][hiccup]]
+     * Raw html
+** Learn more
+   - Twitter: https://twitter.com/logseq
+   - Discord: https://discord.gg/KpN4eHY where we ask questions and share tips
+   - Website: https://logseq.com/
+   - Github: https://github.com/logseq/logseq everyone is encouraged to report issues!
+   - Our blog: https://logseq.com/blog
+** Credits to
+   - [[https://roamresearch.com/][Roam Research]]
+   - [[https://orgmode.org/][Org Mode]]
+   - [[https://tiddlywiki.com/][Tiddlywiki]]
+   - [[https://workflowy.com/][Workflowy]]
+   - [[https://clojure.org][Clojure && Clojurescript]]
+   - [[https://ocaml.org/][OCaml]] && [[https://github.com/inhabitedtype/angstrom][Angstrom]], the document [[https://github.com/mldoc/mldoc][parser]] is built on Angstrom.
+   - [[https://github.com/talex5/cuekeeper][Cuekeeper]] - Browser-based GTD (TODO list) system.
+   - [[https://github.com/tonsky/datascript][Datascript]] - Immutable database and Datalog query engine for Clojure, ClojureScript and JS
+   - [[https://github.com/borkdude/sci][sci]] - Small Clojure Interpreter
+   - [[https://isomorphic-git.org/][isomorphic-git]]
