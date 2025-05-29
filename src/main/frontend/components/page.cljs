@@ -301,7 +301,10 @@
                     (swap! *title-value common-util/unquote-string)
                     (gobj/set (rum/deref input-ref) "value" @*title-value))
                   (cond
-                    (or (= old-name @*title-value) (and whiteboard-page? (string/blank? @*title-value)))
+                    (= old-name @*title-value)
+                    (reset! *edit? false)
+
+                    (and whiteboard-page? untitled? (string/blank? @*title-value))
                     (reset! *edit? false)
 
                     (string/blank? @*title-value)
@@ -367,12 +370,12 @@
               hls-page? (pdf-utils/hls-file? title)
               whiteboard-page? (model/whiteboard-page? page)
               untitled? (and whiteboard-page? (parse-uuid title)) ;; normal page cannot be untitled right?
+              old-name (:block/title page)
               title (if hls-page?
                       [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                       (if fmt-journal?
                         (date/journal-title->custom-format title)
-                        title))
-              old-name title]
+                        title))]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
