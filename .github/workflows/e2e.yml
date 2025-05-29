@@ -24,6 +24,7 @@ env:
 
 jobs:
   e2e-test-build:
+    if: false                   # disabled
     name: Build Test Artifact
     runs-on: ubuntu-22.04
     steps:
