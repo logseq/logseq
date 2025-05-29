@@ -57,7 +57,7 @@
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
-    (-store [_ addr+data-seq _delete-addrs]
+    (-store [_ addr+data-seq delete-addrs]
       ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
       (let [data (map
                   (fn [[addr data]]
@@ -73,12 +73,10 @@
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
 
-(defn open-db!
-  "For a given database name, opens a sqlite db connection for it, creates
-  needed sqlite tables if not created and returns a datascript connection that's
-  connected to the sqlite db"
+(defn open-sqlite-datascript!
+  "Returns `conn` for datascript connection and `db` for sqlite connection"
   ([db-full-path]
-   (open-db! nil db-full-path))
+   (open-sqlite-datascript! nil db-full-path))
   ([graphs-dir db-name]
    (let [[base-name db-full-path]
          (if (nil? graphs-dir)
@@ -92,7 +90,17 @@
      (common-sqlite/create-kvs-table! db)
      (let [storage (new-sqlite-storage db)
            conn (common-sqlite/get-storage-conn storage schema)]
-       conn))))
+       {:sqlite db
+        :conn conn}))))
+
+(defn open-db!
+  "For a given database name, opens a sqlite db connection for it, creates
+  needed sqlite tables if not created and returns a datascript connection that's
+  connected to the sqlite db"
+  ([db-full-path]
+   (open-db! nil db-full-path))
+  ([graphs-dir db-name]
+   (:conn (open-sqlite-datascript! graphs-dir db-name))))
 
 (defn ->open-db-args
   "Creates args for open-db from a graph arg. Works for relative and absolute paths and
