@@ -74,7 +74,7 @@
       (restore-data-from-addr db addr))))
 
 (defn open-sqlite-datascript!
-  "Returns `conn` for datascript connection and `db` for sqlite connection"
+  "Returns a map including `conn` for datascript connection and `sqlite` for sqlite connection"
   ([db-full-path]
    (open-sqlite-datascript! nil db-full-path))
   ([graphs-dir db-name]
