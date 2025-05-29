@@ -118,7 +118,9 @@
 (rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu < rum/reactive
   [{:keys [current-repo t]}]
   (let [page (some-> (sidebar/get-current-page) db/get-page)
-        page-menu (if (ldb/page? page)
+        ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+        working-page? (if config/publishing? (not (state/sub :db/restoring?)) true)
+        page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
                       (when (config/db-based-graph?)
