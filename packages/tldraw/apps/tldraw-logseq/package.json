@@ -19,7 +19,7 @@
     "@types/react-dom": "^17.0.0",
     "autoprefixer": "^10.4.13",
     "concurrently": "^7.5.0",
-    "esbuild": "^0.15.14",
+    "esbuild": "^0.25.0",
     "mobx": "^6.7.0",
     "mobx-react-lite": "^3.4.0",
     "perfect-freehand": "^1.2.0",
