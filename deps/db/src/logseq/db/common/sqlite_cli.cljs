@@ -57,7 +57,7 @@
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
+    (-store [_ addr+data-seq _delete-addrs]
       ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
       (let [data (map
                   (fn [[addr data]]
