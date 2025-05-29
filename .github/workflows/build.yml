@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - '*.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths-ignore:
       - '*.md'
 

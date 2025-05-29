@@ -10,7 +10,7 @@ on:
       - deps/**
       - packages/**
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'clj-e2e/**'
       - '.github/workflows/clj-e2e.yml'
