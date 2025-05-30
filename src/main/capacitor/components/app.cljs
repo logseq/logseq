@@ -124,7 +124,7 @@
                                                           (-> (page-handler/<create! page-name {:redirect? false})
                                                               (p/then #(nav-to-journal! (db/get-page page-name)))))))]
 
-                                    (if (mobile-util/native-android?)
+                                    (if (mobile-util/native-platform?)
                                       (-> (.showDatePicker mobile-util/ui-local)
                                           (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
 
