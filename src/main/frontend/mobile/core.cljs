@@ -2,8 +2,10 @@
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
+            ["@capacitor/network" :refer [^js Network]]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
+            [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -36,8 +38,10 @@
                      #(intent/handle-received)))
 
 (defn- app-state-change-handler
+  "NOTE: don't add more logic in this listener, use mobile-flows instead"
   [^js state]
   (println :debug :app-state-change-handler state (js/Date.))
+  (reset! mobile-flows/*mobile-app-state (.-isActive state))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (when-not is-active?
@@ -69,7 +73,8 @@
   (.addEventListener js/window "statusTap"
                      #(util/scroll-to-top true))
 
-  (.addListener App "appStateChange" app-state-change-handler))
+  (.addListener App "appStateChange" app-state-change-handler)
+  (.addListener Network "networkStatusChange" #(reset! mobile-flows/*mobile-network-status %)))
 
 (defn init! []
   (when (mobile-util/native-android?)
