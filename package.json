@@ -3,8 +3,8 @@
     "version": "0.0.1",
     "private": true,
     "main": "static/electron.js",
-    "engines" : {
-      "node" : ">=20.19.1"
+    "engines": {
+        "node": ">=20.19.1"
     },
     "devDependencies": {
         "@axe-core/playwright": "=4.4.4",
@@ -108,6 +108,7 @@
         "@capacitor/haptics": "7.0.1",
         "@capacitor/ios": "7.2.0",
         "@capacitor/keyboard": "7.0.1",
+        "@capacitor/network": "^7.0.1",
         "@capacitor/share": "7.0.1",
         "@capacitor/splash-screen": "7.0.1",
         "@capacitor/status-bar": "7.0.1",
