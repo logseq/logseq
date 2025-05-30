@@ -251,10 +251,10 @@
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 7 24 3600 1000))) ; 1 week ago
       (prn :debug "gc current graph")
-      (sqlite-gc/gc-kvs-table! sqlite-db)
+      (doseq [db [sqlite-db client-ops-db]]
+        (sqlite-gc/gc-kvs-table! db))
       (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                     :kv/value (common-util/time-ms)}])))
-  (sqlite-gc/gc-kvs-table! client-ops-db))
+                                     :kv/value (common-util/time-ms)}]))))
 
 (defn- create-or-open-db!
   [repo {:keys [config import-type datoms] :as opts}]
@@ -734,7 +734,8 @@
   (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db client-ops conn {:from-user? true}))))
+      (gc-sqlite-dbs! db client-ops conn {:from-user? true})
+      nil)))
 
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
