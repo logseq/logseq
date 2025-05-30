@@ -22,7 +22,7 @@
   [dir db-name]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true}))
 
-(deftest ^:focus gc-kvs-table-test
+(deftest ^:long gc-kvs-table-test
   (testing "Create a datascript db, gc it and ensure there's no missing addrs and garbage addrs"
     (create-graph-dir "tmp/graphs" "test-db")
 
