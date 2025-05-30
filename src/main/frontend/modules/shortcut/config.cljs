@@ -600,7 +600,7 @@
                           :fn #(repo-handler/fix-broken-graph! (state/get-current-repo))}
 
    :dev/gc-graph {:binding []
-                  :db-graph? true
+                  :inactive (not (state/developer-mode?))
                   :fn #(repo-handler/gc-graph! (state/get-current-repo))}
 
    :dev/replace-graph-with-db-file {:binding []

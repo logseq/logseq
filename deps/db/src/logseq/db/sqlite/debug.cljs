@@ -34,4 +34,4 @@
                             [addr (bean/->clj (js/JSON.parse addresses))])))
         used-addresses (set (concat (mapcat second result)
                                     [0 1 (:eavt schema) (:avet schema) (:aevt schema)]))]
-    (clojure.set/difference used-addresses (set (map first result)))))
+    (clojure.set/difference used-addresses  (set (map first result)))))
