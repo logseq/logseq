@@ -274,6 +274,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor/keyboard/-/keyboard-7.0.1.tgz#edf212528cd1587494ceb1d260868c1a9540aed1"
   integrity sha512-Gi064vOARMac+x9/DmEFeywN9oAETMf3OYsMuYm9gA8SvdsDJ3QJqMoFnSEIORYXe21Jzt2SIEdLlpT65P/b2g==
 
+"@capacitor/network@^7.0.1":
+  version "7.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor/network/-/network-7.0.1.tgz#8241ce6b6b5bbddc3157e218f31dd4ec04f1c4f0"
+  integrity sha512-jKyhTUqegKHjHKkK8e3t0TgwAYpKb3ocYpZkJrB3uXL5figkG06UEhQE4Cp25Dfb4LIjDxTSDLLsDEteKarmyg==
+
 "@capacitor/share@7.0.1":
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/share/-/share-7.0.1.tgz#1d1e6d312504703c1f34fa0de94bed14af4bcbf8"
