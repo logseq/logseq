@@ -2,6 +2,7 @@
   (:require ["react-dom/client" :as rdc]
             [capacitor.components.app :as app]
             [capacitor.nav :as nav]
+            [frontend.background-tasks]
             [frontend.components.page :as page]
             [frontend.components.user.login :as login]
             [frontend.handler :as fhandler]
