@@ -11,7 +11,8 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (comment
   (def rtc-state-schema
@@ -158,26 +159,28 @@
                                                          :queuing (pos? unpushed-block-update-count)}])})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
-(c.m/run-background-task
- ::update-accumulated-download-logs
- (m/reduce
-  (fn [_ log]
-    (when log
-      (if (= :download-completed (:sub-type log))
-        (reset! *accumulated-download-logs [])
-        (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))
-  rtc-flows/rtc-download-log-flow))
+(when-not config/publishing?
+  (c.m/run-background-task
+   ::update-accumulated-download-logs
+   (m/reduce
+    (fn [_ log]
+      (when log
+        (if (= :download-completed (:sub-type log))
+          (reset! *accumulated-download-logs [])
+          (swap! *accumulated-download-logs (fn [logs] (take 20 (conj logs log)))))))
+    rtc-flows/rtc-download-log-flow)))
 
 (def ^:private *accumulated-upload-logs (atom []))
-(c.m/run-background-task
- ::update-accumulated-upload-logs
- (m/reduce
-  (fn [_ log]
-    (when log
-      (if (= :upload-completed (:sub-type log))
-        (reset! *accumulated-upload-logs [])
-        (swap! *accumulated-upload-logs (fn [logs] (take 20 (conj logs log)))))))
-  rtc-flows/rtc-upload-log-flow))
+(when-not config/publishing?
+  (c.m/run-background-task
+   ::update-accumulated-upload-logs
+   (m/reduce
+    (fn [_ log]
+      (when log
+        (if (= :upload-completed (:sub-type log))
+          (reset! *accumulated-upload-logs [])
+          (swap! *accumulated-upload-logs (fn [logs] (take 20 (conj logs log)))))))
+    rtc-flows/rtc-upload-log-flow)))
 
 (defn- accumulated-logs-flow
   [*acc-logs]
