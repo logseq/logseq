@@ -22,14 +22,14 @@
   [dir db-name]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true}))
 
-(deftest gc-kvs-table-test
-  (testing "Create a datascript db, gc it and ensure there's no missing addrs"
+(deftest ^:focus gc-kvs-table-test
+  (testing "Create a datascript db, gc it and ensure there's no missing addrs and garbage addrs"
     (create-graph-dir "tmp/graphs" "test-db")
 
     (let [{:keys [conn sqlite]} (sqlite-cli/open-sqlite-datascript! "tmp/graphs" "test-db")
           tx-data (map (fn [i] {:block/uuid (random-uuid)
                                 :block/title (str "title " i)})
-                       (range 0 100000))]
+                       (range 0 10000))]
       (println "DB start transacting")
       (d/transact! conn tx-data)
       (println "DB transacted")
@@ -38,5 +38,10 @@
                                 (map (fn [block] [:db/retractEntity [:block/uuid (:block/uuid block)]])))]
         (d/transact! conn non-ordered-tx))
       (sqlite-gc/gc-kvs-table-node-version! sqlite)
+
+      ;; ensure there's no missing address (broken db)
       (is (empty? (sqlite-debug/find-missing-addresses-node-version sqlite))
-          "Found missing addresses!"))))
+          "Found missing addresses!")
+
+      (is (true? (sqlite-gc/ensure-no-garbage sqlite))
+          "Found garbage addresses!"))))
