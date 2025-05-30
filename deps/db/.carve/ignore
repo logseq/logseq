@@ -42,3 +42,5 @@ logseq.db.sqlite.debug/find-missing-addresses-node-version
 logseq.db.sqlite.gc/gc-kvs-table!
 ;; API
 logseq.db.sqlite.gc/gc-kvs-table-node-version!
+;; API
+logseq.db.sqlite.gc/ensure-no-garbage
