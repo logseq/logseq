@@ -244,15 +244,15 @@
 
 (defn- gc-sqlite-dbs!
   "Gc main db weekly and rtc ops db each time when opening it"
-  [sqlite-db client-ops-db datascript-conn {:keys [from-user?]}]
+  [sqlite-db client-ops-db datascript-conn {:keys [full-gc?]}]
   (let [last-gc-at (:kv/value (d/entity @datascript-conn :logseq.kv/graph-last-gc-at))]
-    (when (or from-user?
+    (when (or full-gc?
               (nil? last-gc-at)
               (not (number? last-gc-at))
-              (> (- (common-util/time-ms) last-gc-at) (* 7 24 3600 1000))) ; 1 week ago
-      (prn :debug "gc current graph")
+              (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
+      (println :debug "gc current graph")
       (doseq [db [sqlite-db client-ops-db]]
-        (sqlite-gc/gc-kvs-table! db))
+        (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?}))
       (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                      :kv/value (common-util/time-ms)}]))))
 
@@ -734,7 +734,7 @@
   (let [{:keys [db client-ops]} (get @*sqlite-conns repo)
         conn (get @*datascript-conns repo)]
     (when (and db conn)
-      (gc-sqlite-dbs! db client-ops conn {:from-user? true})
+      (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
       nil)))
 
 (comment
