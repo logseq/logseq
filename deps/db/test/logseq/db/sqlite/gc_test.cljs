@@ -29,15 +29,15 @@
     (let [{:keys [conn sqlite]} (sqlite-cli/open-sqlite-datascript! "tmp/graphs" "test-db")
           tx-data (map (fn [i] {:block/uuid (random-uuid)
                                 :block/title (str "title " i)})
-                       (range 0 10000))]
+                       (range 0 500000))]
       (println "DB start transacting")
       (d/transact! conn tx-data)
       (println "DB transacted")
       (let [non-ordered-tx (->> (shuffle tx-data)
-                                (take 10000)
+                                (take 100000)
                                 (map (fn [block] [:db/retractEntity [:block/uuid (:block/uuid block)]])))]
         (d/transact! conn non-ordered-tx))
-      (sqlite-gc/gc-kvs-table-node-version! sqlite)
+      (time (sqlite-gc/gc-kvs-table-node-version! sqlite))
 
       ;; ensure there's no missing address (broken db)
       (is (empty? (sqlite-debug/find-missing-addresses-node-version sqlite))
