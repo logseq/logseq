@@ -4,7 +4,7 @@
             [clojure.set :as set]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-(defn walk-addresses
+(defn- walk-addresses
   "Given a map of parent address to children addresses and a root address,
    returns a set of all used addresses including the root and its descendants."
   [root addr->children]
@@ -42,7 +42,7 @@
 
 (defn gc-kvs-table!
   "WASM version to GC kvs table to remove unused addresses"
-  [^Object db]
+  [^Object db {:keys [full-gc?] :as opts}]
   (when db
     (let [unused-addresses (get-unused-addresses db)]
       (if (seq unused-addresses)
@@ -51,7 +51,9 @@
           (.transaction db (fn [tx]
                              (doseq [addr unused-addresses]
                                (.exec tx #js {:sql "Delete from kvs where addr = ?"
-                                              :bind #js [addr]})))))
+                                              :bind #js [addr]}))))
+          (when full-gc?
+            (gc-kvs-table! db opts)))
         (println :debug :db-gc "There's no garbage data that's need to be collected.")))))
 
 (defn- get-unused-addresses-node-version
