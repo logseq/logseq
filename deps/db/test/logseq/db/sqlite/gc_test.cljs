@@ -37,7 +37,9 @@
                                 (take 100000)
                                 (map (fn [block] [:db/retractEntity [:block/uuid (:block/uuid block)]])))]
         (d/transact! conn non-ordered-tx))
-      (time (sqlite-gc/gc-kvs-table-node-version! sqlite))
+      (println "gc time")
+      ;; `true` to walk addresses and `false` to recursively run gc
+      (time (sqlite-gc/gc-kvs-table-node-version! sqlite false))
 
       ;; ensure there's no missing address (broken db)
       (is (empty? (sqlite-debug/find-missing-addresses-node-version sqlite))
