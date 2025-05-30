@@ -70,9 +70,9 @@
 
 The Database version (DB version) of Logseq introduces DB graphs while maintaining support for file graphs. [See this page](https://github.com/logseq/docs/blob/feat/db/db-version.md) to get an overview of the main features for DB graphs. If you are an existing user, [see this page](https://github.com/logseq/docs/blob/feat/db/db-version-changes.md) to get an overview of changes with the DB version.
 
-The DB version of Logseq is alpha software. When using DB graphs, we recommend you create a dedicated test graph and choose one project/workflow (that’s not crucial for you) to test with it. **Data loss is possible**, which is why we recommend [automated backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#automated-backup) or making [regular SQLite DB backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#graph-export). When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using file graphs if you are making regular backups with git.
+The DB version of Logseq is alpha software. When using DB graphs, we recommend you create a dedicated test graph and choose one project/workflow that’s not crucial for you. **Data loss is possible**, which is why we recommend [automated backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#automated-backup) or making [regular SQLite DB backups](https://github.com/logseq/docs/blob/feat/db/db-version.md#graph-export). When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using file graphs if you are making regular backups with git.
 
-To try the latest web version, go to https://test.logseq.com/.
+To try the latest web version, go to https://test.logseq.com/. For DB version issues, please report them to https://github.com/logseq/db-test/issues.
 
 ## 🤔 Why Logseq?
 
