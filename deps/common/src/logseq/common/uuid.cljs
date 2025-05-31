@@ -40,7 +40,8 @@ the remaining chars for data of this type"
   - :journal-page-uuid, 00000001
   - :db-ident-block-uuid, 00000002
   - :migrate-new-block-uuid, 00000003
-  - :builtin-block-uuid, 00000004"
+  - :builtin-block-uuid, 00000004
+  - :view-block-uuid, 00000006"
   ([] (d/squuid))
   ([type' v]
    (assert (some? v))
@@ -48,7 +49,8 @@ the remaining chars for data of this type"
      :journal-page-uuid (gen-journal-page-uuid v)
      :db-ident-block-uuid (gen-db-ident-block-uuid v)
      :migrate-new-block-uuid (gen-block-uuid v "00000003")
-     :builtin-block-uuid (gen-block-uuid v "00000004"))))
+     :builtin-block-uuid (gen-block-uuid v "00000004")
+     :view-block-uuid (gen-block-uuid v "00000006"))))
 
 (defn gen-journal-template-block
   "Persistent uuid for journal template block"
