@@ -40,7 +40,8 @@
                             true
                             (assoc property-id value)
                             (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
-                                 (or (empty? (:block/tags block)) (ldb/internal-page? block)))
+                                 (or (empty? (:block/tags block)) (ldb/internal-page? block))
+                                 (not (get (d/pull @conn [property-id] (:db/id block)) property-id)))
                             (assoc :block/tags :logseq.class/Task))]
       (cond-> []
         multiple-values-empty?
