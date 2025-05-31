@@ -2304,21 +2304,21 @@
 
      ;; children
      (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
-           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
+           ;; Check if this is a PDF annotation block
+           pdf-annotation? (or (= :annotation block-type)
+                              (and (pu/lookup block :logseq.property.pdf/hl-page)
+                                   (or (pu/lookup block :logseq.property.pdf/hl-type)
+                                       (pu/lookup block :logseq.property.pdf/hl-value))))
+           hl-ref #(when (and pdf-annotation? (not (#{:default :whiteboard-shape} block-type)))
                      [:div.prefix-link
                       {:on-pointer-down
                        (fn [^js e]
                          (let [^js target (.-target e)]
-                           (case block-type
-                             ;; pdf annotation
-                             :annotation
-                             (if (and area? (.contains (.-classList target) "blank"))
-                               :actions
-                               (do
-                                 (pdf-assets/open-block-ref! block)
-                                 (util/stop e)))
-
-                             :dune)))}
+                           (if (and area? (.contains (.-classList target) "blank"))
+                             :actions
+                             (do
+                               (pdf-assets/open-block-ref! block)
+                               (util/stop e)))))}
 
                       [:span.hl-page
                        [:strong.forbid-edit
@@ -2346,14 +2346,14 @@
             (file-block/priority-cp block)])
 
          ;; highlight ref block (inline)
-         (when-not area? [(hl-ref)])
+         (when (and pdf-annotation? (not area?)) [(hl-ref)])
 
          (conj
           (map-inline config block-ast-title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
-         (when area? [(hl-ref)])
+         (when (and pdf-annotation? area?) [(hl-ref)])
 
          (when (and (seq block-ast-title) (ldb/class-instance?
                                            (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
