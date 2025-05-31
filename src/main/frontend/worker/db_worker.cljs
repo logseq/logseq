@@ -535,19 +535,7 @@
                              (let [refs (map :db/id (:block/refs (d/entity db (:e d))))]
                                (contains? (set refs) (:e d)))))
                       datoms)))))
-        (boolean
-         (some
-          ;; check if there's any entity reference this `block` except the view-entity
-          (fn [ref]
-            (not
-             (or (= id (:db/id (:logseq.property/view-for ref)))
-                 (ldb/hidden? (:block/page ref))
-                 (ldb/hidden? ref)
-                 (and db-based? (contains? (set (map :db/id (:block/tags ref))) id))
-                 (some? (get ref (:db/ident block)))
-                 (= id (:db/id ref))
-                 (= id (:db/id (:block/page ref))))))
-          (:block/_refs block)))))))
+        (> (ldb/get-block-refs-count db (:db/id block)) 0)))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]

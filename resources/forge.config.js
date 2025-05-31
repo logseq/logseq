@@ -6,6 +6,7 @@ module.exports = {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
     buildVersion: "87",
+    appBundleId: "com.logseq.logseq",
     protocols: [
       {
         "protocol": "logseq",
