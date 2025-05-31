@@ -9,6 +9,7 @@
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";
 
+@import "node_modules/@ionic/react/css/palettes/dark.class.css";
 @import "src/main/frontend/animations.css";
 @import "packages/amplify/dist/amplify.css";
 @import "src/main/frontend/common.css";
