@@ -2590,8 +2590,14 @@
                           (string/trim value)))
                (save-block! repo uuid value))
 
-             (if property-value-container?
+             (cond
+               (dom/has-class? sibling-block "ls-dummy-block")
+               (.click sibling-block)
+
+               property-value-container?
                (focus-trigger current-block sibling-block)
+
+               :else
                (let [new-uuid (cljs.core/uuid sibling-block-id)
                      block (db/entity [:block/uuid new-uuid])]
                  (edit-block! block
@@ -2647,18 +2653,25 @@
                               (first (dom/by-class sibling-block "ls-block"))))
                           sibling-block)]
     (when sibling-block
-      (if-let [sibling-block-id (dom/attr sibling-block "blockid")]
-        (do
-          (let [content (:block/title block)
-                value (state/get-edit-content)]
-            (when (and value (not= (clean-content! repo format content) (string/trim value)))
-              (save-block! repo uuid value)))
-
+      (let [content (:block/title block)
+            value (state/get-edit-content)]
+        (when (and value (not= (clean-content! repo format content) (string/trim value)))
+          (save-block! repo uuid value)))
+      (let [sibling-block-id (dom/attr sibling-block "blockid")]
+        (cond
+          sibling-block-id
           (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
                 block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]
-            (edit-block! block pos {:container-id container-id})))
-        (when (property-value-node? sibling-block)
-          (focus-trigger editing-block sibling-block))))))
+            (edit-block! block pos {:container-id container-id}))
+
+          (property-value-node? sibling-block)
+          (focus-trigger editing-block sibling-block)
+
+          (dom/has-class? sibling-block "ls-dummy-block")
+          (.click sibling-block)
+
+          :else
+          nil)))))
 
 (defn keydown-arrow-handler
   [direction]

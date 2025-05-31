@@ -4,11 +4,11 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.fs :as fs]
-            [frontend.handler.block :as block-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -17,6 +17,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -39,12 +40,11 @@
 (defn <create!
   ([title]
    (<create! title {}))
-  ([title {:keys [redirect?]
+  ([title {:keys [redirect? today-journal?]
            :or   {redirect? true}
            :as options}]
    (when (string? title)
      (p/let [repo (state/get-current-repo)
-             conn (db/get-db repo false)
              db-based? (config/db-based-graph? repo)
              title (if (and db-based? (string/includes? title " #")) ; tagged page
                      (wrap-tags title)
@@ -70,8 +70,14 @@
                    page (db/get-page (or page-uuid title'))]
              (when redirect?
                (route-handler/redirect-to-page! page-uuid)
-               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-                 (block-handler/edit-block! first-block :max {:container-id :unknown-container})))
+               (when-not today-journal?
+                 (js/setTimeout
+                  (fn []
+                    (when-let [dummy-block (->> (dom/sel ".ls-dummy-block")
+                                                (filter #(= (str (:db/id page)) (dom/attr % "data-pageId")))
+                                                first)]
+                      (.click dummy-block)))
+                  200)))
              page)))))))
 
 ;; favorite fns

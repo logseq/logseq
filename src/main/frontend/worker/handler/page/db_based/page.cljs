@@ -168,10 +168,9 @@
 (defn create
   "Pure function without side effects"
   [db title*
-   {:keys [create-first-block? tags properties uuid persist-op? whiteboard?
+   {:keys [tags properties uuid persist-op? whiteboard?
            class? today-journal? split-namespace?]
-    :or   {create-first-block?      true
-           properties               nil
+    :or   {properties               nil
            uuid                     nil
            persist-op?              true}
     :as options}]
@@ -221,17 +220,10 @@
 
           (let [page-uuid (:block/uuid page)
                 page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
-                first-block-tx (when (and
-                                      (nil? (d/entity db [:block/uuid page-uuid]))
-                                      create-first-block?
-                                      (not (or whiteboard? class?))
-                                      page-txs)
-                                 (build-first-block-tx (:block/uuid (first page-txs))))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents)
-                          page-txs
-                          first-block-tx)
+                          page-txs)
                 tx-meta (cond-> {:persist-op? persist-op?
                                  :outliner-op :create-page}
                           today-journal?

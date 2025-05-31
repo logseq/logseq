@@ -103,70 +103,26 @@
 
 (if config/publishing?
   (rum/defc dummy-block
-    [_page]
+    [_page _container-id]
     [:div])
 
   (rum/defc dummy-block
-    [page]
-    (let [[hover set-hover!] (rum/use-state false)
-          click-handler-fn (fn []
-                             (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
-                                     result (:tx-data result)
-                                     first-child-id (first (map :block/uuid result))
-                                     first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
-                               (when first-child
-                                 (editor-handler/edit-block! first-child :max {:container-id :unknown-container}))))
-          drop-handler-fn (fn [^js event]
-                            (util/stop event)
-                            (p/let [block-uuids (state/get-selection-block-ids)
-                                    lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-                                    selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
-                                    blocks (if (seq selected) selected [@component-block/*dragging-block])
-                                    _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
-                              (js/setTimeout #(let [target-block page]
-                                                (dnd/move-blocks event blocks target-block nil :sibling))
-                                             0)))
-          *dummy-block-uuid (rum/use-ref (random-uuid))
-          *el-ref (rum/use-ref nil)
-          _ (frontend-rum/use-atom (@state/state :selection/blocks))
-          selection-ids (state/get-selection-block-ids)
-          selected? (contains? (set selection-ids) (rum/deref *dummy-block-uuid))
-          idstr (str (rum/deref *dummy-block-uuid))
-          focus! (fn [] (js/setTimeout #(some-> (rum/deref *el-ref) (.focus)) 16))]
-
-      ;; mounted
-      ;(hooks/use-effect! #(focus!) [])
-      (hooks/use-effect! #(if selected? (focus!)
-                              (some-> (rum/deref *el-ref) (.blur))) [selected?])
-
-      (shui/trigger-as
-       :div.ls-dummy-block.ls-block
-
-       {:style {:width "100%"
-                 ;; The same as .dnd-separator
-                :border-top (if hover
-                              "3px solid #ccc"
-                              nil)
-                :margin-left 20}
-        :ref *el-ref
-        :tabIndex 0
-        :on-click click-handler-fn
-        :id idstr
-        :blockid idstr
-        :class (when selected? "selected")}
-
-       [:div.flex.items-center
-        [:div.flex.items-center.mx-1 {:style {:height 24}}
+    [page container-id]
+    (let [insert-new-block! (fn []
+                              (state/set-state! :editor/container-id container-id)
+                              (editor-handler/api-insert-new-block! "" {:page (:block/uuid page)}))]
+      [:div.ls-block.ls-dummy-block.flex-1.flex-col.rounded-sm.cursor-text.!py-0
+       {:data-pageId (:db/id page)
+        :on-click (fn [_e] (insert-new-block!))
+        :on-key-down (fn [e]
+                       (when (= "Enter" (util/ekey e))
+                         (insert-new-block!)))
+        :tab-index 0}
+       [:div.flex.flex-row
+        {:style {:height 28}}
+        [:div.flex.items-center {:style {:margin-left 22}}
          [:span.bullet-container.cursor
-          [:span.bullet]]]
-
-        [:div.flex.flex-1.cursor-text
-         {:on-drag-enter #(set-hover! true)
-          :on-drag-over #(util/stop %)
-          :on-drop drop-handler-fn
-          :on-drag-leave #(set-hover! false)}
-         [:span.opacity-70.text
-          "Click here to edit..."]]]))))
+          [:span.bullet]]]]])))
 
 (rum/defc add-button
   [args container-id]
@@ -220,7 +176,7 @@
         (and
          (not block?)
          (empty? children) block)
-        (dummy-block block)
+        (dummy-block block (:container-id config))
 
         :else
         (let [document-mode? (state/sub :document/mode?)

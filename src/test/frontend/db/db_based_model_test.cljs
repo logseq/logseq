@@ -22,7 +22,7 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-all-classes-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
     (is (= (set
@@ -34,7 +34,7 @@
            (set (map :block/title (model/get-all-classes repo)))))))
 
 (deftest ^:fix-me get-class-objects-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
@@ -53,14 +53,14 @@
               (:db/id (db/entity [:block/uuid sbid]))])))))
 
 (deftest hidden-page-test
-  (let [opts {:redirect? false :create-first-block? false}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "page 1" opts)]
     (is (false? (model/hidden-page? (db/get-page "page 1"))))
     (is (true? (model/hidden-page? "$$$test")))
     (is (true? (model/hidden-page? (str "$$$" (random-uuid)))))))
 
 (deftest get-class-children-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
+  (let [opts {:redirect? false}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)
         _ (test-helper/create-page! "class3" opts)

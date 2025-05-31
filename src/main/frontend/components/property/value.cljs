@@ -388,8 +388,7 @@
             (let [journal (date/js-date->journal-title d)]
               (p/do!
                (when-not (db/get-page journal)
-                 (page-handler/<create! journal {:redirect? false
-                                                 :create-first-block? false}))
+                 (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
                  (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
                    (on-change value)))
@@ -596,7 +595,6 @@
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))
             create-options {:redirect? false
-                            :create-first-block? false
                             :tags (if inline-class-uuid
                                     [inline-class-uuid]
                                     ;; Only 1st class b/c page normally has

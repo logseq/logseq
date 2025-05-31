@@ -53,21 +53,9 @@
         page-name  (common-util/page-name-sanity-lc title)]
     [title page-name]))
 
-(defn- build-first-block-tx
-  [page-uuid format]
-  (let [page-id [:block/uuid page-uuid]]
-    [(outliner-core/block-with-timestamps
-      {:block/uuid (ldb/new-block-id)
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil nil)
-       :block/title ""
-       :block/format format})]))
-
 (defn create!
-  [repo conn config title {:keys [create-first-block? format properties uuid persist-op? whiteboard? today-journal?]
-                           :or   {create-first-block?      true
-                                  format                   nil
+  [repo conn config title {:keys [format properties uuid persist-op? today-journal?]
+                           :or   {format                   nil
                                   properties               nil
                                   uuid                     nil
                                   persist-op?              true}
@@ -105,16 +93,9 @@
                                (fn [p]
                                  (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
                        page-txs)
-            first-block-tx (when (and
-                                  (nil? (d/entity @conn [:block/uuid page-uuid]))
-                                  create-first-block?
-                                  (not whiteboard?)
-                                  page-txs)
-                             (build-first-block-tx (:block/uuid (first page-txs)) format))
             txs      (concat
                       txs
-                      page-txs
-                      first-block-tx)]
+                      page-txs)]
         (when (seq txs)
           (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
                                            :outliner-op :create-page}
