@@ -3884,9 +3884,11 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
+     (and (or (:list-view? config) (:ref? config))
+          (integer? (:block-level config))
+          (>= (:block-level config) (state/get-ref-open-blocks-level)))
      (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
-              (some? (:block/_parent block))
               (:table-block-title? config))))))
 
 (defn batch-set-heading!
