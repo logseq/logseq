@@ -73,8 +73,10 @@
 
 (defn- create-pull-remote-updates-flow
   "Return a flow: emit to pull remote-updates.
-  reschedule next emit(INTERVAL-MS later) every time FLOW emit a value."
-  [interval-ms flow]
+  reschedule next emit(INTERVAL-MS later) every time RESCHEDULE-FLOW emit a value.
+  TODO: add immediate-emit-flow arg,
+        e.g. when mobile-app becomes active, trigger one pull-remote-updates"
+  [interval-ms reschedule-flow & [_immediate-emit-flow]]
   (let [v {:type :pull-remote-updates}
         clock-flow (m/ap
                      (loop []
@@ -84,7 +86,7 @@
     (m/ap
       (m/amb
        v
-       (let [_ (m/?< (c.m/continue-flow flow))]
+       (let [_ (m/?< (c.m/continue-flow reschedule-flow))]
          (try
            (m/?< clock-flow)
            (catch Cancelled _ (m/amb))))))))
