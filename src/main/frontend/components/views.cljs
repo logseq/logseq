@@ -37,6 +37,7 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [logseq.common.config :as common-config]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.property :as db-property]
@@ -1699,7 +1700,7 @@
     (ldb/sort-by-order views)))
 
 (defn- create-view!
-  [view-parent view-feature-type]
+  [view-parent view-feature-type {:keys [auto-triggered?]}]
   (when-let [page (db/get-case-page common-config/views-page-name)]
     (p/let [properties (cond->
                         {:logseq.property/view-for (:db/id view-parent)
@@ -1722,10 +1723,14 @@
                            :all-pages
                            "All pages"
                            ""))
+            view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
             result (editor-handler/api-insert-new-block! view-title
-                                                         {:page (:block/uuid page)
-                                                          :properties properties
-                                                          :edit-block? false})]
+                                                         (cond->
+                                                          {:page (:block/uuid page)
+                                                           :properties properties
+                                                           :edit-block? false}
+                                                           auto-triggered?
+                                                           (assoc :custom-uuid view-block-id)))]
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
@@ -1786,7 +1791,7 @@
      :title "Add new view"
      :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
      :on-click (fn []
-                 (p/let [view (create-view! view-parent view-feature-type)]
+                 (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
                    (set-views! (concat views [view]))))}
     (ui/icon "plus" {:size 15}))])
 
@@ -2147,7 +2152,7 @@
                      (set-views! views)
                      (when-not view-entity (set-view-entity! v)))
                    (when (and view-parent view-feature-type (not view-entity))
-                     (let [new-view (c.m/<? (create-view! view-parent view-feature-type))]
+                     (let [new-view (c.m/<? (create-view! view-parent view-feature-type {:auto-triggered? true}))]
                        (set-views! (concat views [new-view]))
                        (set-view-entity! new-view))))))))))
      [])
