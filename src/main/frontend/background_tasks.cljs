@@ -2,6 +2,7 @@
   "Some background tasks"
   (:require [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
+            [frontend.state :as state]
             [logseq.db.common.entity-plus :as entity-plus]
             [missionary.core :as m]))
 
@@ -13,3 +14,9 @@
       ;; (prn :reset-immutable-entities-cache!)
       (entity-plus/reset-immutable-entities-cache!)))
   flows/current-repo-flow))
+
+(c.m/run-background-task
+ ::sync-to-worker-network-online-status
+ (m/reduce
+  (fn [_ online?] (state/<invoke-db-worker :thread-api/update-thread-atom :thread-atom/online-event online?))
+  flows/network-online-event-flow))
