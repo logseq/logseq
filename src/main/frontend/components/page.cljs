@@ -124,13 +124,18 @@
 
 (rum/defc add-button
   [args container-id]
-  (let [*bullet-ref (rum/use-ref nil)]
-    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-     {:on-click (fn [e]
+  (let [*ref (rum/use-ref nil)
+        *bullet-ref (rum/use-ref nil)]
+    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap.ls-block
+     {:ref *ref
+      :on-click (fn [e]
                   (util/stop e)
                   (state/set-state! :editor/container-id container-id)
                   (editor-handler/api-insert-new-block! "" args))
-      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-50")
+      :on-mouse-over (fn []
+                       (when-let [prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                         (when-not (dom/has-class? prev-block "is-blank")
+                           (dom/add-class! (rum/deref *bullet-ref) "opacity-50"))))
       :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-50")
       :on-key-down (fn [e]
                      (util/stop e)
@@ -187,11 +192,7 @@
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
-          (let [add-button? (not (or config/publishing?
-                                     (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
-                                           block' (if last-child-id (db/entity last-child-id) (last blocks))
-                                           link (:block/link block')]
-                                       (string/blank? (:block/title (or link block'))))))]
+          (let [add-button? (not config/publishing?)]
             [:div.relative
              {:class (when add-button? "show-add-button")}
              (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
