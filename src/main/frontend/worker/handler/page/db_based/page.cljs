@@ -7,13 +7,11 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.validate :as outliner-validate]))
@@ -74,16 +72,6 @@
                        (string/replace #"^#+" ""))
         title      (common-util/remove-boundary-slashes title)]
     title))
-
-(defn build-first-block-tx
-  [page-uuid]
-  (let [page-id [:block/uuid page-uuid]]
-    [(sqlite-util/block-with-timestamps
-      {:block/uuid (ldb/new-block-id)
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil nil)
-       :block/title ""})]))
 
 (defn- get-page-by-parent-name
   [db parent-title child-title]

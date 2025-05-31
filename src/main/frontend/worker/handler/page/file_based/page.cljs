@@ -9,8 +9,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.text :as text]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.graph-parser.text :as text]))
 
 (defn- file-based-properties-block
   [repo conn config date-formatter properties format page]
