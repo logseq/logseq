@@ -41,7 +41,7 @@
        (let [id-str (get-in route [:path-params :name])]
          (when (util/uuid-string? id-str)
            (let [page-uuid (uuid id-str)]
-             (nav/nav-to-block! {:block/uuid page-uuid} nil))))
+             (nav/nav-to-block! {:block/uuid page-uuid}))))
        :user-login
        nil
        nil))
