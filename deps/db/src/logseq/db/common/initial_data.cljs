@@ -9,7 +9,8 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -32,6 +33,19 @@
        (map :e)
        sort
        first))
+
+(defn get-block-alias
+  [db eid]
+  (->>
+   (d/q
+    '[:find [?e ...]
+      :in $ ?eid %
+      :where
+      (alias ?eid ?e)]
+    db
+    eid
+    (:alias rules/rules))
+   distinct))
 
 (comment
   (defn- get-built-in-files
@@ -163,6 +177,7 @@
         (or
          (= (:db/id ref-block) id)
          (= id (:db/id (:block/page ref-block)))
+         (= id (:db/id (:logseq.property/view-for ref-block)))
          (entity-util/hidden? (:block/page ref-block))
          (entity-util/hidden? ref-block)
          (contains? (set (map :db/id (:block/tags ref-block))) (:db/id entity))
@@ -174,10 +189,14 @@
 (defn get-block-refs-count
   [db id]
   (or
-   (some->> (d/entity db id)
-            :block/_refs
-            (remove (fn [ref-block] (hidden-ref? db ref-block id)))
-            count)
+   (let [with-alias (->> (get-block-alias db id)
+                         (cons id)
+                         distinct)]
+     (some->> with-alias
+              (map #(d/entity db %))
+              (mapcat :block/_refs)
+              (remove (fn [ref-block] (hidden-ref? db ref-block id)))
+              count))
    0))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
