@@ -1,12 +1,22 @@
 (ns frontend.mobile.flows
   "common flows for mobile"
-  (:require [missionary.core :as m]))
+  (:require ["@capacitor/network" :refer [^js Network]]
+            [frontend.common.missionary :as c.m]
+            [missionary.core :as m]
+            [promesa.core :as p]))
 
 (def *mobile-network-status (atom nil))
 (def *mobile-app-state (atom nil))
 
+(def ^:private mobile-network-init-status-flow
+  (m/observe
+   (fn ctor [emit!]
+     (p/let [init-network-status (.getStatus Network)]
+       (emit! init-network-status))
+     (fn dtor []))))
+
 (def mobile-network-status-flow
-  (->> (m/watch *mobile-network-status)
+  (->> (c.m/mix mobile-network-init-status-flow (m/watch *mobile-network-status))
        (m/eduction (map #(js->clj % :keywordize-keys true)))))
 
 (def mobile-app-state
