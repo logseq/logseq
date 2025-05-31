@@ -1529,7 +1529,7 @@
   (let [lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
-                                        (block-container (assoc config :list-view? true) block))))
+                                        (block-container (assoc config :list-view? true :block-level 1) block))))
         list-cp (fn [rows]
                   (when (seq rows)
                     (ui/virtualized-list
