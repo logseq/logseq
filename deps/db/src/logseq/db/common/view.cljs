@@ -317,16 +317,18 @@
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
                      (filter-blocks page-filters))
-        ref-pages-count (->> (mapcat (fn [block]
+        ref-pages-count (->> full-ref-blocks
+                             (mapcat (fn [block]
                                        (->>
                                         (cons
                                          (:block/title (:block/page block))
                                          (map (fn [b]
-                                                (when (and (ldb/page? b) (not= (:db/id b) id))
+                                                (when (and (ldb/page? b)
+                                                           (not= (:db/id b) id)
+                                                           (not (contains? #{:block/tags} (:db/ident b))))
                                                   (:block/title b)))
-                                              (:block/refs block)))
-                                        distinct))
-                                     full-ref-blocks)
+                                              (:block/path-refs block)))
+                                        distinct)))
                              (remove nil?)
                              (frequencies)
                              (sort-by second #(> %1 %2)))]
