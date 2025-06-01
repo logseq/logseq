@@ -35,6 +35,12 @@
 (defonce *db-worker (atom nil))
 (defonce *editor-info (atom nil))
 
+(def db-worker-ready-flow
+  "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
+  Use this flow to wait till db-worker ready."
+  (->> (m/watch *db-worker)
+       (m/eduction (map some?))))
+
 (defn- <invoke-db-worker*
   [qkw direct-pass-args? args-list]
   (let [worker @*db-worker]
