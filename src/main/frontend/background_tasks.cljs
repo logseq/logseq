@@ -18,5 +18,7 @@
 (c.m/run-background-task
  ::sync-to-worker-network-online-status
  (m/reduce
-  (fn [_ online?] (state/<invoke-db-worker :thread-api/update-thread-atom :thread-atom/online-event online?))
-  flows/network-online-event-flow))
+  (fn [_ [online? db-worker-ready?]]
+    (when db-worker-ready?
+      (state/<invoke-db-worker :thread-api/update-thread-atom :thread-atom/online-event online?)))
+  (m/latest vector flows/network-online-event-flow state/db-worker-ready-flow)))
