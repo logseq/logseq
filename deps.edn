@@ -25,7 +25,7 @@
   hiccups/hiccups                       {:mvn/version "0.3.0"}
   tongue/tongue                         {:mvn/version "0.4.4"}
   org.clojure/core.async                {:mvn/version "1.6.673"}
-  thheller/shadow-cljs                  {:mvn/version "2.19.0"}
+  thheller/shadow-cljs                  {:mvn/version "2.28.21"}
   expound/expound                       {:mvn/version "0.8.6"}
   com.lambdaisland/glogi                {:mvn/version "1.1.144"}
   binaryage/devtools                    {:mvn/version "1.0.5"}

@@ -125,8 +125,8 @@
 
 (defn load-base-assets$
   []
-  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
-          _ (util/js-load$ (str util/JS_ROOT "/pdf_viewer2.js"))]))
+  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.mjs"))
+          _ (util/js-load$ (str util/JS_ROOT "/pdf_viewer3.mjs"))]))
 
 (defn get-page-from-el
   [^js/HTMLElement el]
