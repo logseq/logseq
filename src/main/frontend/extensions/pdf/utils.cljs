@@ -123,11 +123,6 @@
   []
   (common-uuid/gen-uuid))
 
-(defn load-base-assets$
-  []
-  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.mjs"))
-          _ (util/js-load$ (str util/JS_ROOT "/pdf_viewer3.mjs"))]))
-
 (defn get-page-from-el
   [^js/HTMLElement el]
   (when-let [^js page-el (and el (.closest el ".page"))]
