@@ -577,8 +577,7 @@
                          (or
                           ;; built-in
                           (and (not (ldb/public-built-in-property? ent))
-                               ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
-                               (get db-property/built-in-properties (:db/ident ent)))
+                               (ldb/built-in? ent))
                           ;; other position
                           (when-not (or sidebar-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
