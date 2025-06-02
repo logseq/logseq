@@ -832,24 +832,25 @@
                                                   (not (:logseq.property/created-from-property block)))]
                       (if delete-prev-block?
                         (p/do!
+                         (state/set-state! :editor/edit-block-fn
+                                           #(edit-block! (assoc block :block/title new-content) (count (:block/title prev-block))))
                          (ui-outliner-tx/transact!
                           transact-opts
                           (delete-block-aux! prev-block)
-                          (save-block! repo block new-content {}))
-                         (edit-block! (assoc block :block/title new-content) (count (:block/title prev-block))))
+                          (save-block! repo block new-content {})))
                         (p/do!
+                         (state/set-state! :editor/edit-block-fn edit-block-f)
                          (ui-outliner-tx/transact!
                           transact-opts
                           (when (seq children)
                             (outliner-op/move-blocks! children prev-block false))
                           (delete-block-aux! block)
-                          (save-block! repo prev-block new-content {}))
-                         (when edit-block-f (edit-block-f)))))
+                          (save-block! repo prev-block new-content {})))))
 
                     :else
                     (p/do!
-                     (delete-block-aux! block)
-                     (when edit-block-f (edit-block-f)))))))))))))
+                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (delete-block-aux! block))))))))))))
 
 (defn delete-block!
   [repo]
@@ -864,14 +865,14 @@
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)]
       (p/do!
-       (ui-outliner-tx/transact!
-        {:outliner-op :delete-blocks}
-        (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
                                                           (get block :block/format :markdown)
                                                           "")]
-           (when edit-block-f (edit-block-f))))))))
+           (state/set-state! :editor/edit-block-fn edit-block-f)))
+       (ui-outliner-tx/transact!
+        {:outliner-op :delete-blocks}
+        (outliner-op/delete-blocks! blocks' nil))))))
 
 (defn set-block-timestamp!
   [block-id key value]
