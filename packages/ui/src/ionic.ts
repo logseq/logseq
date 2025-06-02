@@ -12,7 +12,10 @@ import {
   IonDatetimeButton, IonRefresher,
   IonRefresherContent, IonMenu,
   IonMenuButton, IonActionSheet, IonSearchbar,
-  IonRouterOutlet
+  IonRouterOutlet,  useIonViewDidEnter,
+  useIonViewDidLeave,
+  useIonViewWillEnter,
+  useIonViewWillLeave,
 } from '@ionic/react'
 
 declare global {
@@ -33,7 +36,11 @@ const ionicUI = {
   IonDatetimeButton, IonRefresher,
   IonRefresherContent, IonMenu,
   IonMenuButton, IonActionSheet, IonSearchbar,
-  IonRouterOutlet
+  IonRouterOutlet,
+  useIonViewDidEnter,
+  useIonViewDidLeave,
+  useIonViewWillEnter,
+  useIonViewWillLeave,
 }
 
 // initialize ionic mode

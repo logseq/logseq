@@ -2,6 +2,7 @@
   (:require ["react-dom/client" :as rdc]
             [capacitor.components.app :as app]
             [capacitor.nav :as nav]
+            [capacitor.state :as state]
             [frontend.background-tasks]
             [frontend.components.page :as page]
             [frontend.components.user.login :as login]
@@ -20,11 +21,7 @@
   (.render root (app/main)))
 
 (def routes
-  [["/login"
-    {:name :user-login
-     :view login/page}]
-
-   ["/page/:name"
+  [["/page/:name"
     {:name :page
      :view (fn [route-match]
              (page/page-cp (assoc route-match :current-page? true)))}]])
@@ -41,7 +38,8 @@
        (let [id-str (get-in route [:path-params :name])]
          (when (util/uuid-string? id-str)
            (let [page-uuid (uuid id-str)]
-             (nav/nav-to-block! {:block/uuid page-uuid}))))
+             (state/set-modal! {:open? true
+                                :block {:block/uuid page-uuid}}))))
        :user-login
        nil
        nil))

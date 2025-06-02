@@ -1,14 +1,13 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
-            ["@capacitor/app" :refer [App]]
             [capacitor.components.search :as search]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui-component]
             [capacitor.ionic :as ion]
-            [capacitor.nav :as nav]
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
+            [frontend.components.page :as page]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -88,24 +87,40 @@
   [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
    {:id "app-keep-keyboard-open-input"}])
 
-(rum/defc journals < rum/reactive
+(rum/defc journals
   []
-  (let [show-action-bar? (fstate/sub :mobile/show-action-bar?)]
-    (ion/content
-     (ui-component/classic-app-container-wrap
-      [:div.pt-3
-       (journal/all-journals)
-       (when show-action-bar?
-         (action-bar/action-bar))]))))
+  (ui-component/classic-app-container-wrap
+   [:div.pt-3
+    (journal/all-journals)]))
 
-(rum/defc home < rum/reactive
-  {:did-mount (fn [state]
-                (ui/inject-document-devices-envs!)
-                state)}
-  []
-  (let [db-restoring? (fstate/sub :db/restoring?)]
+(rum/defc modal < rum/reactive
+  [presenting-element]
+  (let [{:keys [open? block]} (rum/react state/*modal-data)
+        show-action-bar? (fstate/sub :mobile/show-action-bar?)]
+    (ion/modal
+     {:isOpen (boolean open?)
+      :presenting-element presenting-element
+      :onDidDismiss (fn [] (state/set-modal! nil))
+      :expand "block"}
+     (ion/content {:class "ion-padding"}
+                  (page/page-cp (db/entity [:block/uuid (:block/uuid block)]))
+                  (mobile-bar/mobile-bar)
+                  (when show-action-bar?
+                    (action-bar/action-bar))))))
+
+(rum/defc home-inner
+  [db-restoring?]
+  (let [[current-tab] (state/use-tab)
+        search? (= current-tab "search")
+        *page (hooks/use-ref nil)
+        [presenting-element set-presenting-element!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-presenting-element! (rum/deref *page)))
+     [])
     (ion/page
-     {:id "app-main-content"}
+     {:id "app-main-content"
+      :ref *page}
      (ion/header
       (ion/toolbar
        (ion/buttons {:slot "start"}
@@ -119,9 +134,9 @@
                                   (let [apply-date! (fn [date]
                                                       (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
                                                         (if-let [journal (db/get-page page-name)]
-                                                          (nav/nav-to-block! journal)
+                                                          (state/open-block-modal! journal)
                                                           (-> (page-handler/<create! page-name {:redirect? false})
-                                                              (p/then #(nav/nav-to-block! (db/get-page page-name)))))))]
+                                                              (p/then #(state/open-block-modal! (db/get-page page-name)))))))]
 
                                     (if (mobile-util/native-platform?)
                                       (-> (.showDatePicker mobile-util/ui-local)
@@ -156,57 +171,25 @@
                           ])]))))
 
       ;; main content
-     (if db-restoring?
+     (cond
+       db-restoring?
        (ion/content
         [:strong.flex.justify-center.items-center.py-24
          (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
-       (journals)))))
+       search?
+       ""
+       :else
+       (ion/content
+        (journals)
+        (modal presenting-element))))))
 
-(rum/defc settings
+(rum/defc home < rum/reactive
+  {:did-mount (fn [state]
+                (ui/inject-document-devices-envs!)
+                state)}
   []
-  (ion/page
-   {:id "settings-tab"}
-   (ion/header
-    (ion/toolbar
-     "Settings"))
-   [:div.flex.flex-1.p-4 "TODO..."]))
-
-(rum/defc tabs
-  []
-  (let [nav-ref (hooks/use-ref nil)
-        [_ set-nav-root!] (state/use-nav-root)]
-    (hooks/use-effect!
-     (fn []
-       (when-let [nav (rum/deref nav-ref)]
-         (set-nav-root! nav))
-       #())
-     [(rum/deref nav-ref)])
-    (ion/tabs
-     {:onIonTabsDidChange (fn [^js e]
-                            (state/set-tab! (.-tab (.-detail e))))}
-     (ion/tab
-      {:tab "home"}
-      (ion/nav {:ref nav-ref
-                :root home                                ;;settings/page
-                :animated true
-                :swipeGesture true}))
-     (ion/tab
-      {:tab "search"}
-      (ion/content
-       (search/search)))
-     (ion/tab
-      {:tab "settings"}
-      (ion/content
-       (settings/page)))
-     (bottom-tabs)
-
-     (keep-keyboard-open)
-     (ui-component/install-notifications)
-     (ui-component/install-modals)
-
-     (shui-toaster/install-toaster)
-     (shui-dialog/install-modals)
-     (shui-popup/install-popups))))
+  (let [db-restoring? (fstate/sub :db/restoring?)]
+    (home-inner db-restoring?)))
 
 (defn use-theme-effects!
   [current-repo]
@@ -228,39 +211,44 @@
      (some-> js/window.externalsjs (.settleStatusBar)))
    [current-repo]))
 
-(defn use-navigation-effects!
+(rum/defc tabs
+  [current-repo]
+  (use-theme-effects! current-repo)
+  (ion/tabs
+   {:onIonTabsDidChange (fn [^js e]
+                          (state/set-tab! (.-tab (.-detail e))))}
+   (ion/tab
+    {:tab "home"}
+    (ion/content
+     (home)))
+   (ion/tab
+    {:tab "search"}
+    (ion/content
+     (search/search)))
+   (ion/tab
+    {:tab "settings"}
+    (ion/content
+     (settings/page)))
+
+   (bottom-tabs)
+
+   (keep-keyboard-open)
+   (ui-component/install-notifications)
+   (ui-component/install-modals)
+
+   (shui-toaster/install-toaster)
+   (shui-dialog/install-modals)
+   (shui-popup/install-popups)))
+
+(rum/defc main < rum/reactive
   []
-  (hooks/use-effect!
-   (fn []
-     (let [handle-back!
-           (fn []
-             (cond
-               (seq (ui-component/get-modal))
-               (ui-component/close-modal!)
-
-               (seq (shui-dialog/get-modal (shui-dialog/get-first-modal-id)))
-               (shui-dialog/close!)
-
-               (seq (fstate/get-selection-blocks))
-               (fstate/clear-selection!)
-
-               :else
-               (-> (nav/nav-length?)
-                   (p/then (fn [len]
-                             (if (= len 1)
-                               (.exitApp App)
-                               (nav/nav-pop!))))))
-             (fstate/clear-edit!))
-           ^js back-listener (.addListener App "backButton" handle-back!)]
-       #(.remove back-listener)))
-   []))
-
-(rum/defc main []
-  (let [[current-repo] (frum/use-atom-in fstate/state :git/current-repo)]
-
-    (use-theme-effects! current-repo)
-    (use-navigation-effects!)
-
-    [:<>
-     (tabs)
-     (mobile-bar/mobile-bar)]))
+  (let [current-repo (fstate/sub :git/current-repo)
+        show-action-bar? (fstate/sub :mobile/show-action-bar?)
+        {:keys [open?]} (rum/react state/*modal-data)]
+    (ion/app
+     (tabs current-repo)
+     (when-not open?
+       [:<>
+        (mobile-bar/mobile-bar)
+        (when show-action-bar?
+          (action-bar/action-bar))]))))

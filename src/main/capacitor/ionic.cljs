@@ -8,6 +8,10 @@
 (def ^js ionic-react js/window.LSIonic)
 (def ^js camera (.-Camera ionicCamera))
 (def ^js camera-result-type (.-CameraResultType ionicCamera))
+(def ^js useIonViewDidEnter (.-useIonViewDidEnter ionic-react))
+(def ^js useIonViewDidLeave (.-useIonViewDidLeave ionic-react))
+(def ^js useIonViewWillEnter (.-useIonViewWillEnter ionic-react))
+(def ^js useIonViewWillLeave (.-useIonViewWillLeave ionic-react))
 
 (def tabler-icon shui-icon/root)
 
