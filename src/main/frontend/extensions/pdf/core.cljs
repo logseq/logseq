@@ -1062,9 +1062,7 @@
     ;; load assets
     (hooks/use-effect!
      (fn []
-       (p/then
-        (pdf-utils/load-base-assets$)
-        (fn [] (set-prepared! true))))
+       (set-prepared! true))
      [])
 
     ;; refresh loader
