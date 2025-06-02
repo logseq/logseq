@@ -2620,7 +2620,6 @@
 
             :else
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
-              (util/mobile-keep-keyboard-open)
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
               (let [f #(p/do!
