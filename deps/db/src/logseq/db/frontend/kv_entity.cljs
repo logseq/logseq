@@ -25,4 +25,7 @@ RTC won't start when major-schema-versions don't match"
   :logseq.kv/graph-backup-folder          {:doc "Backup folder for automated backup feature"
                                            :rtc {:rtc/ignore-entity-when-init-upload true
                                                  :rtc/ignore-entity-when-init-download true}}
-  :logseq.kv/graph-initial-schema-version {:doc "Graph's schema version when created"})
+  :logseq.kv/graph-initial-schema-version {:doc "Graph's schema version when created"}
+  :logseq.kv/graph-last-gc-at             {:doc "Last time graph gc at"
+                                           :rtc {:rtc/ignore-entity-when-init-upload true
+                                                 :rtc/ignore-entity-when-init-download true}})

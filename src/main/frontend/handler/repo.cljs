@@ -217,3 +217,11 @@
 (defn fix-broken-graph!
   [graph]
   (state/<invoke-db-worker :thread-api/fix-broken-graph graph))
+
+(defn gc-graph!
+  [graph]
+  (p/do!
+   (state/<invoke-db-worker :thread-api/gc-graph graph)
+   (state/pub-event! [:notification/show
+                      {:content "Graph gc successfully!"
+                       :status :success}])))

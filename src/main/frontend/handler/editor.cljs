@@ -2593,8 +2593,14 @@
                           (string/trim value)))
                (save-block! repo uuid value))
 
-             (if property-value-container?
+             (cond
+               (dom/has-class? sibling-block "block-add-button")
+               (.click sibling-block)
+
+               property-value-container?
                (focus-trigger current-block sibling-block)
+
+               :else
                (let [new-uuid (cljs.core/uuid sibling-block-id)
                      block (db/entity [:block/uuid new-uuid])]
                  (edit-block! block
@@ -2650,18 +2656,25 @@
                               (first (dom/by-class sibling-block "ls-block"))))
                           sibling-block)]
     (when sibling-block
-      (if-let [sibling-block-id (dom/attr sibling-block "blockid")]
-        (do
-          (let [content (:block/title block)
-                value (state/get-edit-content)]
-            (when (and value (not= (clean-content! repo format content) (string/trim value)))
-              (save-block! repo uuid value)))
-
+      (let [content (:block/title block)
+            value (state/get-edit-content)]
+        (when (and value (not= (clean-content! repo format content) (string/trim value)))
+          (save-block! repo uuid value)))
+      (let [sibling-block-id (dom/attr sibling-block "blockid")]
+        (cond
+          sibling-block-id
           (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
                 block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]
-            (edit-block! block pos {:container-id container-id})))
-        (when (property-value-node? sibling-block)
-          (focus-trigger editing-block sibling-block))))))
+            (edit-block! block pos {:container-id container-id}))
+
+          (property-value-node? sibling-block)
+          (focus-trigger editing-block sibling-block)
+
+          (dom/has-class? sibling-block "block-add-button")
+          (.click sibling-block)
+
+          :else
+          nil)))))
 
 (defn keydown-arrow-handler
   [direction]
@@ -3887,9 +3900,11 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
+     (and (or (:list-view? config) (:ref? config))
+          (integer? (:block-level config))
+          (>= (:block-level config) (state/get-ref-open-blocks-level)))
      (and (or (:view? config) (:popup? config))
           (or (ldb/page? block)
-              (some? (:block/_parent block))
               (:table-block-title? config))))))
 
 (defn batch-set-heading!

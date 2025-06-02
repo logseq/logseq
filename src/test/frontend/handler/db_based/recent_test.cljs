@@ -1,9 +1,9 @@
 (ns frontend.handler.db-based.recent-test
-  (:require [frontend.handler.db-based.recent :as db-recent-handler]
-            [clojure.test :refer [deftest is testing use-fixtures]]
-            [frontend.test.helper :as test-helper]
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.handler.db-based.recent :as db-recent-handler]
+            [frontend.test.helper :as test-helper]))
 
 (def init-data (test-helper/initial-test-page-and-blocks))
 (defn start-and-destroy-db
@@ -19,7 +19,7 @@
     (let [pages (map (fn [i] (str "Page " i)) (range 15))]
       ;; create pages
       (doseq [page pages]
-        (test-helper/create-page! page {:redirect? false :create-first-block? false :class? true})
+        (test-helper/create-page! page {:redirect? false})
         (db-recent-handler/add-page-to-recent! (:db/id (db/get-page page)) false))
       (is (= (map :block/title (db-recent-handler/get-recent-pages)) (reverse pages)))
       (testing "Click existing recent item shouldn't update its position"

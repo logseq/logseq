@@ -599,6 +599,10 @@
                           :db-graph? true
                           :fn #(repo-handler/fix-broken-graph! (state/get-current-repo))}
 
+   :dev/gc-graph {:binding []
+                  :inactive (not (state/developer-mode?))
+                  :fn #(repo-handler/gc-graph! (state/get-current-repo))}
+
    :dev/replace-graph-with-db-file {:binding []
                                     :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
                                     :fn :frontend.handler.common.developer/replace-graph-with-db-file}
@@ -876,6 +880,7 @@
           :dev/replace-graph-with-db-file
           :dev/validate-db
           :dev/fix-broken-graph
+          :dev/gc-graph
           :dev/rtc-stop
           :dev/rtc-start
           :ui/customize-appearance])
@@ -1072,6 +1077,7 @@
      :dev/replace-graph-with-db-file
      :dev/validate-db
      :dev/fix-broken-graph
+     :dev/gc-graph
      :dev/rtc-stop
      :dev/rtc-start
      :ui/clear-all-notifications]

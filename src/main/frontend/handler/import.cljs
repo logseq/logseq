@@ -69,7 +69,6 @@
      (try (page-handler/<create! title {:redirect?           false
                                         :format              page-format
                                         :uuid                uuid
-                                        :create-first-block? false
                                         :properties          properties
                                         :whiteboard?         whiteboard?})
           (catch :default e
