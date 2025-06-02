@@ -240,7 +240,8 @@
           m* (cond->
               (-> data'
                   (dissoc :block/children :block/meta :block/unordered
-                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
+                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?
+                          :block.temp/has-children?)
                   common-util/remove-nils
 
                   (fix-tag-ids db {:db-graph? db-based?}))
