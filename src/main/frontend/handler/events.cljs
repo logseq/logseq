@@ -227,9 +227,7 @@
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 1))
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
-      (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
-      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-        (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))))
+      (set! (.. main-node -style -marginBottom) (str keyboard-height "px")))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
@@ -246,9 +244,7 @@
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
-      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-        (set! (.. toolbar -style -bottom) 0)))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)

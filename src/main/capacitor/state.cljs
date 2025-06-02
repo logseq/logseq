@@ -10,8 +10,6 @@
   [tab]
   (reset! *tab tab))
 
-(defn use-tab [] (r/use-atom *tab))
-
 (defonce *modal-data (atom nil))
 (defn set-modal!
   [data]

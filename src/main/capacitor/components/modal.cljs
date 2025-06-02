@@ -19,7 +19,7 @@
       :presenting-element presenting-element
       :onDidDismiss (fn [] (state/set-modal! nil))
       :expand "block"}
-     (ion/content {:class "ion-padding"}
+     (ion/content {:class "ion-padding scrolling"}
                   (ui/classic-app-container-wrap
                    (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
                   (mobile-bar/mobile-bar)
