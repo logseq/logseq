@@ -8,6 +8,9 @@
   borkdude/rewrite-edn {:mvn/version "0.4.9"}
   logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
                                          :sha     "1087f0fb18aa8e25ee3bbbb0db983b7a29bce270"}
-  io.github.nextjournal/nbb-test-runner
-  {:git/sha "012017a8a8983d05f905f38f631f5222f25b9ed9"}
+  ;; TODO: Remove fork once https://github.com/nextjournal/nbb-test-runner/pull/3 is merged
+  io.github.logseq-cldwalker/nbb-test-runner
+  {:git/sha "581c88fdedd928c595ec0288a4d1b7c2ed36095d"}
+;;   io.github.nextjournal/nbb-test-runner
+;;   {:git/sha "012017a8a8983d05f905f38f631f5222f25b9ed9"}
   io.github.pez/baldr {:mvn/version "1.0.9"}}}
