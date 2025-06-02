@@ -27,7 +27,7 @@ html.plt-capacitor.plt-android {
 html.has-mobile-keyboard {
   .ion-page:not(.ion-page-hidden) {
     & > ion-content::part(scroll) {
-      padding-bottom: 512px !important;
+      padding-bottom: 100px !important;
     }
   }
 }

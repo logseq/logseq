@@ -45,7 +45,7 @@
          recent-pages)))
 
 (rum/defc search
-  []
+  [*page]
   (let [*ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
@@ -73,7 +73,8 @@
             (js/clearTimeout timeout))))
      [(hooks/use-debounced-value input 150)])
     (ion/page
-     {:id "search-tab"}
+     {:id "search-tab"
+      :ref *page}
      (ion/header
       (ion/toolbar
        (ion/searchbar
