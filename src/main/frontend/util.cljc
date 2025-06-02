@@ -1545,5 +1545,5 @@ Arg *stop: atom, reset to true to stop the loop"
    (defn mobile-keep-keyboard-open
      []
      (when mobile?
-       (when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
-         (.focus node)))))
+       (schedule #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
+                    (.focus node))))))
