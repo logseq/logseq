@@ -15,6 +15,7 @@
 (defn nav-length? []
   (some-> ^js @state/*nav-root (.getLength)))
 
-(defn nav-to-block!
-  [page-or-block]
-  (nav-push! #(page/page page-or-block)))
+(comment
+  (defn nav-to-block!
+    [page-or-block]
+    (nav-push! #(page/page page-or-block))))

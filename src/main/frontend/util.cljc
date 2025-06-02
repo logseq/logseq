@@ -94,7 +94,7 @@
 #?(:cljs
    (defn current-page-scroll
      []
-     (some-> (js/document.querySelector "ion-nav > .ion-page:not(.ion-page-hidden)")
+     (some-> (js/document.querySelector ".ion-page:not(.ion-page-hidden)")
              (.querySelector "ion-content")
              (.-shadowRoot)
              (.querySelector "[part=scroll]"))))
