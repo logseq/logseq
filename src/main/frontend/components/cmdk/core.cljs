@@ -539,8 +539,7 @@
     (p/let [result (cond
                      create-class?
                      (db-page-handler/<create-class! class
-                                                     {:redirect? false
-                                                      :create-first-block? false})
+                                                     {:redirect? false})
                      create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
                      create-page? (page-handler/<create! @!input {:redirect? true}))]
       (shui/dialog-close! :ls-dialog-cmdk)

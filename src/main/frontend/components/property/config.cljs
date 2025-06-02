@@ -76,8 +76,7 @@
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false
-                                                                :create-first-block? false})]
+        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false})]
           (:block/uuid page))))))
 
 (rum/defc class-select
