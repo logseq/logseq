@@ -109,7 +109,8 @@
   (when (and (some? property-name) (not= property-name (:block/title property)))
     (outliner-validate/validate-page-title property-name {:node property})
     (outliner-validate/validate-page-title-characters property-name {:node property})
-    (outliner-validate/validate-block-title @conn property-name property))
+    (outliner-validate/validate-block-title @conn property-name property)
+    (outliner-validate/validate-property-title property-name))
 
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp

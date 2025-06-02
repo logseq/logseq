@@ -8,7 +8,8 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api validate-page-title-characters
   "Validates characters that must not be in a page title"
@@ -138,11 +139,20 @@
                                :type :warning}}))))
 
 (defn validate-block-title
-  "Validates a block title when it has changed"
+  "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
   (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
+
+(defn validate-property-title
+  "Validates a property's title when it has changed"
+  [new-title]
+  (when-not (db-property/valid-property-name? new-title)
+    (throw (ex-info "Property name is invalid"
+                    {:type :notification
+                     :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                               :type :error}}))))
 
 (defn- validate-parent-property-have-same-type
   "Validates whether given parent and children are valid. Allows 'class' and
