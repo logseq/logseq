@@ -67,9 +67,9 @@ const common = {
         'packages/amplify/dist/amplify.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
-        'node_modules/pdfjs-dist/build/pdf.js',
-        'node_modules/pdfjs-dist/build/pdf.worker.js',
-        'node_modules/pdfjs-dist/web/pdf_viewer.js'
+        'node_modules/pdfjs-dist/legacy/build/pdf.mjs',
+        'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+        'node_modules/pdfjs-dist/legacy/web/pdf_viewer.mjs',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
       () => gulp.src([
         'node_modules/pdfjs-dist/cmaps/*.*',

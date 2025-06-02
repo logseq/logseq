@@ -96,16 +96,16 @@
   [^js viewer]
   (when-let [^js doc (and viewer (.-pdfDocument viewer))]
     (p/create
-      (fn [resolve]
-        (p/catch
-          (p/then (.getMetadata doc)
-                  (fn [^js r]
-                    (js/console.debug "[metadata] " r)
-                    (when-let [^js info (and r (.-info r))]
-                      (resolve (bean/->clj info)))))
-          (fn [e]
-            (resolve nil)
-            (js/console.error e)))))))
+     (fn [resolve]
+       (p/catch
+        (p/then (.getMetadata doc)
+                (fn [^js r]
+                  (js/console.debug "[metadata] " r)
+                  (when-let [^js info (and r (.-info r))]
+                    (resolve (bean/->clj info)))))
+        (fn [e]
+          (resolve nil)
+          (js/console.error e)))))))
 
 (defn clear-all-selection
   []
@@ -113,7 +113,7 @@
 
 (def adjust-viewer-size!
   (util/debounce
-    200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+   200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
 
 (defn fix-nested-js
   [its]
@@ -122,11 +122,6 @@
 
 (defn gen-uuid []
   (d/squuid))
-
-(defn load-base-assets$
-  []
-  (p/let [_ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf.js"))
-          _ (util/js-load$ (str util/JS_ROOT "/pdfjs/pdf_viewer.js"))]))
 
 (defn get-page-from-el
   [^js/HTMLElement el]
@@ -200,8 +195,8 @@
     (catch js/Error _e nil)))
 
 (comment
- (fix-selection-text-breakline "this is a\ntest paragraph")
- (fix-selection-text-breakline "he is 1\n8 years old")
- (fix-selection-text-breakline "这是一个\n\n段落")
- (fix-selection-text-breakline "これ\n\nは、段落")
- (fix-selection-text-breakline "this is a te-\nst paragraph"))
+  (fix-selection-text-breakline "this is a\ntest paragraph")
+  (fix-selection-text-breakline "he is 1\n8 years old")
+  (fix-selection-text-breakline "这是一个\n\n段落")
+  (fix-selection-text-breakline "これ\n\nは、段落")
+  (fix-selection-text-breakline "this is a te-\nst paragraph"))
