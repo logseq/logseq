@@ -83,6 +83,11 @@
     {:tab "settings"}
     (ion/tabler-icon "settings" {:size 22}) "Settings")))
 
+(rum/defc keep-keyboard-open
+  []
+  [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
+   {:id "app-keep-keyboard-open-input"}])
+
 (rum/defc journals < rum/reactive
   []
   (let [show-action-bar? (fstate/sub :mobile/show-action-bar?)]
@@ -195,6 +200,7 @@
        (settings/page)))
      (bottom-tabs)
 
+     (keep-keyboard-open)
      (ui-component/install-notifications)
      (ui-component/install-modals)
 
