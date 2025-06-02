@@ -166,7 +166,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-    (test-helper/create-page! page-name {:redirect? false})
+    (test-helper/create-page! page-name {:redirect? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
