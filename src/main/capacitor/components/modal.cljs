@@ -1,5 +1,6 @@
 (ns capacitor.components.modal
   (:require ["../externals.js"]
+            [capacitor.components.ui :as ui]
             [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [frontend.components.page :as page]
@@ -19,7 +20,8 @@
       :onDidDismiss (fn [] (state/set-modal! nil))
       :expand "block"}
      (ion/content {:class "ion-padding"}
-                  (page/page-cp (db/entity [:block/uuid (:block/uuid block)]))
+                  (ui/classic-app-container-wrap
+                   (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
                   (mobile-bar/mobile-bar)
                   (when show-action-bar?
                     (action-bar/action-bar))))))
