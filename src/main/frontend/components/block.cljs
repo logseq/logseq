@@ -2115,7 +2115,9 @@
                         (or ref? query?)
                         (assoc :ref-query-child? true)
                         true
-                        (assoc :block-children? true))]
+                        (assoc :block-children? true)
+                        (integer? (:block-level config))
+                        (update :block-level inc))]
           (block-list config' children))]])))
 
 (defn- block-content-empty?

@@ -28,11 +28,11 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.page :as page-util]
+            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
@@ -278,7 +278,6 @@
                      (when-not (de/entity? chosen-result)
                        (<create! chosen'
                                  {:redirect? false
-                                  :create-first-block? false
                                   :split-namespace? true})))
             ref-text' (if result
                         (let [title (:block/title result)]
@@ -335,9 +334,6 @@
                          (p/do!
                           (<create! title {:redirect? false
                                            :split-namespace? false
-                                           :create-first-block? (if db-based?
-                                                                  true
-                                                                  (not (state/get-default-journal-template)))
                                            :today-journal? true})
                           (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
                           (ui-handler/re-render-root!)

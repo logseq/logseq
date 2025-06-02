@@ -15,8 +15,7 @@
    [logseq.e2e.rtc :as rtc]
    [logseq.e2e.settings :as settings]
    [logseq.e2e.util :as util]
-   [wally.main :as w]
-   [wally.repl :as repl]))
+   [wally.main :as w]))
 
 (defn- prepare-rtc-graph-fixture
   "open 2 app instances, add a rtc graph, check this graph available on other instance"

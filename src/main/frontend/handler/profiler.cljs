@@ -84,7 +84,7 @@
                                    (when (> coll-size data-count-threshold)
                                      (vswap! *ref-hash->coll-size assoc @*ref-hash coll-size)
                                      (vswap! *ref-hash->ref assoc @*ref-hash ref))
-                                   (let [watches-count (count (.-watches ref))]
+                                   (let [watches-count (count (.-watches ^js ref))]
                                      (when (> watches-count watches-count-threshold)
                                        (vswap! *ref-hash->watches-count assoc @*ref-hash watches-count)
                                        (vswap! *ref-hash->ref assoc @*ref-hash ref))))))
@@ -120,5 +120,4 @@
                 :custom-key-fn (fn [args result] {:a args :r result}))
 
   (mem-leak-detect)
-  [@*ref-hash->coll-size @*ref-hash->watches-count]
-  )
+  [@*ref-hash->coll-size @*ref-hash->watches-count])

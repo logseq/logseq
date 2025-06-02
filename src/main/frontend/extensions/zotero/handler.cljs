@@ -9,8 +9,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
+            [frontend.util.ref :as ref]
             [promesa.core :as p]))
 
 ;; TODO: test
@@ -64,7 +64,6 @@
    page-name
    {:redirect? false
     :format :markdown
-    :create-first-block? false
     :properties properties}))
 
 (defn create-zotero-page

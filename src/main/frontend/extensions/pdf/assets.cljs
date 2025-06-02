@@ -19,10 +19,10 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.publishing.db :as publish-db]
@@ -49,9 +49,9 @@
         url       (if blob-res? href
                       (assets-handler/normalize-asset-resource-url original-path))
         filename' (if (or asset-res? web-link? blob-res?) filename
-                    (some-> url (js/decodeURIComponent)
-                      (get-in-repo-assets-full-filename)
-                      (string/replace '"/" "_")))
+                      (some-> url (js/decodeURIComponent)
+                              (get-in-repo-assets-full-filename)
+                              (string/replace '"/" "_")))
         filekey   (util/safe-sanitize-file-name
                    (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
@@ -93,7 +93,7 @@
         (if-not page
           (let [label (:filename pdf-current)]
             (p/do!
-             (page-handler/<create! page-name {:redirect?        false :create-first-block? false
+             (page-handler/<create! page-name {:redirect?        false
                                                :split-namespace? false
                                                :format           format
                                                :properties       {:file
