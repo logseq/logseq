@@ -619,7 +619,7 @@ should be done through this fn in order to get global config and config defaults
   []
   (or
    (when-let [value (:ref/default-open-blocks-level (get-config))]
-     (when (integer? value)
+     (when (pos-int? value)
        (min value 9)))
    2))
 
