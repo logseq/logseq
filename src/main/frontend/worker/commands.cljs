@@ -168,7 +168,7 @@
                                             {:page-uuid (:block/uuid (d/entity db journal-day))}
                                             (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
                                                   title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
-                                              (worker-db-page/create db title {:create-first-block? false})))
+                                              (worker-db-page/create db title {})))
               value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat
            tx-data

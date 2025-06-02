@@ -4,11 +4,11 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.fs :as fs]
-            [frontend.handler.block :as block-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
@@ -39,12 +39,11 @@
 (defn <create!
   ([title]
    (<create! title {}))
-  ([title {:keys [redirect?]
+  ([title {:keys [redirect? today-journal?]
            :or   {redirect? true}
            :as options}]
    (when (string? title)
      (p/let [repo (state/get-current-repo)
-             conn (db/get-db repo false)
              db-based? (config/db-based-graph? repo)
              title (if (and db-based? (string/includes? title " #")) ; tagged page
                      (wrap-tags title)
@@ -70,8 +69,14 @@
                    page (db/get-page (or page-uuid title'))]
              (when redirect?
                (route-handler/redirect-to-page! page-uuid)
-               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-                 (block-handler/edit-block! first-block :max {:container-id :unknown-container})))
+               (when-not today-journal?
+                 (js/setTimeout
+                  (fn []
+                    (when-let [block-add-button (->> (dom/sel ".block-add-button")
+                                                     (filter #(= (str (:db/id page)) (dom/attr % "data-blockId")))
+                                                     first)]
+                      (.click block-add-button)))
+                  200)))
              page)))))))
 
 ;; favorite fns
