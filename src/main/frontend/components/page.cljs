@@ -136,7 +136,7 @@
      [:div.flex.flex-row
       [:div.flex.items-center {:style {:height 28
                                        :margin-left (if (util/mobile?) 0 22)}}
-       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
+       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100
         [:span.bullet]]]]]))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
