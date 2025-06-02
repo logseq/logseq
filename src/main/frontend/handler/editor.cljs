@@ -67,7 +67,6 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.popup.core :as shui-popup]
-            ;; [capacitor.components.common :as cc-common]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -508,18 +507,19 @@
 
                           :else
                           insert-new-block-aux!)
-              [result-promise sibling? next-block] (insert-fn config block'' value)]
+              [result-promise sibling? next-block] (insert-fn config block'' value)
+              edit-block-f (fn []
+                             (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
+                                   pos 0
+                                   unsaved-chars @(:editor/async-unsaved-chars @state/state)
+                                   container-id (get-new-container-id :insert {:sibling? sibling?})]
+                               (edit-block! next-block' (+ pos (count unsaved-chars))
+                                            {:container-id container-id
+                                             :custom-content (str unsaved-chars (:block/title next-block'))})))]
           (p/do!
+           (state/set-state! :editor/edit-block-fn edit-block-f)
            result-promise
-           (clear-when-saved!)
-           (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
-                 pos 0
-                 unsaved-chars @(:editor/async-unsaved-chars @state/state)
-                 container-id (get-new-container-id :insert {:sibling? sibling?})]
-             ;; (when (util/mobile?) (cc-common/keep-keyboard-open nil))
-             (edit-block! next-block' (+ pos (count unsaved-chars))
-                          {:container-id container-id
-                           :custom-content (str unsaved-chars (:block/title next-block'))}))))))
+           (clear-when-saved!)))))
     (p/finally (fn []
                  (state/set-state! :editor/async-unsaved-chars nil))))))
 
