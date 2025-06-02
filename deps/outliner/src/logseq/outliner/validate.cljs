@@ -139,7 +139,7 @@
                                :type :warning}}))))
 
 (defn validate-block-title
-  "Validates a block title when it has changed for a ldb/page? or tagged node"
+  "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
   (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
