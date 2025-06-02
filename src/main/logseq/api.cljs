@@ -656,7 +656,7 @@
   [name ^js properties ^js opts]
   (let [properties (bean/->clj properties)
         db-base? (config/db-based-graph? (state/get-current-repo))
-        {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
+        {:keys [redirect format journal]} (bean/->clj opts)]
     (p/let [page (<pull-block name)
             new-page (when-not page
                        (page-handler/<create!
@@ -664,7 +664,6 @@
                         (cond->
                          {:redirect? (if (boolean? redirect) redirect true)
                           :journal? journal
-                          :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                           :format format}
                           (not db-base?)
                           (assoc :properties properties))))
@@ -741,7 +740,7 @@
                 page-name              (when page-name (util/page-name-sanity-lc page-name))
                 _                      (when (and page-name
                                                   (nil? (ldb/get-page (db/get-db) page-name)))
-                                         (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
+                                         (page-handler/<create! block-uuid-or-page-name {}))
                 custom-uuid            (or customUUID (:id properties))
                 custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
                 edit-block?            (if (nil? focus) true focus)
@@ -1067,7 +1066,6 @@
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
                                                                       {:redirect?           false
-                                                                       :create-first-block? false
                                                                        :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
       (-> (api-block/<sync-children-blocks! block)
@@ -1085,7 +1083,6 @@
           page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
           _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
                                                                       {:redirect?           false
-                                                                       :create-first-block? false
                                                                        :format              (state/get-preferred-format)}))]
     (when-let [block (db-model/get-page uuid-or-page-name)]
       (let [target   (str (:block/uuid block))]

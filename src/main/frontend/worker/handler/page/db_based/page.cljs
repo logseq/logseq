@@ -7,13 +7,11 @@
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.text :as text]
             [logseq.outliner.validate :as outliner-validate]))
@@ -74,16 +72,6 @@
                        (string/replace #"^#+" ""))
         title      (common-util/remove-boundary-slashes title)]
     title))
-
-(defn build-first-block-tx
-  [page-uuid]
-  (let [page-id [:block/uuid page-uuid]]
-    [(sqlite-util/block-with-timestamps
-      {:block/uuid (ldb/new-block-id)
-       :block/page page-id
-       :block/parent page-id
-       :block/order (db-order/gen-key nil nil)
-       :block/title ""})]))
 
 (defn- get-page-by-parent-name
   [db parent-title child-title]
@@ -168,10 +156,9 @@
 (defn create
   "Pure function without side effects"
   [db title*
-   {:keys [create-first-block? tags properties uuid persist-op? whiteboard?
+   {:keys [tags properties uuid persist-op? whiteboard?
            class? today-journal? split-namespace?]
-    :or   {create-first-block?      true
-           properties               nil
+    :or   {properties               nil
            uuid                     nil
            persist-op?              true}
     :as options}]
@@ -221,17 +208,10 @@
 
           (let [page-uuid (:block/uuid page)
                 page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
-                first-block-tx (when (and
-                                      (nil? (d/entity db [:block/uuid page-uuid]))
-                                      create-first-block?
-                                      (not (or whiteboard? class?))
-                                      page-txs)
-                                 (build-first-block-tx (:block/uuid (first page-txs))))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents)
-                          page-txs
-                          first-block-tx)
+                          page-txs)
                 tx-meta (cond-> {:persist-op? persist-op?
                                  :outliner-op :create-page}
                           today-journal?
