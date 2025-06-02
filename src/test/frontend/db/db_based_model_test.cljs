@@ -22,7 +22,7 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-all-classes-test
-  (let [opts {:redirect? false}
+  (let [opts {:redirect? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)]
     (is (= (set
