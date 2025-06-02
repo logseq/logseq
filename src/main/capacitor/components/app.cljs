@@ -152,7 +152,8 @@
      (ion/content
       [:strong.flex.justify-center.items-center.py-24
        (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
-     (ion/content (journals)))))
+     (ion/content {:class "ion-padding"}
+                  (journals)))))
 
 (rum/defc home < rum/reactive
   {:did-mount (fn [state]
