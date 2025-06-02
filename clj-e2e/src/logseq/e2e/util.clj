@@ -98,11 +98,11 @@
 (defn blocks-count
   "Blocks count including page title"
   []
-  (count-elements ".ls-block:not(.ls-dummy-block)"))
+  (count-elements ".ls-block:not(.block-add-button)"))
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .ls-block:not(.ls-dummy-block)"))
+  (count-elements ".ls-page-blocks .ls-block:not(.block-add-button)"))
 
 (defn exit-edit
   []

@@ -99,54 +99,44 @@
 
 (declare page-cp)
 
-(if config/publishing?
-  (rum/defc dummy-block
-    [_page _container-id]
-    [:div])
-
-  (rum/defc dummy-block
-    [page container-id]
-    (let [insert-new-block! (fn []
-                              (state/set-state! :editor/container-id container-id)
-                              (editor-handler/api-insert-new-block! "" {:page (:block/uuid page)}))]
-      [:div.ls-block.ls-dummy-block.flex-1.flex-col.rounded-sm.cursor-text.!py-0
-       {:data-pageId (:db/id page)
-        :on-click (fn [_e] (insert-new-block!))
-        :on-key-down (fn [e]
-                       (when (= "Enter" (util/ekey e))
-                         (insert-new-block!)))
-        :tab-index 0}
-       [:div.flex.flex-row.block-content
-        {:style {:height 28}}
-        [:div.flex.items-center {:style {:margin-left 22}}
-         [:span.bullet-container.cursor
-          [:span.bullet]]]]])))
-
 (rum/defc add-button
-  [args container-id]
+  [block container-id]
   (let [*ref (rum/use-ref nil)
-        *bullet-ref (rum/use-ref nil)]
-    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap.ls-block
-     {:ref *ref
+        has-children? (:block/_parent block)]
+    [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
+     {:class (if has-children?
+               "opacity-0"
+               "opacity-50")
+      :data-blockId (:db/id block)
+      :ref *ref
       :on-click (fn [e]
                   (util/stop e)
                   (state/set-state! :editor/container-id container-id)
-                  (editor-handler/api-insert-new-block! "" args))
+                  (editor-handler/api-insert-new-block! ""
+                                                        {:block-uuid (:block/uuid block)}))
       :on-mouse-over (fn []
-                       (when-let [prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
-                         (when-not (dom/has-class? prev-block "is-blank")
-                           (dom/add-class! (rum/deref *bullet-ref) "opacity-50"))))
-      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-50")
+                       (let [ref (rum/deref *ref)
+                             prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                         (cond
+                           (and prev-block (dom/has-class? prev-block "is-blank"))
+                           (dom/add-class! ref "opacity-0")
+                           (and prev-block has-children?)
+                           (dom/add-class! ref "opacity-50")
+                           :else
+                           (dom/add-class! ref "opacity-100"))))
+      :on-mouse-leave #(do
+                         (dom/remove-class! (rum/deref *ref) "opacity-50")
+                         (dom/remove-class! (rum/deref *ref) "opacity-100"))
       :on-key-down (fn [e]
                      (util/stop e)
                      (when (= "Enter" (util/ekey e))
                        (state/set-state! :editor/container-id container-id)
-                       (editor-handler/api-insert-new-block! "" args)))
+                       (editor-handler/api-insert-new-block! "" block)))
       :tab-index 0}
-     [:div.flex.flex-row
+     [:div.flex.flex-row.block-content
       [:div.flex.items-center {:style {:height 28
                                        :margin-left 22}}
-       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
+       [:span.bullet-container
         [:span.bullet]]]]]))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
@@ -178,8 +168,9 @@
       (cond
         (and
          (not block?)
+         (not config/publishing?)
          (empty? children) block)
-        (dummy-block block (:container-id config))
+        (add-button block (:container-id config))
 
         :else
         (let [document-mode? (state/sub :document/mode?)
@@ -192,12 +183,9 @@
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
-          (let [add-button? (not config/publishing?)]
-            [:div.relative
-             {:class (when add-button? "show-add-button")}
-             (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-             (let [args {:block-uuid block-id}]
-               (add-button args (:container-id config)))]))))))
+          [:div.relative
+           (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
+           (add-button block (:container-id config))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]

@@ -72,10 +72,10 @@
                (when-not today-journal?
                  (js/setTimeout
                   (fn []
-                    (when-let [dummy-block (->> (dom/sel ".ls-dummy-block")
-                                                (filter #(= (str (:db/id page)) (dom/attr % "data-pageId")))
-                                                first)]
-                      (.click dummy-block)))
+                    (when-let [block-add-button (->> (dom/sel ".block-add-button")
+                                                     (filter #(= (str (:db/id page)) (dom/attr % "data-blockId")))
+                                                     first)]
+                      (.click block-add-button)))
                   200)))
              page)))))))
 

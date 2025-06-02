@@ -2591,7 +2591,7 @@
                (save-block! repo uuid value))
 
              (cond
-               (dom/has-class? sibling-block "ls-dummy-block")
+               (dom/has-class? sibling-block "block-add-button")
                (.click sibling-block)
 
                property-value-container?
@@ -2667,7 +2667,7 @@
           (property-value-node? sibling-block)
           (focus-trigger editing-block sibling-block)
 
-          (dom/has-class? sibling-block "ls-dummy-block")
+          (dom/has-class? sibling-block "block-add-button")
           (.click sibling-block)
 
           :else
