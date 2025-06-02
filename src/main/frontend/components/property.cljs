@@ -558,7 +558,7 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties? page-title?] :as opts}]
+  [state _target-block {:keys [sidebar-properties?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -580,7 +580,7 @@
                                ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
                                (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
-                          (when-not (or sidebar-properties? page-title?
+                          (when-not (or sidebar-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
@@ -604,8 +604,8 @@
                                      state-hide-empty-properties?
                                      (nil? (get block property-id))
                                      :else
-                                     ;; For sidebar and page properties, ignore these checks
-                                     (when-not (or sidebar-properties? page-title?)
+                                     ;; sidebar properties ignore these checks
+                                     (when-not sidebar-properties?
                                        (cond
                                          root-block?
                                          false
