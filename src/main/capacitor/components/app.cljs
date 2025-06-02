@@ -152,7 +152,7 @@
      (ion/content
       [:strong.flex.justify-center.items-center.py-24
        (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
-     (ion/content {:class "ion-padding"}
+     (ion/content {:class "scrolling ion-padding"}
                   (journals)))))
 
 (rum/defc home < rum/reactive
@@ -223,10 +223,11 @@
   []
   (let [current-repo (fstate/sub :git/current-repo)
         show-action-bar? (fstate/sub :mobile/show-action-bar?)
-        {:keys [open?]} (rum/react state/*modal-data)]
+        {:keys [open?]} (rum/react state/*modal-data)
+        search? (= "search" (rum/react state/*tab))]
     (ion/app
      (tabs current-repo)
-     (when-not open?
+     (when-not (or open? search?)
        [:<>
         (mobile-bar/mobile-bar)
         (when show-action-bar?

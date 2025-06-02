@@ -94,10 +94,13 @@
 #?(:cljs
    (defn current-page-scroll
      []
-     (some-> (js/document.querySelector ".ion-page:not(.ion-page-hidden)")
-             (.querySelector "ion-content")
+     (some-> (or
+              (js/document.querySelector "ion-modal.show-modal")
+              (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
+             (.querySelector "ion-content.scrolling")
              (.-shadowRoot)
              (.querySelector "[part=scroll]"))))
+
 #?(:cljs (defn app-scroll-container-node
            ([]
             (if (capacitor-new?)
