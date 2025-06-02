@@ -75,15 +75,11 @@
                              (util/scroll-editor-cursor input :to-vw-one-quarter? true)
                              (.focus input)))]
     [(command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) {:icon "brackets"} true)
-     (command #(do (viewport-fn) (editor-handler/toggle-block-reference-embed parent-id)) {:icon "parentheses"} true)
      (command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) {:icon "command"} true)]))
 
 (rum/defc mobile-bar < rum/reactive
   []
   (when (util/capacitor-new?)
-      ;; (and (or (state/sub :mobile/show-toolbar?)
-      ;;          (mobile-util/native-ipad?))
-      ;;     (state/editing?))
     (let [parent-id (state/get-edit-input-id)
           commands' (commands parent-id)]
       [:div#mobile-editor-toolbar
@@ -92,20 +88,14 @@
         (indent-outdent true "indent-increase")
         (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
         (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
-        (command #(if (state/sub :document/mode?)
-                    (editor-handler/insert-new-block! nil)
-                    (commands/simple-insert! parent-id "\n" {})) {:icon "arrow-back"})
-        ;; On mobile devies, some IME(keyboard) uses composing mode.
-        ;; The composing text can be committed by losing focus.
-        ;; 100ms is enough to commit the composing text to db.
         (command #(do
                     (blur-if-compositing)
                     (editor-handler/cycle-todo!))
                  {:icon "checkbox"} true)
-        (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
-        (command history/undo! {:icon "rotate" :class "rotate-180"} true)
-        (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
-        (timestamp-submenu parent-id)
+        ;; (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
+        ;; (command history/undo! {:icon "rotate" :class "rotate-180"} true)
+        ;; (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
+        ;; (timestamp-submenu parent-id)
         (for [command' commands']
           command')]
        [:div.toolbar-hide-keyboard
