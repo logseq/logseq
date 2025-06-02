@@ -1,5 +1,6 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
+            [capacitor.components.modal :as modal]
             [capacitor.components.search :as search]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui-component]
@@ -7,7 +8,6 @@
             [capacitor.state :as state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
-            [frontend.components.page :as page]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.date :as date]
@@ -93,103 +93,74 @@
    [:div.pt-3
     (journal/all-journals)]))
 
-(rum/defc modal < rum/reactive
-  [presenting-element]
-  (let [{:keys [open? block]} (rum/react state/*modal-data)
-        show-action-bar? (fstate/sub :mobile/show-action-bar?)]
-    (ion/modal
-     {:isOpen (boolean open?)
-      :presenting-element presenting-element
-      :onDidDismiss (fn [] (state/set-modal! nil))
-      :expand "block"}
-     (ion/content {:class "ion-padding"}
-                  (page/page-cp (db/entity [:block/uuid (:block/uuid block)]))
-                  (mobile-bar/mobile-bar)
-                  (when show-action-bar?
-                    (action-bar/action-bar))))))
-
 (rum/defc home-inner
-  [db-restoring?]
-  (let [[current-tab] (state/use-tab)
-        search? (= current-tab "search")
-        *page (hooks/use-ref nil)
-        [presenting-element set-presenting-element!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (set-presenting-element! (rum/deref *page)))
-     [])
-    (ion/page
-     {:id "app-main-content"
-      :ref *page}
-     (ion/header
-      (ion/toolbar
-       (ion/buttons {:slot "start"}
-                    (app-graphs-select))
+  [*page db-restoring?]
+  (ion/page
+   {:id "app-main-content"
+    :ref *page}
+   (ion/header
+    (ion/toolbar
+     (ion/buttons {:slot "start"}
+                  (app-graphs-select))
 
-       (ion/buttons {:slot "end"}
-                    (ion/button
-                     {:size "small"
-                      :fill "clear"
-                      :on-click (fn []
-                                  (let [apply-date! (fn [date]
-                                                      (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                                                        (if-let [journal (db/get-page page-name)]
-                                                          (state/open-block-modal! journal)
-                                                          (-> (page-handler/<create! page-name {:redirect? false})
-                                                              (p/then #(state/open-block-modal! (db/get-page page-name)))))))]
+     (ion/buttons {:slot "end"}
+                  (ion/button
+                   {:size "small"
+                    :fill "clear"
+                    :on-click (fn []
+                                (let [apply-date! (fn [date]
+                                                    (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                                                      (if-let [journal (db/get-page page-name)]
+                                                        (state/open-block-modal! journal)
+                                                        (-> (page-handler/<create! page-name {:redirect? false})
+                                                            (p/then #(state/open-block-modal! (db/get-page page-name)))))))]
 
-                                    (if (mobile-util/native-platform?)
-                                      (-> (.showDatePicker mobile-util/ui-local)
-                                          (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
+                                  (if (mobile-util/native-platform?)
+                                    (-> (.showDatePicker mobile-util/ui-local)
+                                        (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
 
-                                      (ui-component/open-modal!
-                                       (fn [{:keys [close!]}]
-                                         (ion/datetime
-                                          {:presentation "date"
-                                           :onIonChange (fn [^js e]
-                                                          (let [val (.-value (.-detail e))]
-                                                            (apply-date! val)
-                                                            (close!)))}))))))}
-                     [:span.text-muted-foreground {:slot "icon-only"}
-                      (ion/tabler-icon "calendar-month" {:size 24})])
+                                    (ui-component/open-modal!
+                                     (fn [{:keys [close!]}]
+                                       (ion/datetime
+                                        {:presentation "date"
+                                         :onIonChange (fn [^js e]
+                                                        (let [val (.-value (.-detail e))]
+                                                          (apply-date! val)
+                                                          (close!)))}))))))}
+                   [:span.text-muted-foreground {:slot "icon-only"}
+                    (ion/tabler-icon "calendar-month" {:size 24})])
 
-                    (let [repo (fstate/get-current-repo)]
-                      [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
-                       (when (and repo
-                                  (ldb/get-graph-rtc-uuid (db/get-db))
-                                  (user-handler/logged-in?)
-                                  (config/db-based-graph? repo)
-                                  (user-handler/team-member?))
-                         [:<>
+                  (let [repo (fstate/get-current-repo)]
+                    [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
+                     (when (and repo
+                                (ldb/get-graph-rtc-uuid (db/get-db))
+                                (user-handler/logged-in?)
+                                (config/db-based-graph? repo)
+                                (user-handler/team-member?))
+                       [:<>
                   ;; (rum/with-key (rtc-collaborators)
                   ;;   (str "collab-" repo))
-                          (rtc-indicator/indicator)
+                        (rtc-indicator/indicator)
                   ;; (when (user-handler/logged-in?)
                   ;;   (rtc-indicator/downloading-detail))
                   ;; (when (user-handler/logged-in?)
                   ;;   (rtc-indicator/uploading-detail))
-                          ])]))))
+                        ])]))))
 
       ;; main content
-     (cond
-       db-restoring?
-       (ion/content
-        [:strong.flex.justify-center.items-center.py-24
-         (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
-       search?
-       ""
-       :else
-       (ion/content
-        (journals)
-        (modal presenting-element))))))
+   (if db-restoring?
+     (ion/content
+      [:strong.flex.justify-center.items-center.py-24
+       (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
+     (ion/content (journals)))))
 
 (rum/defc home < rum/reactive
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
-  []
+  [*page]
   (let [db-restoring? (fstate/sub :db/restoring?)]
-    (home-inner db-restoring?)))
+    (home-inner *page db-restoring?)))
 
 (defn use-theme-effects!
   [current-repo]
@@ -214,31 +185,38 @@
 (rum/defc tabs
   [current-repo]
   (use-theme-effects! current-repo)
-  (ion/tabs
-   {:onIonTabsDidChange (fn [^js e]
-                          (state/set-tab! (.-tab (.-detail e))))}
-   (ion/tab
-    {:tab "home"}
-    (ion/content
-     (home)))
-   (ion/tab
-    {:tab "search"}
-    (ion/content
-     (search/search)))
-   (ion/tab
-    {:tab "settings"}
-    (ion/content
-     (settings/page)))
+  (let [*page (hooks/use-ref nil)
+        [presenting-element set-presenting-element!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (set-presenting-element! (rum/deref *page)))
+     [])
+    (ion/tabs
+     {:onIonTabsDidChange (fn [^js e]
+                            (state/set-tab! (.-tab (.-detail e))))}
+     (ion/tab
+      {:tab "home"}
+      (ion/content
+       (home *page)))
+     (ion/tab
+      {:tab "search"}
+      (ion/content
+       (search/search *page)))
+     (ion/tab
+      {:tab "settings"}
+      (ion/content
+       (settings/page)))
 
-   (bottom-tabs)
+     (bottom-tabs)
 
-   (keep-keyboard-open)
-   (ui-component/install-notifications)
-   (ui-component/install-modals)
+     (keep-keyboard-open)
+     (ui-component/install-notifications)
+     (ui-component/install-modals)
 
-   (shui-toaster/install-toaster)
-   (shui-dialog/install-modals)
-   (shui-popup/install-popups)))
+     (shui-toaster/install-toaster)
+     (shui-dialog/install-modals)
+     (shui-popup/install-popups)
+     (modal/modal presenting-element))))
 
 (rum/defc main < rum/reactive
   []
