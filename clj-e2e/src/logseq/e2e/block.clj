@@ -11,7 +11,8 @@
   []
   (util/double-esc)
   (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+  (let [last-block (last (w/query ".ls-page-blocks .ls-block .block-content"))]
+    (w/click last-block)))
 
 (defn save-block
   [text]

@@ -98,11 +98,11 @@
 (defn blocks-count
   "Blocks count including page title"
   []
-  (count-elements ".ls-block"))
+  (count-elements ".ls-block:not(.ls-dummy-block)"))
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .ls-block"))
+  (count-elements ".ls-page-blocks .ls-block:not(.ls-dummy-block)"))
 
 (defn exit-edit
   []
@@ -132,7 +132,7 @@
 
 (defn get-page-blocks-contents
   []
-  (w/all-text-contents ".ls-page-blocks .ls-block .block-title-wrap"))
+  (w/all-text-contents ".ls-page-blocks .ls-block:not(.ls-dummy-block) .block-title-wrap"))
 
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
@@ -184,7 +184,7 @@
   (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
   ;; wait tag added on ui
   (assert/assert-is-visible
-   (-> ".ls-block"
+   (-> ".ls-block:not(.ls-dummy-block)"
        (loc/filter :has ".editor-wrapper textarea")
        (loc/filter :has (format ".block-tag :text('%s')" tag)))))
 

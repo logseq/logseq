@@ -47,7 +47,7 @@
       ;; Old page deleted
       (is (nil? e1))
       ;; Blocks from both pages have been merged
-      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data))))))))
+      (is (= (count (:block/_page e2)) (dec (count init-data)))))))
 
 (deftest merge-with-empty-page
   (test-helper/create-page! "Existing page" {:redirect? false})
@@ -71,7 +71,7 @@
       ;; Old page deleted
       (is (nil? e1))
       ;; Blocks from both pages have been merged
-      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
+      (is (= (count (:block/_page e2)) (dec (count init-data))))
       ;; Content updated
       (is (= "Block 1 [[Existing page]]" (:block/title (db/entity [:block/uuid fbid])))))))
 

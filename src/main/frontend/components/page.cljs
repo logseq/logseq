@@ -116,7 +116,7 @@
                        (when (= "Enter" (util/ekey e))
                          (insert-new-block!)))
         :tab-index 0}
-       [:div.flex.flex-row
+       [:div.flex.flex-row.block-content
         {:style {:height 28}}
         [:div.flex.items-center {:style {:margin-left 22}}
          [:span.bullet-container.cursor
