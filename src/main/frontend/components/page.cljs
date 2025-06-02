@@ -133,7 +133,7 @@
                        (state/set-state! :editor/container-id container-id)
                        (editor-handler/api-insert-new-block! "" block)))
       :tab-index 0}
-     [:div.flex.flex-row.block-content
+     [:div.flex.flex-row
       [:div.flex.items-center {:style {:height 28
                                        :margin-left 22}}
        [:span.bullet-container

@@ -102,7 +102,7 @@
 
 (defn page-blocks-count
   []
-  (count-elements ".ls-page-blocks .ls-block:not(.block-add-button)"))
+  (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
 
 (defn exit-edit
   []
