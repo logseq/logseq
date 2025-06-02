@@ -95,8 +95,7 @@
   [chosen chosen-result class? edit-content current-pos last-pattern]
   (let [tag (string/trim chosen)
         edit-block (state/get-edit-block)
-        create-opts {:redirect? false
-                     :create-first-block? false}]
+        create-opts {:redirect? false}]
     (when (:block/uuid edit-block)
       (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
                        (if class?

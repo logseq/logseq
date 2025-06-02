@@ -1,12 +1,12 @@
 (ns frontend.worker.handler.page.file-based.rename-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures are]]
-            [frontend.test.helper :as test-helper]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [deftest is testing use-fixtures are]]
             [datascript.core :as d]
             [frontend.db :as db]
-            [clojure.string :as string]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.test.helper :as test-helper]
             [frontend.util :as util]
-            [frontend.worker.handler.page.file-based.rename :as file-page-rename]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.worker.handler.page.file-based.rename :as file-page-rename]))
 
 ;; FIXME: merge properties from both pages
 
@@ -39,7 +39,7 @@
       (is (= "New name" (:block/title (db/entity (:db/id page)))))))
 
   (testing "Merge existing page"
-    (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})
+    (test-helper/create-page! "Existing page" {:redirect? false})
     (let [page (db/get-page "new name")]
       (page-rename (:block/uuid page) "Existing page"))
     (let [e1 (db/get-page "new name")
@@ -47,10 +47,10 @@
       ;; Old page deleted
       (is (nil? e1))
       ;; Blocks from both pages have been merged
-      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data))))))))
+      (is (= (count (:block/_page e2)) (dec (count init-data)))))))
 
 (deftest merge-with-empty-page
-  (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? false})
+  (test-helper/create-page! "Existing page" {:redirect? false})
   (let [page (db/get-page "test")]
     (page-rename (:block/uuid page) "Existing page"))
   (let [e1 (db/get-page "test")
@@ -63,7 +63,7 @@
 (deftest merge-existing-pages-should-update-ref-ids
   (testing "Merge existing page"
     (editor-handler/save-block! repo fbid "Block 1 [[Test]]")
-    (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})
+    (test-helper/create-page! "Existing page" {:redirect? false})
     (let [page (db/get-page "test")]
       (page-rename (:block/uuid page) "Existing page"))
     (let [e1 (db/get-page "test")
@@ -71,7 +71,7 @@
       ;; Old page deleted
       (is (nil? e1))
       ;; Blocks from both pages have been merged
-      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
+      (is (= (count (:block/_page e2)) (dec (count init-data))))
       ;; Content updated
       (is (= "Block 1 [[Existing page]]" (:block/title (db/entity [:block/uuid fbid])))))))
 
@@ -182,8 +182,8 @@
   (are [x y] (= (let [[content old-name new-name] x]
                   (replace-old-page! content old-name new-name))
                 y)
-       ["#foo bla [[foo]] bla #foo" "foo" "bar"]
-       "#bar bla [[bar]] bla #bar"
+    ["#foo bla [[foo]] bla #foo" "foo" "bar"]
+    "#bar bla [[bar]] bla #bar"
 
-       ["#logseq/foo bla [[logseq/foo]] bla [[file:./pages/logseq.foo.org][logseq/foo]] bla #logseq/foo" "logseq/foo" "logseq/bar"]
-       "#logseq/bar bla [[logseq/bar]] bla [[file:./pages/logseq.bar.org][logseq/bar]] bla #logseq/bar"))
+    ["#logseq/foo bla [[logseq/foo]] bla [[file:./pages/logseq.foo.org][logseq/foo]] bla #logseq/foo" "logseq/foo" "logseq/bar"]
+    "#logseq/bar bla [[logseq/bar]] bla [[file:./pages/logseq.bar.org][logseq/bar]] bla #logseq/bar"))
