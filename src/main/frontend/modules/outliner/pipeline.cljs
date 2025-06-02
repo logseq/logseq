@@ -78,6 +78,10 @@
             (state/set-state! :editor/start-pos nil)
 
             (when-not (:graph/importing @state/state)
+              (when-let [editor-block-f @(:editor/edit-block-fn @state/state)]
+                (state/set-state! :editor/edit-block-fn nil)
+                (editor-block-f))
+
               (react/refresh! repo affected-keys)
 
               (when (and state/lsp-enabled?

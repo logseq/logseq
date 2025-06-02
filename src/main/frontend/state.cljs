@@ -186,6 +186,7 @@
       :editor/next-edit-block                (atom nil)
       :editor/raw-mode-block                 (atom nil)
       :editor/virtualized-scroll-fn          nil
+      :editor/edit-block-fn                  (atom nil)
 
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
