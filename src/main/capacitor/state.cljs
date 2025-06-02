@@ -11,3 +11,13 @@
   (reset! *tab tab))
 
 (defn use-tab [] (r/use-atom *tab))
+
+(defonce *modal-data (atom nil))
+(defn set-modal!
+  [data]
+  (reset! *modal-data data))
+
+(defn open-block-modal!
+  [block]
+  (set-modal! {:open? true
+               :block block}))

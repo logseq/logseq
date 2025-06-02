@@ -117,9 +117,7 @@
          (let [block (or source-page source-block)]
            (ion/item
             {:on-click (fn []
-                         (state/set-tab! "home")
-                         (.select (dom/sel1 "ion-tabs") "home")
-                         (nav/nav-to-block! block))}
+                         (state/open-block-modal! block))}
             [:div.flex.flex-col.gap-1.py-1
              (when header
                [:div.opacity-50.text-sm
