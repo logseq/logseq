@@ -2579,6 +2579,7 @@
 
 (defn- block-content-on-pointer-down
   [e block block-id content edit-input-id config]
+  (util/mobile-keep-keyboard-open)
   (when-not (or
              (:closed-values? config)
              (> (count content) (state/block-content-max-length (state/get-current-repo))))

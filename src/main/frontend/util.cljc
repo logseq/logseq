@@ -1540,3 +1540,10 @@ Arg *stop: atom, reset to true to stop the loop"
      [^js target]
      (when target
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
+
+#?(:cljs
+   (defn mobile-keep-keyboard-open
+     []
+     (when mobile?
+       (when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
+         (.focus node)))))
