@@ -22,7 +22,7 @@
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
     :block.temp/ast-title
-    :block.temp/fully-loaded? :block.temp/ast-body
+    :block.temp/fully-loaded? :block.temp/has-children? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
 

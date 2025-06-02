@@ -234,7 +234,8 @@
                             (if (= children-props '[*])
                               (entity->map block)
                               (-> (select-keys block children-props)
-                                  (with-raw-title block))))
+                                  (with-raw-title block)
+                                  (assoc :block.temp/has-children? (some? (:block/_parent block))))))
                           children)))]
         (if children-only?
           {:children children}
