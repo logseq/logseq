@@ -4301,9 +4301,12 @@
                                      (when (not (:block-children? config))
                                        {:top? top?
                                         :bottom? bottom?}))
-        (str (:block/uuid item)
-             (when linked-block
-               (str "-" (:block/uuid original-block))))))))
+        (str
+         (:container-id config)
+         "-"
+         (:block/uuid item)
+         (when linked-block
+           (str "-" (:block/uuid original-block))))))))
 
 (rum/defc block-list
   [config blocks]
