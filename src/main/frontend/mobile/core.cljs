@@ -85,3 +85,7 @@
 
   (when (mobile-util/native-platform?)
     (general-init)))
+
+(defn keyboard-hide
+  []
+  (.hide Keyboard))

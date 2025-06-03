@@ -79,11 +79,8 @@
 
             (when-not (:graph/importing @state/state)
 
-              (let [edit-block-f @(:editor/edit-block-fn @state/state)
-                    delete-blocks? (= (:outliner-op tx-meta) :delete-blocks)]
+              (let [edit-block-f @(:editor/edit-block-fn @state/state)]
                 (state/set-state! :editor/edit-block-fn nil)
-                (when delete-blocks?
-                  (util/mobile-keep-keyboard-open))
                 (react/refresh! repo affected-keys)
                 (when edit-block-f
                   (util/schedule edit-block-f)))
