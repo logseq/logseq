@@ -979,7 +979,8 @@
                                       (assoc :db/id (:db/id b)))))))]
         (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
       (state/set-block-op-type! :copy)
-      (notification/show! "Copied!" :success))))
+      (when-not (util/capacitor-new?)
+        (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
   []
