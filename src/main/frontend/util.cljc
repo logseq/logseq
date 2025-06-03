@@ -1546,7 +1546,12 @@ Arg *stop: atom, reset to true to stop the loop"
 
 #?(:cljs
    (defn mobile-keep-keyboard-open
-     []
-     (when mobile?
-       (schedule #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
-                    (.focus node))))))
+     ([]
+      (mobile-keep-keyboard-open true))
+     ([schedule?]
+      (when mobile?
+        (let [f #(let [node (gdom/getElement "app-keep-keyboard-open-input")]
+                   (if node
+                     (.focus node)
+                     (prn :debug :error "can't find keyboard open input")))]
+          (if schedule? (schedule f) (f)))))))
