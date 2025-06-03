@@ -1,9 +1,8 @@
 (ns capacitor.components.search
-  (:require [capacitor.ionic :as ion]
-            [capacitor.nav :as nav]
+  (:require [capacitor.components.modal :as modal]
+            [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [clojure.string :as string]
-            [dommy.core :as dom]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
@@ -45,8 +44,10 @@
          recent-pages)))
 
 (rum/defc search
-  [*page]
-  (let [*ref (hooks/use-ref nil)
+  []
+  (let [*page (hooks/use-ref nil)
+        [presenting-element set-presenting-element!] (hooks/use-state nil)
+        *ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
         [last-input-at set-last-input-at!] (hooks/use-state nil)
@@ -54,6 +55,10 @@
         result (if (string/blank? input)
                  (get-recent-pages)
                  search-result)]
+    (hooks/use-effect!
+     (fn []
+       (set-presenting-element! (rum/deref *page)))
+     [])
     (hooks/use-effect!
      (fn []
        (let [*timeout (atom nil)]
@@ -126,4 +131,5 @@
              [:div.flex.flex-row.items-center.gap-1
               (when icon (ui/icon icon {:size 14
                                         :class "text-muted-foreground"}))
-              [:div text]]]))))))))
+              [:div text]]]))))
+      (modal/modal presenting-element)))))
