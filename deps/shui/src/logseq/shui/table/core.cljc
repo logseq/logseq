@@ -2,13 +2,16 @@
   "Table"
   (:require [clojure.set :as set]
             [dommy.core :refer-macros [sel1]]
+            [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
 (defn- get-head-container
   []
-  (sel1 "#head"))
+  (if (and js/window (gobj/get js/window "isCapacitorNew"))
+    (sel1 "ion-header")
+    (sel1 "#head")))
 
 (defn- get-main-scroll-container
   []
