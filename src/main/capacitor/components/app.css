@@ -89,7 +89,7 @@ ion-buttons {
 
 ion-tab-bar {
   box-shadow: 0 0 1px #999999;
-  padding-top: 2px;
+  padding-top: 4px;
 
   ion-tab-button {
     @apply opacity-70;
@@ -118,7 +118,7 @@ ion-content {
   }
 
   .ion-page {
-    @apply bg-gray-01;
+    @apply bg-gray-01 -mb-3;
   }
 }
 
