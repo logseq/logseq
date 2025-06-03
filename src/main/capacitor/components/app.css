@@ -112,11 +112,13 @@ ion-content {
       }
     }
   }
-}
 
-ion-modal {
-  &::part(backdrop) {
-    @apply !opacity-30;
+  &::part(background) {
+    @apply !bg-transparent;
+  }
+
+  .ion-page {
+    @apply bg-gray-01;
   }
 }
 
