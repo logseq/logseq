@@ -8,6 +8,14 @@
 import Capacitor
 import Foundation
 
+func isDarkMode() -> Bool {
+    if #available(iOS 12.0, *) {
+        return UITraitCollection.current.userInterfaceStyle == .dark
+    } else {
+        return false
+    }
+}
+
 class DatePickerDialogViewController: UIViewController {
   private let datePicker = UIDatePicker()
   private let dialogView = UIView()
@@ -28,7 +36,23 @@ class DatePickerDialogViewController: UIViewController {
     onDateSelected?(nil)
     dismiss(animated: true, completion: nil)
   }
-
+  
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+          super.traitCollectionDidChange(previousTraitCollection)
+          
+          if #available(iOS 12.0, *) {
+              if traitCollection.userInterfaceStyle != previousTraitCollection?.userInterfaceStyle {
+                  if traitCollection.userInterfaceStyle == .dark {
+                      print("switch to dark mode")
+                    dialogView.backgroundColor = .black
+                  } else {
+                      print("switch to light mode")
+                    dialogView.backgroundColor = .white
+                  }
+              }
+          }
+      }
+  
   func setupImplView() {
     datePicker.datePickerMode = .date
     datePicker.preferredDatePickerStyle = .inline
@@ -40,7 +64,12 @@ class DatePickerDialogViewController: UIViewController {
 
     view.backgroundColor = .black.withAlphaComponent(0.4)
 
-    dialogView.backgroundColor = .white
+    if isDarkMode() {
+      dialogView.backgroundColor = .black
+    } else {
+      dialogView.backgroundColor = .white
+    }
+    
     dialogView.layer.cornerRadius = 10
     dialogView.clipsToBounds = true
     view.addSubview(dialogView)
