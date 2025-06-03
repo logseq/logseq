@@ -865,7 +865,7 @@
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)]
       (p/do!
-       (when sibling-block
+       (when (and sibling-block (not (util/capacitor-new?)))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
                                                           (get block :block/format :markdown)
                                                           "")]

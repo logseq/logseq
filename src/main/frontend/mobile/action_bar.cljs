@@ -3,8 +3,10 @@
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.core :as mobile]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [frontend.util.url :as url-util]
             [rum.core :as rum]))
 
