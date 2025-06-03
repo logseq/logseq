@@ -16,25 +16,57 @@ func isDarkMode() -> Bool {
     }
 }
 
+func isOnlyDayDifferentOrSame(date1: Date, date2: Date) -> Bool {
+    let calendar = Calendar.current
+    let components1 = calendar.dateComponents([.year, .month, .day], from: date1)
+    let components2 = calendar.dateComponents([.year, .month, .day], from: date2)
+    
+    return components1.year == components2.year &&
+           components1.month == components2.month &&
+           (components1.day != components2.day || components1.day == components2.day)
+}
+
+class DatePickerView: UIView {
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = true
+  }
+  
+  required init?(coder: NSCoder) {
+          super.init(coder: coder)
+          isUserInteractionEnabled = true
+      }
+  
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    super.touchesBegan(touches, with: event)
+  }
+}
+
 class DatePickerDialogViewController: UIViewController {
   private let datePicker = UIDatePicker()
-  private let dialogView = UIView()
+  private let dialogView = DatePickerView()
 
+  private var lastDate: Date?
   var onDateSelected: ((Date?) -> Void)?
-
+  
   override func viewDidLoad() {
     super.viewDidLoad()
+    lastDate = datePicker.date
     setupImplView()
   }
 
   @objc private func confirmDate() {
-    onDateSelected?(datePicker.date)
-    dismiss(animated: true, completion: nil)
+    if (isOnlyDayDifferentOrSame(date1: lastDate!, date2: datePicker.date)) {
+      onDateSelected?(datePicker.date)
+      dismiss(animated: false, completion: nil)
+    }
+    
+    lastDate = datePicker.date
   }
 
   @objc private func dismissDialog() {
     onDateSelected?(nil)
-    dismiss(animated: true, completion: nil)
+    dismiss(animated: false, completion: nil)
   }
   
   override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -63,7 +95,8 @@ class DatePickerDialogViewController: UIViewController {
     let view = self.view!
 
     view.backgroundColor = .black.withAlphaComponent(0.4)
-
+    view.isUserInteractionEnabled = true
+    
     if isDarkMode() {
       dialogView.backgroundColor = .black
     } else {
@@ -101,15 +134,16 @@ class DatePickerDialogViewController: UIViewController {
       .required, for: .vertical)
   }
 
+
   override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    super.touchesBegan(touches, with: event)
+    
     if let touch = touches.first {
       let location = touch.location(in: view)
       if !dialogView.frame.contains(location) {
         dismiss(animated: true, completion: nil)
       }
     }
-
-    super.touchesBegan(touches, with: event)
   }
 }
 
@@ -148,7 +182,7 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
       }
 
       presentingViewController.present(
-        viewController, animated: true, completion: nil)
+        viewController, animated: false, completion: nil)
     }
   }
 
