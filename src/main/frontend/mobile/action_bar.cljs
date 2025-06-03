@@ -46,4 +46,6 @@
                       (fn [_event] (let [current-repo (state/get-current-repo)
                                          tap-f (fn [block-id]
                                                  (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
-                                     (editor-handler/copy-block-ref! (first block-ids) tap-f))))]]))
+                                     (editor-handler/copy-block-ref! (first block-ids) tap-f))))
+      (action-command "x" "Unselect"
+                      (fn [_event] (state/clear-selection!)))]]))

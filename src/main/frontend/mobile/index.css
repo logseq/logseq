@@ -7,11 +7,11 @@
 
 
     .ti, .tie {
-      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-60;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-75;
     }
 
     .description {
-      @apply text-[var(--ls-primary-text-color)] text-[13px] opacity-60;
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-75;
     }
 
     button {
@@ -20,7 +20,7 @@
         flex-direction: column;   /* Stack icon and label */
         align-items: center;      /* Center horizontally */
         justify-content: center;  /* Center vertically */
-        padding: 10px;
+        padding: 12px 4px;
     }
   }
 }
