@@ -376,7 +376,10 @@
           (reset! *touch-start nil))))))
 
 (defn on-touch-cancel
-  [_e]
+  [e]
   (reset! *swipe nil)
   (reset! *swiped? nil)
-  (reset! *touch-start nil))
+  (reset! *touch-start nil)
+  (let [target (.-target e)
+        block-container (util/rec-get-node target "ls-block")]
+    (dom/set-style! block-container :transform "translateX(0)")))
