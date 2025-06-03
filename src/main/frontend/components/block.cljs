@@ -2242,12 +2242,12 @@
            bullet')))]))
 
 (rum/defc dnd-separator
-  [move-to block-content?]
+  [move-to]
   [:div.relative
    [:div.dnd-separator.absolute
-    {:style {:left (cond-> (if (= move-to :nested) 40 20)
-                     block-content?
-                     (- 34))
+    {:style {:left (cond-> (if (= move-to :nested) 48 20)
+                     (util/capacitor-new?)
+                     (- 20))
              :top 0
              :width "100%"
              :z-index 3}}]])
@@ -2656,22 +2656,18 @@
                 (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
-  [block children block-id top? block-content?]
+  [block block-id top?]
   (let [dragging? (rum/react *dragging?)
-        drag-to-block (rum/react *drag-to-block)]
+        drag-to-block (rum/react *drag-to-block)
+        move-to (rum/react *move-to)]
     (when (and
-           (= block-id drag-to-block)
            dragging?
-           (not (:block/pre-block? block)))
-      (let [move-to (rum/react *move-to)]
-        (when-not
-         (or (and top? (not= move-to :top))
-             (and (not top?) (= move-to :top))
-             (and block-content? (not= move-to :nested))
-             (and (not block-content?)
-                  (first children)
-                  (= move-to :nested)))
-          (dnd-separator move-to block-content?))))))
+           (= block-id drag-to-block)
+           (not (:block/pre-block? block))
+           move-to)
+      (when-not (or (and top? (not= move-to :top))
+                    (and (not top?) (= move-to :top)))
+        (dnd-separator move-to)))))
 
 (defn- block-content-inner
   [config block body plugin-slotted? collapsed? block-ref-with-title?]
@@ -3281,7 +3277,7 @@
                           (and top? (<= (js/Math.abs (- cursor-top element-top)) 16))
                           :top
 
-                          (> x-offset 50)
+                          (> x-offset (if (util/capacitor-new?) 100 50))
                           :nested
 
                           :else
@@ -3292,26 +3288,28 @@
       (reset! *drag-to-block block-id)
       (reset! *move-to' move-to-value))))
 
-(defn- block-drag-leave
-  [*move-to']
-  (reset! *move-to' nil))
-
 (defn block-drag-end
   ([_event]
    (block-drag-end _event *move-to))
   ([_event *move-to']
-   (reset! *dragging? false)
-   (reset! *dragging-block nil)
-   (reset! *dragging-over-block nil)
-   (reset! *drag-to-block nil)
-   (reset! *move-to' nil)
-   (editor-handler/unhighlight-blocks!)))
+   (util/schedule
+    (fn []
+      (reset! *dragging? false)
+      (reset! *dragging-block nil)
+      (reset! *dragging-over-block nil)
+      (reset! *drag-to-block nil)
+      (reset! *move-to' nil)
+      (editor-handler/unhighlight-blocks!)))))
+
+(defn- block-drag-leave
+  [_event *move-to']
+  (reset! *move-to' nil))
 
 (defn- block-drop
   "Block on-drop handler"
   [^js event uuid target-block original-block *move-to']
-  (util/stop event)
   (when-not (dnd-same-block? uuid)
+    (util/stop-propagation event)
     (haptics/haptics)
     (let [block-uuids (state/get-selection-block-ids)
           lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
@@ -3320,7 +3318,11 @@
           blocks (remove-nils blocks)]
       (if (seq blocks)
         ;; dnd block moving in current Logseq instance
-        (dnd/move-blocks event blocks target-block original-block @*move-to')
+        (do
+          (dnd/move-blocks event blocks target-block original-block @*move-to')
+          (when (util/capacitor-new?)
+            (state/set-state! :mobile/show-action-bar? false)
+            (state/clear-selection!)))
         ;; handle DataTransfer
         (let [repo (state/get-current-repo)
               data-transfer (.-dataTransfer event)
@@ -3365,8 +3367,8 @@
                          (recur (rest res))))))))
 
             :else
-            (prn ::unhandled-drop-data-transfer-type transfer-types))))))
-  (block-drag-end event *move-to'))
+            (prn ::unhandled-drop-data-transfer-type transfer-types)))))
+    (block-drag-end event *move-to')))
 
 (defonce *block-last-mouse-event (atom nil))
 
@@ -3397,10 +3399,12 @@
 
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
-  {:on-drag-over (fn [event]
+  {:on-drag-enter (fn [event]
+                    (.preventDefault event))
+   :on-drag-over (fn [event]
                    (block-drag-over event uuid top? block-id *move-to'))
-   :on-drag-leave (fn [_event]
-                    (block-drag-leave *move-to'))
+   :on-drag-leave (fn [event]
+                    (block-drag-leave event *move-to'))
    :on-drop (fn [event]
               (block-drop event uuid block original-block *move-to'))
    :on-drag-end (fn [event]
@@ -3583,9 +3587,12 @@
                    (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
        :haschild (str (boolean has-child?))
-       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+       :on-touch-start (fn [event uuid]
+                         (when-not @*dragging?
+                           (block-handler/on-touch-start event uuid)))
        :on-touch-end (fn [event]
-                       (block-handler/on-touch-end event))
+                       (when-not @*dragging?
+                         (block-handler/on-touch-end event)))
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
 
@@ -3624,7 +3631,7 @@
 
      ;; only render this for the first block in each container
      (when (and top? (not (or table? property?)))
-       (dnd-separator-wrapper block children block-id true false))
+       (dnd-separator-wrapper block block-id true))
 
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
@@ -3725,7 +3732,8 @@
                          (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
-     (when-not (or in-whiteboard? table? property?) (dnd-separator-wrapper block children block-id false false))]))
+     (when-not (or in-whiteboard? table? property?)
+       (dnd-separator-wrapper block block-id false))]))
 
 (rum/defc block-container-inner
   [container-state repo config* block opts]
