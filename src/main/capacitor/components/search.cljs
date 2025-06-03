@@ -46,7 +46,7 @@
 (rum/defc search
   []
   (let [*page (hooks/use-ref nil)
-        [presenting-element set-presenting-element!] (hooks/use-state nil)
+        ;; [presenting-element set-presenting-element!] (hooks/use-state nil)
         *ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
@@ -55,10 +55,10 @@
         result (if (string/blank? input)
                  (get-recent-pages)
                  search-result)]
-    (hooks/use-effect!
-     (fn []
-       (set-presenting-element! (rum/deref *page)))
-     [])
+    ;; (hooks/use-effect!
+    ;;  (fn []
+    ;;    (set-presenting-element! (rum/deref *page)))
+    ;;  [])
     (hooks/use-effect!
      (fn []
        (let [*timeout (atom nil)]
@@ -132,4 +132,5 @@
               (when icon (ui/icon icon {:size 14
                                         :class "text-muted-foreground"}))
               [:div text]]]))))
-      (modal/modal presenting-element)))))
+      ;; (modal/modal presenting-element)
+      ))))
