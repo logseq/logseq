@@ -3410,16 +3410,17 @@
 
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
-  {:on-drag-enter (fn [event]
-                    (.preventDefault event))
-   :on-drag-over (fn [event]
-                   (block-drag-over event uuid top? block-id *move-to'))
-   :on-drag-leave (fn [event]
-                    (block-drag-leave event *move-to'))
-   :on-drop (fn [event]
-              (block-drop event uuid block original-block *move-to'))
-   :on-drag-end (fn [event]
-                  (block-drag-end event *move-to'))})
+  (when-not (ldb/journal? block)
+    {:on-drag-enter (fn [event]
+                      (.preventDefault event))
+     :on-drag-over (fn [event]
+                     (block-drag-over event uuid top? block-id *move-to'))
+     :on-drag-leave (fn [event]
+                      (block-drag-leave event *move-to'))
+     :on-drop (fn [event]
+                (block-drop event uuid block original-block *move-to'))
+     :on-drag-end (fn [event]
+                    (block-drag-end event *move-to'))}))
 
 (defn- root-block?
   [config block]
@@ -3607,12 +3608,13 @@
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
 
-       (util/capacitor-new?)
+       (and (util/capacitor-new?) (not (ldb/page? block)))
        (assoc
         :draggable true
-        :on-drag-start (fn [event]
-                         (util/stop-propagation event)
-                         (on-drag-start event block block-id)))
+        :on-drag-start
+        (fn [event]
+          (util/stop-propagation event)
+          (on-drag-start event block block-id)))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
