@@ -2589,7 +2589,8 @@
                (save-block! repo uuid value))
 
              (cond
-               (dom/has-class? sibling-block "block-add-button")
+               (and (dom/has-class? sibling-block "block-add-button")
+                    (util/rec-get-node current-block "ls-page-title"))
                (.click sibling-block)
 
                property-value-container?
@@ -2665,7 +2666,8 @@
           (property-value-node? sibling-block)
           (focus-trigger editing-block sibling-block)
 
-          (dom/has-class? sibling-block "block-add-button")
+          (and (dom/has-class? sibling-block "block-add-button")
+               (util/rec-get-node editing-block "ls-page-title"))
           (.click sibling-block)
 
           :else
