@@ -44,10 +44,8 @@
          recent-pages)))
 
 (rum/defc search
-  []
-  (let [*page (hooks/use-ref nil)
-        ;; [presenting-element set-presenting-element!] (hooks/use-state nil)
-        *ref (hooks/use-ref nil)
+  [*page]
+  (let [*ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
         [last-input-at set-last-input-at!] (hooks/use-state nil)
@@ -55,10 +53,6 @@
         result (if (string/blank? input)
                  (get-recent-pages)
                  search-result)]
-    ;; (hooks/use-effect!
-    ;;  (fn []
-    ;;    (set-presenting-element! (rum/deref *page)))
-    ;;  [])
     (hooks/use-effect!
      (fn []
        (let [*timeout (atom nil)]
@@ -131,6 +125,4 @@
              [:div.flex.flex-row.items-center.gap-1
               (when icon (ui/icon icon {:size 14
                                         :class "text-muted-foreground"}))
-              [:div text]]]))))
-      ;; (modal/modal presenting-element)
-      ))))
+              [:div text]]]))))))))
