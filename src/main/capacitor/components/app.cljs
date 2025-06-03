@@ -72,8 +72,7 @@
   (ion/tab-bar
    {:slot "bottom"}
    (ion/tab-button
-    {:tab "home"
-     :selected true}
+    {:tab "home"}
     (ion/tabler-icon "home" {:size 22}) "Journals")
    (ion/tab-button
     {:tab "search"}
