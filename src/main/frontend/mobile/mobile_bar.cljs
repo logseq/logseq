@@ -3,10 +3,8 @@
             [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
-            [frontend.mobile.camera :as mobile-camera]
-            [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.core :as mobile]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -99,4 +97,6 @@
         (for [command' commands']
           command')]
        [:div.toolbar-hide-keyboard
-        (command #(state/clear-edit!) {:icon "keyboard-show"})]])))
+        (command #(do
+                    (state/clear-edit!)
+                    (mobile/keyboard-hide)) {:icon "keyboard-show"})]])))
