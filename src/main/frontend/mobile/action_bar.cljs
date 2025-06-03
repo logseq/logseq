@@ -2,11 +2,8 @@
   "Block Action bar, activated when swipe on a block"
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mixins :as mixins]
-            [frontend.mobile.core :as mobile]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
             [frontend.util.url :as url-util]
             [rum.core :as rum]))
 
@@ -24,13 +21,6 @@
      [:div.description description]]))
 
 (rum/defcs action-bar < rum/reactive
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn []
-                 (editor-handler/clear-selection!)
-                 (state/set-state! :mobile/show-action-bar? false)))))
   [state]
   (let [blocks (->> (state/get-selection-block-ids)
                     (keep (fn [id]
@@ -48,4 +38,6 @@
                                                  (url-util/get-logseq-graph-uuid-url nil current-repo block-id))]
                                      (editor-handler/copy-block-ref! (first block-ids) tap-f))))
       (action-command "x" "Unselect"
-                      (fn [_event] (state/clear-selection!)))]]))
+                      (fn [_event]
+                        (state/clear-selection!)
+                        (state/set-state! :mobile/show-action-bar? false)))]]))
