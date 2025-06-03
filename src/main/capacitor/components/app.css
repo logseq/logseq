@@ -114,6 +114,12 @@ ion-content {
   }
 }
 
+ion-modal {
+  &::part(backdrop) {
+    @apply !opacity-30;
+  }
+}
+
 [type='text']:focus, [type='email']:focus, [type='url']:focus,
 [type='password']:focus, [type='number']:focus, [type='date']:focus, [type='datetime-local']:focus,
 [type='month']:focus, [type='search']:focus, [type='tel']:focus, [type='time']:focus, [type='week']:focus,
