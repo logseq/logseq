@@ -568,18 +568,19 @@
                           highlights' (conj highlights hl)]
                       (set-highlights! highlights')
 
-                      (if-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                      (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                          (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
                         ;; exceptions
                         (->
-                         (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                                           hl nil (:bounding vw-pos))]
-                           (if (de/entity? result)
-                             (let [hl' (assoc-in hl [:content :image] (:db/id result))]
-                               (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
-                               hl')
-                             (throw (js/Error. (str "[pdf] unexpected persist asset image return:" result)))))
-                         (p/catch (fn [e] (js/console.error e))))
+                          (p/let [result (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                           hl nil (:bounding vw-pos))]
+                            (when (de/entity? result)
+                              (let [hl' (assoc-in hl [:content :image] (:db/id result))]
+                                (set-highlights! (map (fn [hl] (if (= (:id hl) (:id hl')) hl' hl)) highlights'))
+                                hl')
+                              ;(throw (js/Error. (str "[pdf] unexpected persist asset image return:" result)))
+                              ))
+                          (p/catch (fn [e] (js/console.error e))))
                         hl))))
         upd-hl! (fn [hl]
                   (let [highlights (pdf-utils/fix-nested-js highlights)]
