@@ -1210,26 +1210,24 @@
       (delete-block-aux! block))))
 
 (defn highlight-selection-area!
-  [end-block-id & {:keys [append?]}]
-  (when-let [start-block (state/get-selection-start-block-or-first)]
-    (let [end-block-node (gdom/getElement end-block-id)
-          start-node (gdom/getElement start-block)
+  [end-block-id block-dom-element & {:keys [append?]}]
+  (when-let [start-node (state/get-selection-start-block-or-first)]
+    (let [end-block-node block-dom-element
           select-direction (state/get-selection-direction)
           selected-blocks (state/get-unsorted-selection-blocks)
-          last-node (when-let [node (last selected-blocks)]
-                      (gdom/getElement (.-id ^js node)))
+          last-node (last selected-blocks)
           latest-visible-block (or last-node start-node)
           latest-block-id (when latest-visible-block (.-id latest-visible-block))]
       (if (and start-node end-block-node)
-        (let [blocks (util/get-nodes-between-two-nodes start-block end-block-id "ls-block")
-              direction (util/get-direction-between-two-nodes start-block end-block-id "ls-block")
+        (let [blocks (util/get-nodes-between-two-nodes start-node end-block-node "ls-block")
+              direction (util/get-direction-between-two-nodes start-node end-block-node "ls-block")
               blocks (if (= direction :up) (reverse blocks) blocks)]
           (state/exit-editing-and-set-selected-blocks! blocks direction))
         (when latest-visible-block
-          (let [blocks (util/get-nodes-between-two-nodes latest-block-id end-block-id "ls-block")
+          (let [blocks (util/get-nodes-between-two-nodes latest-visible-block end-block-node "ls-block")
                 direction (if (= latest-block-id end-block-id)
                             select-direction
-                            (util/get-direction-between-two-nodes latest-block-id end-block-id "ls-block"))
+                            (util/get-direction-between-two-nodes latest-visible-block end-block-node "ls-block"))
                 blocks (if (= direction :up) (reverse (util/sort-by-height blocks)) (util/sort-by-height blocks))]
             (if append?
               (do (state/clear-edit!)
