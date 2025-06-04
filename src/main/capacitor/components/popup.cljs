@@ -1,15 +1,18 @@
 (ns capacitor.components.popup
   (:require [capacitor.ionic :as ion]
             [capacitor.state :as state]
+            [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
 (defn popup-show!
-  [_event content-fn opts]
-  (when (fn? content-fn)
-    (state/set-popup! {:open? true
-                       :content-fn content-fn
-                       :opts opts})))
+  [event content-fn {:keys [id] :as opts}]
+  (if (and (keyword? id) (= "editor.commands" (namespace id)))
+    (shui-popup/show! event content-fn opts)
+    (when (fn? content-fn)
+      (state/set-popup! {:open? true
+                         :content-fn content-fn
+                         :opts opts}))))
 
 (set! shui/popup-show! popup-show!)
 
