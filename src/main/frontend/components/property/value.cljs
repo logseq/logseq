@@ -631,17 +631,17 @@
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
-        [items _] (hooks/use-state (sort-select-items property selected-choices items))
+        [sorted-items set-items!] (hooks/use-state (sort-select-items property selected-choices items))
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
                          (not (and (ldb/class? block) (= (:db/ident property) :logseq.property/parent)))
                          (not= (:db/ident property) :logseq.property.view/type))
-                  (concat items
+                  (concat sorted-items
                           [{:value clear-value
                             :label clear-value-label
                             :clear? true}])
-                  items)
+                  sorted-items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
         k :on-chosen
         f (get opts k)
@@ -658,6 +658,10 @@
                 (when-not (false? (:exit-edit? opts))
                   (shui/popup-hide!)))
                (f chosen selected?)))]
+    (hooks/use-effect!
+     (fn []
+       (set-items! (sort-select-items property selected-choices items)))
+     [items])
     (select/select (assoc opts
                           :selected-choices selected-choices
                           :items items'
