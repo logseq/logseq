@@ -140,3 +140,22 @@ ion-content {
 [multiple]:focus, textarea:focus, select:focus {
   box-shadow: none;
 }
+
+.ui__popover-content, .ui__dropdown-menu-content {
+    &[data-editor-popup-ref=page-search],
+    &[data-editor-popup-ref=page-search-hashtag],
+    &[data-editor-popup-ref=commands]
+    {
+        max-height: 160px;
+        width: 200px;
+        max-width: 200px;
+
+        &[data-side=top] {
+            max-height: 160px;
+        }
+
+        &[data-side=bottom] {
+            max-height: 160px
+        }
+    }
+}

@@ -100,6 +100,8 @@
                         ;; minus default offset
                          (if as-mask? 6 0))
                       width (if as-mask? 1 height)])
+                   (and (vector event) (= (count event) 2) (every? integer? event))
+                   event
                    :else [0 0])]
     (some-> @*target (d/set-attr! "data-popup-active" (if (keyword? id) (name id) (str id))))
     (let [on-before-hide (fn []
