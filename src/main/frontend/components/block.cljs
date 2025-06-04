@@ -913,6 +913,12 @@
      (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
+(defn- <get-block
+  [block-id]
+  (db-async/<get-block (state/get-current-repo) block-id
+                       {:children? false
+                        :skip-refresh? true}))
+
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [args (:rum/args state)
@@ -929,8 +935,7 @@
                (or (:skip-async-load? config) (:table-view? config))
                (reset! *result page)
                :else
-               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
-                                                                                             :skip-refresh? true})]
+               (p/let [result (<get-block page-id-or-name)]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -1063,6 +1068,7 @@
         (contains? config/video-formats asset-type))))
 
 (declare block-positioned-properties)
+
 (rum/defc page-reference < rum/reactive db-mixins/query
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
@@ -1093,7 +1099,7 @@
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
                              (not contents-page?))]
-          (when-not (= (:db/id block) (:db/id (:block config)))
+          (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
             (cond
               (and asset? (img-audio-video? block))
               (asset-cp config block)
