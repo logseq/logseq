@@ -1395,7 +1395,8 @@
 #?(:cljs
    (def JS_ROOT
      (when-not node-test?
-       (if (= js/location.protocol "file:")
+       (if (or (= js/location.protocol "file:")
+             (string/starts-with? js/location.host "localhost"))
          "./js"
          "./static/js"))))
 

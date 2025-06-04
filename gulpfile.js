@@ -124,6 +124,7 @@ const common = {
         'node_modules/react-dom/umd/react-dom.development.js',
         'node_modules/prop-types/prop-types.min.js',
         'node_modules/interactjs/dist/interact.min.js',
+        'node_modules/photoswipe/dist/umd/*.js',
         'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui/ui.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
