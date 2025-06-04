@@ -1284,8 +1284,8 @@
              ;; mobile toolbar height: 40px
              scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
          (cond
-           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
-           (set! (.-scrollTop main-node) (+ scroll-top' (- cursor-y (/ vw-height 4))))
+           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.2)))
+           (set! (.-scrollTop main-node) (- (+ scroll-top' cursor-y) 130))
 
            (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
                 (>= cursor-y header-height))
@@ -1298,7 +1298,7 @@
              (set! (.-scrollTop main-node) (- scroll-top' (/ vw-height 4))))
 
            (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
+           (set! (.-scrollTop main-node) (+ scroll-top' scroll 32))
 
            :else
            nil)))))
@@ -1396,7 +1396,7 @@
    (def JS_ROOT
      (when-not node-test?
        (if (or (= js/location.protocol "file:")
-             (string/starts-with? js/location.host "localhost"))
+               (string/starts-with? js/location.host "localhost"))
          "./js"
          "./static/js"))))
 
