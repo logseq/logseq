@@ -1045,9 +1045,10 @@
         {:keys [direction loaded total]} (state/sub :rtc/asset-upload-download-progress
                                                     {:path-in-sub-atom [repo (str (:block/uuid block))]})
         downloading? (and (= direction :download) (not= loaded total))
-        download-finished? (and (= direction :download) (= loaded total))]
+        asset-file-write-finished? (state/sub :assets/asset-file-write-finish
+                                              {:path-in-sub-atom [repo (str (:block/uuid block))]})]
     (cond
-      (or file-exists? download-finished?)
+      (or file-exists? asset-file-write-finished?)
       (asset-link (assoc config :asset-block block)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
