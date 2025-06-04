@@ -1257,18 +1257,12 @@
 
 (def keyboard-height (atom nil))
 #?(:cljs
-   (defn scroll-editor-cursor
-     [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
+   (defn mobile-get-scroll
+     [^js/HTMLElement el]
      (when (and el (mobile?))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
-
-             header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
-
-             main-node   (app-scroll-container-node el)
-             scroll-top'  (.-scrollTop main-node)
-
              current-pos (get-selection-start el)
              grapheme-pos (get-graphemes-pos (.-value el) current-pos)
              mock-text   (some-> (gdom/getElement "mock-text")
@@ -1280,22 +1274,23 @@
 
              cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
              vw-height   (or (.-height js/window.visualViewport)
-                             (.-clientHeight js/document.documentElement))
-             ;; mobile toolbar height: 40px
-             scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
-         (cond
-           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.2)))
-           (set! (.-scrollTop main-node) (- (+ scroll-top' cursor-y) 130))
+                             (.-clientHeight js/document.documentElement))]
+         {:scroll (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))
+          :cursor-y cursor-y
+          :offset-height offset-height}))))
 
+#?(:cljs
+   (defn scroll-editor-cursor
+     [^js/HTMLElement el]
+     (when (and el (mobile?))
+       (let [header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
+             main-node   (app-scroll-container-node el)
+             scroll-top'  (.-scrollTop main-node)
+             {:keys [scroll offset-height cursor-y]} (mobile-get-scroll el)]
+         (cond
            (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
                 (>= cursor-y header-height))
            (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
-
-           (< cursor-y header-height)
-           (let [_ (.scrollIntoView el true)
-                 main-node (app-scroll-container-node el)
-                 scroll-top' (.-scrollTop main-node)]
-             (set! (.-scrollTop main-node) (- scroll-top' (/ vw-height 4))))
 
            (> scroll 0)
            (set! (.-scrollTop main-node) (+ scroll-top' scroll 32))
