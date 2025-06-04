@@ -83,6 +83,8 @@
           text' (if (and c (not= c " "))
                   (str " " text)
                   text)]
+      ;; (util/scroll-editor-cursor input :to-vw-one-quarter? true)
+      ;; (.focus input)
       (commands/simple-insert! parent-id text' opts))))
 
 (defn commands
