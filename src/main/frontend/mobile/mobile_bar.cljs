@@ -89,7 +89,7 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (util/capacitor-new?)
+  (when (util/mobile?)
     (let [commands' (commands)]
       [:div#mobile-editor-toolbar
        [:div.toolbar-commands
