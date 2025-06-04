@@ -89,3 +89,7 @@
 (defn keyboard-hide
   []
   (.hide Keyboard))
+
+(defn keyboard-show
+  []
+  (.show Keyboard))
