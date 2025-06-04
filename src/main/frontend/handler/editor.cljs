@@ -3102,17 +3102,19 @@
 (defn editor-on-change!
   [block id search-timeout]
   (fn [e]
-    (if (= :block-search (state/sub :editor/action))
-      (let [timeout 50]
-        (when @search-timeout
-          (js/clearTimeout @search-timeout))
-        (reset! search-timeout
-                (js/setTimeout
-                 #(edit-box-on-change! e block id)
-                 timeout)))
-      (let [input (gdom/getElement id)]
-        (edit-box-on-change! e block id)
-        (util/scroll-editor-cursor input)))))
+    (let [editor-action (state/get-editor-action)]
+      (if (= :block-search editor-action)
+        (let [timeout 50]
+          (when @search-timeout
+            (js/clearTimeout @search-timeout))
+          (reset! search-timeout
+                  (js/setTimeout
+                   #(edit-box-on-change! e block id)
+                   timeout)))
+        (let [input (gdom/getElement id)]
+          (edit-box-on-change! e block id)
+          (when-not editor-action
+            (util/scroll-editor-cursor input)))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]

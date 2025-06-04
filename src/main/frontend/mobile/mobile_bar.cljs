@@ -83,20 +83,20 @@
           text' (if (and c (not= c " "))
                   (str " " text)
                   text)]
-      ;; (util/scroll-editor-cursor input :to-vw-one-quarter? true)
-      ;; (.focus input)
       (commands/simple-insert! parent-id text' opts))))
 
 (defn commands
   []
   [(command #(insert-text "#" {}) {:icon "hash"} true)
-   (command #(let [input (state/get-input)
-                   new-pos (cursor/get-caret-pos input)]
-               (insert-text page-ref/left-and-right-brackets
-                            {:backward-pos 2
-                             :check-fn (fn [_ _ _]
+   (command #(insert-text page-ref/left-and-right-brackets
+                          {:backward-pos 2
+                           :check-fn (fn [_ _ _]
+                                       (let [input (state/get-input)
+                                             new-pos (cursor/get-caret-pos input)]
                                          (state/set-editor-action-data! {:pos new-pos})
-                                         (commands/handle-step [:editor/search-page]))})) {:icon "brackets"} true)
+                                         (commands/handle-step [:editor/search-page])))})
+
+            {:icon "brackets"} true)
    (command #(insert-text "/" {}) {:icon "command"} true)])
 
 (rum/defc mobile-bar < rum/reactive

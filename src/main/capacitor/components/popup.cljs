@@ -6,9 +6,10 @@
             [rum.core :as rum]))
 
 (defn popup-show!
-  [event content-fn {:keys [id] :as opts}]
+  [_event content-fn {:keys [id] :as opts}]
   (if (and (keyword? id) (= "editor.commands" (namespace id)))
-    (shui-popup/show! event content-fn opts)
+    ;; FIXME: Editing a block at bottom will scroll to top
+    (shui-popup/show! [0 86] content-fn opts)
     (when (fn? content-fn)
       (state/set-popup! {:open? true
                          :content-fn content-fn
