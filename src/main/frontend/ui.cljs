@@ -52,7 +52,7 @@
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
-(defonce icon-size (if (mobile-util/native-platform?) 26 20))
+(defonce icon-size (if (mobile-util/native-platform?) 24 20))
 
 (defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
 (defn last-shui-preview-popup?

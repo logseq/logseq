@@ -4,7 +4,9 @@
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.core :as mobile]
+            [frontend.mobile.haptics :as haptics]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -24,6 +26,7 @@
    [:button.bottom-action
     {:on-pointer-down (fn [e]
                         (util/stop e)
+                        (haptics/haptics)
                         (blur-if-compositing)
                         (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:size ui/icon-size})]])
@@ -34,6 +37,7 @@
    [:button.bottom-action
     {:on-pointer-down (fn [e]
                         (util/stop e)
+                        (haptics/haptics)
                         (if event?
                           (command-handler e)
                           (command-handler)))}
@@ -69,20 +73,19 @@
 
 (defn commands
   []
-  (let [viewport-fn (fn [parent-id]
-                      (when-let [input (gdom/getElement parent-id)]
-                        (util/scroll-editor-cursor input :to-vw-one-quarter? true)
-                        (.focus input)))]
-    [(command #(let [parent-id (state/get-edit-input-id)]
-                 (viewport-fn parent-id)
-                 (editor-handler/toggle-page-reference-embed parent-id))
-              {:icon "brackets"}
-              true)
-     (command #(let [parent-id (state/get-edit-input-id)]
-                 (viewport-fn parent-id)
-                 (commands/simple-insert! parent-id " /" {}))
-              {:icon "command"}
-              true)]))
+  [(command #(let [parent-id (state/get-edit-input-id)]
+               ;; TODO: set tags
+               )
+            {:icon "hash"}
+            true)
+   (command #(let [parent-id (state/get-edit-input-id)]
+               (editor-handler/toggle-page-reference-embed parent-id))
+            {:icon "brackets"}
+            true)
+   (command #(let [parent-id (state/get-edit-input-id)]
+               (commands/simple-insert! parent-id " /" {}))
+            {:icon "command"}
+            true)])
 
 (rum/defc mobile-bar < rum/reactive
   []
@@ -90,20 +93,21 @@
     (let [commands' (commands)]
       [:div#mobile-editor-toolbar
        [:div.toolbar-commands
-        (indent-outdent false "indent-decrease")
-        (indent-outdent true "indent-increase")
-        (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
-        (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
+        ;; (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
+        ;; (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
         (command #(do
                     (blur-if-compositing)
                     (editor-handler/cycle-todo!))
                  {:icon "checkbox"} true)
-        ;; (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
+        (indent-outdent false "arrow-left-to-arc")
+        (indent-outdent true "arrow-right-to-arc")
         ;; (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         ;; (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)
         ;; (timestamp-submenu parent-id)
         (for [command' commands']
-          command')]
+          command')
+        (command #(let [parent-id (state/get-edit-input-id)]
+                    (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
        [:div.toolbar-hide-keyboard
         (command #(do
                     (state/clear-edit!)
