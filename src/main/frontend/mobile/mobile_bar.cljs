@@ -32,11 +32,11 @@
   [command-handler {:keys [icon class]} & [event?]]
   [:div
    [:button.bottom-action
-    {:on-mouse-down (fn [e]
-                      (if event?
-                        (command-handler e)
-                        (command-handler))
-                      (util/stop e))}
+    {:on-pointer-down (fn [e]
+                        (util/stop e)
+                        (if event?
+                          (command-handler e)
+                          (command-handler)))}
     (ui/icon icon {:size ui/icon-size :class class})]])
 
 (rum/defc timestamp-submenu
@@ -68,18 +68,26 @@
                   "Time")]]))
 
 (defn commands
-  [parent-id]
-  (let [viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
-                             (util/scroll-editor-cursor input :to-vw-one-quarter? true)
-                             (.focus input)))]
-    [(command #(do (viewport-fn) (editor-handler/toggle-page-reference-embed parent-id)) {:icon "brackets"} true)
-     (command #(do (viewport-fn) (commands/simple-insert! parent-id "/" {})) {:icon "command"} true)]))
+  []
+  (let [viewport-fn (fn [parent-id]
+                      (when-let [input (gdom/getElement parent-id)]
+                        (util/scroll-editor-cursor input :to-vw-one-quarter? true)
+                        (.focus input)))]
+    [(command #(let [parent-id (state/get-edit-input-id)]
+                 (viewport-fn parent-id)
+                 (editor-handler/toggle-page-reference-embed parent-id))
+              {:icon "brackets"}
+              true)
+     (command #(let [parent-id (state/get-edit-input-id)]
+                 (viewport-fn parent-id)
+                 (commands/simple-insert! parent-id " /" {}))
+              {:icon "command"}
+              true)]))
 
 (rum/defc mobile-bar < rum/reactive
   []
   (when (util/capacitor-new?)
-    (let [parent-id (state/get-edit-input-id)
-          commands' (commands parent-id)]
+    (let [commands' (commands)]
       [:div#mobile-editor-toolbar
        [:div.toolbar-commands
         (indent-outdent false "indent-decrease")
