@@ -226,6 +226,38 @@
      (state/exit-editing-and-set-selected-blocks! [cell])
      (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
 
+(rum/defc block-open-buttons
+  [block* opacity redirect! add-to-sidebar!]
+  (let [class (str "h-5 w-5 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                   "opacity-" opacity)]
+    [:div.absolute.right-0
+     [:div.flex.flex-row.items-center.gap-1
+      (when (and (or (:block.temp/has-children? block*)
+                     (some? (:block/_parent block*)))
+                 (not (ldb/page? block*)))
+        [:span.absolute.-top-3.right-8.transition-opacity.duration-100.ease-in
+         {:title "This block has children"
+          :class (str "opacity-" (if (zero? opacity) opacity 50))}
+         "·"])
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :title "Open"
+        :on-click (fn [e]
+                    (util/stop-propagation e)
+                    (redirect!))
+        :class class}
+       (ui/icon "arrow-right" {:size 14}))
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :title "Open in sidebar"
+        :class class
+        :on-click (fn [e]
+                    (util/stop-propagation e)
+                    (add-to-sidebar!))}
+       (ui/icon "layout-sidebar-right" {:size 14}))]]))
+
 (rum/defc block-title
   "Used on table view"
   [block* {:keys [create-new-block width row property]}]
@@ -302,35 +334,7 @@
             (render block*)))]
        [:div])
 
-     (let [class (str "h-5 w-5 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                      "opacity-" opacity)]
-       [:div.absolute.right-0
-        [:div.flex.flex-row.items-center.gap-1
-         (when (and (or (:block.temp/has-children? block*)
-                        (some? (:block/_parent block*)))
-                    (not (ldb/page? block*)))
-           [:span.absolute.-top-3.right-8.transition-opacity.duration-100.ease-in
-            {:title "This block has children"
-             :class (str "opacity-" (if (zero? opacity) opacity 50))}
-            "·"])
-         (shui/button
-          {:variant :ghost
-           :size :sm
-           :title "Open"
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (redirect!))
-           :class class}
-          (ui/icon "arrow-right" {:size 14}))
-         (shui/button
-          {:variant :ghost
-           :size :sm
-           :title "Open in sidebar"
-           :class class
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (add-to-sidebar!))}
-          (ui/icon "layout-sidebar-right" {:size 14}))]])]))
+     (block-open-buttons block* opacity redirect! add-to-sidebar!)]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
