@@ -1260,7 +1260,7 @@
   (cond
     ;; when editing, quit editing and select current block
     (state/editing?)
-    (let [element (gdom/getElement (state/get-editing-block-dom-id))]
+    (when-let [element (state/get-editor-block-container)]
       (when element
         (p/do!
          (save-current-block!)
@@ -2641,7 +2641,7 @@
         {:block/keys [format uuid] :as block} (or block (state/get-edit-block))
         format (or format :markdown)
         repo (state/get-current-repo)
-        editing-block (gdom/getElement (state/get-editing-block-dom-id))
+        editing-block (state/get-editor-block-container)
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
         sibling-block (f editing-block)
         sibling-block (or (when (and sibling-block (property-value-node? sibling-block))
