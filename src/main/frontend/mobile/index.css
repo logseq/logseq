@@ -35,7 +35,7 @@
   transition: transform 250ms ease-out, opacity 50ms ease-out;
 
   button {
-    @apply flex items-center py-2 px-2 opacity-70 active:opacity-80;
+    @apply flex items-center py-2 px-2 opacity-95;
   }
 
   .submenu {
@@ -48,7 +48,7 @@
   }
 
   .toolbar-commands {
-    @apply flex justify-between items-center w-[95%] overflow-y-hidden overflow-x-auto;
+    @apply flex justify-between items-center overflow-y-hidden overflow-x-auto;
 
     &::-webkit-scrollbar {
       @apply h-1;
