@@ -857,7 +857,7 @@
   (delete-block-inner! repo (get-state)))
 
 (defn delete-blocks!
-  [repo block-uuids blocks dom-blocks]
+  [repo block-uuids blocks dom-blocks mobile-action-bar?]
   (when (seq block-uuids)
     (let [uuid->dom-block (zipmap block-uuids dom-blocks)
           block (first blocks)
@@ -871,7 +871,8 @@
                                                           "")]
            (state/set-state! :editor/edit-block-fn edit-block-f)))
        (ui-outliner-tx/transact!
-        {:outliner-op :delete-blocks}
+        {:outliner-op :delete-blocks
+         :mobile-action-bar? mobile-action-bar?}
         (outliner-op/delete-blocks! blocks' nil))))))
 
 (defn set-block-timestamp!
@@ -1052,7 +1053,7 @@
            (map :block/uuid)))))
 
 (defn cut-selection-blocks
-  [copy?]
+  [copy? & {:keys [mobile-action-bar?]}]
   (when copy? (copy-selection-blocks true))
   (state/set-block-op-type! :cut)
   (when-let [blocks (->> (get-selected-blocks)
@@ -1073,7 +1074,7 @@
                                       (tree/get-sorted-block-and-children repo (:db/id block)))
                                     top-level-blocks)]
           (when (seq sorted-blocks)
-            (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))
+            (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks mobile-action-bar?)))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
