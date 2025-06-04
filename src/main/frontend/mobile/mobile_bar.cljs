@@ -10,7 +10,9 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
+            [logseq.common.util.page-ref :as page-ref]
             [rum.core :as rum]))
 
 (defn- blur-if-compositing
@@ -71,21 +73,29 @@
                      (commands/simple-insert! parent-id timestamp {}))
                   "Time")]]))
 
+(defn- insert-text
+  [text opts]
+  (when-let [parent-id (state/get-edit-input-id)]
+    (let [input (gdom/getElement parent-id)
+          pos (cursor/pos input)
+          c (when (> pos 0)
+              (str (nth (.-value input) (dec pos))))
+          text' (if (and c (not= c " "))
+                  (str " " text)
+                  text)]
+      (commands/simple-insert! parent-id text' opts))))
+
 (defn commands
   []
-  [(command #(let [parent-id (state/get-edit-input-id)]
-               ;; TODO: set tags
-               )
-            {:icon "hash"}
-            true)
-   (command #(let [parent-id (state/get-edit-input-id)]
-               (editor-handler/toggle-page-reference-embed parent-id))
-            {:icon "brackets"}
-            true)
-   (command #(let [parent-id (state/get-edit-input-id)]
-               (commands/simple-insert! parent-id " /" {}))
-            {:icon "command"}
-            true)])
+  [(command #(insert-text "#" {}) {:icon "hash"} true)
+   (command #(let [input (state/get-input)
+                   new-pos (cursor/get-caret-pos input)]
+               (insert-text page-ref/left-and-right-brackets
+                            {:backward-pos 2
+                             :check-fn (fn [_ _ _]
+                                         (state/set-editor-action-data! {:pos new-pos})
+                                         (commands/handle-step [:editor/search-page]))})) {:icon "brackets"} true)
+   (command #(insert-text "/" {}) {:icon "command"} true)])
 
 (rum/defc mobile-bar < rum/reactive
   []

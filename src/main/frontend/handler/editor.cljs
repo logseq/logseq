@@ -2369,67 +2369,6 @@
                       (state/set-edit-content! (state/get-edit-input-id) value')
                       (cursor/move-cursor-to input cursor'))))))))))))
 
-(defn toggle-page-reference-embed
-  [parent-id]
-  (let [{:keys [block]} (get-state)]
-    (when block
-      (let [input (state/get-input)
-            new-pos (cursor/get-caret-pos input)
-            page-ref-fn (fn [bounds backward-pos]
-                          (commands/simple-insert!
-                           parent-id bounds
-                           {:backward-pos backward-pos
-                            :check-fn (fn [_ _ _]
-                                        (state/set-editor-action-data! {:pos new-pos})
-                                        (commands/handle-step [:editor/search-page]))}))]
-        (state/clear-editor-action!)
-        (let [selection (get-selection-and-format)
-              {:keys [selection-start selection-end selection]} selection]
-          (if selection
-            (do (delete-and-update input selection-start selection-end)
-                (insert (ref/->page-ref selection)))
-            (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
-              (let [{:keys [raw-content start end]} embed-ref]
-                (delete-and-update input start end)
-                (if (= 5 (count raw-content))
-                  (page-ref-fn page-ref/left-and-right-brackets 2)
-                  (insert raw-content)))
-              (if-let [page-ref (thingatpt/page-ref-at-point input)]
-                (let [{:keys [start end full-content raw-content]} page-ref]
-                  (delete-and-update input start end)
-                  (if (= raw-content "")
-                    (page-ref-fn "{{embed [[]]}}" 4)
-                    (insert (util/format "{{embed %s}}" full-content))))
-                (page-ref-fn page-ref/left-and-right-brackets 2)))))))))
-
-(defn toggle-block-reference-embed
-  [parent-id]
-  (let [{:keys [block]} (get-state)]
-    (when block
-      (let [input (state/get-input)
-            new-pos (cursor/get-caret-pos input)
-            block-ref-fn (fn [bounds backward-pos]
-                           (commands/simple-insert!
-                            parent-id bounds
-                            {:backward-pos backward-pos
-                             :check-fn     (fn [_ _ _]
-                                             (state/set-editor-action-data! {:pos new-pos})
-                                             (commands/handle-step [:editor/search-block]))}))]
-        (state/clear-editor-action!)
-        (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
-          (let [{:keys [raw-content start end]} embed-ref]
-            (delete-and-update input start end)
-            (if (= 5 (count raw-content))
-              (block-ref-fn block-ref/left-and-right-parens 2)
-              (insert raw-content)))
-          (if-let [page-ref (thingatpt/block-ref-at-point input)]
-            (let [{:keys [start end full-content raw-content]} page-ref]
-              (delete-and-update input start end)
-              (if (= raw-content "")
-                (block-ref-fn "{{embed (())}}" 4)
-                (insert (util/format "{{embed %s}}" full-content))))
-            (block-ref-fn block-ref/left-and-right-parens 2)))))))
-
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
