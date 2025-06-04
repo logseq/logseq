@@ -209,6 +209,7 @@
       ;; assets
       :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
       :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+      :assets/asset-file-write-finish        (atom {})
 
       ;; mobile
       :mobile/container-urls                 nil
