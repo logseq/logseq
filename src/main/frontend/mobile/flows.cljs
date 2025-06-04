@@ -19,7 +19,7 @@
   (->> (c.m/mix mobile-network-init-status-flow (m/watch *mobile-network-status))
        (m/eduction (map #(js->clj % :keywordize-keys true)))))
 
-(def mobile-app-state
+(def mobile-app-state-flow
   (m/watch *mobile-app-state))
 
 (comment
