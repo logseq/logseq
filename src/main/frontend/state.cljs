@@ -1072,9 +1072,9 @@ Similar to re-frame subscriptions"
   []
   (or @(get @state :selection/start-block)
       (when-let [edit-block (get-edit-block)]
-        (let [id (str "ls-block-" (:block/uuid edit-block))]
-          (set-selection-start-block! id)
-          id))))
+        (let [node (util/rec-get-node edit-block "ls-block")]
+          (set-selection-start-block! node)
+          node))))
 
 (defn get-cursor-range
   []

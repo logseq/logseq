@@ -2588,34 +2588,34 @@
           forbidden-edit? (target-forbidden-edit? target)]
       (when (and (not forbidden-edit?) (contains? #{1 0} button))
         (let [selection-blocks (state/get-selection-blocks)
-              starting-block (state/get-selection-start-block-or-first)]
+              starting-block (state/get-selection-start-block-or-first)
+              block-dom-element (util/rec-get-node target "ls-block")]
           (cond
             (and meta? shift?)
             (when-not (empty? selection-blocks)
               (util/stop e)
-              (editor-handler/highlight-selection-area! block-id {:append? true}))
+              (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
 
             meta?
             (do
               (util/stop e)
-              (let [block-dom-element (gdom/getElement block-id)]
-                (if (some #(= block-dom-element %) selection-blocks)
-                  (state/drop-selection-block! block-dom-element)
-                  (state/conj-selection-block! block-dom-element :down)))
+              (if (some #(= block-dom-element %) selection-blocks)
+                (state/drop-selection-block! block-dom-element)
+                (state/conj-selection-block! block-dom-element :down))
               (if (empty? (state/get-selection-blocks))
                 (state/clear-selection!)
-                (state/set-selection-start-block! block-id)))
+                (state/set-selection-start-block! block-dom-element)))
 
             (and shift? starting-block)
             (do
               (util/stop e)
               (util/clear-selection!)
-              (editor-handler/highlight-selection-area! block-id))
+              (editor-handler/highlight-selection-area! block-id block-dom-element))
 
             shift?
             (do
               (util/clear-selection!)
-              (state/set-selection-start-block! block-id))
+              (state/set-selection-start-block! block-dom-element))
 
             :else
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
@@ -2650,7 +2650,7 @@
                  (state/pub-event! [:editor/save-code-editor])
                  (f))
 
-                (state/set-selection-start-block! block-id)))))))))
+                (state/set-selection-start-block! block-dom-element)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block children block-id top? block-content?]
@@ -3381,7 +3381,8 @@
 
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))]
+  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
     (when (and mouse-moving?
                (not @*dragging?)
                (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
@@ -3394,7 +3395,7 @@
       (when (non-dragging? e)
         (when-let [container (gdom/getElement "app-container-wrapper")]
           (dom/add-class! container "blocks-selection-mode"))
-        (editor-handler/highlight-selection-area! block-id {:append? true})))))
+        (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
