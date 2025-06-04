@@ -22,6 +22,14 @@ html.plt-capacitor.plt-android {
   .searchbar-input.sc-ion-searchbar-md {
     @apply shadow-none;
   }
+
+  ion-modal {
+    ion-content {
+      #app-container-wrapper {
+        @apply pt-8;
+      }
+    }
+  }
 }
 
 html.has-mobile-keyboard {
