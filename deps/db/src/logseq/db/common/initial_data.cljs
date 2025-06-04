@@ -201,10 +201,12 @@
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id {:keys [children? children-only? nested-children? properties children-props]}]
-  (let [block (d/entity db (if (uuid? id)
-                             [:block/uuid id]
-                             id))
-        block-refs-count? (some #{:block.temp/refs-count} properties)
+  (let [block* (d/entity db (if (uuid? id)
+                              [:block/uuid id]
+                              id))
+        block (assoc block* :block.temp/has-children? (some? (:block/_parent block*)))
+        properties' (when (seq properties) (conj properties :block.temp/has-children?))
+        block-refs-count? (some #{:block.temp/refs-count} properties')
         whiteboard? (common-entity-util/whiteboard? block)]
     (when block
       (let [children (when (or children? children-only?)
@@ -239,8 +241,8 @@
                           children)))]
         (if children-only?
           {:children children}
-          (let [block' (if (seq properties)
-                         (-> (select-keys block properties)
+          (let [block' (if (seq properties')
+                         (-> (select-keys block properties')
                              (with-raw-title block)
                              (assoc :db/id (:db/id block)))
                          (entity->map block))
