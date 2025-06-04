@@ -307,9 +307,11 @@
                   compare-result (when version-in-db (db-schema/compare-schema-version version-in-db "64.8"))]
               (when (and compare-result (not (neg? compare-result))) ; >= 64.8
                 (worker-util/post-message :capture-error
-                                          {:error "db-missing-addresses-v2"
+                                          {:error "db-missing-addresses-v3"
                                            :payload {:missing-addresses (str missing-addresses)
-                                                     :db-schema-version (str version-in-db)}})))
+                                                     :db-schema-version (str version-in-db)
+                                                     :graph-git-sha (when conn
+                                                                      (:kv/value (:logseq.kv/graph-git-sha @conn)))}})))
             (worker-util/post-message :notification ["It seems that the DB has been broken. Please run the command `Fix current broken graph`." :error false])
             (throw (ex-info "DB missing addresses" {:missing-addresses missing-addresses}))))
 
