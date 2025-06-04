@@ -11,6 +11,7 @@
 
 @import "node_modules/@ionic/react/css/palettes/dark.class.css";
 @import "src/main/frontend/animations.css";
+@import "photoswipe/dist/photoswipe.css";
 @import "packages/amplify/dist/amplify.css";
 @import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";
