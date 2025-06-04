@@ -30,6 +30,10 @@ html.plt-capacitor.plt-android {
       }
     }
   }
+
+  .pswp__top-bar {
+    @apply relative top-8;
+  }
 }
 
 html.has-mobile-keyboard {
