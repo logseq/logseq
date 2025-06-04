@@ -1,6 +1,7 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
             [capacitor.components.modal :as modal]
+            [capacitor.components.popup :as popup]
             [capacitor.components.search :as search]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui-component]
@@ -228,7 +229,8 @@
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
      (shui-popup/install-popups)
-     (modal/modal presenting-element))))
+     (modal/modal presenting-element)
+     (popup/popup))))
 
 (rum/defc main < rum/reactive
   []
