@@ -482,7 +482,7 @@
               (:name column))))))
        (shui/dropdown-menu-item
         {:key "export-edn"
-         :on-click #(db-export-handler/export-view-nodes-data rows)}
+         :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}
         "Export EDN"))))))
 
 (defn- get-column-size
