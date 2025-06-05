@@ -681,6 +681,7 @@
       (sqlite-export/build-export @conn options)
       (catch :default e
         (js/console.error "export-edn error: " e)
+        (js/console.error "Stack:\n" (.-stack e))
         (worker-util/post-message :notification
                                   ["An unexpected error occurred during export. See the javascript console for details."
                                    :error])
