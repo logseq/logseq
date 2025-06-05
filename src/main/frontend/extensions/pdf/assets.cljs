@@ -127,6 +127,7 @@
             (println "[existed ref block]" ref-block)
             ref-block)
           (let [text (:text content)
+                area? (not (nil? (:image content)))
                 wrap-props #(if-let [stamp (:image content)]
                               (assoc %
                                 :hl-type :area
@@ -139,10 +140,11 @@
                 properties (wrap-props props)]
             (when (string? text)
               (editor-handler/api-insert-new-block!
-               text (merge {:page        (:block/name ref-page)
-                            :custom-uuid id
-                            :properties properties}
-                           insert-opts)))))))))
+                text (merge {:page (:block/name ref-page)
+                             :custom-uuid id
+                             :edit-block? (not area?)
+                             :properties properties}
+                       insert-opts)))))))))
 
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
