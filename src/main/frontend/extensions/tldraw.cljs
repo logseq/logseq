@@ -142,8 +142,6 @@
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
-   :insertFirstPageBlock (fn [page-name]
-                           (editor-handler/insert-first-page-block-if-not-exists! page-name))
    :addNewPage (fn [page-name]
                  (p/let [result (page-handler/<create! page-name {:redirect? false})]
                    (str (:block/uuid result))))
