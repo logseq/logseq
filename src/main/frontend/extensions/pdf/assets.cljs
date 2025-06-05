@@ -118,7 +118,7 @@
             page))))))
 
 (defn file-based-ensure-ref-block!
-  [pdf-current {:keys [id content page properties] :as hl} insert-opts]
+  [pdf-current {:keys [id content page properties] :as _hl} insert-opts]
   (p/let [ref-page (when pdf-current (file-based-ensure-ref-page! pdf-current))]
     (when ref-page
       (let [ref-block (db-model/query-block-by-uuid id)]
