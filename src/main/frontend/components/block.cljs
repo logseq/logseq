@@ -1034,7 +1034,10 @@
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                   (p/let [result (if config/publishing?
+                                    ;; publishing doesn't have window.pfs defined
+                                    true
+                                    (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
                      (reset! (::file-exists? state) result))
                    state))}
   [state config block]
