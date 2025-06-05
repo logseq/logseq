@@ -324,8 +324,7 @@
                (not config/publishing?))
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)
-                (config/local-file-based-graph? repo)
-                (and (= config/demo-repo repo) (not (mobile-util/native-platform?))))
+                (config/local-file-based-graph? repo))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
@@ -338,10 +337,9 @@
                           (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
                           (ui-handler/re-render-root!)
                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
-          (when (db/page-empty? repo today-page)
+          (when-not (db/get-page today-page)
             (if db-based?
-              (when-not (model/get-journal-page title)
-                (create-f))
+              (create-f)
               (p/let [file-name (date/journal-title->default title)
                       file-rpath (str (config/get-journals-directory) "/" file-name "."
                                       (config/get-file-extension format))

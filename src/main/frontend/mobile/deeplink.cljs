@@ -55,8 +55,11 @@
              (fn []
                (cond
                  page-name
-                 (let [db-page-name (db-model/get-redirect-page-name page-name)]
-                   (editor-handler/insert-first-page-block-if-not-exists! db-page-name))
+                 (p/let [block (db-async/<get-block (state/get-current-repo) page-name {:children? false})]
+                   (if block
+                     (route-handler/redirect-to-page! block-uuid)
+                     (notification/show! (str "Open link failed. Page `" page-name "` doesn't exist in the graph."
+                                              :result block) :error false)))
 
                  block-uuid
                  (p/let [block (db-async/<get-block (state/get-current-repo) block-uuid {:children? false})]
