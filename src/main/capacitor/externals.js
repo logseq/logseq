@@ -64,7 +64,7 @@ const settleStatusBar = async () => {
 }
 
 window.externalsjs = {
-  Keyboard, Capacitor,
+  Keyboard, Capacitor, StatusBar,
   initGlobalListeners,
   settleStatusBar,
 }

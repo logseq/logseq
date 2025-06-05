@@ -165,10 +165,10 @@
 
 (defn use-theme-effects!
   [current-repo]
-  (let [_ (fstate/sync-system-theme!)
-        [theme] (frum/use-atom-in fstate/state :ui/theme)]
+  (let [[theme] (frum/use-atom-in fstate/state :ui/theme)]
     (hooks/use-effect!
      (fn []
+       (fstate/sync-system-theme!)
        (ui/setup-system-theme-effect!))
      [])
     (hooks/use-effect!

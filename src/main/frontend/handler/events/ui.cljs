@@ -274,7 +274,8 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar))
+  (shui/popup-hide! :selection-action-bar)
+  (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
