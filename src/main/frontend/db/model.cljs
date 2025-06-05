@@ -337,20 +337,6 @@ independent of format as format specific heading characters are stripped"
   (when page-name-or-uuid
     (ldb/get-case-page (conn/get-db) page-name-or-uuid)))
 
-(defn get-journal-page
-  [page-title]
-  (when-let [journal-day (date/journal-title->int page-title)]
-    (when-let [db (conn/get-db)]
-      (->
-       (d/q
-        '[:find [?page ...]
-          :in $ ?day
-          :where
-          [?page :block/journal-day ?day]]
-        db
-        journal-day)
-       first))))
-
 (defn get-redirect-page-name
   "Given any readable page-name, return the exact page-name in db. If page
    doesn't exists yet, will return the passed `page-name`. Accepts both

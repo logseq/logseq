@@ -1,18 +1,15 @@
 (ns frontend.mobile.deeplink
-  (:require
-   [clojure.string :as string]
-   [frontend.config :as config]
-   [frontend.db.async :as db-async]
-   [frontend.db.model :as db-model]
-   [frontend.handler.editor :as editor-handler]
-   [frontend.handler.notification :as notification]
-   [frontend.handler.route :as route-handler]
-   [frontend.mobile.intent :as intent]
-   [frontend.state :as state]
-   [frontend.util.text :as text-util]
-   [goog :refer [Uri]]
-   [logseq.common.util :as common-util]
-   [promesa.core :as p]))
+  (:require [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.db.async :as db-async]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
+            [frontend.mobile.intent :as intent]
+            [frontend.state :as state]
+            [frontend.util.text :as text-util]
+            [goog :refer [Uri]]
+            [logseq.common.util :as common-util]
+            [promesa.core :as p]))
 
 (def *link-to-another-graph (atom false))
 
