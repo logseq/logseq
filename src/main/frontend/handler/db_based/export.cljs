@@ -23,10 +23,12 @@
         (notification/show! "Copied block's data!" :success)))
     (notification/show! "No block found" :warning)))
 
-(defn export-view-nodes-data [node-ids]
+(defn export-view-nodes-data [rows {:keys [group-by?]}]
   (p/let [result (state/<invoke-db-worker :thread-api/export-edn
                                           (state/get-current-repo)
-                                          {:export-type :view-nodes :node-ids node-ids})
+                                          {:export-type :view-nodes
+                                           :rows rows
+                                           :group-by? group-by?})
           pull-data (with-out-str (pprint/pprint result))]
     (when-not (= :export-edn-error result)
       (.writeText js/navigator.clipboard pull-data)
