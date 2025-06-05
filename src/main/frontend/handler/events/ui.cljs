@@ -47,7 +47,8 @@
    {:id :ls-dialog-cmdk
     :align :top
     :content-props {:class "ls-dialog-cmdk"}
-    :close-btn? false}))
+    :close-btn? false
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
 
 (defmethod events/handle :command/run [_]
   (when (util/electron?)
