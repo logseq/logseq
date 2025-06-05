@@ -21,7 +21,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.set :as set]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -55,8 +56,17 @@
                                (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
                               string/trim)
                       title)]
-       (if (and has-tags? (nil? title'))
-         (notification/show! "Page name can't include \"#\"." :warning)
+       (cond
+         (and has-tags? (nil? title'))
+         (notification/show! "Page name can't include \"#\"." :error)
+         (and has-tags?
+              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+         (notification/show! (str "New page can't set built-in tags: "
+                                  (string/join ", "
+                                               (keep #(when (ldb/private-tags (:db/ident %)) (pr-str (:block/title %)))
+                                                     (:block/tags parsed-result))))
+                             :error)
+         :else
          (when-not (string/blank? title')
            (p/let [options' (if db-based?
                               (cond-> (update options :tags concat (:block/tags parsed-result))
