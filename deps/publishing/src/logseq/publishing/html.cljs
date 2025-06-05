@@ -129,6 +129,8 @@ necessary db filtering"
             [:script {:src "static/js/interact.min.js"}]
             [:script {:src "static/js/highlight.min.js"}]
             [:script {:src "static/js/katex.min.js"}]
+            [:script {:defer true :type "module" :src "static/js/pdfjs/pdf.mjs"}]
+            [:script {:defer true :type "module" :src "static/js/pdf_viewer3.mjs"}]
             [:script {:src "static/js/html2canvas.min.js"}]
             [:script {:src "static/js/code-editor.js"}]
             [:script {:src "static/js/custom.js"}]])))))
