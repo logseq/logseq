@@ -601,20 +601,6 @@
              (when-let [id (:block/uuid new-block)]
                (db/entity [:block/uuid id])))))))))
 
-(defn insert-first-page-block-if-not-exists!
-  [page-uuid-or-title]
-  (let [page-title (str page-uuid-or-title)]
-    (when-not (string/blank? page-title)
-      (when-let [page (db/get-page page-title)]
-        (let [class-or-property? (or (ldb/class? page) (ldb/property? page))]
-          (when (or class-or-property? (db/page-empty? (state/get-current-repo) (:db/id page)))
-            (let [new-block (cond-> {:block/title ""}
-                              (not (config/db-based-graph? (state/get-current-repo)))
-                              (assoc :block/format (get page :block/format :markdown)))]
-              (ui-outliner-tx/transact!
-               {:outliner-op :insert-blocks}
-               (outliner-op/insert-blocks! [new-block] page {:sibling? false})))))))))
-
 (defn check
   [{:block/keys [marker title repeated? uuid] :as block}]
   (let [new-content (string/replace-first title marker "DONE")
@@ -1138,9 +1124,9 @@
        (save-current-block!)
        (if (re-find url-regex page)
          (js/window.open page)
-         (let [page-name (db-model/get-redirect-page-name page)]
+         (do
            (state/clear-edit!)
-           (insert-first-page-block-if-not-exists! page-name)))))))
+           (route-handler/redirect-to-page! page)))))))
 
 (defn open-link-in-sidebar!
   []
@@ -2466,7 +2452,9 @@
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (let [page (:link thing-at-point)
                                  page-name (db-model/get-redirect-page-name page)]
-                             (insert-first-page-block-if-not-exists! page-name)))
+                             (p/do!
+                              (save-current-block!)
+                              (route-handler/redirect-to-page! page-name))))
               "list-item" (dwim-in-list)
               "properties-drawer" (dwim-in-properties state))
 
