@@ -14,7 +14,6 @@
             [frontend.db.model :as model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.assets :as assets-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.notification :as notification]
