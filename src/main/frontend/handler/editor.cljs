@@ -2889,15 +2889,6 @@
         (or ctrlKey metaKey)
         nil
 
-        ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
-        ;; does not work if cursor is at the beginning of a block, hence the block
-        ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/native-platform?)
-             (= key "Backspace")
-             (zero? pos)
-             (string/blank? (.toString (js/window.getSelection))))
-        (keydown-backspace-handler false e)
-
         (and (= key "#")
              (> pos 0)
              (= "#" (util/nth-safe value (dec pos))))
