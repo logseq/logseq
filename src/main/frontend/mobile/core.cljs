@@ -8,6 +8,7 @@
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
+            [capacitor.state :as cc-state]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -34,6 +35,22 @@
 (defn- android-init
   "Initialize Android-specified event listeners"
   []
+  (.addListener App "backButton"
+    (fn []
+      (when (false?
+              (cond
+                (not-empty @cc-state/*modal-data)
+                :skip
+
+                (not-empty (state/get-selection-blocks))
+                (editor-handler/clear-selection!)
+
+                (state/editing?)
+                (editor-handler/escape-editing)
+
+                :else false))
+        (prn "TODO: handle back button in Android"))))
+
   (.addEventListener js/window "sendIntentReceived"
                      #(intent/handle-received)))
 
