@@ -137,7 +137,9 @@
                  []
 
                  start-with-slash?
-                 [["Filters" :filters (visible-items :filters)]]
+                 [["Filters" :filters (visible-items :filters)]
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Nodes"          :nodes         (visible-items :nodes)]]
 
                  include-slash?
                  [(when-not node-exists?
