@@ -154,7 +154,6 @@
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
-      :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
       :editor/document-mode?                 document-mode?
@@ -210,6 +209,7 @@
       ;; assets
       :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
       :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+      :assets/asset-file-write-finish        (atom {})
 
       ;; mobile
       :mobile/container-urls                 nil
@@ -1072,9 +1072,9 @@ Similar to re-frame subscriptions"
   []
   (or @(get @state :selection/start-block)
       (when-let [edit-block (get-edit-block)]
-        (let [id (str "ls-block-" (:block/uuid edit-block))]
-          (set-selection-start-block! id)
-          id))))
+        (let [node (util/rec-get-node edit-block "ls-block")]
+          (set-selection-start-block! node)
+          node))))
 
 (defn get-cursor-range
   []
@@ -1462,14 +1462,6 @@ Similar to re-frame subscriptions"
       (if (= mode "light")
         (util/set-theme-light)
         (util/set-theme-dark)))))
-
-(defn set-editing-block-dom-id!
-  [block-dom-id]
-  (set-state! :editor/block-dom-id block-dom-id))
-
-(defn get-editing-block-dom-id
-  []
-  @(:editor/block-dom-id @state))
 
 (defn set-root-component!
   [component]
@@ -1929,6 +1921,12 @@ Similar to re-frame subscriptions"
 (defn get-editor-args
   []
   @(:editor/args @state))
+
+(defn get-editor-block-container
+  []
+  (some-> (get-edit-input-id)
+          (gdom/getElement)
+          (util/rec-get-node "ls-block")))
 
 (defn set-page-blocks-cp!
   [value]
