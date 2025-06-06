@@ -1677,7 +1677,8 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
-                                  {:align :end}))}
+                                  {:align :end
+                                   :dropdown-menu? true}))}
    (ui/icon "arrows-up-down")))
 
 (defn- view-cp
