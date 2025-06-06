@@ -146,17 +146,13 @@ ion-content {
     &[data-editor-popup-ref=page-search-hashtag],
     &[data-editor-popup-ref=commands]
     {
-        max-height: 160px;
-        width: 200px;
-        max-width: 200px;
+        min-width: 61.8vw;
+        max-width: calc(100vw - 40px);
+        max-height: 50vh;
 
-        &[data-side=top] {
-            max-height: 160px;
-        }
+        &[data-side=top] {}
 
-        &[data-side=bottom] {
-            max-height: 160px;
-        }
+        &[data-side=bottom] {}
     }
 }
 

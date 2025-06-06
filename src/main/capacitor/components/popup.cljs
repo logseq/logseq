@@ -7,19 +7,29 @@
 
 (defonce *last-popup-modal? (atom nil))
 
+(defn warp-calc-commands-popup-side
+  [pos opts]
+  (let [side (let [[_x y _ height] pos
+                   vh js/window.innerHeight
+                   [th bh] [y (- vh (+ y height) 300)]]
+               (if (> bh 200) "bottom"
+                 (if (> (- th bh) 100)
+                   "top" "bottom")))]
+    (-> (assoc opts :auto-side? false)
+      (assoc-in [:content-props :side] side))))
+
 (defn popup-show!
   [event content-fn {:keys [id dropdown-menu?] :as opts}]
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
     ;; FIXME: Editing a block at bottom will scroll to top
-    (do
-      (shui-popup/show! [0 86] content-fn opts)
-      (reset! *last-popup-modal? false))
+    (let [opts (warp-calc-commands-popup-side event opts)
+          pid (shui-popup/show! event content-fn opts)]
+      (reset! *last-popup-modal? false) pid)
 
     dropdown-menu?
-    (do
-      (shui-popup/show! event content-fn opts)
-      (reset! *last-popup-modal? false))
+    (let [pid (shui-popup/show! event content-fn opts)]
+      (reset! *last-popup-modal? false) pid)
 
     :else
     (when (fn? content-fn)
