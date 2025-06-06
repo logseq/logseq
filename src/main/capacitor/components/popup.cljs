@@ -5,23 +5,37 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+(defonce *last-popup-modal? (atom nil))
+
 (defn popup-show!
   [event content-fn {:keys [id dropdown-menu?] :as opts}]
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
     ;; FIXME: Editing a block at bottom will scroll to top
-    (shui-popup/show! [0 86] content-fn opts)
+    (do
+      (shui-popup/show! [0 86] content-fn opts)
+      (reset! *last-popup-modal? false))
 
     dropdown-menu?
-    (shui-popup/show! event content-fn opts)
+    (do
+      (shui-popup/show! event content-fn opts)
+      (reset! *last-popup-modal? false))
 
     :else
     (when (fn? content-fn)
       (state/set-popup! {:open? true
                          :content-fn content-fn
-                         :opts opts}))))
+                         :opts opts})
+      (reset! *last-popup-modal? true))))
+
+(defn popup-hide!
+  [& args]
+  (if @*last-popup-modal?
+    (state/set-popup! nil)
+    (apply shui-popup/hide! args)))
 
 (set! shui/popup-show! popup-show!)
+(set! shui/popup-hide! popup-hide!)
 
 (rum/defc popup < rum/reactive
   []
