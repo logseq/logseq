@@ -46,11 +46,13 @@
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
@@ -376,10 +378,22 @@
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
   (->
    (p/do!
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000))
+    (when (util/mobile?)
+      (shui/popup-show!
+       nil
+       (fn []
+         [:div.flex.items-center.justify-center.mt-8.text-2xl
+          (ui/loading (str "Downloading " graph-name))])))
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (when (util/mobile?)
+      (shui/popup-hide!)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)))))
+              (js/console.error e)
+              (when (util/mobile?)
+                (shui/popup-hide!)
+                ;; TODO: notify error
+                )))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
