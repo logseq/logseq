@@ -155,7 +155,13 @@ ion-content {
         }
 
         &[data-side=bottom] {
-            max-height: 160px
+            max-height: 160px;
         }
     }
+}
+
+html[data-color=logseq] {
+  &[data-theme=light] {
+    --ion-color-primary:var(--rx-logseq-11);
+  }
 }
