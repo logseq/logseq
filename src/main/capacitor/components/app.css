@@ -165,3 +165,7 @@ html[data-color=logseq] {
     --ion-color-primary:var(--rx-logseq-11);
   }
 }
+
+.graph-switcher .action-sheet-button {
+  font-size: 1.125em;
+}
