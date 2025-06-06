@@ -4495,7 +4495,7 @@
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             scroll-container (or (:scroll-container config)
-                                 (gdom/getElement "main-content-container"))]
+                                 (util/app-scroll-container-node))]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]
