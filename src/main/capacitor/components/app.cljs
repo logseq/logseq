@@ -95,7 +95,7 @@
     (journal/all-journals)]))
 
 (rum/defc home-inner
-  [*page db-restoring?]
+  [*page db-restoring? current-tab]
   (ion/page
    {:id "app-main-content"
     :ref *page}
@@ -143,15 +143,17 @@
       [:strong.flex.justify-center.items-center.py-24
        (ui-component/loading)])
      (ion/content {:class "scrolling ion-padding"}
-                  (journals)))))
+                  (if (= current-tab "search")
+                    [:div]
+                    (journals))))))
 
 (rum/defc home < rum/reactive
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
-  [*page]
+  [*page current-tab]
   (let [db-restoring? (fstate/sub :db/restoring?)]
-    (home-inner *page db-restoring?)))
+    (home-inner *page db-restoring? current-tab)))
 
 (defn use-theme-effects!
   [current-repo]
@@ -200,7 +202,7 @@
      (ion/tab
       {:tab "home"}
       (ion/content
-       (home *home-page)))
+       (home *home-page current-tab)))
      (ion/tab
       {:tab "search"}
       (ion/content
