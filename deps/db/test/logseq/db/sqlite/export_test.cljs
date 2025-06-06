@@ -524,14 +524,14 @@
                             (mapv #(vector :block/uuid (:block/uuid %)))))
         conn2 (db-test/create-conn)
         {:keys [init-tx block-props-tx] :as _txs}
-        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :node-ids (get-node-ids @conn)})
+        (-> (sqlite-export/build-export @conn {:export-type :view-nodes :rows (get-node-ids @conn)})
             (sqlite-export/build-import @conn2 {}))
         ;; _ (cljs.pprint/pprint _txs)
         _ (d/transact! conn2 init-tx)
         _ (d/transact! conn2 block-props-tx)
         _ (validate-db @conn2)
         imported-nodes (sqlite-export/build-export @conn2 {:export-type :view-nodes
-                                                           :node-ids (get-node-ids @conn2)})]
+                                                           :rows (get-node-ids @conn2)})]
 
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-nodes)))
     (is (= (expand-properties (:properties original-data)) (:properties imported-nodes)))
@@ -882,8 +882,8 @@
 (deftest build-import-can-import-existing-page-with-different-uuid
   (testing "By default any properties passed to an existing page are upserted"
     (test-import-existing-page {}
-                              {:logseq.property/description "second description"
-                               :logseq.property/exclude-from-graph-view true}))
+                               {:logseq.property/description "second description"
+                                :logseq.property/exclude-from-graph-view true}))
   (testing "With ::existing-pages-keep-properties?, existing properties on existing pages are not overwritten by imported data"
     (test-import-existing-page {:existing-pages-keep-properties? true}
                                {:logseq.property/description "first description"

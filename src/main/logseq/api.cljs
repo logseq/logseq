@@ -844,7 +844,7 @@
     (let [block (state/get-edit-block)
           block (or block
                     (some-> (or (first (state/get-selection-blocks))
-                                (gdom/getElement (state/get-editing-block-dom-id)))
+                                (state/get-editor-block-container))
                             (.getAttribute "blockid")
                             (db-model/get-block-by-uuid)))]
       (get_block (:block/uuid block) opts))))

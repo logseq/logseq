@@ -44,12 +44,10 @@
 
 (defn- set-global-error-notification!
   []
-  (when-not config/dev?
-    (set! js/window.onerror
-          (fn [message, _source, _lineno, _colno, error]
-            (when-not (error/ignored? message)
-              (js/console.error message)
-              (log/error :exception error))))))
+  (set! js/window.onerror
+        (fn [message, _source, _lineno, _colno, error]
+          (when-not (error/ignored? message)
+            (log/error :exception error)))))
 
 (defn- watch-for-date!
   []

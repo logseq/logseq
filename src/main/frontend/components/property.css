@@ -293,6 +293,7 @@ a.control-link {
   min-height: 28px;
   padding-top: 0;
   padding-bottom: 0;
+  container-type: normal;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {

@@ -55,7 +55,6 @@ export interface LogseqContextValue {
     queryBlockByUUID: (uuid: string) => any
     getBlockPageName: (uuid: string) => string
     getRedirectPageName: (uuidOrPageName: string) => string
-    insertFirstPageBlock: (pageName: string) => string
     isWhiteboardPage: (pageName: string) => boolean
     isMobile: () => boolean
     saveAsset: (file: File) => Promise<string>
