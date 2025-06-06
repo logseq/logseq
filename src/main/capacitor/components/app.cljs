@@ -114,19 +114,8 @@
                                                         (state/open-block-modal! journal)
                                                         (-> (page-handler/<create! page-name {:redirect? false})
                                                             (p/then #(state/open-block-modal! (db/get-page page-name)))))))]
-
-                                  (if (mobile-util/native-platform?)
-                                    (-> (.showDatePicker mobile-util/ui-local)
-                                        (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))
-
-                                    (ui-component/open-modal!
-                                     (fn [{:keys [close!]}]
-                                       (ion/datetime
-                                        {:presentation "date"
-                                         :onIonChange (fn [^js e]
-                                                        (let [val (.-value (.-detail e))]
-                                                          (apply-date! val)
-                                                          (close!)))}))))))}
+                                  (-> (.showDatePicker mobile-util/ui-local)
+                                      (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
                    [:span.text-muted-foreground {:slot "icon-only"}
                     (ion/tabler-icon "calendar-month" {:size 24})])
 

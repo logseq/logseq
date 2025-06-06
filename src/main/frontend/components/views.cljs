@@ -181,6 +181,7 @@
                                           {:id popup-id
                                            :align "start"
                                            :as-dropdown? true
+                                           :dropdown-menu? true
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
@@ -1766,6 +1767,7 @@
                                             (shui/popup-hide!))))}
                             "Delete")])
                         {:as-dropdown? true
+                         :dropdown-menu? true
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
                        (do
