@@ -155,8 +155,9 @@
                    (when-not (string/blank? q)
                      (p/let [result (if db-tag?
                                       (editor-handler/get-matched-classes q)
-                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
-                                                                             :page-only? (not db-based?)}))]
+                                      (p/let [result (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                                            :page-only? (not db-based?)})]
+                                        (reverse (sort-by (fn [result] (:page? result)) result))))]
                        (set-matched-pages! result))))]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
@@ -206,10 +207,10 @@
                                  (ui/icon "letter-p" {:size 14})
 
                                  (db-model/whiteboard-page? block')
-                                 (ui/icon "writing")
+                                 (ui/icon "writing" {:size 14})
 
-                                 (:page? block')
-                                 (ui/icon "file")
+                                 (or (ldb/page? block') (:page? block'))
+                                 (ui/icon "file" {:size 14})
 
                                  (or (string/starts-with? (str (:block/title block')) (t :new-tag))
                                      (string/starts-with? (str (:block/title block')) (t :new-page)))
@@ -225,7 +226,10 @@
                                               (str title " -> alias: " (:block/title target))
                                               title))
                                           (block-handler/block-unique-title block'))]
-                              (search-handler/highlight-exact-query title q))]]))
+                              (if (or (string/starts-with? title (t :new-tag))
+                                      (string/starts-with? title (t :new-page)))
+                                title
+                                (search-handler/highlight-exact-query title q)))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]

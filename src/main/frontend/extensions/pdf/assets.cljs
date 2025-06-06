@@ -118,7 +118,7 @@
             page))))))
 
 (defn file-based-ensure-ref-block!
-  [pdf-current {:keys [id content page properties] :as hl} insert-opts]
+  [pdf-current {:keys [id content page properties] :as _hl} insert-opts]
   (p/let [ref-page (when pdf-current (file-based-ensure-ref-page! pdf-current))]
     (when ref-page
       (let [ref-block (db-model/query-block-by-uuid id)]
@@ -126,29 +126,23 @@
           (do
             (println "[existed ref block]" ref-block)
             ref-block)
-          (let [text       (:text content)
+          (let [text (:text content)
+                area? (not (nil? (:image content)))
                 wrap-props #(if-let [stamp (:image content)]
                               (assoc %
                                      :hl-type :area
                                      :hl-stamp stamp)
                               %)
-                db-base? (config/db-based-graph? (state/get-current-repo))
-                props (cond->
-                       {(pu/get-pid :logseq.property/ls-type)  :annotation
-                        (pu/get-pid :logseq.property.pdf/hl-page)  page
-                        (pu/get-pid :logseq.property.pdf/hl-color) (:color properties)}
-
-                        db-base?
-                        (assoc (pu/get-pid :logseq.property.pdf/hl-value) hl)
-
-                        (not db-base?)
-                         ;; force custom uuid
-                        (assoc :id (if (string? id) (uuid id) id)))
+                props {:id (if (string? id) (uuid id) id)
+                       (pu/get-pid :logseq.property/ls-type) :annotation
+                       (pu/get-pid :logseq.property.pdf/hl-page) page
+                       (pu/get-pid :logseq.property.pdf/hl-color) (:color properties)}
                 properties (wrap-props props)]
             (when (string? text)
               (editor-handler/api-insert-new-block!
-               text (merge {:page        (:block/name ref-page)
+               text (merge {:page (:block/name ref-page)
                             :custom-uuid id
+                            :edit-block? (not area?)
                             :properties properties}
                            insert-opts)))))))))
 

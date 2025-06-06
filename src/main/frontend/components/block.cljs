@@ -916,6 +916,12 @@
      (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
+(defn- <get-block
+  [block-id]
+  (db-async/<get-block (state/get-current-repo) block-id
+                       {:children? false
+                        :skip-refresh? true}))
+
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [args (:rum/args state)
@@ -932,8 +938,7 @@
                (or (:skip-async-load? config) (:table-view? config))
                (reset! *result page)
                :else
-               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
-                                                                                             :skip-refresh? true})]
+               (p/let [result (<get-block page-id-or-name)]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -1032,7 +1037,10 @@
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                   (p/let [result (if config/publishing?
+                                    ;; publishing doesn't have window.pfs defined
+                                    true
+                                    (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
                      (reset! (::file-exists? state) result))
                    state))}
   [state config block]
@@ -1043,9 +1051,10 @@
         {:keys [direction loaded total]} (state/sub :rtc/asset-upload-download-progress
                                                     {:path-in-sub-atom [repo (str (:block/uuid block))]})
         downloading? (and (= direction :download) (not= loaded total))
-        download-finished? (and (= direction :download) (= loaded total))]
+        asset-file-write-finished? (state/sub :assets/asset-file-write-finish
+                                              {:path-in-sub-atom [repo (str (:block/uuid block))]})]
     (cond
-      (or file-exists? download-finished?)
+      (or file-exists? asset-file-write-finished?)
       (asset-link (assoc config :asset-block block)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
@@ -1066,6 +1075,7 @@
         (contains? config/video-formats asset-type))))
 
 (declare block-positioned-properties)
+
 (rum/defc page-reference < rum/reactive db-mixins/query
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
@@ -1096,7 +1106,7 @@
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
                              (not contents-page?))]
-          (when-not (= (:db/id block) (:db/id (:block config)))
+          (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
             (cond
               (and asset? (img-audio-video? block))
               (asset-cp config block)
@@ -2580,19 +2590,20 @@
    (dom/closest target ".query-table")))
 
 (defn- block-content-on-pointer-down
-  [e block block-id content edit-input-id config]
-  (let [selection-blocks (state/get-selection-blocks)
+  [e block block-id edit-input-id content config]
+  (let [target (.-target e)
+        selection-blocks (state/get-selection-blocks)
         starting-block (state/get-selection-start-block-or-first)
-        mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))]
+        mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
+        block-dom-element (util/rec-get-node target "ls-block")]
     (if mobile-selection?
-      (let [ids (set (state/get-selection-block-ids))
-            block-node (gdom/getElement block-id)]
+      (let [ids (set (state/get-selection-block-ids))]
         (if (contains? ids (:block/uuid block))
           (do
-            (state/drop-selection-block! block-node)
+            (state/drop-selection-block! block-dom-element)
             (when (= 1 (count ids))
               (state/set-state! :mobile/show-action-bar? false)))
-          (state/conj-selection-block! block-node)))
+          (state/conj-selection-block! block-dom-element)))
       (do
         (util/mobile-keep-keyboard-open false)
         (when-not (or
@@ -2608,29 +2619,28 @@
                 (and meta? shift?)
                 (when-not (empty? selection-blocks)
                   (util/stop e)
-                  (editor-handler/highlight-selection-area! block-id {:append? true}))
+                  (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
 
                 meta?
                 (do
                   (util/stop e)
-                  (let [block-dom-element (gdom/getElement block-id)]
-                    (if (some #(= block-dom-element %) selection-blocks)
-                      (state/drop-selection-block! block-dom-element)
-                      (state/conj-selection-block! block-dom-element :down)))
+                  (if (some #(= block-dom-element %) selection-blocks)
+                    (state/drop-selection-block! block-dom-element)
+                    (state/conj-selection-block! block-dom-element :down))
                   (if (empty? (state/get-selection-blocks))
                     (state/clear-selection!)
-                    (state/set-selection-start-block! block-id)))
+                    (state/set-selection-start-block! block-dom-element)))
 
                 (and shift? starting-block)
                 (do
                   (util/stop e)
                   (util/clear-selection!)
-                  (editor-handler/highlight-selection-area! block-id))
+                  (editor-handler/highlight-selection-area! block-id block-dom-element))
 
                 shift?
                 (do
                   (util/clear-selection!)
-                  (state/set-selection-start-block! block-id))
+                  (state/set-selection-start-block! block-dom-element))
 
                 :else
                 (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
@@ -2639,7 +2649,7 @@
                   (let [f #(p/do!
                             (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
                               (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
-                            (let [cursor-range (some-> (gdom/getElement block-id)
+                            (let [cursor-range (some-> block-dom-element
                                                        (dom/by-class "block-content-inner")
                                                        first
                                                        util/caret-range)
@@ -2659,12 +2669,12 @@
                                {:db (db/get-db)
                                 :move-cursor? false
                                 :container-id (:container-id config)})))]
-                ;; wait a while for the value of the caret range
+                    ;; wait a while for the value of the caret range
                     (p/do!
                      (state/pub-event! [:editor/save-code-editor])
                      (f))
 
-                    (state/set-selection-start-block! block-id)))))))))))
+                    (state/set-selection-start-block! block-dom-element)))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id top?]
@@ -2955,7 +2965,7 @@
                                             (let [f (:on-block-content-pointer-down config)]
                                               (if (fn? f)
                                                 (f e)
-                                                (block-content-on-pointer-down e block block-id content edit-input-id config))))))))]
+                                                (block-content-on-pointer-down e block block-id edit-input-id content config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
@@ -3385,7 +3395,8 @@
 
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))]
+  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
     (when (and mouse-moving?
                (not @*dragging?)
                (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
@@ -3398,7 +3409,7 @@
       (when (non-dragging? e)
         (when-let [container (gdom/getElement "app-container-wrapper")]
           (dom/add-class! container "blocks-selection-mode"))
-        (editor-handler/highlight-selection-area! block-id {:append? true})))))
+        (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
@@ -4319,9 +4330,12 @@
                                      (when (not (:block-children? config))
                                        {:top? top?
                                         :bottom? bottom?}))
-        (str (:block/uuid item)
-             (when linked-block
-               (str "-" (:block/uuid original-block))))))))
+        (str
+         (:container-id config)
+         "-"
+         (:block/uuid item)
+         (when linked-block
+           (str "-" (:block/uuid original-block))))))))
 
 (rum/defc block-list
   [config blocks]

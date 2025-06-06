@@ -102,42 +102,43 @@
 (rum/defc add-button
   [block container-id]
   (let [*ref (rum/use-ref nil)
-        has-children? (:block/_parent block)]
-    [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
-     {:class (if has-children?
-               "opacity-0"
-               "opacity-50")
-      :data-blockId (:db/id block)
-      :ref *ref
-      :on-click (fn [e]
-                  (util/stop e)
-                  (state/set-state! :editor/container-id container-id)
-                  (editor-handler/api-insert-new-block! ""
-                                                        {:block-uuid (:block/uuid block)}))
-      :on-mouse-over (fn []
-                       (let [ref (rum/deref *ref)
-                             prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
-                         (cond
-                           (and prev-block (dom/has-class? prev-block "is-blank"))
-                           (dom/add-class! ref "opacity-0")
-                           (and prev-block has-children?)
-                           (dom/add-class! ref "opacity-50")
-                           :else
-                           (dom/add-class! ref "opacity-100"))))
-      :on-mouse-leave #(do
-                         (dom/remove-class! (rum/deref *ref) "opacity-50")
-                         (dom/remove-class! (rum/deref *ref) "opacity-100"))
-      :on-key-down (fn [e]
-                     (util/stop e)
-                     (when (= "Enter" (util/ekey e))
-                       (state/set-state! :editor/container-id container-id)
-                       (editor-handler/api-insert-new-block! "" block)))
-      :tab-index 0}
-     [:div.flex.flex-row
-      [:div.flex.items-center {:style {:height 28
-                                       :margin-left (if (util/mobile?) 0 22)}}
-       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100
-        [:span.bullet]]]]]))
+        has-children? (:block/_parent block)
+        page? (ldb/page? block)
+        opacity-class (if has-children? "opacity-0" "opacity-50")]
+    (when page?
+      [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
+       {:class opacity-class
+        :data-blockId (:db/id block)
+        :ref *ref
+        :on-click (fn [e]
+                    (util/stop e)
+                    (state/set-state! :editor/container-id container-id)
+                    (editor-handler/api-insert-new-block! ""
+                                                          {:block-uuid (:block/uuid block)}))
+        :on-mouse-over (fn []
+                         (let [ref (rum/deref *ref)
+                               prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                           (cond
+                             (and prev-block (dom/has-class? prev-block "is-blank"))
+                             (dom/add-class! ref "opacity-0")
+                             (and prev-block has-children?)
+                             (dom/add-class! ref "opacity-50")
+                             :else
+                             (dom/add-class! ref "opacity-100"))))
+        :on-mouse-leave #(do
+                           (dom/remove-class! (rum/deref *ref) "opacity-50")
+                           (dom/remove-class! (rum/deref *ref) "opacity-100"))
+        :on-key-down (fn [e]
+                       (util/stop e)
+                       (when (= "Enter" (util/ekey e))
+                         (state/set-state! :editor/container-id container-id)
+                         (editor-handler/api-insert-new-block! "" block)))
+        :tab-index 0}
+       [:div.flex.flex-row
+        [:div.flex.items-center {:style {:height 28
+                                         :margin-left (if (util/mobile?) 0 22)}}
+         [:span.bullet-container
+          [:span.bullet]]]]])))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -652,7 +653,7 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when (and (not preview?) (or (not show-tabs?) tabs-rendered?))
-           [:div.ml-1.flex.flex-col.gap-4
+           [:div.ml-1.flex.flex-col.gap-8.mt-4
             (when today?
               (today-queries repo today? sidebar?))
 
