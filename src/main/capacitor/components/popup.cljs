@@ -13,10 +13,10 @@
                    vh js/window.innerHeight
                    [th bh] [y (- vh (+ y height) 300)]]
                (if (> bh 200) "bottom"
-                 (if (> (- th bh) 100)
-                   "top" "bottom")))]
+                   (if (> (- th bh) 100)
+                     "top" "bottom")))]
     (-> (assoc opts :auto-side? false)
-      (assoc-in [:content-props :side] side))))
+        (assoc-in [:content-props :side] side))))
 
 (defn popup-show!
   [event content-fn {:keys [id dropdown-menu?] :as opts}]
@@ -40,8 +40,7 @@
 
 (defn popup-hide!
   [& args]
-  (if @*last-popup-modal?
-    (state/set-popup! nil)
+  (when-not  @*last-popup-modal?
     (apply shui-popup/hide! args)))
 
 (set! shui/popup-show! popup-show!)
