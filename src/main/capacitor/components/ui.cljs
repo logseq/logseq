@@ -3,8 +3,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
-            [frontend.ui :as ui]
             [frontend.state :as fstate]
+            [frontend.ui :as ui]
             [medley.core :as medley]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
@@ -26,7 +26,7 @@
   [:main#app-container-wrapper.ls-fold-button-on-right
    [:div#app-container.pt-2
     [:div#main-container.flex.flex-1
-     [:div#main-content-container.w-full.!px-0 content]]]])
+     [:div.w-full content]]]])
 
 (rum/defc notification-clear-all
   []

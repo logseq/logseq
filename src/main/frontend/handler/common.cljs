@@ -51,7 +51,7 @@
                     (state/set-state! :ui/scrolling? true)
                     (state/save-scroll-position! (util/scroll-top))
                     (state/save-main-container-position!
-                     (-> (gdom/getElement "main-content-container")
+                     (-> (util/app-scroll-container-node)
                          (gobj/get "scrollTop")))
                     (reset! *scroll-timer (js/setTimeout
                                            (fn [] (state/set-state! :ui/scrolling? false)) 500)))
