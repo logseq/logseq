@@ -140,7 +140,7 @@
    (if db-restoring?
      (ion/content
       [:strong.flex.justify-center.items-center.py-24
-       (ion/tabler-icon "loader" {:class "animate animate-spin opacity-50" :size 30})])
+       (ui-component/loading)])
      (ion/content {:class "scrolling ion-padding"}
                   (journals)))))
 
