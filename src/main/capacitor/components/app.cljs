@@ -49,7 +49,7 @@
                                   (for [repo graphs]
                                     {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
                                      :role (:url repo)})
-                                  [{:text "+ Add new graph"
+                                  [{:text "Add new graph"
                                     :role "add-new-graph"}])]
                      (ui-component/open-modal! "Switch graph"
                                                {:type :action-sheet
@@ -58,11 +58,12 @@
                                                 :on-action (fn [e]
                                                              (when-let [role (:role e)]
                                                                (if (= "add-new-graph" role)
-                                                                 (when-let [db-name (js/prompt "Create new db")]
+                                                                 (when-let [db-name (js/prompt "Create new graph")]
                                                                    (when-not (string/blank? db-name)
                                                                      (repo-handler/new-db! db-name)))
                                                                  (when (string/starts-with? role "logseq_db_")
-                                                                   (fstate/pub-event! [:graph/switch role])))))})))}
+                                                                   (fstate/pub-event! [:graph/switch role])))))
+                                                :modal-props {:class "graph-switcher"}})))}
       [:span.flex.items-center.gap-2.opacity-80.pt-1
        [:strong.overflow-hidden.text-ellipsis.block.font-normal
         {:style {:max-width "40vw"}}
