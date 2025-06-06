@@ -22,7 +22,6 @@
   [event content-fn {:keys [id dropdown-menu?] :as opts}]
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
-    ;; FIXME: Editing a block at bottom will scroll to top
     (let [opts (warp-calc-commands-popup-side event opts)
           pid (shui-popup/show! event content-fn opts)]
       (reset! *last-popup-modal? false) pid)
