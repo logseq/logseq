@@ -29,20 +29,21 @@
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
-    [:span.flex.items-center
-     (if (or (config/local-file-based-graph? url)
-             (config/db-based-graph? url))
-       (let [local-dir (config/get-local-dir url)
-             graph-name (text-util/get-graph-name-from-path url)]
-         [:a.flex.items-center {:title    local-dir
-                                :on-click #(on-click graph)}
-          [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
-          (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
+    (let [db-based? (config/db-based-graph? url)]
+      [:span.flex.items-center
+       (if (or (config/local-file-based-graph? url) db-based?)
+         (let [local-dir (config/get-local-dir url)
+               graph-name (text-util/get-graph-name-from-path url)]
+           [:a.flex.items-center {:title    local-dir
+                                  :on-click #(on-click graph)}
+            [:span.pr-1 graph-name
+             (when (and GraphName (not (and remote? db-based?))) [:strong.pl-1 "(" GraphName ")"])]
+            (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
-       [:a.flex.items-center {:title    GraphUUID
-                              :on-click #(on-click graph)}
-        (db/get-repo-path (or url GraphName))
-        (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])]))
+         [:a.flex.items-center {:title    GraphUUID
+                                :on-click #(on-click graph)}
+          (db/get-repo-path (or url GraphName))
+          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (defn sort-repos-with-metadata-local
   [repos]
@@ -110,8 +111,7 @@
            [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
             {:title title
              :on-click (fn []
-                         (let [has-prompt? true
-                               prompt-str (cond only-cloud?
+                         (let [prompt-str (cond only-cloud?
                                                 (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
                                                 db-based?
                                                 (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
@@ -143,9 +143,7 @@
                                           [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
                                      (p/then #(action-confirm-fn!))))]
 
-                           (if has-prompt?
-                             (confirm-fn!)
-                             (unlink-or-remote-fn!))))}
+                           (confirm-fn!)))}
             (if only-cloud? "Remove (server)" "Unlink (local)")]))]]]))
 
 (rum/defc repos-cp < rum/reactive
