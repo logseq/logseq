@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.search :as search]
+            [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -859,7 +860,6 @@
                        :logseq.task/scheduled :logseq.property/scheduled})
    conn search-db))
 
-
 (defn- empty-placeholder-add-block-uuid
   [_conn _search-db]
   [{:db/ident :logseq.property/empty-placeholder
@@ -1154,8 +1154,7 @@
         nil
 
         (neg? compare-result) ; outdated client, db version could be synced from server
-        ;; FIXME: notify users to upgrade to the latest version asap
-        nil
+        (worker-util/post-message :notification ["Your app is using an outdated version that is incompatible with your current graph. Please update your app before editing this graph." :error false])
 
         (pos? compare-result)
         (try

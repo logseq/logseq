@@ -26,6 +26,8 @@
                     (assoc :revision config/revision))}
    ;; :integrations [(new posthog/SentryIntegration posthog "logseq" 5311485)
    ;;                (new BrowserTracing)]
+   :ignoreErrors ["ResizeObserver loop limit exceeded"
+                  "ResizeObserver loop completed with undelivered notifications"]
    :debug config/dev?
    :tracesSampleRate 1.0
    :beforeSend (fn [^js event]

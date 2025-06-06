@@ -7,16 +7,16 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -527,8 +527,9 @@
 
 (defn- build-view-nodes-export
   "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
-  [db eids]
-  (let [nodes (map #(d/entity db %) eids)
+  [db rows {:keys [group-by?]}]
+  (let [eids (if group-by? (mapcat second rows) rows)
+        nodes (map #(d/entity db %) eids)
         property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
                                           vals
                                           (filter de/entity?))
@@ -859,7 +860,7 @@
           :page
           (build-page-export db (:page-id options))
           :view-nodes
-          (build-view-nodes-export db (:node-ids options))
+          (build-view-nodes-export db (:rows options) (select-keys options [:group-by?]))
           :selected-nodes
           (build-selected-nodes-export db (:node-ids options))
           :graph-ontology

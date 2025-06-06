@@ -131,9 +131,15 @@
                                       (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
+        start-with-slash? (string/starts-with? input "/")
         order* (cond
                  (= search-mode :graph)
                  []
+
+                 start-with-slash?
+                 [["Filters" :filters (visible-items :filters)]
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Nodes"          :nodes         (visible-items :nodes)]]
 
                  include-slash?
                  [(when-not node-exists?
@@ -558,8 +564,11 @@
 
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
-        !input (::input state)]
-    (reset! !input (get-filter-user-input @!input))
+        !input (::input state)
+        input-ref @(::input-ref state)]
+    (let [value (get-filter-user-input @!input)]
+      (reset! !input value)
+      (set! (.-value input-ref) value))
     (let [!filter (::filter state)
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
@@ -779,13 +788,14 @@
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter' @(::filter state)]
-             (when-not (string/blank? input)
-               (util/stop e)
-               (handle-input-change state nil ""))
-             (when (and filter' (string/blank? input))
-               (util/stop e)
-               (reset! (::filter state) nil)
-               (load-results :default state)))
+             (if filter'
+               (do
+                 (util/stop e)
+                 (reset! (::filter state) nil)
+                 (load-results :default state))
+               (when-not (string/blank? input)
+                 (util/stop e)
+                 (handle-input-change state nil ""))))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -841,6 +851,7 @@
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :auto-focus true
        :autoComplete "off"
+       :autoCapitalize false
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change debounced-on-change
@@ -848,23 +859,12 @@
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
-       :on-key-down (gfun/debounce
-                     (fn [e]
-                       (p/let [value (.-value @input-ref)
-                               last-char (last value)
-                               backspace? (= (util/ekey e) "Backspace")
-                               filter-group (:group @(::filter state))
-                               slash? (= (util/ekey e) "/")
-                               namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
-                                                 (search/block-search (state/get-current-repo) (str value "/") {}))
-                               namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
-                         (when (and filter-group
-                                    (or (and slash? (not namespace-page-matched?))
-                                        (and backspace? (= last-char "/"))
-                                        (and backspace? (= input ""))))
-                           (reset! (::filter state) nil)
-                           (load-results :default state))))
-                     100)
+       :on-key-down (fn [e]
+                      (case (util/ekey e)
+                        "Esc"
+                        (when-not @(::filter state)
+                          (shui/dialog-close!))
+                        nil))
        :default-value input}]]))
 
 (defn rand-tip
@@ -1044,14 +1044,13 @@
                                       (and (contains? #{:create} group-filter)
                                            (= group-key :create))))))
                    results-ordered)]
-        (when-not (= ["Filters"] (map first items))
-          (if (seq items)
-            (for [[group-name group-key _group-count group-items] items]
-              (let [title (string/capitalize group-name)]
-                (result-group state title group-key group-items first-item sidebar?)))
-            [:div.flex.flex-col.p-4.opacity-50
-             (when-not (string/blank? @*input)
-               "No matched results")])))]
+        (if (seq items)
+          (for [[group-name group-key _group-count group-items] items]
+            (let [title (string/capitalize group-name)]
+              (result-group state title group-key group-items first-item sidebar?)))
+          [:div.flex.flex-col.p-4.opacity-50
+           (when-not (string/blank? @*input)
+             "No matched results")]))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]

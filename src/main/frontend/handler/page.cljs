@@ -11,7 +11,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
-            [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -25,7 +24,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -324,8 +322,7 @@
                (not config/publishing?))
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)
-                (config/local-file-based-graph? repo)
-                (and (= config/demo-repo repo) (not (mobile-util/native-platform?))))
+                (config/local-file-based-graph? repo))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
@@ -338,10 +335,9 @@
                           (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
                           (ui-handler/re-render-root!)
                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
-          (when (db/page-empty? repo today-page)
+          (when-not (db/get-page today-page)
             (if db-based?
-              (when-not (model/get-journal-page title)
-                (create-f))
+              (create-f)
               (p/let [file-name (date/journal-title->default title)
                       file-rpath (str (config/get-journals-directory) "/" file-name "."
                                       (config/get-file-extension format))
