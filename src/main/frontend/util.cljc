@@ -1293,7 +1293,7 @@
            (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
 
            (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top' scroll 32))
+           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
 
            :else
            nil)))))
