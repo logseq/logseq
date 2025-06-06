@@ -85,9 +85,13 @@
 (defn start-db-worker!
   []
   (when-not util/node-test?
-    (let [worker-url (if (util/electron?)
+    (let [worker-url (cond
+                       (util/electron?)
                        "js/db-worker.js"
-                       (if js/window.Capacitor "db-worker.js" "static/js/db-worker.js"))
+                       (util/capacitor-new?)
+                       "db-worker.js"
+                       :else
+                       "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
           wrapped-worker (fn [qkw direct-pass-args? & args]
