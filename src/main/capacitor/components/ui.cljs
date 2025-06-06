@@ -3,6 +3,7 @@
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
+            [frontend.ui :as ui]
             [frontend.state :as fstate]
             [medley.core :as medley]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
@@ -192,3 +193,7 @@
                  props' (assoc props :close! close!)]]
        (x-modal props'
                 (if (fn? content) (content props') content)))]))
+
+(rum/defc loading
+  ([] (loading ""))
+  ([content] [:span.opacity-50 (ui/loading content)]))
