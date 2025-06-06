@@ -101,7 +101,7 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (util/mobile?)
+  (when (and (util/mobile?) (state/sub :editor/editing?))
     (let [commands' (commands)]
       [:div#mobile-editor-toolbar
        [:div.toolbar-commands

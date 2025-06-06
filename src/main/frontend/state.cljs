@@ -156,7 +156,7 @@
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              (atom {})
-      :editor/editing?                       (atom {})
+      :editor/editing?                       (atom nil)
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
@@ -1387,7 +1387,7 @@ Similar to re-frame subscriptions"
       :or {clear-editing-block? true}}]
   (clear-editor-action!)
   (when clear-editing-block?
-    (set-state! :editor/editing? {})
+    (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)

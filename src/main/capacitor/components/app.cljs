@@ -225,11 +225,10 @@
   []
   (let [current-repo (fstate/sub :git/current-repo)
         show-action-bar? (fstate/sub :mobile/show-action-bar?)
-        {:keys [open?]} (rum/react state/*modal-data)
-        search? (= "search" (rum/react state/*tab))]
+        {:keys [open?]} (rum/react state/*modal-data)]
     (ion/app
      (tabs current-repo)
-     (when-not (or open? search?)
+     (when-not open?
        [:<>
         (mobile-bar/mobile-bar)
         (when show-action-bar?
