@@ -395,7 +395,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content-container"))
+  (util/app-scroll-container-node))
 
 (defn focus-element
   [element]
