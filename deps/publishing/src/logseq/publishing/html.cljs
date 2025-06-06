@@ -126,14 +126,15 @@ necessary db filtering"
             [:script {:src "static/js/ui.js"}]
             [:script {:src "static/js/shared.js"}]
             [:script {:src "static/js/main.js"}]
-            [:script {:src "static/js/interact.min.js"}]
-            [:script {:src "static/js/highlight.min.js"}]
-            [:script {:src "static/js/katex.min.js"}]
+            ;; Deferring scripts above results in errors
+            [:script {:defer true :src "static/js/interact.min.js"}]
+            [:script {:defer true :src "static/js/highlight.min.js"}]
+            [:script {:defer true :src "static/js/katex.min.js"}]
             [:script {:defer true :type "module" :src "static/js/pdfjs/pdf.mjs"}]
             [:script {:defer true :type "module" :src "static/js/pdf_viewer3.mjs"}]
-            [:script {:src "static/js/html2canvas.min.js"}]
-            [:script {:src "static/js/code-editor.js"}]
-            [:script {:src "static/js/custom.js"}]])))))
+            [:script {:defer true :src "static/js/html2canvas.min.js"}]
+            [:script {:defer true :src "static/js/code-editor.js"}]
+            [:script {:defer true :src "static/js/custom.js"}]])))))
 
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
