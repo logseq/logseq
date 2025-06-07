@@ -86,7 +86,8 @@
 (rum/defc keep-keyboard-open
   []
   [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
-   {:id "app-keep-keyboard-open-input"}])
+   {:id "app-keep-keyboard-open-input"
+    :auto-capitalize "off"}])
 
 (rum/defc journals
   []
