@@ -3611,7 +3611,7 @@
                    (when original-block " embed-block"))
        :haschild (str (boolean has-child?))
        :on-touch-start (fn [event uuid]
-                         (when-not @*dragging?
+                         (when-not (or @*dragging? (state/editing?))
                            (block-handler/on-touch-start event uuid)))
        :on-touch-end (fn [event]
                        (when-not @*dragging?
@@ -3624,8 +3624,9 @@
         :draggable true
         :on-drag-start
         (fn [event]
-          (util/stop-propagation event)
-          (on-drag-start event block block-id)))
+          (when-not (state/editing?)
+            (util/stop-propagation event)
+            (on-drag-start event block block-id))))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
