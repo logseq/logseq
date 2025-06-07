@@ -641,8 +641,9 @@
 
         :else
         (let [f (or (:on-redirect-to-page config) route-handler/redirect-to-page!)]
-          (f (or (:block/uuid page) (:block/name page))
-             {:ignore-alias? ignore-alias?})))))
+          (when-not (and (util/mobile?) @block-handler/*swiped?)
+            (f (or (:block/uuid page) (:block/name page))
+               {:ignore-alias? ignore-alias?}))))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
