@@ -170,16 +170,21 @@ const common = {
     cb()
   },
 
-  switchReactDevelopmentMode (cb) {
-    const reactFrom = path.join(outputPath, 'js', 'react.development.js');
-    const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
-    fs.renameSync(reactFrom, reactTo);
+  switchReactDevelopmentMode(cb) {
+    try {
+      const reactFrom = path.join(outputPath, 'js', 'react.development.js');
+      const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
+      fs.renameSync(reactFrom, reactTo);
 
-    const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
-    const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
-    fs.renameSync(reactDomFrom, reactDomTo);
+      const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
+      const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
+      fs.renameSync(reactDomFrom, reactDomTo);
 
-    cb();
+      cb();
+    } catch (err) {
+      console.error("Error during switchReactDevelopmentMode:", err);
+      cb(err);
+    }
   },
 }
 
