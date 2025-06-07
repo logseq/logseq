@@ -101,7 +101,9 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (util/mobile?) (state/sub :editor/editing?))
+  (when (and (util/mobile?)
+             (or (state/sub :editor/editing?)
+                 (= "app-keep-keyboard-open-input" (some-> js/document.activeElement (.-id)))))
     (let [commands' (commands)]
       [:div#mobile-editor-toolbar
        [:div.toolbar-commands
