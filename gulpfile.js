@@ -171,16 +171,15 @@ const common = {
   },
 
   switchReactDevelopmentMode (cb) {
-    const reactFrom = path.join(outputPath, 'js', 'react.development.js')
-    const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-    cp.execSync(`mv ${reactFrom} ${reactTo}`, { stdio: 'inherit' })
+    const reactFrom = path.join(outputPath, 'js', 'react.development.js');
+    const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
+    fs.renameSync(reactFrom, reactTo);
 
-    const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js')
-    const reactDomTo = path.join(outputPath, 'js',
-      'react-dom.production.min.js')
-    cp.execSync(`mv ${reactDomFrom} ${reactDomTo}`, { stdio: 'inherit' })
+    const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
+    const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
+    fs.renameSync(reactDomFrom, reactDomTo);
 
-    cb()
+    cb();
   },
 }
 
