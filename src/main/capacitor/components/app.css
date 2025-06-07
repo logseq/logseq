@@ -1,0 +1,167 @@
+:root {
+  --ls-page-title-size: 26px;
+}
+
+html.plt-capacitor.plt-android {
+  --ion-safe-area-top: 42px;
+  --ion-safe-area-bottom: 16px;
+
+  ion-button, ion-tab-button {
+    --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
+  }
+
+  ion-app {
+    margin-top: 0;
+  }
+
+  .header-md {
+    box-shadow: 0 2px 8px #eee;
+    border-bottom: .5px solid rgba(0, 0, 0, .15);
+  }
+
+  .searchbar-input.sc-ion-searchbar-md {
+    @apply shadow-none;
+  }
+
+  ion-modal {
+    ion-content {
+      #app-container-wrapper {
+        @apply pt-8;
+      }
+    }
+  }
+
+  .pswp__top-bar {
+    @apply relative top-8;
+  }
+}
+
+html.has-mobile-keyboard {
+  .ion-page:not(.ion-page-hidden) {
+    & > ion-content::part(scroll) {
+      padding-bottom: 512px !important;
+    }
+  }
+}
+
+ul {
+  @apply !list-disc ml-1 mt-2 list-inside;
+
+  li {
+    @apply pl-0;
+  }
+}
+
+ion-textarea {
+  textarea {
+    @apply !p-1 min-h-[120px];
+  }
+}
+
+ion-buttons {
+  &:has(.app-graph-select) {
+    @apply max-w-[60%] overflow-hidden;
+  }
+}
+
+.app-graph-select {
+  ion-button {
+    &::part(native) {
+      @apply whitespace-nowrap overflow-hidden font-semibold active:opacity-80 pr-8;
+    }
+  }
+}
+
+.sc-ion-buttons-md {
+  &.text-muted-foreground {
+    @apply text-gray-600;
+  }
+}
+
+.app-login-modal {
+  @apply mx-8 p-0;
+}
+
+.ui__notifications {
+  @apply fixed top-8 pointer-events-none w-full;
+
+  z-index: 9999;
+
+  &-content {
+    @apply inset-0 flex items-end justify-center px-4 py-2
+    pointer-events-none sm:px-6 sm:py-2 sm:items-start sm:justify-end;
+  }
+
+  .notification-area {
+    @apply border;
+
+    background-color: var(--ion-color-light-tint);
+  }
+}
+
+ion-tab-bar {
+  box-shadow: 0 0 1px #999999;
+  padding-top: 4px;
+
+  ion-tab-button {
+    @apply opacity-70;
+
+    &.tab-selected {
+      @apply opacity-100 text-accent-11 font-semibold;
+    }
+  }
+}
+
+ion-content {
+  .ls-page-blocks {
+    @apply px-1;
+  }
+
+  .block-main-container {
+    &[data-has-heading] {
+      > .block-control-wrap {
+        @apply static;
+      }
+    }
+  }
+
+  &::part(background) {
+    @apply !bg-transparent;
+  }
+
+  .ion-page {
+    @apply bg-gray-01 -mb-3;
+  }
+}
+
+[type='text']:focus, [type='email']:focus, [type='url']:focus,
+[type='password']:focus, [type='number']:focus, [type='date']:focus, [type='datetime-local']:focus,
+[type='month']:focus, [type='search']:focus, [type='tel']:focus, [type='time']:focus, [type='week']:focus,
+[multiple]:focus, textarea:focus, select:focus {
+  box-shadow: none;
+}
+
+.ui__popover-content, .ui__dropdown-menu-content {
+    &[data-editor-popup-ref=page-search],
+    &[data-editor-popup-ref=page-search-hashtag],
+    &[data-editor-popup-ref=commands]
+    {
+        min-width: 61.8vw;
+        max-width: calc(100vw - 40px);
+        max-height: 50vh;
+
+        &[data-side=top] {}
+
+        &[data-side=bottom] {}
+    }
+}
+
+html[data-color=logseq] {
+  &[data-theme=light] {
+    --ion-color-primary:var(--rx-logseq-11);
+  }
+}
+
+.graph-switcher .action-sheet-button {
+  font-size: 1.125em;
+}

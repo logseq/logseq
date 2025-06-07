@@ -540,6 +540,11 @@
 
 .ls-block {
   @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
+  width: 100%;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  will-change: transform;
+
   container-type: inline-size;
   container-name: ls-block;
 
@@ -1140,4 +1145,8 @@ html.is-mac {
     div[data-testid='virtuoso-item-list'] button {
         @apply mb-2;
     }
+}
+
+.swipe-item {
+    touch-action: pan-y; /* disables horizontal scrolling on touch */
 }

@@ -33,6 +33,7 @@
   (swap! *unfinished-request-ids disj request-id))
 
 (defn listen-for-requests []
+  (prn "[debug] setup listen for worker request!")
   (async/go-loop []
     (when-let [{:keys [id request response]} (async/<! requests)]
       (try

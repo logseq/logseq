@@ -860,7 +860,6 @@
                        :logseq.task/scheduled :logseq.property/scheduled})
    conn search-db))
 
-
 (defn- empty-placeholder-add-block-uuid
   [_conn _search-db]
   [{:db/ident :logseq.property/empty-placeholder

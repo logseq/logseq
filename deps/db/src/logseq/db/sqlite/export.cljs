@@ -7,16 +7,16 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
