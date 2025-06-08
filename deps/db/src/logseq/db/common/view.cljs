@@ -317,7 +317,8 @@
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
                      (filter-blocks page-filters))
-        ref-pages-count (->> full-ref-blocks
+        ref-pages-count (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) ids)
+                             (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
                              (mapcat (fn [block]
                                        (->>
                                         (cons
