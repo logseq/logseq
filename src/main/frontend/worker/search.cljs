@@ -326,7 +326,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                    nil)
                                      :block/tags (seq (map :db/id (:block/tags block)))
                                      :page? (ldb/page? block)
-                                     :alias (:block/title (first (:block/_alias block)))}))))))
+                                     :alias (some-> (first (:block/_alias block))
+                                                    (select-keys [:block/uuid :block/title]))}))))))
           page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
       (->>
        (concat page-or-object-result
