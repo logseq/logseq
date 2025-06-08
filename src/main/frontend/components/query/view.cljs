@@ -3,17 +3,8 @@
   (:require [frontend.components.views :as views]
             [frontend.db :as db]
             [frontend.state]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
-
-(defn- columns
-  [config result]
-  (->> (mapcat :block.temp/property-keys result)
-       distinct
-       (map db/entity)
-       (ldb/sort-by-order)
-       ((fn [cs] (views/build-columns config cs {:add-tags-column? false})))))
 
 (defn- result->entities
   [result]
@@ -33,8 +24,7 @@
 (rum/defc query-result
   [config view-entity result*]
   (let [[data set-data!] (rum/use-state (init-result result* view-entity))
-        ids (mapv :db/id data)
-        columns' (columns config data)]
+        ids (mapv :db/id data)]
     (hooks/use-effect!
      (fn []
        (set-data! (init-result result* view-entity)))
@@ -47,5 +37,4 @@
        :view-feature-type :query-result
        :data ids
        :set-data! set-data!
-       :query-entity-ids ids
-       :columns columns'})]))
+       :query-entity-ids ids})]))

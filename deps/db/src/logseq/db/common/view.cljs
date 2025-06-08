@@ -498,6 +498,10 @@
        values)
      (common-util/distinct-by :label))))
 
+(defn- get-query-properties
+  [entities]
+  (distinct (mapcat keys entities)))
+
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
                :as opts}]
@@ -584,4 +588,6 @@
        {:count (count filtered-entities)
         :data (distinct data')}
         (= feat-type :linked-references)
-        (assoc :ref-pages-count (:ref-pages-count entities-result))))))
+        (assoc :ref-pages-count (:ref-pages-count entities-result))
+        query?
+        (assoc :properties (get-query-properties entities-result))))))
