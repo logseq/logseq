@@ -2,7 +2,8 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [dommy.core :as dom]
             [frontend.config :as config]
@@ -21,8 +22,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
-            [promesa.core :as p]
-            [clojure.set :as set]))
+            [promesa.core :as p]))
 
 (defn- wrap-tags
   "Tags might have multiple words"
@@ -83,7 +83,7 @@
                  (js/setTimeout
                   (fn []
                     (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                     (filter #(= (str (:db/id page)) (dom/attr % "data-blockId")))
+                                                     (filter #(= (str (:db/id page)) (dom/attr % "data-block-id")))
                                                      first)]
                       (.click block-add-button)))
                   200)))

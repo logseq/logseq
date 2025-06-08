@@ -615,10 +615,10 @@
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
     (p/let [ignore-alias? (:ignore-alias? config)
-            page (or (and (not ignore-alias?)
-                          (or (first (:block/_alias page-entity))
-                              (db-async/<get-block-source (state/get-current-repo) (:db/id page-entity))))
-                     page-entity)]
+            source-page (and (not ignore-alias?)
+                             (or (first (:block/_alias page-entity))
+                                 (db-async/<get-block-source (state/get-current-repo) (:db/id page-entity))))
+            page (or source-page page-entity)]
       (cond
         (gobj/get e "shiftKey")
         (when page
