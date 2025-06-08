@@ -223,7 +223,7 @@
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
-                            (let [title (let [alias (:alias block')
+                            (let [title (let [alias (get-in block' [:alias :block/title])
                                               title (if (and db-based? (not (ldb/built-in? block')))
                                                       (block-handler/block-unique-title block')
                                                       (:block/title block'))]

@@ -281,15 +281,16 @@
 (defn- page-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
-        source-page (or (:block/title (model/get-alias-source-page repo (:db/id entity)))
+        source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (get-page-icon entity)
         title (block-handler/block-unique-title page)
-        title' (if source-page (str title " -> alias: " source-page) title)]
+        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
               :text title'
-              :source-page (or source-page page))))
+              :source-page (or source-page page)
+              :alias (:alias page))))
 
 (defn- block-item
   [repo block current-page !input]
@@ -437,9 +438,11 @@
 
 (defn- get-highlighted-page-uuid-or-name
   [state]
-  (let [highlighted-item (some-> state state->highlighted-item)]
-    (or (:block/uuid (:source-block highlighted-item))
-        (:block/uuid (:source-page highlighted-item)))))
+  (let [highlighted-item (some-> state state->highlighted-item)
+        block (or (:alias highlighted-item)
+                  (:source-block highlighted-item)
+                  (:source-page highlighted-item))]
+    (:block/uuid block)))
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]

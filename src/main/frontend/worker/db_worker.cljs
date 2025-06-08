@@ -469,6 +469,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-block-refs-count @conn id)))
 
+(def-thread-api :thread-api/get-block-source
+  [repo id]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (:db/id (first (:block/_alias (d/entity @conn id))))))
+
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
   (when-let [conn (worker-state/get-datascript-conn repo)]

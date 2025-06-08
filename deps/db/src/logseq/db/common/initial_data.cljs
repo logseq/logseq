@@ -201,7 +201,11 @@
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? children-only? nested-children? properties children-props]}]
-  (let [block (let [eid (cond (uuid? id-or-page-name) [:block/uuid id-or-page-name] (integer? id-or-page-name) id-or-page-name :else nil)]
+  (let [block (let [eid (cond (uuid? id-or-page-name)
+                              [:block/uuid id-or-page-name]
+                              (integer? id-or-page-name)
+                              id-or-page-name
+                              :else nil)]
                 (cond
                   eid
                   (d/entity db eid)
