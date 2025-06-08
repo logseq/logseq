@@ -126,7 +126,9 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property properties]
-  (let [columns (views/build-columns config properties)]
+  (let [tags? (= :block/tags (:db/ident property))
+        columns (views/build-columns config properties
+                                     (when tags? {:add-tags-column? false}))]
     (views/view {:config config
                  :view-parent property
                  :view-feature-type :property-objects
@@ -149,6 +151,8 @@
           config {:container-id (:container-id state)
                   :current-page? current-page?}
           ;; Show tags to help differentiate property rows
-          properties [property' (db/entity :block/tags)]]
+          properties (if (= (:db/ident property) :block/tags)
+                       [property']
+                       [property' (db/entity :block/tags)])]
       [:div.ml-1
        (property-related-objects-inner config property' properties)])))
