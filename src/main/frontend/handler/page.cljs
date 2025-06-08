@@ -257,9 +257,14 @@
   (fn [chosen-result e]
     (util/stop e)
     (state/clear-editor-action!)
-    (p/let [chosen-result (if (:block/uuid chosen-result)
+    (p/let [_ (when-let [id (:block/uuid chosen-result)]
+                (db-async/<get-block (state/get-current-repo) id {:children? false}))
+            chosen-result (if (:block/uuid chosen-result)
                             (db/entity [:block/uuid (:block/uuid chosen-result)])
                             chosen-result)
+            _ (when-not chosen-result
+                (throw (ex-info "No chosen item"
+                                {:chosen chosen-result})))
             chosen (:block/title chosen-result)
             chosen' (string/replace-first chosen (str (t :new-page) " ") "")
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
