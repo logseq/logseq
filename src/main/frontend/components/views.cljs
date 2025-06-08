@@ -328,10 +328,8 @@
                         :or {with-object-name? true
                              with-id? true
                              add-tags-column? true}}]
-  (let [;; FIXME: Shouldn't file graphs have :block/tags?
-        add-tags-column?' (and (config/db-based-graph? (state/get-current-repo)) add-tags-column?)
-        properties' (->>
-                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?'))
+  (let [properties' (->>
+                     (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
                        (conj properties (db/entity :block/tags)))
                      (remove nil?))]
