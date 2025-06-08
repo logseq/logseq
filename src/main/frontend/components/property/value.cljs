@@ -963,10 +963,17 @@
                                 {:label label
                                  :value (:db/id value)}))
                          (distinct)))
-            items (->> (if (= :date type)
+            items (->> (cond
+                         (= :checkbox type)
+                         [{:label "True"
+                           :value true}
+                          {:label "False"
+                           :value false}]
+                         (= :date type)
                          (map (fn [m] (let [label (:block/title (db/entity (:value m)))]
                                         (when label
                                           (assoc m :label label)))) items)
+                         :else
                          items)
                        (remove nil?))
             on-chosen (fn [chosen selected?]
@@ -976,9 +983,10 @@
                                                          :exit-edit? exit-edit?
                                                          :refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
-            selected-choices (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                               (map :db/id selected-choices')
-                               [selected-choices'])]
+            selected-choices (when-not (= type :checkbox)
+                               (if (every? #(and (map? %) (:db/id %)) selected-choices')
+                                 (map :db/id selected-choices')
+                                 [selected-choices']))]
         (select-aux block property
                     {:multiple-choices? multiple-choices?
                      :items items
@@ -1161,7 +1169,7 @@
         popup-content (fn content-fn [target]
                         [:div.property-select
                          (case type
-                           (:entity :number :default :url)
+                           (:entity :number :default :url :checkbox)
                            (select block property select-opts' opts)
 
                            (:node :class :property :page :date)
@@ -1303,7 +1311,7 @@
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
         select-type?' (or (select-type? block property)
-                          (and editing? batch? (contains? #{:default :url} type) (not closed-values?)))
+                          (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
@@ -1346,20 +1354,20 @@
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
-          (let [add-property! (fn []
-                                (let [value' (boolean (not value))]
-                                  (<add-property! block (:db/ident property) value' opts)
-                                  (when-let [on-checked-change (:on-checked-change opts)]
-                                    (on-checked-change value'))))]
+          (let [add-property! (fn [value]
+                                (<add-property! block (:db/ident property) value opts)
+                                (when-let [on-checked-change (:on-checked-change opts)]
+                                  (on-checked-change value)))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
                              :auto-focus editing?
                              :checked value
-                             :on-checked-change add-property!
+                             :on-checked-change (fn []
+                                                  (add-property! (boolean (not value))))
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property!))
+                                              (add-property! (boolean (not value))))
                                             (when (contains? #{"Backspace" "Delete"} (util/ekey e))
                                               (delete-block-property! block property)))})])
           ;; :others
