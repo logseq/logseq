@@ -151,6 +151,13 @@
             _ (d/transact! conn result)]
       result)))
 
+(defn <get-block-source
+  [graph id]
+  (assert (integer? id))
+  (p/let [source-id (state/<invoke-db-worker :thread-api/get-block-source graph id)]
+    (when source-id
+      (<get-block graph source-id {:children? false}))))
+
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))

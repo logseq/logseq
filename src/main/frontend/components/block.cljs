@@ -611,11 +611,14 @@
 
 (declare page-reference)
 
-(defn open-page-ref
+(defn <open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
-    (let [ignore-alias? (:ignore-alias? config)
-          page (or (and (not ignore-alias?) (first (:block/_alias page-entity))) page-entity)]
+    (p/let [ignore-alias? (:ignore-alias? config)
+            page (or (and (not ignore-alias?)
+                          (or (first (:block/_alias page-entity))
+                              (db-async/<get-block-source (state/get-current-repo) (:db/id page-entity))))
+                     page-entity)]
       (cond
         (gobj/get e "shiftKey")
         (when page
@@ -708,12 +711,12 @@
                           (util/stop e)
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
-                            (open-page-ref config page-entity e page-name contents-page?))
+                            (<open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
                             (util/stop e)
                             (state/clear-edit!)
-                            (open-page-ref config page-entity e page-name contents-page?)))}
+                            (<open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
        (assoc :on-context-menu on-context-menu))
      (when (and show-icon? (not tag?))
