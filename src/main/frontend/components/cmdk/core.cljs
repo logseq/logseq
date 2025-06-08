@@ -281,10 +281,11 @@
 (defn- page-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
-        source-page (model/get-alias-source-page repo (:db/id entity))
+        source-page (or (:block/title (model/get-alias-source-page repo (:db/id entity)))
+                        (:alias page))
         icon (get-page-icon entity)
         title (block-handler/block-unique-title page)
-        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
+        title' (if source-page (str title " -> alias: " source-page) title)]
     (hash-map :icon icon
               :icon-theme :gray
               :text title'

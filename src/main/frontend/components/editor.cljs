@@ -186,7 +186,9 @@
          :item-render (fn [block _chosen?]
                         (let [block' (if-let [id (:block/uuid block)]
                                        (if-let [e (db/entity [:block/uuid id])]
-                                         (assoc e :block/title (:block/title block))
+                                         (assoc e
+                                                :block/title (:block/title block)
+                                                :alias (:alias block))
                                          block)
                                        block)]
                           [:div.flex.flex-col
@@ -221,12 +223,12 @@
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
-                            (let [title (let [target (first (:block/_alias block'))
+                            (let [title (let [alias (:alias block')
                                               title (if (and db-based? (not (ldb/built-in? block')))
                                                       (block-handler/block-unique-title block')
                                                       (:block/title block'))]
-                                          (if target
-                                            (str title " -> alias: " (:block/title target))
+                                          (if alias
+                                            (str title " -> alias: " alias)
                                             title))]
                               (if (or (string/starts-with? title (t :new-tag))
                                       (string/starts-with? title (t :new-page)))
