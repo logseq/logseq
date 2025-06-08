@@ -2402,10 +2402,10 @@
                          [:div.opacity-75 (if show-query?
                                             "Hide query"
                                             "Set query")]))]
-    [:div.w-full
+    [:div
      {:class (if query?
                "inline-flex"
-               "inline")
+               "w-full inline")
       :on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      (cond
