@@ -200,10 +200,15 @@
    0))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id {:keys [children? children-only? nested-children? properties children-props]}]
-  (let [block (d/entity db (if (uuid? id)
-                             [:block/uuid id]
-                             id))
+  [db id-or-page-name {:keys [children? children-only? nested-children? properties children-props]}]
+  (let [block (let [eid (cond (uuid? id-or-page-name) [:block/uuid id-or-page-name] (integer? id-or-page-name) id-or-page-name :else nil)]
+                (cond
+                  eid
+                  (d/entity db eid)
+                  (string? id-or-page-name)
+                  (d/entity db (get-first-page-by-name db (name id-or-page-name)))
+                  :else
+                  nil))
         block-refs-count? (some #{:block.temp/refs-count} properties)
         whiteboard? (common-entity-util/whiteboard? block)]
     (when block
