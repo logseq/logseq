@@ -1601,12 +1601,13 @@
           result (search/block-search (state/get-current-repo) q {:built-in? false
                                                                   :enable-snippet? false
                                                                   :page-only? page-only?})
-          matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)]
-    (-> (concat matched
-                (when nlp-pages?
-                  (map (fn [title] {:block/title title :nlp-date? true})
-                       date/nlp-pages)))
-        (search/fuzzy-search q {:extract-fn :block/title :limit 50}))))
+          matched (remove (fn [b] (= (:block/uuid b) (:block/uuid block))) result)
+          result' (-> (concat matched
+                              (when nlp-pages?
+                                (map (fn [title] {:block/title title :nlp-date? true :page? true})
+                                     date/nlp-pages)))
+                      (search/fuzzy-search q {:extract-fn :block/title :limit 50}))]
+    (sort-by (complement :page?) result')))
 
 (defn <get-matched-templates
   [q]
