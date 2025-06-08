@@ -2012,9 +2012,17 @@
   [view opts]
   (state/<invoke-db-worker :thread-api/get-view-data (state/get-current-repo) (:db/id view) opts))
 
+(defn- get-query-columns
+  [config properties]
+  (->> properties
+       (map db/entity)
+       (ldb/sort-by-order)
+       ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
+
 (rum/defc view-aux
-  [view-entity {:keys [view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
+  [view-entity {:keys [config view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
+        [properties set-properties!] (hooks/use-state nil)
         db-based? (config/db-based-graph?)
         group-by-property (:logseq.property.view/group-by-property view-entity)
         display-type (if (config/db-based-graph?)
@@ -2039,6 +2047,7 @@
         view-filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or view-filters {}))
         query? (= view-feature-type :query-result)
+        option (if query? (assoc option :columns (get-query-columns config properties)) option)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
@@ -2054,7 +2063,7 @@
                                 :else
                                 (when (or (not query?) need-query?)
                                   (try
-                                    (let [{:keys [data ref-pages-count]}
+                                    (let [{:keys [data ref-pages-count properties]}
                                           (c.m/<?
                                            (<load-view-data view-entity
                                                             (cond->
@@ -2069,7 +2078,8 @@
                                                               (assoc :query-entity-ids query-entity-ids))))]
                                       (set-data! data)
                                       (when ref-pages-count
-                                        (set-ref-pages-count! ref-pages-count)))
+                                        (set-ref-pages-count! ref-pages-count))
+                                      (set-properties! properties))
                                     (finally
                                       (set-loading! false)))))))))]
     (let [sorting-filters {:sorting sorting
