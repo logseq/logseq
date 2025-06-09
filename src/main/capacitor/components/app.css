@@ -148,11 +148,14 @@ ion-content {
     {
         min-width: 61.8vw;
         max-width: calc(100vw - 40px);
-        max-height: 50vh;
 
-        &[data-side=top] {}
+        &[data-side=top] {
+          max-height: var(--top-popup-content-max-height, 50vh);
+        }
 
-        &[data-side=bottom] {}
+        &[data-side=bottom] {
+          max-height: var(--bottom-popup-content-max-height, 50vh);
+        }
     }
 }
 
