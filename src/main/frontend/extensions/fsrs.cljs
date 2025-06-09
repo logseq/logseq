@@ -188,39 +188,43 @@
 
 (rum/defcs ^:private card-view < rum/reactive db-mixins/query
   {:will-mount (fn [state]
-                 (when-let [[repo block-id _] (:rum/args state)]
-                   (db-async/<get-block repo block-id {:children? false}))
-                 state)}
-  [state repo block-id *card-index *phase]
-  (when-let [block-entity (db/sub-block block-id)]
-    (let [phase (rum/react *phase)
-          next-phase (phase->next-phase block-entity phase)]
-      [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
-       [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
-       (let [option (case phase
-                      :init
-                      {:hide-children? true}
-                      :show-cloze
-                      {:show-cloze? true
-                       :hide-children? true}
-                      {:show-cloze? true})]
-         (component-block/blocks-container option [block-entity]))
-       [:div.mt-8.pb-2
-        (if (contains? #{:show-cloze :show-answer} next-phase)
-          (btn-with-shortcut {:btn-text (t
-                                         (case next-phase
-                                           :show-answer
-                                           :flashcards/modal-btn-show-answers
-                                           :show-cloze
-                                           :flashcards/modal-btn-show-clozes
-                                           :init
-                                           :flashcards/modal-btn-hide-answers))
-                              :shortcut "s"
-                              :id (str "card-answers")
-                              :on-click #(swap! *phase
-                                                (fn [phase]
-                                                  (phase->next-phase block-entity phase)))})
-          [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase)])]])))
+                 (let [[repo block-id _] (:rum/args state)
+                       *block (atom nil)]
+                   (p/let [result (db-async/<get-block repo block-id {:children? true})]
+                     (reset! *block result))
+                   (assoc state ::block *block)))}
+  [state repo _block-id *card-index *phase]
+  (when-let [block (rum/react (::block state))]
+    (when-let [block-entity (db/sub-block (:db/id block))]
+      (let [phase (rum/react *phase)
+            _card-index (rum/react *card-index)
+            next-phase (phase->next-phase block-entity phase)]
+        [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
+         [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+         (let [option (case phase
+                        :init
+                        {:hide-children? true}
+                        :show-cloze
+                        {:show-cloze? true
+                         :hide-children? true}
+                        {:show-cloze? true})]
+           (component-block/blocks-container option [block-entity]))
+         [:div.mt-8.pb-2
+          (if (contains? #{:show-cloze :show-answer} next-phase)
+            (btn-with-shortcut {:btn-text (t
+                                           (case next-phase
+                                             :show-answer
+                                             :flashcards/modal-btn-show-answers
+                                             :show-cloze
+                                             :flashcards/modal-btn-show-clozes
+                                             :init
+                                             :flashcards/modal-btn-hide-answers))
+                                :shortcut "s"
+                                :id (str "card-answers")
+                                :on-click #(swap! *phase
+                                                  (fn [phase]
+                                                    (phase->next-phase block-entity phase)))})
+            [:div.flex.justify-center (rating-btns repo block-entity *card-index *phase)])]]))))
 
 (declare update-due-cards-count)
 (rum/defcs cards-view < rum/reactive
@@ -253,6 +257,7 @@
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
         *card-index (::card-index state)
+        card-index (rum/react *card-index)
         *phase (atom :init)]
     (when (false? loading?)
       [:div#cards-modal.flex.flex-col.gap-8.h-full.flex-1
@@ -275,7 +280,7 @@
                                 (:block/title card-entity)))))))
 
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
-       (let [block-id (nth block-ids @*card-index nil)]
+       (let [block-id (nth block-ids card-index nil)]
          (cond
            block-id
            [:div.flex.flex-col

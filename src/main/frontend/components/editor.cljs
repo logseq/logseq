@@ -9,6 +9,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.block :as block-handler]
@@ -153,12 +154,13 @@
         [matched-pages set-matched-pages!] (rum/use-state nil)
         search-f (fn []
                    (when-not (string/blank? q)
-                     (p/let [result (if db-tag?
-                                      (editor-handler/get-matched-classes q)
-                                      (p/let [result (editor-handler/<get-matched-blocks q {:nlp-pages? true
-                                                                                            :page-only? (not db-based?)})]
-                                        (reverse (sort-by (fn [result] (:page? result)) result))))]
-                       (set-matched-pages! result))))]
+                     (p/do!
+                      (db-async/<get-block (state/get-current-repo) q {:children? false})
+                      (p/let [result (if db-tag?
+                                       (editor-handler/get-matched-classes q)
+                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                                              :page-only? (not db-based?)}))]
+                        (set-matched-pages! result)))))]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
@@ -184,7 +186,9 @@
          :item-render (fn [block _chosen?]
                         (let [block' (if-let [id (:block/uuid block)]
                                        (if-let [e (db/entity [:block/uuid id])]
-                                         (assoc e :block/title (:block/title block))
+                                         (assoc e
+                                                :block/title (:block/title block)
+                                                :alias (:alias block))
                                          block)
                                        block)]
                           [:div.flex.flex-col
@@ -219,13 +223,13 @@
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
-                            (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block'))
-                                                title (:block/title block)]
-                                            (if (ldb/class? target)
-                                              (str title " -> alias: " (:block/title target))
-                                              title))
-                                          (block-handler/block-unique-title block'))]
+                            (let [title (let [alias (get-in block' [:alias :block/title])
+                                              title (if (and db-based? (not (ldb/built-in? block')))
+                                                      (block-handler/block-unique-title block')
+                                                      (:block/title block'))]
+                                          (if alias
+                                            (str title " -> alias: " alias)
+                                            title))]
                               (if (or (string/starts-with? title (t :new-tag))
                                       (string/starts-with? title (t :new-page)))
                                 title
