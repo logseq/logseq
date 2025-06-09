@@ -317,7 +317,8 @@
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
                      (filter-blocks page-filters))
-        ref-pages-count (->> full-ref-blocks
+        ref-pages-count (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) ids)
+                             (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
                              (mapcat (fn [block]
                                        (->>
                                         (cons
@@ -497,6 +498,10 @@
        values)
      (common-util/distinct-by :label))))
 
+(defn- get-query-properties
+  [entities]
+  (distinct (mapcat keys entities)))
+
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
                :as opts}]
@@ -583,4 +588,6 @@
        {:count (count filtered-entities)
         :data (distinct data')}
         (= feat-type :linked-references)
-        (assoc :ref-pages-count (:ref-pages-count entities-result))))))
+        (assoc :ref-pages-count (:ref-pages-count entities-result))
+        query?
+        (assoc :properties (get-query-properties entities-result))))))
