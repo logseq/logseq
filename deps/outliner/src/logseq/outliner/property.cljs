@@ -42,7 +42,9 @@
                             (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
                                  (or (empty? (:block/tags block)) (ldb/internal-page? block))
                                  (not (get (d/pull @conn [property-id] (:db/id block)) property-id)))
-                            (assoc :block/tags :logseq.class/Task))]
+                            (assoc :block/tags :logseq.class/Task)
+                            (= :logseq.property/template-applied-to property-id)
+                            (assoc :block/tags :logseq.class/Template))]
       (cond-> []
         multiple-values-empty?
         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
