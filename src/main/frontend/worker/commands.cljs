@@ -151,10 +151,9 @@
                         (t/plus default-timezone-time delta))]
         (tc/to-long next-time)))))
 
-(defmethod handle-command :reschedule [_ conn db entity _datoms]
-  (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
-                           :logseq.property/scheduled)
-        frequency (or (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
+(defn- compute-reschedule-property-tx
+  [conn db entity property-ident]
+  (let [frequency (or (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
                       (let [property (d/entity db :logseq.property.repeat/recur-frequency)
                             default-value-block (db-property-build/build-property-value-block property property 1)
                             default-value-tx-data [default-value-block
@@ -182,6 +181,22 @@
            tx-data
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
+
+(defmethod handle-command :reschedule [_ conn db entity _datoms]
+  (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
+                           :logseq.property/scheduled)
+        other-property-idents (cond
+                                (and (= property-ident :logseq.property/scheduled)
+                                     (:logseq.property/deadline entity))
+                                [:logseq.property/deadline]
+
+                                (and (= property-ident :logseq.property/deadline)
+                                     (:logseq.property/scheduled entity))
+                                [:logseq.property/scheduled]
+
+                                :else
+                                (filter (fn [p] (get entity p)) [:logseq.property/deadline :logseq.property/scheduled]))]
+    (mapcat #(compute-reschedule-property-tx conn db entity %) (distinct (cons property-ident other-property-idents)))))
 
 (defmethod handle-command :set-property [_ _db _conn entity _datoms property value]
   (let [property' (get-property entity property)
