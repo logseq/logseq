@@ -111,9 +111,9 @@
 (defn- repeat-timestamp
   [datetime recur-unit frequency period-f keep-week?]
   (let [now (t/now)
-        v (period-f (if (t/after? datetime now)
-                      (t/interval now datetime)
-                      (t/interval datetime now)))
+        v (if (t/after? datetime now)
+            1
+            (period-f (t/interval datetime now)))
         delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
                    (* frequency)
                    recur-unit)
