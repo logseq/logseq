@@ -9,13 +9,16 @@
 
 (defn warp-calc-commands-popup-side
   [pos opts]
-  (let [side (let [[_x y _ height] pos
+  (let [[side mh] (let [[_x y _ height] pos
                    vh js/window.innerHeight
                    [th bh] [y (- vh (+ y height) 300)]]
-               (if (> bh 200) "bottom"
-                   (if (> (- th bh) 100)
-                     "top" "bottom")))]
+               (case (if (> bh 280) "bottom"
+                       (if (> (- th bh) 100)
+                         "top" "bottom"))
+                 "top" ["top" th]
+                 ["bottom" bh]))]
     (-> (assoc opts :auto-side? false)
+        (assoc :max-popup-height mh)
         (assoc-in [:content-props :side] side))))
 
 (defn popup-show!
@@ -23,6 +26,10 @@
   (cond
     (and (keyword? id) (= "editor.commands" (namespace id)))
     (let [opts (warp-calc-commands-popup-side event opts)
+          side (some-> opts :content-props :side)
+          max-h (some-> opts :max-popup-height (js/parseInt) (- 48))
+          _ (when max-h (js/document.documentElement.style.setProperty
+                          (str "--" side "-popup-content-max-height") (str max-h "px")))
           pid (shui-popup/show! event content-fn opts)]
       (reset! *last-popup-modal? false) pid)
 
