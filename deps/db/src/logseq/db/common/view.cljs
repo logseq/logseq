@@ -309,7 +309,7 @@
   [db id]
   (let [entity (d/entity db id)
         ids (set (cons id (ldb/get-block-alias db id)))
-        refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)
+        refs (mapcat (fn [id] (:block/_path-refs (d/entity db id))) ids)
         page-filters (get-filters db entity)
         full-ref-blocks (->> refs
                              (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
@@ -317,8 +317,9 @@
         ref-blocks (cond->> full-ref-blocks
                      (seq page-filters)
                      (filter-blocks page-filters))
-        ref-pages-count (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) ids)
-                             (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
+        ref-pages-count (->> ref-blocks
+                             (remove (fn [block]
+                                       (common-initial-data/hidden-ref? db block id)))
                              (mapcat (fn [block]
                                        (->>
                                         (cons
