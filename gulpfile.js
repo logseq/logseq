@@ -115,6 +115,8 @@ const common = {
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
       () => gulp.src([
+        'node_modules/katex/dist/katex.min.js',
+        'node_modules/katex/dist/contrib/mhchem.min.js',
         'node_modules/marked/marked.min.js',
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
