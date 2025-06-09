@@ -489,7 +489,7 @@
 
   &[data-has-heading="2"], &:has(textarea.h2) {
     > .block-control-wrap {
-      @apply relative top-3;
+      @apply relative top-2.5;
     }
 
     .block-content-or-editor-wrap {
