@@ -896,7 +896,8 @@
      (if (boolean? in-popup?)
        (if (and (not (:preview? config))
                 (not in-popup?)
-                (or (not manual?) open?))
+                (or (not manual?) open?)
+                (not (state/editing?)))
          (popup-preview-impl children
                              {:visible? visible? :set-visible! set-visible!
                               :*timer *timer :*timer1 *timer1
