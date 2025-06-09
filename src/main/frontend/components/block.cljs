@@ -687,9 +687,13 @@
        :on-mouse-over #(reset! *hover? true)
        :on-mouse-leave #(reset! *hover? false)
        :on-click (fn [e]
-                   (when stop-click-event? (util/stop e)))
+                   (when (and stop-click-event? (not (util/link? (.-target e))))
+                     (util/stop e)))
        :on-pointer-down (fn [^js e]
                           (cond
+                            (util/link? (.-target e))
+                            nil
+
                             (and on-context-menu (= 2 (.-button e)))
                             nil
 
