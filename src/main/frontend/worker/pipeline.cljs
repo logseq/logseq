@@ -55,6 +55,9 @@
   [repo tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
+        journal-page (some (fn [d] (when (and (= :block/journal-day (:a d)) (:added d))
+                                     (d/entity db (:e d))))
+                           (:tx-data tx-report))
         journal-template? (some (fn [d] (and (:added d) (= (:a d) :block/tags) (= (:v d) journal-id))) (:tx-data tx-report))
         tx-data (some->> (:tx-data tx-report)
                          (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
@@ -63,12 +66,11 @@
                                    (let [object (d/entity db e)
                                          template-blocks (->> (mapcat (fn [id]
                                                                         (let [tag (d/entity db id)
-                                                                              journal? (= journal-id id)
                                                                               parents (ldb/get-page-parents tag {:node-class? true})
                                                                               templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
                                                                           (cond->> templates
-                                                                            journal?
-                                                                            (map (fn [t] (assoc t :journal tag))))))
+                                                                            journal-page
+                                                                            (map (fn [t] (assoc t :journal journal-page))))))
                                                                       (set (map :v datoms)))
                                                               distinct
                                                               (sort-by :block/created-at)
