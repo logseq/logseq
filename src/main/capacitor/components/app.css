@@ -146,6 +146,16 @@ ion-content {
   }
 }
 
+.latex.initial {
+  @apply pt-1;
+
+  .katex-html {
+    &[aria-hidden="true"] {
+      @apply hidden;
+    }
+  }
+}
+
 [type='text']:focus, [type='email']:focus, [type='url']:focus,
 [type='password']:focus, [type='number']:focus, [type='date']:focus, [type='datetime-local']:focus,
 [type='month']:focus, [type='search']:focus, [type='tel']:focus, [type='time']:focus, [type='week']:focus,
