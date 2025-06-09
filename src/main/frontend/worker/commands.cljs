@@ -108,24 +108,24 @@
 
 (defmulti handle-command (fn [action-id & _others] action-id))
 
-(defn- repeat-until-future-timestamp
+(defn- repeat-timestamp
   [datetime recur-unit frequency period-f keep-week?]
-  (let [now (t/now)]
-    (if (t/after? datetime now)
-      datetime
-      (let [v (period-f (t/interval datetime now))
-            delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
-                       (* frequency)
-                       recur-unit)
-            result (t/plus datetime delta)
-            w1 (t/day-of-week datetime)
-            w2 (t/day-of-week result)]
-        (if (and keep-week? (not= w1 w2))
-          ;; next week
-          (if (> w2 w1)
-            (t/plus result (t/days (- 7 (- w2 w1))))
-            (t/plus result (t/days (- w1 w2))))
-          result)))))
+  (let [now (t/now)
+        v (period-f (if (t/after? datetime now)
+                      (t/interval now datetime)
+                      (t/interval datetime now)))
+        delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
+                   (* frequency)
+                   recur-unit)
+        result (t/plus datetime delta)
+        w1 (t/day-of-week datetime)
+        w2 (t/day-of-week result)]
+    (if (and keep-week? (not= w1 w2))
+      ;; next week
+      (if (> w2 w1)
+        (t/plus result (t/days (- 7 (- w2 w1))))
+        (t/plus result (t/days (- w1 w2))))
+      result)))
 
 (defn- get-next-time
   [current-value unit frequency]
@@ -143,12 +143,12 @@
       (let [delta (recur-unit frequency)
             next-time (case (:db/ident unit)
                         :logseq.property.repeat/recur-unit.year
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
+                        (repeat-timestamp default-timezone-time recur-unit frequency period-f false)
                         :logseq.property.repeat/recur-unit.month
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f false)
+                        (repeat-timestamp default-timezone-time recur-unit frequency period-f false)
                         :logseq.property.repeat/recur-unit.week
-                        (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f true)
-                        (t/plus (t/now) delta))]
+                        (repeat-timestamp default-timezone-time recur-unit frequency period-f true)
+                        (t/plus default-timezone-time delta))]
         (tc/to-long next-time)))))
 
 (defmethod handle-command :reschedule [_ conn db entity _datoms]
