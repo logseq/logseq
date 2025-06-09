@@ -7,6 +7,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]))
@@ -150,10 +151,17 @@
                         (t/plus (t/now) delta))]
         (tc/to-long next-time)))))
 
-(defmethod handle-command :reschedule [_ db entity _datoms]
+(defmethod handle-command :reschedule [_ conn db entity _datoms]
   (let [property-ident (or (:db/ident (:logseq.property.repeat/temporal-property entity))
                            :logseq.property/scheduled)
-        frequency (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
+        frequency (or (db-property/property-value-content (:logseq.property.repeat/recur-frequency entity))
+                      (let [property (d/entity db :logseq.property.repeat/recur-frequency)
+                            default-value-block (db-property-build/build-property-value-block property property 1)
+                            default-value-tx-data [default-value-block
+                                                   {:db/id (:db/id property)
+                                                    :logseq.property/default-value [:block/uuid (:block/uuid default-value-block)]}]]
+                        (d/transact! conn default-value-tx-data)
+                        1))
         unit (:logseq.property.repeat/recur-unit entity)
         property (d/entity db property-ident)
         date? (= :date (:logseq.property/type property))
@@ -175,12 +183,12 @@
            (when value
              [[:db/add (:db/id entity) property-ident value]])))))))
 
-(defmethod handle-command :set-property [_ _db entity _datoms property value]
+(defmethod handle-command :set-property [_ _db _conn entity _datoms property value]
   (let [property' (get-property entity property)
         value' (get-value entity property value)]
     [[:db/add (:db/id entity) property' value']]))
 
-(defmethod handle-command :record-property-history [_ db entity datoms]
+(defmethod handle-command :record-property-history [_ _conn db entity datoms]
   (let [changes (keep (fn [d]
                         (let [property (d/entity db (:a d))]
                           (when (and (true? (get property :logseq.property/enable-history?))
@@ -198,7 +206,7 @@
            :logseq.property.history/property (:db/id property)})))
      changes)))
 
-(defmethod handle-command :default [command _db entity datoms]
+(defmethod handle-command :default [command _conn _db entity datoms]
   (throw (ex-info "Unhandled command"
                   {:command command
                    :entity entity
@@ -206,12 +214,12 @@
 
 (defn execute-command
   "Build tx-data"
-  [db entity datoms [_command {:keys [actions]}]]
+  [conn db entity datoms [_command {:keys [actions]}]]
   (mapcat (fn [action]
-            (apply handle-command (first action) db entity datoms (rest action))) actions))
+            (apply handle-command (first action) conn db entity datoms (rest action))) actions))
 
 (defn run-commands
-  [{:keys [tx-data db-after]}]
+  [conn {:keys [tx-data db-after]}]
   (let [db db-after]
     (mapcat (fn [[e datoms]]
               (let [entity (d/entity db e)
@@ -223,6 +231,6 @@
                                         (every? #(satisfy-condition? db entity % datoms) tx-conditions))) @*commands)]
                 (mapcat
                  (fn [command]
-                   (execute-command db entity datoms command))
+                   (execute-command conn db entity datoms command))
                  commands)))
             (group-by :e tx-data))))

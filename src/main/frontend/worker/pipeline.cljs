@@ -215,11 +215,11 @@
           (nil? created-by-ent) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
-  [repo tx-report]
+  [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
-                      (commands/run-commands tx-report))
+                      (commands/run-commands conn tx-report))
         insert-templates-tx (insert-tag-templates repo tx-report)
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
@@ -228,7 +228,7 @@
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
-                           (compute-extra-tx-data repo tx-report))
+                           (compute-extra-tx-data repo conn tx-report))
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke
