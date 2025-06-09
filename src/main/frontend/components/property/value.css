@@ -36,3 +36,8 @@
   @apply cursor-text;
   min-height: 20px;
 }
+
+.ls-repeat-task-frequency .property-value-inner {
+  @apply border rounded pl-2;
+  min-width: 3em;
+}
