@@ -123,6 +123,18 @@ ion-content {
         @apply static;
       }
     }
+
+    &[data-has-heading="1"], &:has(textarea.h1) {
+      > .block-control-wrap, > .block-control-wrap > .block-control {
+        @apply mt-4;
+      }
+    }
+
+    &[data-has-heading="2"], &:has(textarea.h2) {
+      > .block-control-wrap, > .block-control-wrap > .block-control {
+        @apply mt-2.5;
+      }
+    }
   }
 
   &::part(background) {
