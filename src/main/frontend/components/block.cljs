@@ -2599,7 +2599,12 @@
         selection-blocks (state/get-selection-blocks)
         starting-block (state/get-selection-start-block-or-first)
         mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
-        block-dom-element (util/rec-get-node target "ls-block")]
+        block-dom-element (util/rec-get-node target "ls-block")
+        cursor-range (some-> block-dom-element
+                       (dom/by-class "block-content-inner")
+                       first
+                       util/caret-range)]
+
     (if mobile-selection?
       (let [ids (set (state/get-selection-block-ids))]
         (if (contains? ids (:block/uuid block))
@@ -2653,11 +2658,7 @@
                   (let [f #(p/do!
                             (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
                               (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
-                            (let [cursor-range (some-> block-dom-element
-                                                       (dom/by-class "block-content-inner")
-                                                       first
-                                                       util/caret-range)
-                                  block (db/entity (:db/id block))
+                            (let [block (db/entity (:db/id block))
                                   {:block/keys [title format]} block
                                   content (if (config/db-based-graph? (state/get-current-repo))
                                             (:block/title block)
