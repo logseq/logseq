@@ -10,18 +10,17 @@
             [frontend.state :as fstate]
             [rum.core :as rum]))
 
-(rum/defc modal < rum/reactive
+(rum/defc block-modal < rum/reactive
   [presenting-element]
-  (let [{:keys [open? block mode]} (rum/react state/*modal-data)
+  (let [{:keys [open? block]} (rum/react state/*modal-data)
         show-action-bar? (fstate/sub :mobile/show-action-bar?)]
     (ion/modal
-      (cond-> {:isOpen (boolean open?)
-               :presenting-element presenting-element
-               :onDidDismiss (fn [] (state/set-modal! nil))
-               :expand "block"}
+      {:isOpen (boolean open?)
+       :presenting-element presenting-element
+       :onDidDismiss (fn [] (state/set-modal! nil))
+       :mode "ios" ;; force card modal for android
+       :expand "block"}
 
-        (string? mode)
-        (assoc :mode mode))
       (ion/content {:class "ion-padding scrolling"}
         (ui/classic-app-container-wrap
           (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
