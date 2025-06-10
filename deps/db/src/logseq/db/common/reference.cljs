@@ -1,7 +1,6 @@
 (ns logseq.db.common.reference
   "References"
   (:require [cljs.reader :as reader]
-            [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.log :as log]
@@ -56,8 +55,8 @@
                    (mapcat
                     (fn [class-id]
                       (map
-                       (fn [var]
-                         (list 'not [var :block/tags class-id]))
+                       (fn [variable]
+                         (list 'not [variable :block/tags class-id]))
                        ['?b '?p '?c]))
                     class-ids)))]
     (into [:find '?b '?p '?c
@@ -81,6 +80,23 @@
 (defn- remove-hidden-ref
   [db page-id refs]
   (remove (fn [block] (common-initial-data/hidden-ref? db block page-id)) refs))
+
+(defn- get-ref-pages-count
+  [db id ref-blocks children-ids]
+  (when (seq ref-blocks)
+    (let [children (->> children-ids
+                        (map (fn [id] (d/entity db id)))
+                        (remove-hidden-ref db id))]
+      (->> (concat (mapcat :block/path-refs ref-blocks)
+                   (mapcat :block/refs children))
+           frequencies
+           (keep (fn [[ref size]]
+                   (when (and (ldb/page? ref)
+                              (not= (:db/id ref) id)
+                              (not= :block/tags (:db/ident ref))
+                              (not (common-initial-data/hidden-ref? db ref id)))
+                     [(:block/title ref) size])))
+           (sort-by second #(> %1 %2))))))
 
 (defn get-linked-references
   [db id]
@@ -106,20 +122,7 @@
                                  (map second children-query-result)
                                  (map last children-query-result)))
                       (remove (set (map :db/id ref-blocks))))
-        ref-pages-count (when (seq ref-blocks)
-                          (let [children (->> children-ids
-                                              (map (fn [id] (d/entity db id)))
-                                              (remove-hidden-ref db id))]
-                            (->> (concat (mapcat :block/path-refs ref-blocks)
-                                         (mapcat :block/refs children))
-                                 frequencies
-                                 (keep (fn [[ref size]]
-                                         (when (and (ldb/page? ref)
-                                                    (not= (:db/id ref) id)
-                                                    (not= :block/tags (:db/ident ref))
-                                                    (not (common-initial-data/hidden-ref? db ref id)))
-                                           [(:block/title ref) size])))
-                                 (sort-by second #(> %1 %2)))))]
+        ref-pages-count (get-ref-pages-count db id ref-blocks children-ids)]
     {:ref-pages-count ref-pages-count
      :ref-blocks ref-blocks
      :ref-matched-children-ids (when filter-exists? (set children-ids))}))
