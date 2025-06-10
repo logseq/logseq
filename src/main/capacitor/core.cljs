@@ -37,6 +37,7 @@
          (when (util/uuid-string? id-str)
            (let [page-uuid (uuid id-str)]
              (state/set-modal! {:open? true
+                                :mode "ios"
                                 :block {:block/uuid page-uuid}}))))
        :user-login
        nil
