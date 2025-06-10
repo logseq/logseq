@@ -2134,8 +2134,14 @@
                                           :items-count (if (every? number? data)
                                                          (count data)
                                                          ;; grouped
-                                                         (reduce (fn [total [_ col]]
-                                                                   (+ total (count col))) 0 data))
+                                                         (let [f (fn count-col
+                                                                   [data]
+                                                                   (reduce (fn [total [_k col]]
+                                                                             (if (and (vector? (first col))
+                                                                                      (uuid? (ffirst col)))
+                                                                               (+ total (count-col col))
+                                                                               (+ total (count col)))) 0 data))]
+                                                           (f data)))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
                                           :ref-matched-children-ids ref-matched-children-ids

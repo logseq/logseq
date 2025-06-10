@@ -66,7 +66,8 @@
   [conn foo-id]
   (d/transact! conn [[:db/retract foo-id :logseq.property.linked-references/includes]
                      [:db/retract foo-id :logseq.property.linked-references/excludes]]))
-(deftest ^:focus get-linked-references
+
+(deftest get-linked-references
   (let [conn (create-conn!)
         foo-id (:db/id (ldb/get-page @conn "foo"))
         _ (retract-filters! conn foo-id)
@@ -125,28 +126,57 @@
                    [{:db/id (:db/id foo)
                      :logseq.property.linked-references/excludes (:db/id baz)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
+        (is (= [["Journal" 3] ["Jun 11th, 2025" 2] ["bar" 1]] (vec ref-pages-count))
+            "ref-pages-count check failed")
+        (is (= 4 (count ref-matched-children-ids))
+            "ref-matched-children-ids check failed")
+        (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
+            "ref-blocks check failed")))
+
+    (testing "Linked references exclude both \"baz\" and \"bar\""
+      (retract-filters! conn foo-id)
+      (d/transact! conn
+                   [{:db/id (:db/id foo)
+                     :logseq.property.linked-references/excludes #{(:db/id baz) (:db/id bar)}}])
+      (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
+        (is (= [["Journal" 2] ["Jun 11th, 2025" 2]] (vec ref-pages-count))
+            "ref-pages-count check failed")
+        (is (zero? (count ref-matched-children-ids))
+            "ref-matched-children-ids check failed")
+        (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
+            "ref-blocks check failed")))
+
+    (testing "Linked references includes \"bar\" and excludes \"baz\""
+      (retract-filters! conn foo-id)
+      (d/transact! conn
+                   [{:db/id (:db/id foo)
+                     :logseq.property.linked-references/includes (:db/id bar)
+                     :logseq.property.linked-references/excludes (:db/id baz)}])
+      (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
         (is (= [["Journal" 2] ["Jun 11th, 2025" 1] ["bar" 1]] (vec ref-pages-count))
             "ref-pages-count check failed")
         (is (= 4 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
-        (is (= #{"[[foo]] 2"} (set (map :block/title ref-blocks)))
+        (is (= #{"[[foo]] 1"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
 
-    ;; FIXME: there're still bugs on excludes
-    (comment
-      (testing "Linked references exclude both \"baz\" and \"bar\""
-        (retract-filters! conn foo-id)
-        (d/transact! conn
-                     [{:db/id (:db/id foo)
-                       :logseq.property.linked-references/excludes #{(:db/id baz) (:db/id bar)}}])
-        (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-          (is (= [["Journal" 2] ["Jun 11th, 2025" 1] ["bar" 1]] (vec ref-pages-count))
-              "ref-pages-count check failed")
-          (is (= 4 (count ref-matched-children-ids))
-              "ref-matched-children-ids check failed")
-          (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
-              "ref-blocks check failed")))
+    (testing "Linked references includes \"baz\" and excludes \"bar\""
+      (retract-filters! conn foo-id)
+      (d/transact! conn
+                   [{:db/id (:db/id foo)
+                     :logseq.property.linked-references/includes (:db/id baz)
+                     :logseq.property.linked-references/excludes (:db/id bar)}])
+      (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
+        (is (= [["Journal" 3] ["Jun 11th, 2025" 2] ["baz" 2]] (vec ref-pages-count))
+            "ref-pages-count check failed")
+        (is (= 3 (count ref-matched-children-ids))
+            "ref-matched-children-ids check failed")
+        (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
+            "ref-blocks check failed")))))
 
-      (testing "Linked references includes \"bar\" and excludes \"baz\"")
-
-      (testing "Linked references includes \"baz\" and excludes \"bar\""))))
+(deftest get-unlinked-references
+  (let [conn (create-conn!)
+        db @conn
+        ids (map #(:db/id (ldb/get-page @conn %)) ["foo" "bar" "baz"])]
+    (is (= [3 2 3]
+           (mapv #(count (db-reference/get-unlinked-references db %)) ids)))))

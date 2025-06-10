@@ -66,7 +66,7 @@
            ['?b :block/refs '?id]]
           clauses)))
 
-(defn- filter-refs-no-children-query
+(defn- filter-refs-query
   [includes excludes class-ids]
   (let [clauses (concat
                  (build-include-exclude-query '?b includes excludes)
@@ -75,8 +75,7 @@
     (into [:find '[?b ...]
            :in '$ '% '[?id ...]
            :where
-           ['?b :block/refs '?id]
-           (list 'not ['?c :block/parent '?b])]
+           ['?b :block/refs '?id]]
           clauses)))
 
 (defn- remove-hidden-ref
@@ -95,10 +94,10 @@
                     (let [class-children (db-class/get-structured-children db id)]
                       (set (conj class-children id))))
         rules (rules/extract-rules rules/db-query-dsl-rules [:block-parent] {})
-        non-children-query-result (d/q (filter-refs-no-children-query includes excludes class-ids) db rules ids)
+        ref-blocks-query-result (d/q (filter-refs-query includes excludes class-ids) db rules ids)
         children-query-result (d/q (filter-refs-children-query includes excludes class-ids) db rules ids)
         ref-blocks (->> (map first children-query-result)
-                        (concat non-children-query-result)
+                        (concat ref-blocks-query-result)
                         distinct
                         (map (fn [id] (d/entity db id)))
                         (remove-hidden-ref db id))
@@ -123,8 +122,7 @@
                                  (sort-by second #(> %1 %2)))))]
     {:ref-pages-count ref-pages-count
      :ref-blocks ref-blocks
-     :ref-matched-children-ids (when filter-exists?
-                                 (set children-ids))}))
+     :ref-matched-children-ids (when filter-exists? (set children-ids))}))
 
 (defn get-unlinked-references
   [db id]

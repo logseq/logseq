@@ -2119,7 +2119,7 @@
         children    (when (coll? children)
                       (let [ref-matched-children-ids (:ref-matched-children-ids config)]
                         (cond->> (remove nil? children)
-                          (seq ref-matched-children-ids)
+                          ref-matched-children-ids
                           (filter (fn [b] (ref-matched-children-ids (:db/id b)))))))]
     (when (and (coll? children)
                (seq children)
