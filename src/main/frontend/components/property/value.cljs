@@ -297,12 +297,12 @@
        (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
          [:div "Repeat task"]
          [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
-     [:div.flex.flex-row.gap-2
-      [:div.flex.text-muted-foreground.mr-4
+     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
+      [:div.flex.text-muted-foreground
        "Every"]
 
       ;; recur frequency
-      [:div.w-6
+      [:div.w-10.mr-2
        (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
 
       ;; recur unit
