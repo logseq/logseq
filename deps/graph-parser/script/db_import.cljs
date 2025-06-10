@@ -161,7 +161,9 @@
             (js/process.exit 1))
         init-conn-args (sqlite-cli/->open-db-args db-graph-dir)
         db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
-        db-dir (if (= 1 (count init-conn-args)) (node-path/dirname (first init-conn-args)) (second init-conn-args))
+        db-full-dir (if (= 1 (count init-conn-args))
+                      (node-path/dirname (first init-conn-args))
+                      (apply node-path/join init-conn-args))
         file-graph' (resolve-path file-graph)
         conn (apply outliner-cli/init-conn (conj init-conn-args {:classpath (cp/get-classpath)
                                                                  :import-type :cli/db-import}))
@@ -177,7 +179,7 @@
                         (select-keys options [:files :verbose :continue :debug]))]
     (p/let [{:keys [import-state]}
             (if directory?
-              (import-file-graph-to-db file-graph' db-dir conn options')
+              (import-file-graph-to-db file-graph' db-full-dir conn options')
               (import-files-to-db file-graph' conn options'))]
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
