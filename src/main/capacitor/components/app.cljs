@@ -223,7 +223,7 @@
      (shui-toaster/install-toaster)
      (shui-dialog/install-modals)
      (shui-popup/install-popups)
-     (modal/modal presenting-element)
+     (modal/block-modal presenting-element)
      (popup/popup))))
 
 (rum/defc main < rum/reactive
