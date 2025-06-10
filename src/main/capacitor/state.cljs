@@ -14,6 +14,7 @@
 (defn open-block-modal!
   [block]
   (set-modal! {:open? true
+               :mode "ios"
                :block block}))
 
 (defonce *popup-data (atom nil))
