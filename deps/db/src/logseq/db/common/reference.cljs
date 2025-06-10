@@ -36,30 +36,13 @@
              (catch :default e
                (log/error :syntax/filters e)))))))
 
-(defn- filter-blocks
-  [filters ref-blocks]
-  (let [exclude-ids (set (map :db/id (:excluded filters)))
-        include-ids (set (map :db/id (:included filters)))
-        get-ids (fn [block]
-                  (set (map :db/id (:block/path-refs block))))]
-    (cond->> ref-blocks
-      (seq exclude-ids)
-      (remove (fn [block]
-                (let [ids (get-ids block)]
-                  (seq (set/intersection exclude-ids ids)))))
-
-      (seq include-ids)
-      (filter (fn [block]
-                (let [ids (get-ids block)]
-                  (set/subset? include-ids ids)))))))
-
 (defn- build-include-exclude-query
-  [var includes excludes]
+  [variable includes excludes]
   (concat
    (for [include includes]
-     [var :block/path-refs include])
+     [variable :block/path-refs include])
    (for [exclude excludes]
-     (list 'not [var :block/path-refs exclude]))))
+     (list 'not [variable :block/path-refs exclude]))))
 
 (defn- filter-refs-children-query
   [includes excludes class-ids]
@@ -141,7 +124,7 @@
      :ref-matched-children-ids (when filter-exists?
                                  (set children-ids))}))
 
-(defn- get-unlinked-references
+(defn get-unlinked-references
   [db id]
   (let [entity (d/entity db id)
         title (string/lower-case (:block/title entity))]
