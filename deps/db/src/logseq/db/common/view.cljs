@@ -264,21 +264,18 @@
       (:filters filters)))))
 
 (defn filter-blocks
-  [filters ref-blocks]
-  (let [exclude-ids (set (map :db/id (:excluded filters)))
-        include-ids (set (map :db/id (:included filters)))
-        get-ids (fn [block]
-                  (set (map :db/id (:block/path-refs block))))]
+  [includes excludes ref-blocks]
+  (let [get-full-ids (fn [block] (map :db/id (:block.temp/full-path-refs block)))
+        get-self-ids (fn [block] (map :db/id (:block/path-refs block)))]
     (cond->> ref-blocks
-      (seq exclude-ids)
+      (seq excludes)
       (remove (fn [block]
-                (let [ids (get-ids block)]
-                  (seq (set/intersection exclude-ids ids)))))
-
-      (seq include-ids)
+                (let [ids (get-self-ids block)]
+                  (some excludes ids))))
+      (seq includes)
       (filter (fn [block]
-                (let [ids (get-ids block)]
-                  (set/subset? include-ids ids)))))))
+                (let [ids (get-full-ids block)]
+                  (every? (fn [include-id] (some #{include-id} ids)) includes)))))))
 
 (defn get-filters
   [db page]
@@ -305,35 +302,70 @@
              (catch :default e
                (log/error :syntax/filters e)))))))
 
+(defn- filter-refs
+  [includes excludes path-ref?]
+  (let [clauses (concat
+                 (when path-ref?
+                   [['?b :block/uuid '?ref-block-id]
+                    '(block-parent ?b ?c)])
+                 (for [include includes]
+                   ['?c :block/path-refs include])
+                 (for [exclude excludes]
+                   (list 'not ['?c :block/path-refs exclude])))]
+    (if path-ref?
+      (into [:find '[?c ...]
+             :in '$ '% '[?id ...] '[?ref-block-id ...]
+             :where
+             ['?c :block/path-refs '?id]]
+            clauses)
+      (into [:find '[?c ...]
+             :in '$ '[?id ...]
+             :where
+             ['?c :block/refs '?id]]
+            clauses))))
+
+(defn- remove-hidden-ref
+  [db page-id refs]
+  (remove (fn [block] (common-initial-data/hidden-ref? db block page-id)) refs))
+
+(defn- get-class-object-datoms
+  [db class-id]
+  (let [class-children (db-class/get-structured-children db class-id)
+        class-ids (distinct (conj class-children class-id))]
+    (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)))
+
 (defn- get-linked-references
   [db id]
   (let [entity (d/entity db id)
         ids (set (cons id (ldb/get-block-alias db id)))
-        refs (mapcat (fn [id] (:block/_path-refs (d/entity db id))) ids)
         page-filters (get-filters db entity)
-        full-ref-blocks (->> refs
-                             (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
-                             (common-util/distinct-by :db/id))
-        ref-blocks (cond->> full-ref-blocks
-                     (seq page-filters)
-                     (filter-blocks page-filters))
-        ref-pages-count (->> ref-blocks
-                             (remove (fn [block]
-                                       (common-initial-data/hidden-ref? db block id)))
-                             (mapcat (fn [block]
-                                       (->>
-                                        (cons
-                                         (:block/title (:block/page block))
-                                         (map (fn [b]
-                                                (when (and (ldb/page? b)
-                                                           (not= (:db/id b) id)
-                                                           (not (contains? #{:block/tags} (:db/ident b))))
-                                                  (:block/title b)))
-                                              (:block/path-refs block)))
-                                        distinct)))
-                             (remove nil?)
-                             (frequencies)
-                             (sort-by second #(> %1 %2)))]
+        excludes (map :db/id (:excluded page-filters))
+        includes (map :db/id (:included page-filters))
+        q (filter-refs includes excludes false)
+        ref-blocks (time
+                    (doall
+                     (->> (d/q q db ids)
+                          (map (fn [id] (d/entity db id)))
+                          (remove-hidden-ref db id))))
+        ref-pages-count (when (seq ref-blocks)
+                          (let [path-refs (let [q (filter-refs includes excludes true)
+                                                matched-ids (d/q q db
+                                                                 (rules/extract-rules rules/db-query-dsl-rules [:block-parent] {})
+                                                                 ids
+                                                                 (map :block/uuid ref-blocks))]
+                                            (remove-hidden-ref db id (map #(d/entity db %) matched-ids)))]
+                            (->> path-refs
+                                 (mapcat (fn [block] (map :db/id (:block/refs block))))
+                                 (concat (mapcat (fn [block] (map :db/id (:block/path-refs block))) ref-blocks))
+                                 frequencies
+                                 (keep (fn [[e size]]
+                                         (let [ref (d/entity db e)]
+                                           (when (and (ldb/page? ref)
+                                                      (not= (:db/id ref) id)
+                                                      (not= :block/tags (:db/ident ref))
+                                                      (not (common-initial-data/hidden-ref? db ref id)))
+                                             [(:block/title ref) size]))))
+                                 (sort-by second #(> %1 %2)))))]
     {:ref-pages-count ref-pages-count
      :ref-blocks ref-blocks}))
 
@@ -393,10 +425,7 @@
       (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
 
       :class-objects
-      (let [class-id view-for-id
-            class-children (db-class/get-structured-children db class-id)
-            class-ids (distinct (conj class-children class-id))
-            datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
+      (let [datoms (get-class-object-datoms db view-for-id)]
         (keep (fn [d] (non-hidden-e (:e d))) datoms))
 
       :property-objects

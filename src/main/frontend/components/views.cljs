@@ -2022,7 +2022,7 @@
 (defn- load-view-data-aux
   [view-entity view-parent {:keys [query? query-entity-ids sorting filters input
                                    view-feature-type group-by-property-ident
-                                   set-data! set-ref-pages-count! set-properties! set-loading!]}]
+                                   set-data! set-ref-pages-count! set-ref-page-filters! set-properties! set-loading!]}]
   (c.m/run-task*
    (m/sp
      (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -2034,7 +2034,7 @@
          :else
          (when (or (not query?) need-query?)
            (try
-             (let [{:keys [data ref-pages-count properties]}
+             (let [{:keys [data ref-pages-count ref-page-filters properties]}
                    (c.m/<?
                     (<load-view-data view-entity
                                      (cond->
@@ -2050,6 +2050,8 @@
                (set-data! data)
                (when ref-pages-count
                  (set-ref-pages-count! ref-pages-count))
+               (when ref-page-filters
+                 (set-ref-page-filters! ref-page-filters))
                (set-properties! properties))
              (finally
                (set-loading! false)))))))))
@@ -2086,13 +2088,14 @@
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
+        [ref-page-filters set-ref-page-filters!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
                          (load-view-data-aux view-entity view-parent
                                              {:query? query?
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input
                                               :view-feature-type view-feature-type :group-by-property-ident group-by-property-ident
-                                              :set-data! set-data! :set-ref-pages-count! set-ref-pages-count!
+                                              :set-data! set-data! :set-ref-pages-count! set-ref-pages-count! :set-ref-page-filters! set-ref-page-filters!
                                               :set-properties! set-properties! :set-loading! set-loading!}))]
     (let [sorting-filters {:sorting sorting
                            :filters filters}]
@@ -2130,6 +2133,7 @@
                                                                    (+ total (count col))) 0 data))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
+                                          :ref-page-filters ref-page-filters
                                           :display-type display-type
                                           :load-view-data load-view-data
                                           :set-view-entity! set-view-entity!))])))

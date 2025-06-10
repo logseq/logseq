@@ -3261,7 +3261,7 @@
                                         (rum/with-key (breadcrumb-fragment config block label opts)
                                           (str (:block/uuid block))))
                                       [:span.opacity-70 {:key "dots"} "⋯"])))
-                             (interpose (rum/with-key (breadcrumb-separator) "icon")))]
+                             (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
            {:class (when (seq breadcrumbs)
