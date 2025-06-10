@@ -346,41 +346,47 @@
 
 (defn- get-linked-references
   [db id]
-  (let [entity (d/entity db id)
-        ids (set (cons id (ldb/get-block-alias db id)))
-        page-filters (get-filters db entity)
-        excludes (map :db/id (:excluded page-filters))
-        includes (map :db/id (:included page-filters))
-        class-ids (when (ldb/class? entity)
-                    (let [class-children (db-class/get-structured-children db id)]
-                      (set (conj class-children id))))
-        rules (rules/extract-rules rules/db-query-dsl-rules [:block-parent] {})
-        query-result (d/q (filter-refs includes excludes class-ids) db rules ids)
-        children (->> (distinct (concat
-                                 (map second query-result)
-                                 (map last query-result)))
-                      (map (fn [id] (d/entity db id)))
-                      (remove-hidden-ref db id))
-        ref-blocks (time
-                    (doall
-                     (->> (distinct (map first query-result))
-                          (map (fn [id] (d/entity db id)))
-                          (remove-hidden-ref db id))))
-        ref-pages-count (time
-                         (doall
-                          (when (seq ref-blocks)
-                            (->> (concat (mapcat :block/path-refs ref-blocks)
-                                         (mapcat :block/refs children))
-                                 frequencies
-                                 (keep (fn [[ref size]]
-                                         (when (and (ldb/page? ref)
-                                                    (not= (:db/id ref) id)
-                                                    (not= :block/tags (:db/ident ref))
-                                                    (not (common-initial-data/hidden-ref? db ref id)))
-                                           [(:block/title ref) size])))
-                                 (sort-by second #(> %1 %2))))))]
-    {:ref-pages-count ref-pages-count
-     :ref-blocks ref-blocks}))
+  (time
+   (doall
+    (let [entity (d/entity db id)
+          ids (set (cons id (ldb/get-block-alias db id)))
+          page-filters (get-filters db entity)
+          excludes (map :db/id (:excluded page-filters))
+          includes (map :db/id (:included page-filters))
+          filter-exists? (or (seq excludes) (seq includes))
+          class-ids (when (ldb/class? entity)
+                      (let [class-children (db-class/get-structured-children db id)]
+                        (set (conj class-children id))))
+          rules (rules/extract-rules rules/db-query-dsl-rules [:block-parent] {})
+          query-result (d/q (filter-refs includes excludes class-ids) db rules ids)
+          children-ids (distinct (concat
+                                  (map second query-result)
+                                  (map last query-result)))
+          ref-blocks (time
+                      (doall
+                       (->> (distinct (map first query-result))
+                            (map (fn [id] (d/entity db id)))
+                            (remove-hidden-ref db id))))
+          ref-pages-count (time
+                           (doall
+                            (when (seq ref-blocks)
+                              (let [children (->> children-ids
+                                                  (map (fn [id] (d/entity db id)))
+                                                  (remove-hidden-ref db id))]
+                                (->> (concat (mapcat :block/path-refs ref-blocks)
+                                             (mapcat :block/refs children))
+                                     frequencies
+                                     (keep (fn [[ref size]]
+                                             (when (and (ldb/page? ref)
+                                                        (not= (:db/id ref) id)
+                                                        (not= :block/tags (:db/ident ref))
+                                                        (not (common-initial-data/hidden-ref? db ref id)))
+                                               [(:block/title ref) size])))
+                                     (sort-by second #(> %1 %2)))))))]
+      {:ref-pages-count ref-pages-count
+       :ref-blocks ref-blocks
+       :ref-matched-children-ids (when filter-exists?
+                                   (set children-ids))}))))
 
 (defn- get-unlinked-references
   [db id]
@@ -634,6 +640,6 @@
        {:count (count filtered-entities)
         :data (distinct data')}
         (= feat-type :linked-references)
-        (assoc :ref-pages-count (:ref-pages-count entities-result))
+        (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
         query?
         (assoc :properties (get-query-properties entities-result))))))
