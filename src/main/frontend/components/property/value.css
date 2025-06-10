@@ -1,8 +1,12 @@
-.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]) {
+.property-value-inner:not([data-type="default"]):not([data-type="url"]):not([data-type="number"]):not([data-type="date"]):not([data-type="datetime"]) {
   @apply cursor-pointer;
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
   }
+}
+
+.property-value-inner[data-type="date"], .property-value-inner[data-type="datetime"] {
+  @apply cursor-pointer;
 }
 
 .ls-property-input {
@@ -35,4 +39,9 @@
 .ls-number {
   @apply cursor-text;
   min-height: 20px;
+}
+
+.ls-repeat-task-frequency .property-value-inner {
+  @apply border rounded pl-2;
+  min-width: 3em;
 }
