@@ -2055,8 +2055,7 @@
                                        (assoc :query-entity-ids query-entity-ids))))]
                (set-data! data)
                (when ref-pages-count
-                 (set-ref-pages-count! ref-pages-count))
-               (when ref-matched-children-ids
+                 (set-ref-pages-count! ref-pages-count)
                  (set-ref-matched-children-ids! ref-matched-children-ids))
                (set-properties! properties))
              (finally
