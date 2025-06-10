@@ -47,8 +47,10 @@
 (defn- filter-refs-children-query
   [includes excludes class-ids]
   (let [clauses (concat
-                 ['(block-parent ?b ?c)
-                  ['?c :block/parent '?p]]
+                 [;; find refs from refed block's children only
+                  '(block-parent ?b ?c)
+                  ;; find all levels of parents
+                  '(block-parent ?p ?c)]
                  (build-include-exclude-query '?c includes excludes)
                  (when class-ids
                    (mapcat
