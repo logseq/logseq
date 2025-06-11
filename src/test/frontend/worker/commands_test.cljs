@@ -1,7 +1,7 @@
 (ns frontend.worker.commands-test
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs.test :refer [deftest is are testing]]
+            [cljs.test :refer [deftest is testing]]
             [frontend.worker.commands :as commands]))
 
 (def get-next-time #'commands/get-next-time)
@@ -87,7 +87,7 @@
       (let [next-time (get-next-time one-year-ago year-unit 5)]
         (is (= 4 (in-years next-time)))))
 
-    (testing "perserves week day"
+    (testing "preserves week day"
       (let [next-time (get-next-time now week-unit 1)]
         (is (= (t/day-of-week (tc/from-long next-time)) (t/day-of-week now))))
       (let [next-time (get-next-time one-week-ago week-unit 1)]
