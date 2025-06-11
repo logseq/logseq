@@ -257,7 +257,6 @@
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
         *card-index (::card-index state)
-        card-index (rum/react *card-index)
         *phase (atom :init)]
     (when (false? loading?)
       [:div#cards-modal.flex.flex-col.gap-8.h-full.flex-1
@@ -280,11 +279,13 @@
                                 (:block/title card-entity)))))))
 
         [:span.text-sm.opacity-50 (str (min (inc @*card-index) (count @*block-ids)) "/" (count @*block-ids))]]
-       (let [block-id (nth block-ids card-index nil)]
+       (let [block-id (nth block-ids @*card-index nil)]
          (cond
            block-id
            [:div.flex.flex-col
-            (card-view repo block-id *card-index *phase)]
+            (rum/with-key
+              (card-view repo block-id *card-index *phase)
+              (str "card-" block-id))]
 
            (empty? block-ids)
            [:div.ls-card.content.ml-2
