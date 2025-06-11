@@ -27,6 +27,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.dialog.core :as shui-dialog]
@@ -338,8 +339,15 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
+;; TODO: Wire up UI
 (defn- copy-asset [repo repo-dir file]
+  ;; (prn ::copy-asset (:path file))
+  ;; (prn ::size (.-size (:file-object file)))
   (-> (.arrayBuffer (:file-object file))
+      #_(p/then (fn [buffer]
+                  (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+                    (prn ::checksum2 checksum)
+                    buffer)))
       (p/then (fn [buffer]
                 (let [content (js/Uint8Array. buffer)
                       parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
