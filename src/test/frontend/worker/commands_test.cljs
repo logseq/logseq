@@ -12,7 +12,7 @@
 (def month-unit {:db/ident :logseq.property.repeat/recur-unit.month})
 (def year-unit {:db/ident :logseq.property.repeat/recur-unit.year})
 
-(deftest ^:focus get-next-time-test
+(deftest ^:large-vars/cleanup-todo get-next-time-test
   (let [now (t/now)
         one-minute-ago (t/minus now (t/minutes 1))
         one-hour-ago (t/minus now (t/hours 1))
