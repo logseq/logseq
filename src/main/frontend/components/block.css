@@ -1067,8 +1067,16 @@ html.is-mac {
   height: 16px;
 }
 
-.ls-page-title .positioned-properties, .ls-page-title .time-spent {
-  margin-top: 15px;
+.ls-page-title {
+  .positioned-properties, .time-spent {
+    margin-top: 15px;
+  }
+}
+
+.ls-page-title .ls-properties-area {
+    .positioned-properties, .time-spent {
+        margin-top: initial;
+    }
 }
 
 .ls-page-title .ls-page-icon button {
