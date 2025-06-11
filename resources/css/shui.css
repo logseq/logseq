@@ -246,7 +246,7 @@ div[data-radix-popper-content-wrapper] {
 }
 
 .ui__dialog-content {
-  @apply outline-none;
+  @apply outline-none m-4;
 
   &[data-auto-width] {
     @apply max-w-[90vw] w-max sm:max-w-[960px];
