@@ -7,7 +7,7 @@ html.plt-capacitor.plt-android {
   --ion-safe-area-bottom: 16px;
 
   ion-button, ion-tab-button {
-    --ripple-color: rgba(0, 0, 0, .08); /* 设置涟漪颜色为透明 */
+    --ripple-color: rgba(0, 0, 0, .3); /* 设置涟漪颜色为透明 */
   }
 
   ion-app {
@@ -101,7 +101,7 @@ ion-buttons {
 
 .block-modal-page {
   > ion-header {
-    @apply pt-5 pb-1 px-6 flex justify-between bg-white/10;
+    @apply pt-5 pb-1 px-4 flex justify-between bg-white/10;
   }
 
   > ion-content {
@@ -120,6 +120,14 @@ ion-tab-bar {
 
     &.tab-selected {
       @apply opacity-100 text-accent-11 font-semibold;
+    }
+  }
+}
+
+ion-modal {
+  .property-select {
+    .cp__select-main {
+      @apply w-auto;
     }
   }
 }
