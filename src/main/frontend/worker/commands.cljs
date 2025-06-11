@@ -108,7 +108,7 @@
 
 (defmulti handle-command (fn [action-id & _others] action-id))
 
-(defn- repeat-timestamp
+(defn- repeat-until-future-timestamp
   [datetime recur-unit frequency period-f keep-week?]
   (let [now (t/now)
         v (if (t/after? datetime now)
@@ -117,7 +117,10 @@
         delta (->> (Math/ceil (/ (if (zero? v) 1 v) frequency))
                    (* frequency)
                    recur-unit)
-        result (t/plus datetime delta)
+        result* (t/plus datetime delta)
+        result (if (t/after? result* now)
+                 result*
+                 (t/plus result* (recur-unit frequency)))
         w1 (t/day-of-week datetime)
         w2 (t/day-of-week result)]
     (if (and keep-week? (not= w1 w2))
@@ -140,15 +143,8 @@
                                 :logseq.property.repeat/recur-unit.year [t/years t/in-years]
                                 nil)]
     (when recur-unit
-      (let [delta (recur-unit frequency)
-            next-time (case (:db/ident unit)
-                        :logseq.property.repeat/recur-unit.year
-                        (repeat-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.property.repeat/recur-unit.month
-                        (repeat-timestamp default-timezone-time recur-unit frequency period-f false)
-                        :logseq.property.repeat/recur-unit.week
-                        (repeat-timestamp default-timezone-time recur-unit frequency period-f true)
-                        (t/plus default-timezone-time delta))]
+      (let [week? (= (:db/ident unit) :logseq.property.repeat/recur-unit.week)
+            next-time (repeat-until-future-timestamp default-timezone-time recur-unit frequency period-f week?)]
         (tc/to-long next-time)))))
 
 (defn- compute-reschedule-property-tx
