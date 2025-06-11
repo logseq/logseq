@@ -9,7 +9,6 @@
   @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
-    max-width: 100%;
 
     /* FIXME: img macros */
 
@@ -43,11 +42,6 @@
       .asset-action-bar {
         @apply opacity-100;
       }
-    }
-
-    > img {
-      max-width: unset;
-      width: 100%;
     }
   }
 
