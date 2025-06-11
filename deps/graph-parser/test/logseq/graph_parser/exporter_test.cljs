@@ -94,15 +94,15 @@
    ;; TODO: Add actual default
    :default-config {}})
 
-(defn- <read-asset-file [file import-state]
+;; Copied from db-import
+(defn- <read-asset-file [file assets]
   (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)
-          ext (string/lower-case (.substr (node-path/extname (:path file)) 1))]
-    (swap! (:assets import-state) assoc
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+    (swap! assets assoc
            (node-path/basename (:path file))
            {:size (.-length buffer)
             :checksum checksum
-            :type ext
+            :type (db-asset/asset-path->type (:path file))
             :path (:path file)})))
 
 ;; Copied from db-import script and tweaked for an in-memory import
@@ -379,7 +379,14 @@
       ;; Cards
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
-          "None of the card properties are imported since they are deprecated"))
+          "None of the card properties are imported since they are deprecated")
+
+      ;; Assets
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "png"
+              :logseq.property.asset/checksum "3d5e620cac62159d8196c118574bfea7a16e86fa86efd1c3fa15a00a0a08792d"
+              :logseq.property.asset/size 753471}
+             (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life

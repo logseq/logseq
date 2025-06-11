@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.exporter
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
-  (:require [borkdude.rewrite-edn :as rewrite]
+  (:require ["path" :as node-path]
+            [borkdude.rewrite-edn :as rewrite]
             [cljs-time.coerce :as tc]
             [cljs.pprint]
             [clojure.edn :as edn]
@@ -31,7 +32,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.asset :as db-asset]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -896,7 +898,7 @@
                                 :title
                                 (filter #(and (= "Link" (first %))
                                               (common-config/local-asset? (second (:url (second %))))))))))
-        asset-name (some-> asset-links first second :url second path/basename)]
+        asset-name (some-> asset-links first second :url second node-path/basename)]
     (when (seq asset-links)
       (prn :asset-added! asset-name (get @assets asset-name)))
     ;; TODO: Handle asset metadata
@@ -909,8 +911,7 @@
                 :logseq.property.asset/type (:type asset-data)
                 :logseq.property.asset/checksum (:checksum asset-data)
                 :logseq.property.asset/size (:size asset-data)
-                ;; TODO: Ensure this matches DB version
-                :block/title (path/file-stem asset-name)}))
+                :block/title (db-asset/asset-name->title asset-name)}))
       block)))
 
 (defn- build-block-tx
@@ -1604,7 +1605,7 @@
 
 (defn- read-asset-files
   "Reads files under assets/"
-  [*asset-files <read-asset-file {:keys [notify-user set-ui-state import-state]
+  [*asset-files <read-asset-file {:keys [notify-user set-ui-state assets]
                                   :or {set-ui-state (constantly nil)}}]
   (assert <read-asset-file "read-asset-file fn required")
   (let [asset-files (mapv #(assoc %1 :idx %2)
@@ -1612,7 +1613,7 @@
                           (sort-by :path *asset-files)
                           (range 0 (count *asset-files)))
         read-asset (fn read-asset [{:keys [path] :as file}]
-                     (-> (<read-asset-file file import-state)
+                     (-> (<read-asset-file file assets)
                          (p/catch
                           (fn [error]
                             (notify-user {:msg (str "Import failed to read " (pr-str path) " with error:\n" (.-message error))
@@ -1624,27 +1625,27 @@
 
 (defn- copy-asset-files
   "Copy files under assets/"
-  [*asset-files <copy-asset-file {:keys [notify-user set-ui-state]
-                                  :or {set-ui-state (constantly nil)}}]
+  [asset-maps* <copy-asset-file {:keys [notify-user set-ui-state]
+                                 :or {set-ui-state (constantly nil)}}]
   (assert <copy-asset-file "copy-asset-file fn required")
-  (let [asset-files (mapv #(assoc %1 :idx %2)
+  (let [asset-maps (mapv #(assoc %1 :idx %2)
                           ;; Sort files to ensure reproducible import behavior
-                          (sort-by :path *asset-files)
-                          (range 0 (count *asset-files)))
-        copy-asset (fn copy-asset [{:keys [path] :as file}]
-                     (if (nil? (:block/uuid file))
+                         (sort-by :path asset-maps*)
+                         (range 0 (count asset-maps*)))
+        copy-asset (fn copy-asset [{:keys [path] :as asset-m}]
+                     (if (nil? (:block/uuid asset-m))
                        (notify-user {:msg (str "Import failed to copy " (pr-str path) " because the asset has no :block/uuid")
                                      :level :error
-                                     :ex-data {:file file}})
+                                     :ex-data {:path path}})
                        (p/catch
-                        (<copy-asset-file file)
+                        (<copy-asset-file asset-m)
                         (fn [error]
                           (notify-user {:msg (str "Import failed to copy " (pr-str path) " with error:\n" (.-message error))
                                         :level :error
                                         :ex-data {:path path :error error}})))))]
-    (when (seq asset-files)
+    (when (seq asset-maps)
       (set-ui-state [:graph/importing-state :current-page] "Copy asset files")
-      (<safe-async-loop copy-asset asset-files notify-user))))
+      (<safe-async-loop copy-asset asset-maps notify-user))))
 
 (defn- insert-favorites
   "Inserts favorited pages as uuids into a new favorite page"
@@ -1733,14 +1734,16 @@
         ;; Assets are read first as doc-files need data from them to make Asset blocks.
         ;; Assets are copied after after doc-files as they need block/uuid's from them to name assets
         (read-asset-files asset-files <read-asset (merge (select-keys options [:notify-user :set-ui-state])
-                                                         (select-keys doc-options [:import-state])))
+                                                         {:assets (get-in doc-options [:import-state :assets])}))
         (export-doc-files conn doc-files <read-file doc-options)
         (copy-asset-files (vals @(get-in doc-options [:import-state :assets]))
                           <copy-asset
                           (select-keys options [:notify-user :set-ui-state]))
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
-        {:import-state (:import-state doc-options)
+        {:import-state (-> (:import-state doc-options)
+                           ;; don't leak full asset content (which could be large) out of this ns
+                           (dissoc :assets))
          :files files})))
    (p/finally (fn [_]
                 (reset! gp-block/*export-to-db-graph? false)))
