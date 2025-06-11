@@ -2117,7 +2117,11 @@
   (let [ref?        (:ref? config)
         query?      (:custom-query? config)
         children    (when (coll? children)
-                      (remove nil? children))]
+                      (let [ref-matched-children-ids (:ref-matched-children-ids config)]
+                        (cond->> (remove nil? children)
+                          ref-matched-children-ids
+                          ;; Block children will not be rendered if the filters do not match them
+                          (filter (fn [b] (ref-matched-children-ids (:db/id b)))))))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -3261,7 +3265,7 @@
                                         (rum/with-key (breadcrumb-fragment config block label opts)
                                           (str (:block/uuid block))))
                                       [:span.opacity-70 {:key "dots"} "⋯"])))
-                             (interpose (rum/with-key (breadcrumb-separator) "icon")))]
+                             (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
            {:class (when (seq breadcrumbs)
@@ -3761,7 +3765,7 @@
 
 (defn- config-block-should-update?
   [old-state new-state]
-  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :ref-matched-children-ids]
         b1                  (second (:rum/args old-state))
         b2                  (second (:rum/args new-state))
         result              (or

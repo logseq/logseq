@@ -63,7 +63,7 @@
 
 (defn entity-memoized
   [db eid]
-  (if (qualified-keyword? eid)
+  (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
       (if (and @*reset-cache-background-task-running?
                (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil
