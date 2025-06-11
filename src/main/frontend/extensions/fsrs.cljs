@@ -259,7 +259,7 @@
         *card-index (::card-index state)
         *phase (atom :init)]
     (when (false? loading?)
-      [:div#cards-modal.flex.flex-col.gap-8.h-full.flex-1
+      [:div#cards-modal.flex.flex-col.gap-8.flex-1
        [:div.flex.flex-row.items-center.gap-2.flex-wrap
         (shui/select
          {:on-value-change (fn [v]
