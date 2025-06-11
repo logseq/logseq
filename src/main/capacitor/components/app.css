@@ -26,7 +26,7 @@ html.plt-capacitor.plt-android {
   ion-modal {
     ion-content {
       #app-container-wrapper {
-        @apply pt-8;
+        @apply pt-0;
       }
     }
   }
@@ -96,6 +96,18 @@ ion-buttons {
     @apply border;
 
     background-color: var(--ion-color-light-tint);
+  }
+}
+
+.block-modal-page {
+  > ion-header {
+    @apply pt-5 pb-1 px-6 flex justify-between bg-white/10;
+  }
+
+  > ion-content {
+    #app-container-wrapper {
+      @apply relative -top-6;
+    }
   }
 }
 
