@@ -35,7 +35,9 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            ["path" :as node-path]
+            [logseq.common.config :as common-config]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -339,21 +341,27 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
-;; TODO: Wire up UI
-(defn- copy-asset [repo repo-dir file]
-  ;; (prn ::copy-asset (:path file))
-  ;; (prn ::size (.-size (:file-object file)))
+(defn- read-asset [file assets]
   (-> (.arrayBuffer (:file-object file))
-      #_(p/then (fn [buffer]
-                  (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
-                    (prn ::checksum2 checksum)
-                    buffer)))
+      (p/then (fn [buffer]
+                (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+                  (swap! assets assoc
+                         (node-path/basename (:path file))
+                         {:size (.-size (:file-object file))
+                          :checksum checksum
+                          :type (db-asset/asset-path->type (:path file))
+                          :path (:path file)
+                          ;; Save buffer to avoid reading asset twice
+                          ::array-buffer buffer}))))))
+
+(defn- copy-asset [repo repo-dir asset-m]
+  (-> (::array-buffer asset-m)
       (p/then (fn [buffer]
                 (let [content (js/Uint8Array. buffer)
-                      parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
+                      assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
                   (p/do!
-                   (fs/mkdir-if-not-exists parent-dir)
-                   (fs/write-plain-text-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
+                   (fs/mkdir-if-not-exists assets-dir)
+                   (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
   [*files
@@ -383,6 +391,7 @@
                    :<save-logseq-file (fn save-logseq-file [_ path content]
                                         (db-editor-handler/save-file! path content))
                    ;; asset file options
+                   :<read-asset read-asset
                    :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
