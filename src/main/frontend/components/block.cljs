@@ -301,6 +301,86 @@
      [:span.handle-right.image-resize (assoc handle-props :ref *handle-right)]]))
 
 (defonce *resizing-image? (atom false))
+(rum/defc asset-container
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [:div.asset-container
+   {:key "resize-asset-container"}
+   [:img.rounded-sm.relative
+    (merge
+     {:loading "lazy"
+      :referrerPolicy "no-referrer"
+      :src src
+      :title title}
+     metadata)]
+   (when (and (not breadcrumb?)
+              (not positioned?))
+     [:<>
+      (let [image-src (fs/asset-path-normalize src)]
+        [:.asset-action-bar {:aria-hidden "true"}
+         [:.flex
+          (when-not config/publishing?
+            [:button.asset-action-btn
+             {:title (t :asset/delete)
+              :tabIndex "-1"
+              :on-pointer-down util/stop
+              :on-click
+              (fn [e]
+                (util/stop e)
+                (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+                  (let [*local-selected? (atom local?)]
+                    (-> (shui/dialog-confirm!
+                         [:div.text-xs.opacity-60.-my-2
+                          (when (and local? (not= (:block/uuid asset-block) block-id))
+                            [:label.flex.gap-1.items-center
+                             (shui/checkbox
+                              {:default-checked @*local-selected?
+                               :on-checked-change #(reset! *local-selected? %)})
+                             (t :asset/physical-delete)])]
+                         {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                          :outside-cancel? true})
+                        (p/then (fn []
+                                  (shui/dialog-close!)
+                                  (editor-handler/delete-asset-of-block!
+                                   {:block-id block-id
+                                    :asset-block asset-block
+                                    :local? local?
+                                    :delete-local? @*local-selected?
+                                    :repo (state/get-current-repo)
+                                    :href src
+                                    :title title
+                                    :full-text full-text})))))))}
+             (ui/icon "trash")])
+
+          [:button.asset-action-btn
+           {:title (t :asset/copy)
+            :tabIndex "-1"
+            :on-pointer-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (-> (util/copy-image-to-clipboard image-src)
+                            (p/then #(notification/show! "Copied!" :success))))}
+           (ui/icon "copy")]
+
+          [:button.asset-action-btn
+           {:title (t :asset/maximize)
+            :tabIndex "-1"
+            :on-pointer-down util/stop
+            :on-click open-lightbox}
+
+           (ui/icon "maximize")]
+
+          (when (util/electron?)
+            [:button.asset-action-btn
+             {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+              :tabIndex "-1"
+              :on-pointer-down util/stop
+              :on-click (fn [e]
+                          (util/stop e)
+                          (if local?
+                            (ipc/ipc "openFileInFolder" image-src)
+                            (js/window.apis.openExternal image-src)))}
+             (shui/tabler-icon "folder-pin")])]])])])
+
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)
   {:will-unmount (fn [state]
@@ -310,101 +390,24 @@
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
-        asset-container [:div.asset-container {:key "resize-asset-container"}
-                         [:img.rounded-sm.relative
-                          (merge
-                           {:loading "lazy"
-                            :referrerPolicy "no-referrer"
-                            :src src
-                            :title title}
-                           metadata)]
-                         (when (and (not breadcrumb?)
-                                    (not positioned?))
-                           [:<>
-                            (let [image-src (fs/asset-path-normalize src)]
-                              [:.asset-action-bar {:aria-hidden "true"}
-                               [:.flex
-                                (when-not config/publishing?
-                                  [:button.asset-action-btn
-                                   {:title (t :asset/delete)
-                                    :tabIndex "-1"
-                                    :on-pointer-down util/stop
-                                    :on-click
-                                    (fn [e]
-                                      (util/stop e)
-                                      (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
-                                        (let [*local-selected? (atom local?)]
-                                          (-> (shui/dialog-confirm!
-                                               [:div.text-xs.opacity-60.-my-2
-                                                (when (and local? (not= (:block/uuid asset-block) block-id))
-                                                  [:label.flex.gap-1.items-center
-                                                   (shui/checkbox
-                                                    {:default-checked @*local-selected?
-                                                     :on-checked-change #(reset! *local-selected? %)})
-                                                   (t :asset/physical-delete)])]
-                                               {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                                :outside-cancel? true})
-                                              (p/then (fn []
-                                                        (shui/dialog-close!)
-                                                        (editor-handler/delete-asset-of-block!
-                                                         {:block-id block-id
-                                                          :asset-block asset-block
-                                                          :local? local?
-                                                          :delete-local? @*local-selected?
-                                                          :repo (state/get-current-repo)
-                                                          :href src
-                                                          :title title
-                                                          :full-text full-text})))))))}
-                                   (ui/icon "trash")])
-
-                                [:button.asset-action-btn
-                                 {:title (t :asset/copy)
-                                  :tabIndex "-1"
-                                  :on-pointer-down util/stop
-                                  :on-click (fn [e]
-                                              (util/stop e)
-                                              (-> (util/copy-image-to-clipboard image-src)
-                                                  (p/then #(notification/show! "Copied!" :success))))}
-                                 (ui/icon "copy")]
-
-                                [:button.asset-action-btn
-                                 {:title (t :asset/maximize)
-                                  :tabIndex "-1"
-                                  :on-pointer-down util/stop
-                                  :on-click open-lightbox}
-
-                                 (ui/icon "maximize")]
-
-                                (when (util/electron?)
-                                  [:button.asset-action-btn
-                                   {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-                                    :tabIndex "-1"
-                                    :on-pointer-down util/stop
-                                    :on-click (fn [e]
-                                                (util/stop e)
-                                                (if local?
-                                                  (ipc/ipc "openFileInFolder" image-src)
-                                                  (js/window.apis.openExternal image-src)))}
-                                   (shui/tabler-icon "folder-pin")])]])])]
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
                   (:width metadata))
         *width (get state ::size)
-        width (or @*width width)
-        style (when-not (util/mobile?)
-                (cond width
-                      {(if (:sidebar? config)
-                         :max-width :width) width}
-                      :else
-                      {}))
+        width (or @*width width 500)
+        metadata' (merge metadata (when width {:width width}))
         resizable? (and (not (mobile-util/native-platform?))
                         (not breadcrumb?)
-                        (not positioned?))]
+                        (not positioned?))
+        asset-container-cp (asset-container asset-block src title metadata'
+                                            {:breadcrumb? breadcrumb?
+                                             :positioned? positioned?
+                                             :local? local?
+                                             :full-text full-text})]
     (if (or (:disable-resize? config)
             (not resizable?))
-      asset-container
+      asset-container-cp
       [:div.ls-resize-image.rounded-md
-       (when style {:style style})
-       asset-container
+       asset-container-cp
        (resize-image-handles
         (fn [k ^js event]
           (let [dx (.-dx event)
