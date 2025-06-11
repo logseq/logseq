@@ -265,18 +265,30 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
-(defn indent-outdent-blocks!
-  [blocks indent? save-current-block]
-  (when (seq blocks)
-    (let [blocks (get-top-level-blocks blocks)]
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (when save-current-block (save-current-block))
-       (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks)
-                                           indent?
-                                           {:parent-original (get-first-block-original)
-                                            :logical-outdenting? (state/logical-outdenting?)})))))
+(let [*timeout (atom nil)]
+  (defn indent-outdent-blocks!
+    [blocks indent? save-current-block]
+    (when-let [timeout *timeout]
+      (js/clearTimeout timeout))
+    (when (seq blocks)
+      (let [blocks-container (when-let [first-selected-node (first (state/get-selection-blocks))]
+                               (util/rec-get-blocks-container first-selected-node))
+            blocks' (get-top-level-blocks blocks)]
+        (p/do!
+         (ui-outliner-tx/transact!
+          {:outliner-op :move-blocks
+           :real-outliner-op :indent-outdent}
+          (when save-current-block (save-current-block))
+          (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                              indent?
+                                              {:parent-original (get-first-block-original)
+                                               :logical-outdenting? (state/logical-outdenting?)}))
+         (when blocks-container
+           ;; Update selection nodes to be the new ones
+           (reset! *timeout
+                   (js/setTimeout
+                    #(state/set-selection-blocks! (dom/sel blocks-container ".ls-block.selected") :down)
+                    100))))))))
 
 (def *swipe (atom nil))
 
