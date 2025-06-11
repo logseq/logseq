@@ -886,8 +886,35 @@
     (:block/name (:block/parent block))
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
+(defn- handle-assets-in-block
+  [block block-ast assets]
+  (let [asset-links
+        (->> block-ast
+             (mapcat (fn [n]
+                       (some->> n
+                                second
+                                :title
+                                (filter #(and (= "Link" (first %))
+                                              (common-config/local-asset? (second (:url (second %))))))))))
+        asset-name (some-> asset-links first second :url second path/basename)]
+    (when (seq asset-links)
+      (prn :asset-added! asset-name (get @assets asset-name)))
+    ;; TODO: Handle asset metadata
+    ;; TODO: Handle: multiple asset links
+    (if-let [asset-data (and asset-name (get @assets asset-name))]
+      (do
+        (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
+        (merge block
+               {:block/tags [:logseq.class/Asset]
+                :logseq.property.asset/type (:type asset-data)
+                :logseq.property.asset/checksum (:checksum asset-data)
+                :logseq.property.asset/size (:size asset-data)
+                ;; TODO: Ensure this matches DB version
+                :block/title (path/file-stem asset-name)}))
+      block)))
+
 (defn- build-block-tx
-  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
+  [db block* pre-blocks {:keys [page-names-to-uuids block-to-ast] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
@@ -898,11 +925,13 @@
         prepared-block (cond-> block-after-built-in-props
                          journal-page-created-at
                          (assoc :block/created-at journal-page-created-at))
+        block-ast (get block-to-ast (:block/uuid block*))
         block' (-> prepared-block
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
+                   (handle-assets-in-block block-ast (:assets import-state))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -1154,7 +1183,9 @@
    :classes-from-property-parents (atom #{})
    ;; Map of block uuids to their :block/properties-text-values value.
    ;; Used if a property value changes to :default
-   :block-properties-text-values (atom {})})
+   :block-properties-text-values (atom {})
+   ;; Track asset data for use across asset and doc import steps
+   :assets (atom {})})
 
 (defn- build-tx-options [{:keys [user-options] :as options}]
   (merge
@@ -1262,6 +1293,25 @@
              (update :block/refs fix-block-uuids {:ref? true :properties (:block/properties b)})))
          blocks)))
 
+(defn- extract-page [file content extract-options]
+  (let [{:keys [blocks ast] :as parsed-page}
+        (-> (extract/extract file content extract-options)
+            (update :pages (fn [pages]
+                             (map #(dissoc % :block.temp/original-page-name) pages)))
+            (update :blocks fix-extracted-block-tags-and-refs))
+        page-blocks (remove :block/pre-block? blocks)
+        ;; Like in gp-block/extract-blocks, only treat heading blocks as blocks
+        block-asts (filter (comp gp-block/heading-block? first) ast)
+        ;; TODO: Add warning if page-blocks and block-asts don't match
+        block-to-ast (when (= (count page-blocks) (count block-asts))
+                       (into {}
+                             (map vector
+                                  (map :block/uuid (remove :block/pre-block? blocks))
+                                  (filter (comp gp-block/heading-block? first) ast))))]
+    (cond-> parsed-page
+      (some? block-to-ast)
+      (assoc :block-to-ast block-to-ast))))
+
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
   [db file content {:keys [extract-options import-state]}]
@@ -1277,10 +1327,7 @@
                                 extract-options
                                 {:db db})]
     (cond (and (contains? common-config/mldoc-support-formats format) (not ignored-highlight-file?))
-          (-> (extract/extract file content extract-options')
-              (update :pages (fn [pages]
-                               (map #(dissoc % :block.temp/original-page-name) pages)))
-              (update :blocks fix-extracted-block-tags-and-refs))
+          (extract-page file content extract-options')
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
@@ -1363,7 +1410,7 @@
                            log-fn prn}
                       :as *options}]
   (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
-        {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
+        {:keys [pages blocks block-to-ast]} (extract-pages-and-blocks @conn file content options)
         tx-options (merge (build-tx-options options)
                           {:journal-created-ats (build-journal-created-ats pages)})
         old-properties (keys @(get-in options [:import-state :property-schemas]))
@@ -1378,7 +1425,7 @@
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
-                       (mapcat #(build-block-tx @conn % pre-blocks per-file-state
+                       (mapcat #(build-block-tx @conn % pre-blocks (assoc per-file-state :block-to-ast block-to-ast)
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
@@ -1542,32 +1589,62 @@
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
 
-(defn- export-asset-files
-  "Exports files under assets/"
+(defn- <safe-async-loop
+  "Calls async-fn with each element in args-to-loop. Catches an unexpected error in loop and notifies user"
+  [async-fn args-to-loop notify-user]
+  (-> (p/loop [_ (async-fn (get args-to-loop 0))
+               i 0]
+        (when-not (>= i (dec (count args-to-loop)))
+          (p/recur (async-fn (get args-to-loop (inc i)))
+                   (inc i))))
+      (p/catch (fn [e]
+                 (notify-user {:msg (str "Import has an unexpected error:\n" (.-message e))
+                               :level :error
+                               :ex-data {:error e}})))))
+
+(defn- read-asset-files
+  "Reads files under assets/"
+  [*asset-files <read-asset-file {:keys [notify-user set-ui-state import-state]
+                                  :or {set-ui-state (constantly nil)}}]
+  (assert <read-asset-file "read-asset-file fn required")
+  (let [asset-files (mapv #(assoc %1 :idx %2)
+                          ;; Sort files to ensure reproducible import behavior
+                          (sort-by :path *asset-files)
+                          (range 0 (count *asset-files)))
+        read-asset (fn read-asset [{:keys [path] :as file}]
+                     (-> (<read-asset-file file import-state)
+                         (p/catch
+                          (fn [error]
+                            (notify-user {:msg (str "Import failed to read " (pr-str path) " with error:\n" (.-message error))
+                                          :level :error
+                                          :ex-data {:path path :error error}})))))]
+    (when (seq asset-files)
+      (set-ui-state [:graph/importing-state :current-page] "Read asset files")
+      (<safe-async-loop read-asset asset-files notify-user))))
+
+(defn- copy-asset-files
+  "Copy files under assets/"
   [*asset-files <copy-asset-file {:keys [notify-user set-ui-state]
                                   :or {set-ui-state (constantly nil)}}]
+  (assert <copy-asset-file "copy-asset-file fn required")
   (let [asset-files (mapv #(assoc %1 :idx %2)
                           ;; Sort files to ensure reproducible import behavior
                           (sort-by :path *asset-files)
                           (range 0 (count *asset-files)))
         copy-asset (fn copy-asset [{:keys [path] :as file}]
-                     (p/catch
-                      (<copy-asset-file file)
-                      (fn [error]
-                        (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
-                                      :level :error
-                                      :ex-data {:path path :error error}}))))]
+                     (if (nil? (:block/uuid file))
+                       (notify-user {:msg (str "Import failed to copy " (pr-str path) " because the asset has no :block/uuid")
+                                     :level :error
+                                     :ex-data {:file file}})
+                       (p/catch
+                        (<copy-asset-file file)
+                        (fn [error]
+                          (notify-user {:msg (str "Import failed to copy " (pr-str path) " with error:\n" (.-message error))
+                                        :level :error
+                                        :ex-data {:path path :error error}})))))]
     (when (seq asset-files)
-      (set-ui-state [:graph/importing-state :current-page] "Asset files")
-      (-> (p/loop [_ (copy-asset (get asset-files 0))
-                   i 0]
-            (when-not (>= i (dec (count asset-files)))
-              (p/recur (copy-asset (get asset-files (inc i)))
-                       (inc i))))
-          (p/catch (fn [e]
-                     (notify-user {:msg (str "Import has an unexpected error:\n" (.-message e))
-                                   :level :error
-                                   :ex-data {:error e}})))))))
+      (set-ui-state [:graph/importing-state :current-page] "Copy asset files")
+      (<safe-async-loop copy-asset asset-files notify-user))))
 
 (defn- insert-favorites
   "Inserts favorited pages as uuids into a new favorite page"
@@ -1599,7 +1676,7 @@
        (log-fn :no-favorites-found {:favorites favorites})))))
 
 (defn build-doc-options
-  "Builds options for use with export-doc-files"
+  "Builds options for use with export-doc-files and assets"
   [config options]
   (-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
                          ;; Remove config keys that break importing
@@ -1628,9 +1705,10 @@
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<copy-asset - fn which copies asset file
+   * :<read-asset - fn which reads asset file
 
    Note: See export-doc-files for additional options that are only for it"
-  [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset rpath-key log-fn]
+  [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset <read-asset rpath-key log-fn]
                                          :or {rpath-key :path log-fn println}
                                          :as options}]
   (reset! gp-block/*export-to-db-graph? true)
@@ -1652,8 +1730,14 @@
         (export-logseq-files repo-or-conn (filter logseq-file? files) <read-file
                              (-> (select-keys options [:notify-user :<save-logseq-file])
                                  (set/rename-keys {:<save-logseq-file :<save-file})))
-        (export-asset-files asset-files <copy-asset (select-keys options [:notify-user :set-ui-state]))
+        ;; Assets are read first as doc-files need data from them to make Asset blocks.
+        ;; Assets are copied after after doc-files as they need block/uuid's from them to name assets
+        (read-asset-files asset-files <read-asset (merge (select-keys options [:notify-user :set-ui-state])
+                                                         (select-keys doc-options [:import-state])))
         (export-doc-files conn doc-files <read-file doc-options)
+        (copy-asset-files (vals @(get-in doc-options [:import-state :assets]))
+                          <copy-asset
+                          (select-keys options [:notify-user :set-ui-state]))
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
         {:import-state (:import-state doc-options)
