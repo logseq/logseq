@@ -20,7 +20,8 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.outliner.db-pipeline :as db-pipeline]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.asset :as db-asset]))
 
 ;; Helpers
 ;; =======
@@ -93,6 +94,17 @@
    ;; TODO: Add actual default
    :default-config {}})
 
+(defn- <read-asset-file [file import-state]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          ext (string/lower-case (.substr (node-path/extname (:path file)) 1))]
+    (swap! (:assets import-state) assoc
+           (node-path/basename (:path file))
+           {:size (.-length buffer)
+            :checksum checksum
+            :type ext
+            :path (:path file)})))
+
 ;; Copied from db-import script and tweaked for an in-memory import
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
@@ -105,6 +117,7 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
+                         :<read-asset <read-asset-file
                          :<copy-asset #(swap! assets conj %)}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
@@ -154,7 +167,7 @@
                 (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
         "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
-(deftest-async export-basic-graph-with-convert-all-tags
+(deftest-async ^:focus export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
@@ -172,6 +185,7 @@
       ;; Includes journals as property values e.g. :logseq.property/deadline
       (is (= 25 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))

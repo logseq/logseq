@@ -11,13 +11,14 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [promesa.core :as p]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)
@@ -47,11 +48,22 @@
   (p/let [s (fsp/readFile (:path file))]
     (str s)))
 
+(defn- <read-asset-file [file import-state]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          ext (string/lower-case (.substr (node-path/extname (:path file)) 1))]
+    (swap! (:assets import-state) assoc
+           (node-path/basename (:path file))
+           {:size (.-length buffer)
+            :checksum checksum
+            :type ext
+            :path (:path file)})))
+
 (defn- <copy-asset-file [file db-graph-dir file-graph-dir]
   (p/let [parent-dir (node-path/dirname
                       (node-path/join db-graph-dir (node-path/relative file-graph-dir (:path file))))
           _ (fsp/mkdir parent-dir #js {:recursive true})]
-    (fsp/copyFile (:path file) (node-path/join parent-dir (node-path/basename (:path file))))))
+    (fsp/copyFile (:path file) (node-path/join parent-dir (str (:block/uuid file) "." (:type file))))))
 
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))
@@ -103,7 +115,8 @@
                        (default-export-options options)
                         ;; asset file options
                        {:<copy-asset (fn copy-asset [file]
-                                       (<copy-asset-file file db-graph-dir file-graph-dir))})]
+                                       (<copy-asset-file file db-graph-dir file-graph-dir))
+                        :<read-asset <read-asset-file})]
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 
