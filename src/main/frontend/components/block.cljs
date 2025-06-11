@@ -2120,6 +2120,7 @@
                       (let [ref-matched-children-ids (:ref-matched-children-ids config)]
                         (cond->> (remove nil? children)
                           ref-matched-children-ids
+                          ;; Block children will not be rendered if the filters do not match them
                           (filter (fn [b] (ref-matched-children-ids (:db/id b)))))))]
     (when (and (coll? children)
                (seq children)
