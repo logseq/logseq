@@ -36,31 +36,31 @@
 
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
-  [entity property-uuid-or-name schema {:keys [class-schema?]}]
+  [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
   (p/let [repo (state/get-current-repo)
+          id-or-name (or block-uuid id-or-name*)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (ldb/class? entity) class-schema?)
-          result (when (uuid? property-uuid-or-name)
-                   (db-async/<get-block repo property-uuid-or-name {:children? false}))
-          ;; In block context result is in :block
-          property (some-> (if (:block result) (:db/id (:block result)) (:db/id result))
-                           db/entity)]
+          property (db-async/<get-block repo id-or-name {:children? false})
+          property? (ldb/property? property)
+          property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
-    (if property
+    (if property?
       (do
         (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
           (notification/show! "This is a private built-in property that can't be used." :error))
         property)
-      ;; new property entered
-      (if (db-property/valid-property-name? property-uuid-or-name)
-        (if add-class-property?
-          (p/let [result (db-property-handler/upsert-property! nil schema {:property-name property-uuid-or-name})
-                  property (db/entity (:db/id result))
-                  _ (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false})]
-            property)
-          (p/let [result (db-property-handler/upsert-property! nil schema {:property-name property-uuid-or-name})]
-            (db/entity (:db/id result))))
+      ;; new property entered or converting page to property
+      (if (db-property/valid-property-name? property-title)
+        (p/let [opts (cond-> {:property-name property-title}
+                       (and (not property?) (ldb/internal-page? property))
+                       (assoc :properties {:db/id (:db/id property)}))
+                result (db-property-handler/upsert-property! nil schema opts)
+                property (db/entity (:db/id result))
+                _ (when add-class-property?
+                    (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false}))]
+          property)
         (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
@@ -149,7 +149,8 @@
 
 (rum/defc property-select
   [select-opts]
-  (let [[properties set-properties!] (rum/use-state nil)]
+  (let [[properties set-properties!] (hooks/use-state nil)
+        [q set-q!] (hooks/use-state "")]
     (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
@@ -158,10 +159,24 @@
                             (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))]
          (set-properties! properties)))
      [])
+    (hooks/use-effect!
+     (fn []
+       (p/let [repo (state/get-current-repo)
+               block (when-not (string/blank? q)
+                       (db-async/<get-block repo q {:children? false}))
+               internal-page-exists? (ldb/internal-page? block)]
+         (when internal-page-exists?
+           (set-properties!
+            (cons (assoc block :convert-page-to-property? true) properties)))))
+     [q])
     (let [items (->>
                  (map (fn [x]
-                        {:label (:block/title x)
-                         :value (:block/uuid x)}) properties)
+                        (let [convert? (:convert-page-to-property? x)]
+                          {:label (if convert?
+                                    (util/format "Convert \"%s\" to property" (:block/title x))
+                                    (:block/title x))
+                           :value (:block/uuid x)
+                           :convert-page-to-property? convert?})) properties)
                  (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
        {:data-keep-selection true}
@@ -175,7 +190,8 @@
                          :new-case-sensitive? true
                          :show-new-when-not-exact-match? true
                          ;; :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                         :input-default-placeholder "Add or change property"}
+                         :input-default-placeholder "Add or change property"
+                         :on-input set-q!}
                         select-opts))]])))
 
 (rum/defc property-icon
@@ -203,9 +219,9 @@
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
-  (fn [{:keys [value label]}]
-    (reset! *property-key (if (uuid? value) label value))
+  (fn [{:keys [value label convert-page-to-property?]}]
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))
+          _ (reset! *property-key (if (uuid? value) (if convert-page-to-property? (:block/title property) label) value))
           batch? (pv/batch-operation?)
           repo (state/get-current-repo)]
       (if (and property remove-property?)
@@ -216,37 +232,39 @@
           (when (and *show-new-property-config? (not (ldb/property? property)))
             (reset! *show-new-property-config? true))
           (reset! *property property)
-          (when property
-            (let [add-class-property? (and (ldb/class? block) class-schema?)
-                  type (:logseq.property/type property)
-                  default-or-url? (and (contains? #{:default :url} type)
-                                       (not (seq (:property/closed-values property))))]
-              (cond
-                add-class-property?
-                (p/do!
-                 (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
-                 (shui/popup-hide!)
-                 (shui/dialog-close!))
+          (when-not convert-page-to-property?
+            (let [property' (some-> (:db/id property) db/entity)]
+              (when (and property' (ldb/property? property'))
+                (let [add-class-property? (and (ldb/class? block) class-schema?)
+                      type (:logseq.property/type property')
+                      default-or-url? (and (contains? #{:default :url} type)
+                                           (not (seq (:property/closed-values property'))))]
+                  (cond
+                    add-class-property?
+                    (p/do!
+                     (pv/<add-property! block (:db/ident property') "" {:class-schema? class-schema?})
+                     (shui/popup-hide!)
+                     (shui/dialog-close!))
 
-                (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
-                nil
+                    (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
+                    nil
 
-                (= :checkbox type)
-                (p/do!
-                 (ui/hide-popups-until-preview-popup!)
-                 (shui/popup-hide!)
-                 (shui/dialog-close!)
-                 (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                               value
-                               false)]
-                   (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+                    (= :checkbox type)
+                    (p/do!
+                     (ui/hide-popups-until-preview-popup!)
+                     (shui/popup-hide!)
+                     (shui/dialog-close!)
+                     (let [value (if-some [value (:logseq.property/scalar-default-value property')]
+                                   value
+                                   false)]
+                       (pv/<add-property! block (:db/ident property') value {:exit-edit? true})))
 
-                default-or-url?
-                (pv/<create-new-block! block property "" {:batch-op? true})
+                    default-or-url?
+                    (pv/<create-new-block! block property' "" {:batch-op? true})
 
-                (or (not= :default type)
-                    (and (= :default type) (seq (:property/closed-values property))))
-                (reset! *show-new-property-config? false)))))))))
+                    (or (not= :default type)
+                        (and (= :default type) (seq (:property/closed-values property'))))
+                    (reset! *show-new-property-config? false)))))))))))
 
 (rum/defc property-key-title
   [block property class-schema?]
