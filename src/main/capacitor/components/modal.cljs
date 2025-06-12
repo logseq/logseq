@@ -5,17 +5,19 @@
             [capacitor.state :as state]
             [frontend.components.page :as page]
             [frontend.db :as db]
+            [frontend.handler.notification :as notification]
             [frontend.ui :as frontend-ui]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.mobile-bar :as mobile-bar]
             [frontend.state :as fstate]
-            [logseq.shui.ui :as shui]
+            [frontend.handler.page :as page-handler]
             [rum.core :as rum]))
 
 (rum/defc block-modal < rum/reactive
   [presenting-element]
   (let [{:keys [open? block]} (rum/react state/*modal-data)
-        show-action-bar? (fstate/sub :mobile/show-action-bar?)]
+        show-action-bar? (fstate/sub :mobile/show-action-bar?)
+        close! #(swap! state/*modal-data assoc :open? false)]
     (ion/modal
       {:isOpen (boolean open?)
        :presenting-element presenting-element
@@ -27,7 +29,7 @@
         {:class "block-modal-page"}
         (ion/header
           [:span.opacity-40.active:opacity-60
-           {:on-click #(swap! state/*modal-data assoc :open? false)}
+           {:on-click close!}
            (ion/tabler-icon "chevron-down" {:size 16 :stroke 3})]
           [:span.opacity-40.active:opacity-60
            {:on-click (fn []
@@ -35,7 +37,24 @@
                           (fn []
                             [:div.-mx-2
                              (frontend-ui/menu-link
-                               {:on-click #(ui/close-popup!)}
+                               {:on-click (fn []
+                                            (ui/open-modal!
+                                              "⚠️ Are you sure you want to delete this page(block)?"
+                                              {:type :alert
+                                               :on-action (fn [{:keys [role]}]
+                                                            (when (not= role "cancel")
+                                                              (ui/close-popup!)
+                                                              (some->
+                                                                (:block/uuid block)
+                                                                (page-handler/<delete!
+                                                                  (fn [] (close!))
+                                                                  {:error-handler
+                                                                   (fn [{:keys [msg]}]
+                                                                     (notification/show! msg :warning))}))))
+                                               :buttons [{:text "Cancel"
+                                                          :role "cancel"}
+                                                         {:text "Ok"
+                                                          :role "confirm"}]}))}
                                [:span.text-lg.flex.gap-2.items-center
                                 (ion/tabler-icon "trash" {:class "opacity-80" :size 18})
                                 "Delete"])
