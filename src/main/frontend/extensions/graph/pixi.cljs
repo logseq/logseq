@@ -15,31 +15,13 @@
 
 (def Graph (gobj/get graphology "Graph"))
 
-(defonce colors
-  ["#1f77b4"
-   "#ff7f0e"
-   "#2ca02c"
-   "#d62728"
-   "#9467bd"
-   "#8c564b"
-   "#e377c2"
-   "#7f7f7f"
-   "#bcbd22"
-   "#17becf"])
-
 (defn default-style
   [dark?]
   {:node {:size   (fn [node]
                     (or (.-size node) 8))
           :border {:width 0}
           :color  (fn [node]
-                    (if-let [parent (gobj/get node "parent")]
-                      (when-let [parent (if (= parent "ls-selected-nodes")
-                                          parent
-                                          (.-id node))]
-                        (let [v (js/Math.abs (hash parent))]
-                          (nth colors (mod v (count colors)))))
-                      (.-color node)))
+                      (.-color node))
           :label  {:content  (fn [node] (.-label node))
                    :type     (.-TEXT (.-TextType Pixi-Graph))
                    :fontSize 12

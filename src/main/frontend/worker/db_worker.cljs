@@ -703,9 +703,9 @@
     (db-view/get-property-values @conn property-ident option)))
 
 (def-thread-api :thread-api/build-graph
-  [repo option]
+  [repo option color-property color-settings]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (graph-view/build-graph @conn option)))
+    (graph-view/build-graph @conn option color-property color-settings)))
 
 (def ^:private *get-all-page-titles-cache (volatile! (cache/lru-cache-factory {})))
 (defn- get-all-page-titles
