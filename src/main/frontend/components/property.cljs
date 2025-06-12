@@ -149,28 +149,19 @@
 
 (rum/defc property-select
   [select-opts]
-  (let [[properties set-properties!] (rum/use-state nil)
-        [classes set-classes!] (rum/use-state nil)]
+  (let [[properties set-properties!] (rum/use-state nil)]
     (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
                properties (if (:class-schema? select-opts)
                             (property-handler/get-class-property-choices)
-                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))
-               classes (->> (db-model/get-all-classes repo)
-                            (remove ldb/built-in?))]
-         (set-classes! classes)
+                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))]
          (set-properties! properties)))
      [])
     (let [items (->>
-                 (concat
-                  (map (fn [x]
-                         {:label (:block/title x)
-                          :value (:block/uuid x)}) properties)
-                  (map (fn [x]
-                         {:label (:block/title x)
-                          :value (:block/uuid x)
-                          :group "Tags"}) classes))
+                 (map (fn [x]
+                        {:label (:block/title x)
+                         :value (:block/uuid x)}) properties)
                  (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
        {:data-keep-selection true}
@@ -236,12 +227,6 @@
                  (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?})
                  (shui/popup-hide!)
                  (shui/dialog-close!))
-
-                ;; using class as property
-                (and property (ldb/class? property))
-                (p/do!
-                 (pv/<set-class-as-property! (state/get-current-repo) property)
-                 (reset! *show-new-property-config? false))
 
                 (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
                 nil
