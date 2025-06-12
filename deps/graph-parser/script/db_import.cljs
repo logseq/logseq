@@ -196,6 +196,8 @@
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
         (println "Ignored properties:" (pr-str ignored-props)))
+      (when-let [ignored-assets (seq @(:ignored-assets import-state))]
+        (println "Ignored assets:" (pr-str ignored-assets)))
       (when-let [ignored-files (seq @(:ignored-files import-state))]
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
