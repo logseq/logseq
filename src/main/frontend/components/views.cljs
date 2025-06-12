@@ -1525,11 +1525,17 @@
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (rum/defc list-view < rum/static
-  [{:keys [config] :as option} _view-entity {:keys [rows]} *scroller-ref]
+  [{:keys [config ref-matched-children-ids] :as option} view-entity {:keys [rows]} *scroller-ref]
   (let [lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
-                                        (block-container (assoc config :list-view? true :block-level 1) block))))
+                                        (let [config' (cond->
+                                                       (assoc config
+                                                              :list-view? true
+                                                              :block-level 1)
+                                                        (= :linked-references (:logseq.property.view/feature-type view-entity))
+                                                        (assoc :ref-matched-children-ids ref-matched-children-ids))]
+                                          (block-container config' block)))))
         list-cp (fn [rows]
                   (when (seq rows)
                     (ui/virtualized-list
@@ -2025,7 +2031,7 @@
 (defn- load-view-data-aux
   [view-entity view-parent {:keys [query? query-entity-ids sorting filters input
                                    view-feature-type group-by-property-ident
-                                   set-data! set-ref-pages-count! set-properties! set-loading!]}]
+                                   set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
   (c.m/run-task*
    (m/sp
      (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -2037,7 +2043,7 @@
          :else
          (when (or (not query?) need-query?)
            (try
-             (let [{:keys [data ref-pages-count properties]}
+             (let [{:keys [data ref-pages-count ref-matched-children-ids properties]}
                    (c.m/<?
                     (<load-view-data view-entity
                                      (cond->
@@ -2052,7 +2058,8 @@
                                        (assoc :query-entity-ids query-entity-ids))))]
                (set-data! data)
                (when ref-pages-count
-                 (set-ref-pages-count! ref-pages-count))
+                 (set-ref-pages-count! ref-pages-count)
+                 (set-ref-matched-children-ids! ref-matched-children-ids))
                (set-properties! properties))
              (finally
                (set-loading! false)))))))))
@@ -2089,13 +2096,14 @@
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
+        [ref-matched-children-ids set-ref-matched-children-ids!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
                          (load-view-data-aux view-entity view-parent
                                              {:query? query?
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input
                                               :view-feature-type view-feature-type :group-by-property-ident group-by-property-ident
-                                              :set-data! set-data! :set-ref-pages-count! set-ref-pages-count!
+                                              :set-data! set-data! :set-ref-pages-count! set-ref-pages-count! :set-ref-matched-children-ids! set-ref-matched-children-ids!
                                               :set-properties! set-properties! :set-loading! set-loading!}))]
     (let [sorting-filters {:sorting sorting
                            :filters filters}]
@@ -2129,10 +2137,17 @@
                                           :items-count (if (every? number? data)
                                                          (count data)
                                                          ;; grouped
-                                                         (reduce (fn [total [_ col]]
-                                                                   (+ total (count col))) 0 data))
+                                                         (let [f (fn count-col
+                                                                   [data]
+                                                                   (reduce (fn [total [_k col]]
+                                                                             (if (and (vector? (first col))
+                                                                                      (uuid? (ffirst col)))
+                                                                               (+ total (count-col col))
+                                                                               (+ total (count col)))) 0 data))]
+                                                           (f data)))
                                           :group-by-property-ident group-by-property-ident
                                           :ref-pages-count ref-pages-count
+                                          :ref-matched-children-ids ref-matched-children-ids
                                           :display-type display-type
                                           :load-view-data load-view-data
                                           :set-view-entity! set-view-entity!))])))

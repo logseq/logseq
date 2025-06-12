@@ -51,8 +51,7 @@
           {:variant variant
            :data-button :icon
            :style (when size {:width size :height size})})
-   (tabler-icon/root (name icon-name) (merge {:size 20
-                                              :key "icon"} icon-props))
+   (tabler-icon/root (name icon-name) (merge {:size 20} icon-props))
    child))
 
 (def button-ghost-icon (partial button-icon :ghost))
