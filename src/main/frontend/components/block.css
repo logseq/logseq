@@ -9,7 +9,6 @@
   @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
-    max-width: 100%;
 
     /* FIXME: img macros */
 
@@ -43,11 +42,6 @@
       .asset-action-bar {
         @apply opacity-100;
       }
-    }
-
-    > img {
-      max-width: unset;
-      width: 100%;
     }
   }
 
@@ -1078,8 +1072,16 @@ html.is-mac {
   height: 16px;
 }
 
-.ls-page-title .positioned-properties, .ls-page-title .time-spent {
-  margin-top: 15px;
+.ls-page-title {
+  .positioned-properties, .time-spent {
+    margin-top: 15px;
+  }
+}
+
+.ls-page-title .ls-properties-area {
+    .positioned-properties, .time-spent {
+        margin-top: initial;
+    }
 }
 
 .ls-page-title .ls-page-icon button {
