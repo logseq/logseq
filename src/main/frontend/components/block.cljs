@@ -3703,8 +3703,10 @@
           (block-right-menu config block editing?))])
 
      (when (and db-based?
-                (not collapsed?)
-                (not (or table? property?)))
+                (or (:tag-dialog? config)
+                    (and
+                     (not collapsed?)
+                     (not (or table? property?)))))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 

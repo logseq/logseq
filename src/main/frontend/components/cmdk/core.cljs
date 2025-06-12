@@ -557,7 +557,7 @@
                      create-page? (page-handler/<create! @!input {:redirect? true}))]
       (shui/dialog-close! :ls-dialog-cmdk)
       (when (and create-class? result)
-        (state/sidebar-add-block! (state/get-current-repo) (:db/id result) :block)))))
+        (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])))))
 
 (defn- get-filter-user-input
   [input]

@@ -1143,3 +1143,7 @@ html.is-mac {
         @apply mb-2;
     }
 }
+
+.ls-dialog-block {
+    @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
+}

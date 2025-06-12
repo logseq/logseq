@@ -98,7 +98,6 @@
   [block editing?]
   (let [icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
-                         (shui/dialog-close!)
                          (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
                      (let [repo (state/get-current-repo)
@@ -155,8 +154,7 @@
                            :or {edit-block? true}}]
   (when-not (or (:logseq.property/hide? property)
                 (= (:db/ident property) :logseq.property/default-value))
-    (ui/hide-popups-until-preview-popup!)
-    (shui/dialog-close!))
+    (ui/hide-popups-until-preview-popup!))
   (let [<create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
                                  (not (db-property/many? property)))
@@ -221,9 +219,7 @@
         (when-not many?
           (cond
             exit-edit?
-            (do
-              (ui/hide-popups-until-preview-popup!)
-              (shui/dialog-close!))
+            (ui/hide-popups-until-preview-popup!)
             selected?
             (shui/popup-hide!)))
         (when-not (or many? checkbox?)
@@ -343,7 +339,6 @@
                  state)
    :will-unmount (fn [state]
                    (shui/popup-hide!)
-                   (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
   [state id {:keys [block property datetime? on-change del-btn? on-delete]}]
@@ -379,8 +374,7 @@
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)
-                 (ui/hide-popups-until-preview-popup!)
-                 (shui/dialog-close!))))))]
+                 (ui/hide-popups-until-preview-popup!))))))]
     [:div.flex.flex-row.gap-2
      [:div.flex.flex-col
       (ui/nlp-calendar
@@ -650,6 +644,7 @@
     (select/select (assoc opts
                           :selected-choices selected-choices
                           :items items'
+                          :close-modal? false
                           k f'))))
 
 (defn- get-node-icon
