@@ -5,6 +5,8 @@
             [frontend.rum :as r]
             [frontend.state :as fstate]
             [frontend.ui :as ui]
+            [capacitor.components.popup :as popup]
+            [capacitor.state :as state]
             [medley.core :as medley]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
@@ -184,6 +186,17 @@
 (defn close-modal!
   ([] (some-> @*modals (last) :id (close-modal!)))
   ([id] (delete-modal! id)))
+
+(defn open-popup!
+  [content-fn opts]
+  (state/set-popup!
+    {:open? true
+     :content-fn content-fn
+     :opts opts}))
+
+(defn close-popup! []
+  (some-> state/*popup-data
+    (swap! assoc :open? false)))
 
 (rum/defc install-modals []
   (let [_ (r/use-atom *modals)]
