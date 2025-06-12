@@ -430,14 +430,18 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (ldb/transact! conn
-                       (concat
-                        [(sqlite-util/build-new-property db-ident' schema {:title k-name
-                                                                           :properties properties})]
-                        ;; Convert page to property
-                        (when-let [id (:db/id properties)]
-                          [[:db/retract id :block/tags :logseq.class/Page]]))
-                       {:outliner-op :upsert-property})
+        (let [db-id (:db/id properties)
+              opts (cond-> {:title k-name
+                            :properties properties}
+                     (integer? db-id)
+                     (assoc :block-uuid (:block/uuid (d/entity db db-id))))]
+          (ldb/transact! conn
+                         (concat
+                          [(sqlite-util/build-new-property db-ident' schema opts)]
+                          ;; Convert page to property
+                          (when db-id
+                            [[:db/retract db-id :block/tags :logseq.class/Page]]))
+                         {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
 (defn delete-property-value!
