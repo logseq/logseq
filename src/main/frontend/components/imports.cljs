@@ -36,7 +36,6 @@
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]
-            ["path" :as node-path]
             [logseq.common.config :as common-config]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
@@ -353,7 +352,7 @@
       (p/then (fn [buffer]
                 (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
                   (swap! assets assoc
-                         (node-path/basename (:path file))
+                         (gp-exporter/asset-path->name (:path file))
                          {:size (.-size (:file-object file))
                           :checksum checksum
                           :type (db-asset/asset-path->type (:path file))
