@@ -889,7 +889,7 @@
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
 (defn- handle-assets-in-block
-  [block block-ast assets]
+  [block block-ast {:keys [assets ignored-assets]}]
   (let [asset-links
         (->> block-ast
              (mapcat (fn [n]
@@ -898,20 +898,35 @@
                                 :title
                                 (filter #(and (= "Link" (first %))
                                               (common-config/local-asset? (second (:url (second %))))))))))
-        asset-name (some-> asset-links first second :url second node-path/basename)]
-    (when (seq asset-links)
-      (prn :asset-added! asset-name (get @assets asset-name)))
-    ;; TODO: Handle asset metadata
-    ;; TODO: Handle: multiple asset links
-    (if-let [asset-data (and asset-name (get @assets asset-name))]
-      (do
-        (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
-        (merge block
-               {:block/tags [:logseq.class/Asset]
-                :logseq.property.asset/type (:type asset-data)
-                :logseq.property.asset/checksum (:checksum asset-data)
-                :logseq.property.asset/size (:size asset-data)
-                :block/title (db-asset/asset-name->title asset-name)}))
+        asset-link (first asset-links)
+        asset-name (some-> asset-link second :url second node-path/basename)]
+    (when (> (count asset-links) 1)
+      (swap! ignored-assets into
+             (map #(hash-map
+                    :reason "Multiple assets on one block. Only one asset per block is allowed"
+                    :path (-> % second :url second)
+                    :location {:block (:block/title block)})
+                  (rest asset-links))))
+    (if asset-name
+      (if-let [asset-data (get @assets asset-name)]
+        (do
+          (prn :asset-added! asset-name (get @assets asset-name))
+        ;; (cljs.pprint/pprint asset-link)
+          (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
+          (merge block
+                 {:block/tags [:logseq.class/Asset]
+                  :logseq.property.asset/type (:type asset-data)
+                  :logseq.property.asset/checksum (:checksum asset-data)
+                  :logseq.property.asset/size (:size asset-data)
+                  :block/title (db-asset/asset-name->title asset-name)}
+                 (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                   {:logseq.property.asset/resize-metadata metadata})))
+        (do
+          (swap! ignored-assets conj
+                 {:reason "Asset file was not found when reading assets"
+                  :path (-> asset-link second :url second)
+                  :location {:block (:block/title block)}})
+          block))
       block)))
 
 (defn- build-block-tx
@@ -932,7 +947,7 @@
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                   (handle-assets-in-block block-ast (:assets import-state))
+                   (handle-assets-in-block block-ast (select-keys import-state [:assets :ignored-assets]))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -1173,6 +1188,8 @@
    :ignored-properties (atom [])
    ;; Vec of maps with keys :path and :reason
    :ignored-files (atom [])
+   ;; Vec of maps with keys :path, :reason and :location (optional).
+   :ignored-assets (atom [])
    ;; Map of property names (keyword) and their current schemas (map of qualified properties).
    ;; Used for adding schemas to properties and detecting changes across a property's usage
    :property-schemas (atom {})
@@ -1294,7 +1311,7 @@
              (update :block/refs fix-block-uuids {:ref? true :properties (:block/properties b)})))
          blocks)))
 
-(defn- extract-page [file content extract-options]
+(defn- extract-page [file content extract-options notify-user]
   (let [{:keys [blocks ast] :as parsed-page}
         (-> (extract/extract file content extract-options)
             (update :pages (fn [pages]
@@ -1303,19 +1320,22 @@
         page-blocks (remove :block/pre-block? blocks)
         ;; Like in gp-block/extract-blocks, only treat heading blocks as blocks
         block-asts (filter (comp gp-block/heading-block? first) ast)
-        ;; TODO: Add warning if page-blocks and block-asts don't match
-        block-to-ast (when (= (count page-blocks) (count block-asts))
+        block-to-ast (if (= (count page-blocks) (count block-asts))
                        (into {}
                              (map vector
-                                  (map :block/uuid (remove :block/pre-block? blocks))
-                                  (filter (comp gp-block/heading-block? first) ast))))]
+                                  (map :block/uuid page-blocks)
+                                  block-asts))
+                       (do
+                         ;; Notify as this should be easy to fix and could lead to missing data
+                         (notify-user {:msg (str "Blocks and AST do not match for file " (pr-str file))})
+                         {}))]
     (cond-> parsed-page
       (some? block-to-ast)
       (assoc :block-to-ast block-to-ast))))
 
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
-  [db file content {:keys [extract-options import-state]}]
+  [db file content {:keys [extract-options import-state notify-user]}]
   (let [format (common-util/get-format file)
         ;; TODO: Remove once pdf highlights are supported
         ignored-highlight-file? (string/starts-with? (str (path/basename file)) "hls__")
@@ -1328,7 +1348,7 @@
                                 extract-options
                                 {:db db})]
     (cond (and (contains? common-config/mldoc-support-formats format) (not ignored-highlight-file?))
-          (extract-page file content extract-options')
+          (extract-page file content extract-options' notify-user)
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
@@ -1635,7 +1655,6 @@
         copy-asset (fn copy-asset [{:keys [path] :as asset-m}]
                      (if (nil? (:block/uuid asset-m))
                        (notify-user {:msg (str "Import failed to copy " (pr-str path) " because the asset has no :block/uuid")
-                                     :level :error
                                      :ex-data {:path path}})
                        (p/catch
                         (<copy-asset-file asset-m)
