@@ -9,6 +9,7 @@
                   logseq.db.common.order
                   logseq.db.sqlite.create-graph
                   logseq.db.frontend.malli-schema
+                  logseq.db.frontend.asset
                   ;; Some fns are used by frontend but not worth moving over yet
                   logseq.db.frontend.schema
                   logseq.db.frontend.validate

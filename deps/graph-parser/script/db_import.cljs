@@ -53,7 +53,7 @@
   (p/let [buffer (fs/readFileSync (:path file))
           checksum (db-asset/<get-file-array-buffer-checksum buffer)]
     (swap! assets assoc
-           (node-path/basename (:path file))
+           (gp-exporter/asset-path->name (:path file))
            {:size (.-length buffer)
             :checksum checksum
             :type (db-asset/asset-path->type (:path file))

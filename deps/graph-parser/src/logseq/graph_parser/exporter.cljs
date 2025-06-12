@@ -20,6 +20,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.property-util :as db-property-util]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db-ident :as db-ident]
@@ -32,8 +33,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [logseq.db.frontend.asset :as db-asset]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -888,6 +888,12 @@
     (:block/name (:block/parent block))
     (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)) {:block block :block/parent (:block/parent block)})})))
 
+(defn asset-path->name
+  "Given an asset's relative or full path, create a unique name for identifying an asset.
+   Must handle to paths as ../assets/*, assets/* and with subdirectories"
+  [path]
+  (re-find #"assets/.*$" path))
+
 (defn- handle-assets-in-block
   [block block-ast {:keys [assets ignored-assets]}]
   (let [asset-links
@@ -899,7 +905,7 @@
                                 (filter #(and (= "Link" (first %))
                                               (common-config/local-asset? (second (:url (second %))))))))))
         asset-link (first asset-links)
-        asset-name (some-> asset-link second :url second node-path/basename)]
+        asset-name (some->> asset-link second :url second asset-path->name)]
     (when (> (count asset-links) 1)
       (swap! ignored-assets into
              (map #(hash-map
@@ -910,7 +916,7 @@
     (if asset-name
       (if-let [asset-data (get @assets asset-name)]
         (do
-          (prn :asset-added! asset-name (get @assets asset-name))
+          (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
         ;; (cljs.pprint/pprint asset-link)
           (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
           (merge block
@@ -918,7 +924,7 @@
                   :logseq.property.asset/type (:type asset-data)
                   :logseq.property.asset/checksum (:checksum asset-data)
                   :logseq.property.asset/size (:size asset-data)
-                  :block/title (db-asset/asset-name->title asset-name)}
+                  :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
                  (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                    {:logseq.property.asset/resize-metadata metadata})))
         (do

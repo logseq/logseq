@@ -99,7 +99,7 @@
   (p/let [buffer (fs/readFileSync (:path file))
           checksum (db-asset/<get-file-array-buffer-checksum buffer)]
     (swap! assets assoc
-           (node-path/basename (:path file))
+           (gp-exporter/asset-path->name (:path file))
            {:size (.-length buffer)
             :checksum checksum
             :type (db-asset/asset-path->type (:path file))
@@ -183,9 +183,9 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 25 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 26 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
-      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
@@ -211,7 +211,7 @@
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 1 (count @assets))))
+      (is (= 2 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
