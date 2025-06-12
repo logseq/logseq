@@ -58,8 +58,8 @@
     (ion/modal
       (merge
         {:isOpen (boolean open?)
-         :initialBreakpoint 0.75
-         :breakpoints #js [0 0.75 1]
+         :initialBreakpoint 0.5
+         :breakpoints #js [0 0.5 0.75 1]
          :onDidDismiss (fn [] (state/set-popup! nil))
          :expand "block"}
         (:modal-props opts))
