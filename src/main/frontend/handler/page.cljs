@@ -213,34 +213,38 @@
   (fn [chosen-result ^js e]
     (util/stop e)
     (state/clear-editor-action!)
-    (let [chosen-result (if (:block/uuid chosen-result)
-                          (db/entity [:block/uuid (:block/uuid chosen-result)])
-                          chosen-result)
-          target (first (:block/_alias chosen-result))
-          chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
-          chosen (:block/title chosen-result)
-          class? (and db-based?
-                      (or (string/includes? chosen (str (t :new-tag) " "))
-                          (ldb/class? chosen-result)))
-          inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
-          chosen (-> chosen
-                     (string/replace-first (str (t :new-tag) " ") "")
-                     (string/replace-first (str (t :new-page) " ") ""))
-          wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
-          chosen-last-part (if (text/namespace-page? chosen)
-                             (text/get-namespace-last-part chosen)
-                             chosen)
-          wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
-                        (ref/->page-ref chosen-last-part)
-                        chosen-last-part)
-          q (if (editor-handler/get-selected-text) "" q)
-          last-pattern (if wrapped?
-                         q
-                         (if (= \# (first q))
-                           (subs q 1)
-                           q))
-          last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
-          tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
+    (p/let [_ (when (:convert-page-to-tag? chosen-result)
+                (let [entity (db/entity (:db/id chosen-result))]
+                  (when (and (ldb/page? entity) (not (ldb/class? entity)))
+                    (db-page-handler/convert-to-tag! entity))))
+            chosen-result (if (:block/uuid chosen-result)
+                            (db/entity [:block/uuid (:block/uuid chosen-result)])
+                            chosen-result)
+            target (first (:block/_alias chosen-result))
+            chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
+            chosen (:block/title chosen-result)
+            class? (and db-based?
+                        (or (string/includes? chosen (str (t :new-tag) " "))
+                            (ldb/class? chosen-result)))
+            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
+            chosen (-> chosen
+                       (string/replace-first (str (t :new-tag) " ") "")
+                       (string/replace-first (str (t :new-page) " ") ""))
+            wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
+            chosen-last-part (if (text/namespace-page? chosen)
+                               (text/get-namespace-last-part chosen)
+                               chosen)
+            wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
+                          (ref/->page-ref chosen-last-part)
+                          chosen-last-part)
+            q (if (editor-handler/get-selected-text) "" q)
+            last-pattern (if wrapped?
+                           q
+                           (if (= \# (first q))
+                             (subs q 1)
+                             q))
+            last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
+            tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
       (p/do!
        (editor-handler/insert-command! id
                                        (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
