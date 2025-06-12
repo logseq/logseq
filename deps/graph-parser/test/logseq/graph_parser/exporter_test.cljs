@@ -209,6 +209,7 @@
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
       (is (= 1 (count @assets))))
 
@@ -385,7 +386,8 @@
       (is (= {:block/tags [:logseq.class/Asset]
               :logseq.property.asset/type "png"
               :logseq.property.asset/checksum "3d5e620cac62159d8196c118574bfea7a16e86fa86efd1c3fa15a00a0a08792d"
-              :logseq.property.asset/size 753471}
+              :logseq.property.asset/size 753471
+              :logseq.property.asset/resize-metadata {:height 288, :width 252}}
              (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))))
 
     (testing "tags convert to classes"

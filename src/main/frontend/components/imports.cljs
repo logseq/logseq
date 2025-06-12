@@ -300,6 +300,13 @@
                         :info false)
     (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
     (pprint/pprint ignored-files))
+  (when-let [ignored-assets (seq @(:ignored-assets import-state))]
+    (notification/show! (str "Import ignored " (count ignored-assets) " "
+                             (if (= 1 (count ignored-assets)) "asset" "assets")
+                             ". See the javascript console for more details.")
+                        :info false)
+    (log/error :import-ignored-assets {:msg (str "Import ignored " (count ignored-assets) " asset(s)")})
+    (pprint/pprint ignored-assets))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
     (notification/show!
      [:.mb-2
