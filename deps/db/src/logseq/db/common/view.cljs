@@ -133,8 +133,6 @@
         minor-sorting (seq (rest sorting))
         major-sorted-entities
         (sort-by-single-property db major-sorting entities (not-empty minor-sorting))]
-    (prn :debug :count (count entities)
-         :sorted (count major-sorted-entities))
     (if minor-sorting
       (sort-entities-by-minor-sorting db major-sorted-entities minor-sorting)
       major-sorted-entities)))

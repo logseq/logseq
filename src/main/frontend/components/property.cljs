@@ -261,19 +261,20 @@
                          (route-handler/redirect-to-page! (:block/uuid property))
                          (.preventDefault e)))
     :on-click (fn [^js/MouseEvent e]
-                (shui/popup-show! (.-target e)
-                                  (fn []
-                                    (property-config/property-dropdown property block {:debug? (.-altKey e)
-                                                                                       :class-schema? class-schema?}))
-                                  {:content-props
-                                   {:class "ls-property-dropdown as-root"
-                                    :onEscapeKeyDown (fn [e]
-                                                       (util/stop e)
-                                                       (shui/popup-hide!)
-                                                       (when-let [input (state/get-input)]
-                                                         (.focus input)))}
-                                   :align "start"
-                                   :as-dropdown? true}))}
+                (when-not (util/meta-key? e)
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/property-dropdown property block {:debug? (.-altKey e)
+                                                                                         :class-schema? class-schema?}))
+                                    {:content-props
+                                     {:class "ls-property-dropdown as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
+                                     :align "start"
+                                     :as-dropdown? true})))}
 
    (:block/title property)))
 
