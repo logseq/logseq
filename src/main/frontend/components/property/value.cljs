@@ -1044,10 +1044,10 @@
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
         :else
-        [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground.ml-1
+        [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
-          :style {:min-height 20}
+          :style {:min-height 20 :margin-left 3}
           :on-click #(<create-new-block! block property "")}
          (when (:class-schema? opts)
            "Add description")]))))
