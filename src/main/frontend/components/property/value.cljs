@@ -1044,11 +1044,13 @@
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
         :else
-        [:div.w-full.h-full.jtrigger.ls-empty-text-property
+        [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground.ml-1
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
           :style {:min-height 20}
-          :on-click #(<create-new-block! block property "")}]))))
+          :on-click #(<create-new-block! block property "")}
+         (when (:class-schema? opts)
+           "Add description")]))))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
