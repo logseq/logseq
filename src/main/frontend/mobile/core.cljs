@@ -9,6 +9,7 @@
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [capacitor.state :as cc-state]
+            [capacitor.components.ui :as cc-ui]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -39,6 +40,9 @@
     (fn []
       (when (false?
               (cond
+                (not-empty (cc-ui/get-modal))
+                (cc-ui/close-modal!)
+
                 (not-empty @cc-state/*modal-data)
                 :skip
 
