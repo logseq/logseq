@@ -7,14 +7,14 @@
 
 ;; Integration test that test parsing a large graph like docs
 (deftest ^:integration parse-graph
-  (let [graph-dir "test/resources/docs-0.10.9"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.9")
+  (let [graph-dir "test/resources/docs-0.10.12"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.12")
         {:keys [conn files asts]} (gp-cli/parse-graph graph-dir {:verbose false})]
 
     (docs-graph-helper/docs-graph-assertions @conn graph-dir files)
 
     (testing "Additional counts"
-      (is (= 57814 (count (d/datoms @conn :eavt))) "Correct datoms count"))
+      (is (= 58149 (count (d/datoms @conn :eavt))) "Correct datoms count"))
 
     (testing "Asts"
       (is (seq asts) "Asts returned are non-zero")
