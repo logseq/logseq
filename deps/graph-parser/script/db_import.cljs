@@ -62,7 +62,12 @@
 (defn- <copy-asset-file [asset-m db-graph-dir]
   (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
           _ (fsp/mkdir parent-dir #js {:recursive true})]
-    (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))))
+    (if (:block/uuid asset-m)
+      (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))
+      (do
+        (println "[INFO]" "Copied asset" (pr-str (node-path/basename (:path asset-m)))
+                 "by its name since it was unused.")
+        (fsp/copyFile (:path asset-m) (node-path/join parent-dir (node-path/basename (:path asset-m))))))))
 
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))

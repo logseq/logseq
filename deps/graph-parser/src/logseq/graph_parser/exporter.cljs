@@ -915,18 +915,21 @@
                   (rest asset-links))))
     (if asset-name
       (if-let [asset-data (get @assets asset-name)]
-        (do
-          (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
-        ;; (cljs.pprint/pprint asset-link)
-          (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
-          (merge block
-                 {:block/tags [:logseq.class/Asset]
-                  :logseq.property.asset/type (:type asset-data)
-                  :logseq.property.asset/checksum (:checksum asset-data)
-                  :logseq.property.asset/size (:size asset-data)
-                  :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
-                 (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                   {:logseq.property.asset/resize-metadata metadata})))
+        (if (:block/uuid asset-data)
+          ;; Link to existing assets instead of creating duplicates to preserve identity
+          (assoc block :block/title (page-ref/->page-ref (:block/uuid asset-data)))
+          (do
+            (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
+            ;; (cljs.pprint/pprint asset-link)
+            (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
+            (merge block
+                   {:block/tags [:logseq.class/Asset]
+                    :logseq.property.asset/type (:type asset-data)
+                    :logseq.property.asset/checksum (:checksum asset-data)
+                    :logseq.property.asset/size (:size asset-data)
+                    :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
+                   (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                     {:logseq.property.asset/resize-metadata metadata}))))
         (do
           (swap! ignored-assets conj
                  {:reason "Asset file was not found when reading assets"
@@ -1659,15 +1662,12 @@
                          (sort-by :path asset-maps*)
                          (range 0 (count asset-maps*)))
         copy-asset (fn copy-asset [{:keys [path] :as asset-m}]
-                     (if (nil? (:block/uuid asset-m))
-                       (notify-user {:msg (str "Import failed to copy " (pr-str path) " because the asset has no :block/uuid")
-                                     :ex-data {:path path}})
-                       (p/catch
-                        (<copy-asset-file asset-m)
-                        (fn [error]
-                          (notify-user {:msg (str "Import failed to copy " (pr-str path) " with error:\n" (.-message error))
-                                        :level :error
-                                        :ex-data {:path path :error error}})))))]
+                     (p/catch
+                      (<copy-asset-file asset-m)
+                      (fn [error]
+                        (notify-user {:msg (str "Import failed to copy " (pr-str path) " with error:\n" (.-message error))
+                                      :level :error
+                                      :ex-data {:path path :error error}}))))]
     (when (seq asset-maps)
       (set-ui-state [:graph/importing-state :current-page] "Copy asset files")
       (<safe-async-loop copy-asset asset-maps notify-user))))
