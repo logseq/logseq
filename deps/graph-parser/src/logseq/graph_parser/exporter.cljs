@@ -33,7 +33,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.walk :as walk]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -894,18 +895,27 @@
   [path]
   (re-find #"assets/.*$" path))
 
+(defn- find-all-asset-links
+  "Walks each ast block in order to its full depth as Link asts can be in different
+   locations e.g. a Heading vs a Paragraph ast block"
+  [ast-blocks]
+  (let [results (atom [])]
+    (walk/prewalk
+     (fn [x]
+       (when (and (vector? x)
+                  (= "Link" (first x))
+                  (common-config/local-asset? (second (:url (second x)))))
+         (swap! results conj x))
+       x)
+     ast-blocks)
+    @results))
+
 (defn- handle-assets-in-block
-  [block block-ast {:keys [assets ignored-assets]}]
-  (let [asset-links
-        (->> block-ast
-             (mapcat (fn [n]
-                       (some->> n
-                                second
-                                :title
-                                (filter #(and (= "Link" (first %))
-                                              (common-config/local-asset? (second (:url (second %))))))))))
+  [block* {:keys [assets ignored-assets]}]
+  (let [block (dissoc block* :block.temp/ast-blocks)
+        asset-links (find-all-asset-links (:block.temp/ast-blocks block*))
         asset-link (first asset-links)
-        asset-name (some->> asset-link second :url second asset-path->name)]
+        asset-name (some-> asset-link second :url second asset-path->name)]
     (when (> (count asset-links) 1)
       (swap! ignored-assets into
              (map #(hash-map
@@ -919,7 +929,7 @@
           ;; Link to existing assets instead of creating duplicates to preserve identity
           (assoc block :block/title (page-ref/->page-ref (:block/uuid asset-data)))
           (do
-            (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
+            ;; (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
             ;; (cljs.pprint/pprint asset-link)
             (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
             (merge block
@@ -939,7 +949,7 @@
       block)))
 
 (defn- build-block-tx
-  [db block* pre-blocks {:keys [page-names-to-uuids block-to-ast] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
+  [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
@@ -950,13 +960,12 @@
         prepared-block (cond-> block-after-built-in-props
                          journal-page-created-at
                          (assoc :block/created-at journal-page-created-at))
-        block-ast (get block-to-ast (:block/uuid block*))
         block' (-> prepared-block
                    (fix-pre-block-references pre-blocks page-names-to-uuids)
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                   (handle-assets-in-block block-ast (select-keys import-state [:assets :ignored-assets]))
+                   (handle-assets-in-block (select-keys import-state [:assets :ignored-assets]))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -1320,31 +1329,9 @@
              (update :block/refs fix-block-uuids {:ref? true :properties (:block/properties b)})))
          blocks)))
 
-(defn- extract-page [file content extract-options notify-user]
-  (let [{:keys [blocks ast] :as parsed-page}
-        (-> (extract/extract file content extract-options)
-            (update :pages (fn [pages]
-                             (map #(dissoc % :block.temp/original-page-name) pages)))
-            (update :blocks fix-extracted-block-tags-and-refs))
-        page-blocks (remove :block/pre-block? blocks)
-        ;; Like in gp-block/extract-blocks, only treat heading blocks as blocks
-        block-asts (filter (comp gp-block/heading-block? first) ast)
-        block-to-ast (if (= (count page-blocks) (count block-asts))
-                       (into {}
-                             (map vector
-                                  (map :block/uuid page-blocks)
-                                  block-asts))
-                       (do
-                         ;; Notify as this should be easy to fix and could lead to missing data
-                         (notify-user {:msg (str "Blocks and AST do not match for file " (pr-str file))})
-                         {}))]
-    (cond-> parsed-page
-      (some? block-to-ast)
-      (assoc :block-to-ast block-to-ast))))
-
 (defn- extract-pages-and-blocks
   "Main fn which calls graph-parser to convert markdown into data"
-  [db file content {:keys [extract-options import-state notify-user]}]
+  [db file content {:keys [extract-options import-state]}]
   (let [format (common-util/get-format file)
         ;; TODO: Remove once pdf highlights are supported
         ignored-highlight-file? (string/starts-with? (str (path/basename file)) "hls__")
@@ -1357,7 +1344,10 @@
                                 extract-options
                                 {:db db})]
     (cond (and (contains? common-config/mldoc-support-formats format) (not ignored-highlight-file?))
-          (extract-page file content extract-options' notify-user)
+          (-> (extract/extract file content extract-options')
+              (update :pages (fn [pages]
+                               (map #(dissoc % :block.temp/original-page-name) pages)))
+              (update :blocks fix-extracted-block-tags-and-refs))
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
@@ -1440,7 +1430,7 @@
                            log-fn prn}
                       :as *options}]
   (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
-        {:keys [pages blocks block-to-ast]} (extract-pages-and-blocks @conn file content options)
+        {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
         tx-options (merge (build-tx-options options)
                           {:journal-created-ats (build-journal-created-ats pages)})
         old-properties (keys @(get-in options [:import-state :property-schemas]))
@@ -1455,7 +1445,7 @@
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
-                       (mapcat #(build-block-tx @conn % pre-blocks (assoc per-file-state :block-to-ast block-to-ast)
+                       (mapcat #(build-block-tx @conn % pre-blocks per-file-state
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
