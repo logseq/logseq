@@ -114,25 +114,24 @@
   [db new-title {:block/keys [tags] :as entity}]
   (cond
     (seq tags)
-    (when-let [another-id (first
-                           (d/q (another-id-q entity)
+    (let [matching-pages (d/q (cond
+                                (ldb/property? entity)
                                 db
                                 (:db/id entity)
                                 new-title
-                                (map :db/id tags)))]
-      (let [another (d/entity db another-id)
-            this-tags (set (map :db/ident tags))
-            another-tags (set (map :db/ident (:block/tags another)))
-            common-tag-ids (set/intersection this-tags another-tags)]
-        (when-not (and (= common-tag-ids #{:logseq.class/Page})
-                       (> (count this-tags) 1)
-                       (> (count another-tags) 1))
-          (throw (ex-info "Duplicate page"
-                          {:type :notification
-                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
-                                                   (string/join ", "
-                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
-                                     :type :warning}})))))
+                                (map :db/id tags))
+                                this-tags (set (map :db/ident tags))]
+      (when-let [duplicate-page (first (filter (fn [page-id]
+                                                (let [page (d/entity db page-id)
+                                                      page-tags (set (map :db/ident (:block/tags page)))]
+                                                  (= this-tags page-tags)))
+                                              matching-pages))]
+        (throw (ex-info "Duplicate page"
+                       {:type :notification
+                        :payload {:message (str "Another page named " (pr-str new-title) " already exists with the same tags: "
+                                               (string/join ", "
+                                                           (map (fn [id] (str "#" (:block/title (d/entity db id)))) tags)))
+                                 :type :warning}}))))
 
     (:logseq.property.class/extends entity)
     (validate-unique-by-extends-and-name db entity new-title)))
