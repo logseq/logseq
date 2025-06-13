@@ -187,19 +187,6 @@
           (editor-handler/edit-block! first-block :max {:container-id :unknown-container}))
         first-block))))
 
-(defn <set-class-as-property!
-  [repo property]
-  (db/transact! repo
-                [{:db/id (:db/id property)
-                  :db/ident (:db/ident property)
-                  :db/cardinality :db.cardinality/one
-                  :db/valueType :db.type/ref
-                  :db/index true
-                  :block/tags :logseq.class/Property
-                  :logseq.property/type :node
-                  :logseq.property/classes (:db/id property)}]
-                {:outliner-op :save-block}))
-
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
@@ -212,41 +199,39 @@
          many? (db-property/many? property)
          checkbox? (= :checkbox (:logseq.property/type property))
          blocks (get-operating-blocks block)]
-     (assert (qualified-keyword? property-id) "property to add must be a keyword")
-     (p/do!
-      (if (and class? class-schema?)
-        (p/do!
-         (when (ldb/class? property)
-           (<set-class-as-property! repo property))
-         (db-property-handler/class-add-property! (:db/id block) property-id))
-        (let [block-ids (map :block/uuid blocks)
-              set-query-list-view? (and (:logseq.property/query block)
-                                        (= property-id :logseq.property.view/type)
-                                        (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
-          (ui-outliner-tx/transact!
-           {:outliner-op :set-block-property}
-           (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
-           (when (and set-query-list-view?
-                      (nil? (:logseq.property.view/group-by-property block)))
-             (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
-                                                         (:db/id (db/entity :block/page))
-                                                         {:entity-id? entity-id?})))))
-      (when (seq (:view/selected-blocks @state/state))
-        (notification/show! "Property updated!" :success))
-      (when-not many?
-        (cond
-          exit-edit?
-          (do
-            (ui/hide-popups-until-preview-popup!)
-            (shui/dialog-close!))
-          selected?
-          (shui/popup-hide!)))
-      (when-not (or many? checkbox?)
-        (when-let [input (state/get-input)]
-          (.focus input)))
-      (when checkbox?
-        (state/set-editor-action-data! {:type :focus-property-value
-                                        :property property}))))))
+     (when-not (ldb/class? property)
+       (assert (qualified-keyword? property-id) "property to add must be a keyword")
+       (p/do!
+        (if (and class? class-schema?)
+          (db-property-handler/class-add-property! (:db/id block) property-id)
+          (let [block-ids (map :block/uuid blocks)
+                set-query-list-view? (and (:logseq.property/query block)
+                                          (= property-id :logseq.property.view/type)
+                                          (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
+            (ui-outliner-tx/transact!
+             {:outliner-op :set-block-property}
+             (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
+             (when (and set-query-list-view?
+                        (nil? (:logseq.property.view/group-by-property block)))
+               (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
+                                                           (:db/id (db/entity :block/page))
+                                                           {:entity-id? entity-id?})))))
+        (when (seq (:view/selected-blocks @state/state))
+          (notification/show! "Property updated!" :success))
+        (when-not many?
+          (cond
+            exit-edit?
+            (do
+              (ui/hide-popups-until-preview-popup!)
+              (shui/dialog-close!))
+            selected?
+            (shui/popup-hide!)))
+        (when-not (or many? checkbox?)
+          (when-let [input (state/get-input)]
+            (.focus input)))
+        (when checkbox?
+          (state/set-editor-action-data! {:type :focus-property-value
+                                          :property property})))))))
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
@@ -1059,11 +1044,13 @@
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
         :else
-        [:div.w-full.h-full.jtrigger.ls-empty-text-property
+        [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
-          :style {:min-height 20}
-          :on-click #(<create-new-block! block property "")}]))))
+          :style {:min-height 20 :margin-left 3}
+          :on-click #(<create-new-block! block property "")}
+         (when (:class-schema? opts)
+           "Add description")]))))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
