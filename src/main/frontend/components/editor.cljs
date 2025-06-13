@@ -134,12 +134,15 @@
     (page-handler/on-chosen-handler input id pos format)))
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
-  (if (or (db/page-exists? q (if db-tag?
-                               #{:logseq.class/Tag}
-                               ;; Page existence here should be the same as entity-util/page?.
-                                ;; Don't show 'New page' if a page has any of these tags
-                               db-class/page-classes))
-          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+  (if (or
+       (if db-tag?
+         (let [entity (db/get-page q)]
+           (and (ldb/internal-page? entity) (= (:block/title entity) q)))
+         ;; Page existence here should be the same as entity-util/page?.
+         ;; Don't show 'New page' if a page has any of these tags
+         (db/page-exists? q db-class/page-classes))
+
+       (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
     partial-matched-pages
     (if db-tag?
       (concat [{:block/title (str (t :new-tag) " " q)}]
@@ -147,20 +150,29 @@
       (cons {:block/title (str (t :new-page) " " q)}
             partial-matched-pages))))
 
+(defn- search-pages
+  [q db-tag? db-based? set-matched-pages!]
+  (when-not (string/blank? q)
+    (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
+            result (if db-tag?
+                     (let [classes (editor-handler/get-matched-classes q)]
+                       (if (and (ldb/internal-page? block)
+                                (= (:block/title block) q))
+                         (cons {:block/title (util/format "Convert \"%s\" to tag" q)
+                                :db/id (:db/id block)
+                                :block/uuid (:block/uuid block)
+                                :convert-page-to-tag? true} classes)
+                         classes))
+                     (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                            :page-only? (not db-based?)}))]
+      (set-matched-pages! result))))
+
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)
-        search-f (fn []
-                   (when-not (string/blank? q)
-                     (p/do!
-                      (db-async/<get-block (state/get-current-repo) q {:children? false})
-                      (p/let [result (if db-tag?
-                                       (editor-handler/get-matched-classes q)
-                                       (editor-handler/<get-matched-blocks q {:nlp-pages? true
-                                                                              :page-only? (not db-based?)}))]
-                        (set-matched-pages! result)))))]
+        search-f #(search-pages q db-tag? db-based? set-matched-pages!)]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
