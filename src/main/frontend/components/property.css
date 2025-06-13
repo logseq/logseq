@@ -166,11 +166,6 @@
     @apply w-full;
     margin: 0;
   }
-
-  .property-key a {
-    color: var(--ls-primary-text-color);
-  }
-
   .property-key a:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -178,6 +173,10 @@
   .multi-values {
     @apply cursor-pointer active:opacity-80;
   }
+}
+
+.property-key a, .ls-new-property a {
+    color: var(--ls-primary-text-color);
 }
 
 .ui__button.empty-btn, .empty-text-btn {

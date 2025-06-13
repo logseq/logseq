@@ -149,28 +149,19 @@
 
 (rum/defc property-select
   [select-opts]
-  (let [[properties set-properties!] (rum/use-state nil)
-        [classes set-classes!] (rum/use-state nil)]
+  (let [[properties set-properties!] (rum/use-state nil)]
     (hooks/use-effect!
      (fn []
        (p/let [repo (state/get-current-repo)
                properties (if (:class-schema? select-opts)
                             (property-handler/get-class-property-choices)
-                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))
-               classes (->> (db-model/get-all-classes repo)
-                            (remove ldb/built-in?))]
-         (set-classes! classes)
+                            (db-model/get-all-properties repo {:remove-ui-non-suitable-properties? true}))]
          (set-properties! properties)))
      [])
     (let [items (->>
-                 (concat
-                  (map (fn [x]
-                         {:label (:block/title x)
-                          :value (:block/uuid x)}) properties)
-                  (map (fn [x]
-                         {:label (:block/title x)
-                          :value (:block/uuid x)
-                          :group "Tags"}) classes))
+                 (map (fn [x]
+                        {:label (:block/title x)
+                         :value (:block/uuid x)}) properties)
                  (util/distinct-by-last-wins :value))]
       [:div.ls-property-add.flex.flex-row.items-center.property-key
        {:data-keep-selection true}
@@ -237,12 +228,6 @@
                  (shui/popup-hide!)
                  (shui/dialog-close!))
 
-                ;; using class as property
-                (and property (ldb/class? property))
-                (p/do!
-                 (pv/<set-class-as-property! (state/get-current-repo) property)
-                 (reset! *show-new-property-config? false))
-
                 (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
                 nil
 
@@ -276,19 +261,20 @@
                          (route-handler/redirect-to-page! (:block/uuid property))
                          (.preventDefault e)))
     :on-click (fn [^js/MouseEvent e]
-                (shui/popup-show! (.-target e)
-                                  (fn []
-                                    (property-config/property-dropdown property block {:debug? (.-altKey e)
-                                                                                       :class-schema? class-schema?}))
-                                  {:content-props
-                                   {:class "ls-property-dropdown as-root"
-                                    :onEscapeKeyDown (fn [e]
-                                                       (util/stop e)
-                                                       (shui/popup-hide!)
-                                                       (when-let [input (state/get-input)]
-                                                         (.focus input)))}
-                                   :align "start"
-                                   :as-dropdown? true}))}
+                (when-not (util/meta-key? e)
+                  (shui/popup-show! (.-target e)
+                                    (fn []
+                                      (property-config/property-dropdown property block {:debug? (.-altKey e)
+                                                                                         :class-schema? class-schema?}))
+                                    {:content-props
+                                     {:class "ls-property-dropdown as-root"
+                                      :onEscapeKeyDown (fn [e]
+                                                         (util/stop e)
+                                                         (shui/popup-hide!)
+                                                         (when-let [input (state/get-input)]
+                                                           (.focus input)))}
+                                     :align "start"
+                                     :as-dropdown? true})))}
 
    (:block/title property)))
 
@@ -424,16 +410,21 @@
 (rum/defcs new-property < rum/reactive
   [state block opts]
   (when-not config/publishing?
-    [:div.ls-new-property {:style {:margin-left 7 :margin-top 1 :font-size 15}}
-     [:a.flex.jtrigger.text-muted-foreground
-      {:tab-index 0
-       :on-click (fn [e]
-                   (state/pub-event! [:editor/new-property (merge opts {:block block
-                                                                        :target (.-target e)})]))}
-      [:div.flex.flex-row.items-center.shrink-0
-       (ui/icon "plus" {:size 15})
-       [:div.ml-1 {:style {:margin-top 1}}
-        "Add property"]]]]))
+    (let [add-new-property! (fn [e]
+                              (state/pub-event! [:editor/new-property (merge opts {:block block
+                                                                                   :target (.-target e)})]))]
+      [:div.ls-new-property {:style {:margin-left 7 :margin-top 1 :font-size 15}}
+       [:a.flex.jtrigger
+        {:tab-index 0
+         :on-click add-new-property!
+         :on-key-press (fn [e]
+                         (when (contains? #{"Enter" " "} (util/ekey e))
+                           (.preventDefault e)
+                           (add-new-property! e)))}
+        [:div.flex.flex-row.items-center.shrink-0
+         (ui/icon "plus" {:size 15 :class "opacity-50"})
+         [:div.ml-1 {:style {:margin-top 1}}
+          "Add property"]]]])))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -485,6 +476,7 @@
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
            [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-center
+
             (when-not (or block? (and property-desc (:class-schema? opts)))
               [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
                [:span.bullet-container [:span.bullet]]])
@@ -494,23 +486,9 @@
                 (pv/property-value property (db/entity :logseq.property/description) opts)
                 (pv/property-value block property opts))]]])]))))
 
-(rum/defcs ordered-properties < rum/reactive
-  {:init (fn [state]
-           (assoc state ::properties-order (atom (mapv first (second (:rum/args state))))))
-   :should-update (fn [old-state new-state]
-                    (let [[_ p1 opts1] (:rum/args old-state)
-                          [_ p2 opts2] (:rum/args new-state)
-                          p1-keys (map first p1)
-                          p1-set (set p1-keys)
-                          p1-m (zipmap (map first p1) (map second p1))
-                          p2-m (zipmap (map first p2) (map second p2))
-                          p2-set (set (map first p2))]
-                      (when-not (= p1-set p2-set)
-                        (reset! (::properties-order new-state) (mapv first p2)))
-                      (not= [p1-set (map p1-m p1-keys) opts1] [p2-set (map p2-m p1-keys) opts2])))}
-  [state block properties opts]
-  (let [*properties-order (::properties-order state)
-        properties-order (rum/react *properties-order)
+(rum/defc ordered-properties
+  [block properties opts]
+  (let [[properties-order set-properties-order!] (hooks/use-state (mapv first properties))
         m (zipmap (map first properties) (map second properties))
         properties (mapv (fn [k] [k (get m k)]) properties-order)
         choices (map (fn [[k v]]
@@ -522,6 +500,7 @@
     (dnd/items choices
                {:sort-by-inner-element? true
                 :on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
+                               (set-properties-order! properties-order)
                                (let [move-down? (= direction :down)
                                      over (db/entity (keyword over-id))
                                      active (db/entity (keyword active-id))
@@ -531,9 +510,6 @@
                                                    (db-order/gen-key over-order next-order))
                                                  (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
                                                    (db-order/gen-key prev-order over-order)))]
-                                 ;; Reset *properties-order without waiting for `db/transact!` so that the UI will not be
-                                 ;; converted back to the old order and then the new order.
-                                 (reset! *properties-order properties-order)
                                  (db/transact! (state/get-current-repo)
                                                [{:db/id (:db/id active)
                                                  :block/order new-order}
@@ -644,12 +620,9 @@
                                         (into result cur-properties)
                                         result)))
                              result))
-        full-properties (cond->
-                         (->> (concat block-own-properties'
-                                      (map (fn [p] [p (get block p)]) class-properties))
-                              remove-built-in-or-other-position-properties)
-                          (and (ldb/class? block) (empty? (:logseq.property.class/properties block)))
-                          (concat [[:logseq.property.class/properties nil]]))]
+        full-properties (->> (concat block-own-properties'
+                                     (map (fn [p] [p (get block p)]) class-properties))
+                             remove-built-in-or-other-position-properties)]
     (cond
       (empty? full-properties)
       (when sidebar-properties?
@@ -657,9 +630,11 @@
 
       :else
       (let [remove-properties #{:logseq.property/icon :logseq.property/query}
-            properties' (remove (fn [[k _v]] (contains? remove-properties k))
-                                full-properties)
-            page? (entity-util/page? block)]
+            properties' (->> (remove (fn [[k _v]] (contains? remove-properties k))
+                                     full-properties)
+                             (remove (fn [[k _v]] (= k :logseq.property.class/properties))))
+            page? (entity-util/page? block)
+            class? (entity-util/class? block)]
         [:div.ls-properties-area
          {:id id
           :class (util/classnames [{:ls-page-properties page?}])
@@ -667,5 +642,20 @@
          [:<>
           (properties-section block properties' opts)
 
-          (when page?
-            (rum/with-key (new-property block opts) (str id "-add-property")))]]))))
+          (when (and page? (not class?))
+            (rum/with-key (new-property block opts) (str id "-add-property")))
+
+          (when class?
+            (let [properties (->> (:logseq.property.class/properties block)
+                                  (map (fn [e] [(:db/ident e)])))
+                  opts' (assoc opts :class-schema? true)]
+              [:div.flex.flex-col.gap-1
+               [:div {:style {:font-size 15}}
+                [:div.property-pair
+                 [:div.property-key.text-sm
+                  (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
+                [:div.text-muted-foreground {:style {:margin-left 26}}
+                 "Tag properties are inherited by all nodes using the tag — for example, each #Task node inherits 'Status' and 'Priority'."]]
+               [:div.ml-4
+                (properties-section block properties opts')
+                (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]]))))
