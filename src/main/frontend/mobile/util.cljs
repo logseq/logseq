@@ -22,6 +22,7 @@
   (.convertFileSrc Capacitor path-str))
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
+(defonce ui-local (registerPlugin "UILocal"))
 (when (native-ios?)
   (defonce ios-utils (registerPlugin "Utils")))
 

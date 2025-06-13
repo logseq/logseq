@@ -772,6 +772,8 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
+        (when (.closest (.-target e) ".block-content")
+          (util/mobile-keep-keyboard-open))
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
@@ -819,8 +821,7 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
-               :autocapitalize "off"
-               :autocorrect "off"
+               :auto-capitalize "off"
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

@@ -35,7 +35,6 @@
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
-            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -636,7 +635,6 @@
        (when show-recording-bar?
          (recording-bar))
 
-       (mobile-bar)
        (footer/footer)
 
        (cond
@@ -702,8 +700,6 @@
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           (when (mobile-util/native-platform?)
-             (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
   (let [default-home (get-default-home-if-valid)

@@ -2,10 +2,10 @@
   "This frontend only ns builds the publishing html including doing all the
 necessary db filtering"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.transit :as dt]
             [goog.string :as gstring]
             [goog.string.format]
-            [datascript.transit :as dt]
-            [datascript.core :as d]
             [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
