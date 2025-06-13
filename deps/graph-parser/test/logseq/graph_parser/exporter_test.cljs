@@ -118,7 +118,11 @@
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
                          :<read-asset <read-asset-file
-                         :<copy-asset #(swap! assets conj %)}
+                         :<copy-asset (fn copy-asset [m]
+                                        (when-not (:block/uuid m)
+                                          (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
+                                                   "does not have a :block/uuid"))
+                                        (swap! assets conj m))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
@@ -167,7 +171,7 @@
                 (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
         "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
-(deftest-async ^:focus export-basic-graph-with-convert-all-tags
+(deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
