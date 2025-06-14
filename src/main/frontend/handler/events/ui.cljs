@@ -337,3 +337,12 @@
        (merge {:close-btn? false
                :center? true
                :close-backdrop? (not= type :welcome)} opts)))))
+
+(defmethod events/handle :dialog/show-block [[_ block option]]
+  (shui/dialog-open!
+   [:div.p-8.w-full.h-full
+    (component-page/page-container block option)]
+   {:id :ls-dialog-block
+    :align :top
+    :content-props {:class "ls-dialog-block"}
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))

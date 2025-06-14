@@ -112,9 +112,7 @@
                    (and *show-class-select? @*show-class-select?)
                    nil
                    add-class-property?
-                   (do
-                     (shui/popup-hide!)
-                     (shui/dialog-close!))
+                   (shui/popup-hide!)
                    (pv/batch-operation?)
                    nil
                    (and block (= type :checkbox))
@@ -243,8 +241,7 @@
                     add-class-property?
                     (p/do!
                      (pv/<add-property! block (:db/ident property') "" {:class-schema? class-schema?})
-                     (shui/popup-hide!)
-                     (shui/dialog-close!))
+                     (shui/popup-hide!))
 
                     (and batch? (or (= :checkbox type) (and batch? default-or-url?)))
                     nil
@@ -253,7 +250,6 @@
                     (p/do!
                      (ui/hide-popups-until-preview-popup!)
                      (shui/popup-hide!)
-                     (shui/dialog-close!)
                      (let [value (if-some [value (:logseq.property/scalar-default-value property')]
                                    value
                                    false)]
@@ -346,7 +342,6 @@
                  (when (contains? #{:esc} type)
                    (shui/popup-hide!)
                    (shui/popup-hide!)
-                   (shui/dialog-close!)
                    (when-let [^js input (state/get-input)]
                      (.focus input)))))))
   {:init (fn [state]
@@ -505,9 +500,10 @@
                 (pv/property-value block property opts))]]])]))))
 
 (rum/defc ordered-properties
-  [block properties opts]
-  (let [[properties-order set-properties-order!] (hooks/use-state (mapv first properties))
-        m (zipmap (map first properties) (map second properties))
+  [block properties* opts]
+  (let [[properties set-properties!] (hooks/use-state properties*)
+        [properties-order set-properties-order!] (hooks/use-state (mapv first properties))
+        m (zipmap (map first properties*) (map second properties*))
         properties (mapv (fn [k] [k (get m k)]) properties-order)
         choices (map (fn [[k v]]
                        (let [id (subs (str k) 1)
@@ -515,6 +511,15 @@
                          {:id id
                           :value k
                           :content (property-cp block k v opts)})) properties)]
+    (hooks/use-effect!
+     (fn []
+       (when (not= properties properties*)
+         (set-properties! properties*))
+
+       (when (not= (set (map first properties*))
+                   (set (map first properties)))
+         (set-properties-order! (mapv first properties*))))
+     [properties*])
     (dnd/items choices
                {:sort-by-inner-element? true
                 :on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
@@ -552,10 +557,11 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties?] :as opts}]
+  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
+        show-properties? (or sidebar-properties? tag-dialog?)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
@@ -573,7 +579,7 @@
                           (and (not (ldb/public-built-in-property? ent))
                                (ldb/built-in? ent))
                           ;; other position
-                          (when-not (or sidebar-properties?
+                          (when-not (or show-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
@@ -597,8 +603,8 @@
                                      state-hide-empty-properties?
                                      (nil? (get block property-id))
                                      :else
-                                     ;; sidebar properties ignore these checks
-                                     (when-not sidebar-properties?
+                                     ;; sidebar or tag dialog properties ignore these checks
+                                     (when-not show-properties?
                                        (cond
                                          root-block?
                                          false
@@ -643,7 +649,7 @@
                              remove-built-in-or-other-position-properties)]
     (cond
       (empty? full-properties)
-      (when sidebar-properties?
+      (when show-properties?
         (rum/with-key (new-property block opts) (str id "-add-property")))
 
       :else
