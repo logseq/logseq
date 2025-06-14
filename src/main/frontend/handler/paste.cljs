@@ -63,7 +63,8 @@
     (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
-    (or (string/includes? url "twitter.com") (string/includes? url "x.com"))
+    (or (re-matches #"^https://twitter\.com.*?$" url)
+        (re-matches #"^https://x\.com.*?$" url))
     (util/format "{{twitter %s}}" url)))
 
 (defn- try-parse-as-json
