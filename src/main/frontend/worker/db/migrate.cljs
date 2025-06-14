@@ -142,7 +142,7 @@
                           :block/name (common-util/page-name-sanity-lc new-title)})))
               classes-to-rename)))))
 
-(defn- separate-classes-and-properties
+(defn separate-classes-and-properties
   [conn _sqlite-db]
   ;; find all properties that're classes, create new properties to separate them
   ;; from classes.
