@@ -1,17 +1,17 @@
 (ns frontend.handler.repo-test
-  (:require [cljs.test :refer [deftest use-fixtures testing is]]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
+            [cljs.test :refer [deftest use-fixtures testing is]]
+            [clojure.edn :as edn]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [frontend.db.model :as model]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [logseq.graph-parser.cli :as gp-cli]
-            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
+            [frontend.worker.state :as worker-state]
             [logseq.common.util.block-ref :as block-ref]
-            [frontend.db.model :as model]
-            [frontend.db.conn :as conn]
-            [datascript.core :as d]
-            [clojure.edn :as edn]
-            ["path" :as node-path]
-            ["fs" :as fs]
-            [frontend.worker.state :as worker-state]))
+            [logseq.graph-parser.cli :as gp-cli]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -51,7 +51,7 @@
 
 (deftest parse-files-and-load-to-db-with-page-rename
   (testing
-    "Reload a file when the disk contents result in the file having a new page name"
+   "Reload a file when the disk contents result in the file having a new page name"
     (let [test-uuid "16c90195-6a03-4b3f-839d-095a496d9efc"
           target-page-content (str "- target block\n  id:: " test-uuid)
           referring-page-content (str "- " (block-ref/->block-ref test-uuid))

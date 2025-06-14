@@ -411,7 +411,7 @@
   "Updates property if property-id is given. Otherwise creates a property
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name] :as opts}]
+  [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
                      (try (db-property/create-user-property-ident-from-name property-name)
@@ -430,9 +430,18 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (ldb/transact! conn
-                       [(sqlite-util/build-new-property db-ident' schema {:title k-name})]
-                       {:outliner-op :new-property})
+        (let [db-id (:db/id properties)
+              opts (cond-> {:title k-name
+                            :properties properties}
+                     (integer? db-id)
+                     (assoc :block-uuid (:block/uuid (d/entity db db-id))))]
+          (ldb/transact! conn
+                         (concat
+                          [(sqlite-util/build-new-property db-ident' schema opts)]
+                          ;; Convert page to property
+                          (when db-id
+                            [[:db/retract db-id :block/tags :logseq.class/Page]]))
+                         {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
 (defn delete-property-value!
