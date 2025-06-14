@@ -13,7 +13,8 @@
             [logseq.common.util :as common-util]
             [medley.core :as medley]
             [missionary.core :as m]
-            [promesa.core :as p])
+            [promesa.core :as p]
+            [logseq.db.frontend.asset :as db-asset])
   (:import [missionary Cancelled]))
 
 (defn alias-enabled?
@@ -186,18 +187,10 @@
                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
           (when blob (js/URL.createObjectURL blob)))))))
 
-(defn- decode-digest
-  [^js/Uint8Array digest]
-  (.. (js/Array.from digest)
-      (map (fn [s] (.. s (toString 16) (padStart 2 "0"))))
-      (join "")))
-
 (defn get-file-checksum
   [^js/Blob file]
   (-> (.arrayBuffer file)
-      (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
-      (.then (fn [dig] (js/Uint8Array. dig)))
-      (.then decode-digest)))
+      (.then db-asset/<get-file-array-buffer-checksum)))
 
 (defn <get-all-assets
   []

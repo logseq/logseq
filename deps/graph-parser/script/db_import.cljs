@@ -11,13 +11,15 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
             [promesa.core :as p]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [logseq.common.config :as common-config]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)
@@ -47,11 +49,25 @@
   (p/let [s (fsp/readFile (:path file))]
     (str s)))
 
-(defn- <copy-asset-file [file db-graph-dir file-graph-dir]
-  (p/let [parent-dir (node-path/dirname
-                      (node-path/join db-graph-dir (node-path/relative file-graph-dir (:path file))))
+(defn- <read-asset-file [file assets]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+    (swap! assets assoc
+           (gp-exporter/asset-path->name (:path file))
+           {:size (.-length buffer)
+            :checksum checksum
+            :type (db-asset/asset-path->type (:path file))
+            :path (:path file)})))
+
+(defn- <copy-asset-file [asset-m db-graph-dir]
+  (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
           _ (fsp/mkdir parent-dir #js {:recursive true})]
-    (fsp/copyFile (:path file) (node-path/join parent-dir (node-path/basename (:path file))))))
+    (if (:block/uuid asset-m)
+      (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))
+      (do
+        (println "[INFO]" "Copied asset" (pr-str (node-path/basename (:path asset-m)))
+                 "by its name since it was unused.")
+        (fsp/copyFile (:path asset-m) (node-path/join parent-dir (node-path/basename (:path asset-m))))))))
 
 (defn- notify-user [{:keys [continue debug]} m]
   (println (:msg m))
@@ -103,7 +119,8 @@
                        (default-export-options options)
                         ;; asset file options
                        {:<copy-asset (fn copy-asset [file]
-                                       (<copy-asset-file file db-graph-dir file-graph-dir))})]
+                                       (<copy-asset-file file db-graph-dir))
+                        :<read-asset <read-asset-file})]
     (p/with-redefs [d/transact! dev-transact!]
       (gp-exporter/export-file-graph conn conn config-file *files options))))
 
@@ -184,6 +201,8 @@
 
       (when-let [ignored-props (seq @(:ignored-properties import-state))]
         (println "Ignored properties:" (pr-str ignored-props)))
+      (when-let [ignored-assets (seq @(:ignored-assets import-state))]
+        (println "Ignored assets:" (pr-str ignored-assets)))
       (when-let [ignored-files (seq @(:ignored-files import-state))]
         (println (count ignored-files) "ignored file(s):" (pr-str (vec ignored-files))))
       (when (:verbose options') (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))

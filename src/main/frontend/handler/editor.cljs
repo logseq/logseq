@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require [clojure.set :as set]
+  (:require ["path" :as node-path]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -58,6 +59,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -1422,15 +1424,14 @@
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
-       (p/let [file-name (util/node-path.basename (.-name file))
-               file-name-without-ext (.-name (util/node-path.parse file-name))
+       (p/let [file-name (node-path/basename (.-name file))
+               file-name-without-ext (db-asset/asset-name->title file-name)
                checksum (assets-handler/get-file-checksum file)
                existing-asset (db-async/<get-asset-with-checksum repo checksum)]
          (if existing-asset
            existing-asset
            (p/let [block-id (ldb/new-block-id)
-                   ext (when file-name
-                         (string/lower-case (.substr (util/node-path.extname file-name) 1)))
+                   ext (when file-name (db-asset/asset-path->type file-name))
                    _ (when (string/blank? ext)
                        (throw (ex-info "File doesn't have a valid ext."
                                        {:file-name file-name})))
