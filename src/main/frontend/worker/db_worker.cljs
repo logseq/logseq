@@ -132,8 +132,7 @@
     (worker-util/post-message :notification ["The SQLite db will be exported to avoid any data-loss." :warning false])
     (worker-util/post-message :export-current-db [])
     (.exec sqlite-db #js {:sql "delete from kvs"})
-    (d/reset-conn! datascript-conn db)
-    (db-migrate/fix-db! datascript-conn)))
+    (d/reset-conn! datascript-conn db)))
 
 (defn- fix-broken-graph
   [graph]
@@ -271,8 +270,6 @@
         (enable-sqlite-wal-mode! db'))
       (common-sqlite/create-kvs-table! db)
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
-      (db-migrate/migrate-sqlite-db db)
-      (when-not @*publishing? (db-migrate/migrate-sqlite-db client-ops-db))
       (search/create-tables-and-triggers! search-db)
       (let [schema (ldb/get-schema repo)
             conn (common-sqlite/get-storage-conn storage schema)
@@ -675,9 +672,7 @@
 (def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [result (worker-db-validate/validate-db @conn)]
-      (db-migrate/fix-db! conn {:invalid-entity-ids (:invalid-entity-ids result)})
-      result)))
+    (worker-db-validate/validate-db @conn)))
 
 (def-thread-api :thread-api/export-edn
   [repo options]
