@@ -1,7 +1,6 @@
 (ns frontend.worker.db.migrate
   "Handles SQLite and datascript migrations for DB graphs"
-  (:require [cljs-bean.core :as bean]
-            [clojure.walk :as walk]
+  (:require [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.util :as worker-util]

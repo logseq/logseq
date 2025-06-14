@@ -1,9 +1,9 @@
 (ns ^:node-only logseq.graph-parser.cli-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.graph-parser.cli :as gp-cli]
-            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [clojure.string :as string]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.graph-parser.cli :as gp-cli]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]))
 
 ;; Integration test that test parsing a large graph like docs
 (deftest ^:integration parse-graph

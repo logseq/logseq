@@ -1,11 +1,11 @@
 (ns logseq.graph-parser.test.docs-graph-helper
   "Helper fns for setting up and running tests against docs graph"
-  (:require ["fs" :as fs]
-            ["child_process" :as child-process]
+  (:require ["child_process" :as child-process]
+            ["fs" :as fs]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
-            [logseq.common.config :as common-config]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.common.config :as common-config]))
 
 ;; Helper fns for test setup
 ;; =========================
