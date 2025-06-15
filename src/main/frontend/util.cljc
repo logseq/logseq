@@ -736,11 +736,9 @@
 
 #?(:cljs
    (defn get-nodes-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)
              start (min idx-1 idx-2)
              end (inc (max idx-1 idx-2))]
@@ -748,11 +746,9 @@
 
 #?(:cljs
    (defn get-direction-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)]
          (if (>= idx-1 idx-2)
            :up
@@ -1543,3 +1539,10 @@ Arg *stop: atom, reset to true to stop the loop"
      [^js target]
      (when target
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
+
+#?(:cljs
+   (defn mobile-keep-keyboard-open
+     []
+     (when mobile?
+       (when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
+         (.focus node)))))

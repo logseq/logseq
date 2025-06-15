@@ -4,7 +4,7 @@
     "private": true,
     "main": "static/electron.js",
     "engines" : {
-      "node" : ">=22.15.0"
+      "node" : ">=20.19.1"
     },
     "devDependencies": {
         "@axe-core/playwright": "=4.4.4",
@@ -133,7 +133,7 @@
         "d3-force": "3.0.0",
         "diff": "5.0.0",
         "dompurify": "2.4.0",
-        "electron": "36.2.0",
+        "electron": "34.5.6",
         "electron-dl": "^4.0.0",
         "emoji-mart": "^5.5.2",
         "fs": "0.0.1-security",
@@ -151,7 +151,7 @@
         "mldoc": "^1.5.9",
         "path": "0.12.7",
         "path-complete-extname": "1.0.0",
-        "pdfjs-dist": "^3.9.179",
+        "pdfjs-dist": "4.2.67",
         "photoswipe": "^5.3.7",
         "pixi-graph-fork": "0.2.0",
         "pixi.js": "6.2.0",

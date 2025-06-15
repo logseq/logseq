@@ -1,13 +1,19 @@
 (ns logseq.e2e.page
-  (:require [logseq.e2e.assert :as assert]
+  (:require [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.selectors :as ws]))
+            [wally.selectors :as ws])
+  (:import (com.microsoft.playwright TimeoutError)))
 
 (defn goto-page
   [page-name]
   (assert (string? page-name) page-name)
-  (util/search-and-click page-name))
+  (try
+    (util/search-and-click page-name)
+    (catch TimeoutError _e
+      ;; try one more time
+      (k/esc)
+      (util/search-and-click page-name))))
 
 (defn new-page
   [title]

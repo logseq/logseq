@@ -9,6 +9,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.block :as block-handler]
@@ -123,7 +124,6 @@
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)
                 _ (when-not page (page-handler/<create! chosen-item {:redirect? false
-                                                                     :create-first-block? false
                                                                      :reference? true}))
                 page' (db/get-page chosen-item)
                 current-block (state/get-edit-block)]
@@ -135,12 +135,15 @@
     (page-handler/on-chosen-handler input id pos format)))
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
-  (if (or (db/page-exists? q (if db-tag?
-                               #{:logseq.class/Tag}
-                               ;; Page existence here should be the same as entity-util/page?.
-                                ;; Don't show 'New page' if a page has any of these tags
-                               db-class/page-classes))
-          (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+  (if (or
+       (if db-tag?
+         (let [entity (db/get-page q)]
+           (and (ldb/internal-page? entity) (= (:block/title entity) q)))
+         ;; Page existence here should be the same as entity-util/page?.
+         ;; Don't show 'New page' if a page has any of these tags
+         (db/page-exists? q db-class/page-classes))
+
+       (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
     partial-matched-pages
     (if db-tag?
       (concat [{:block/title (str (t :new-tag) " " q)}]
@@ -148,18 +151,29 @@
       (cons {:block/title (str (t :new-page) " " q)}
             partial-matched-pages))))
 
+(defn- search-pages
+  [q db-tag? db-based? set-matched-pages!]
+  (when-not (string/blank? q)
+    (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
+            result (if db-tag?
+                     (let [classes (editor-handler/get-matched-classes q)]
+                       (if (and (ldb/internal-page? block)
+                                (= (:block/title block) q))
+                         (cons {:block/title (util/format "Convert \"%s\" to tag" q)
+                                :db/id (:db/id block)
+                                :block/uuid (:block/uuid block)
+                                :convert-page-to-tag? true} classes)
+                         classes))
+                     (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                            :page-only? (not db-based?)}))]
+      (set-matched-pages! result))))
+
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)
-        search-f (fn []
-                   (when-not (string/blank? q)
-                     (p/let [result (if db-tag?
-                                      (editor-handler/get-matched-classes q)
-                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
-                                                                             :page-only? (not db-based?)}))]
-                       (set-matched-pages! result))))]
+        search-f #(search-pages q db-tag? db-based? set-matched-pages!)]
     (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
@@ -185,7 +199,9 @@
          :item-render (fn [block _chosen?]
                         (let [block' (if-let [id (:block/uuid block)]
                                        (if-let [e (db/entity [:block/uuid id])]
-                                         (assoc e :block/title (:block/title block))
+                                         (assoc e
+                                                :block/title (:block/title block)
+                                                :alias (:alias block))
                                          block)
                                        block)]
                           [:div.flex.flex-col
@@ -207,10 +223,10 @@
                                  (ui/icon "letter-p" {:size 14})
 
                                  (db-model/whiteboard-page? block')
-                                 (ui/icon "writing")
+                                 (ui/icon "writing" {:size 14})
 
-                                 (:page? block')
-                                 (ui/icon "file")
+                                 (or (ldb/page? block') (:page? block'))
+                                 (ui/icon "file" {:size 14})
 
                                  (or (string/starts-with? (str (:block/title block')) (t :new-tag))
                                      (string/starts-with? (str (:block/title block')) (t :new-page)))
@@ -219,14 +235,17 @@
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
-                            (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block'))
-                                                title (:block/title block)]
-                                            (if (ldb/class? target)
-                                              (str title " -> alias: " (:block/title target))
-                                              title))
-                                          (block-handler/block-unique-title block'))]
-                              (search-handler/highlight-exact-query title q))]]))
+                            (let [title (let [alias (get-in block' [:alias :block/title])
+                                              title (if (and db-based? (not (ldb/built-in? block')))
+                                                      (block-handler/block-unique-title block')
+                                                      (:block/title block'))]
+                                          (if alias
+                                            (str title " -> alias: " alias)
+                                            title))]
+                              (if (or (string/starts-with? title (t :new-tag))
+                                      (string/starts-with? title (t :new-page)))
+                                title
+                                (search-handler/highlight-exact-query title q)))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
@@ -800,6 +819,8 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
+               :autocapitalize "off"
+               :autocorrect "off"
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

@@ -8,27 +8,38 @@
             [wally.main :as w]))
 
 (defn open-last-block
+  "Open the last existing block or pressing add button to create a new block"
   []
   (util/double-esc)
   (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+  (let [blocks-count (util/page-blocks-count)
+        last-block (-> (if (zero? blocks-count)
+                         (w/query ".ls-page-blocks .block-add-button")
+                         (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
+                       (last))]
+    (w/click last-block)))
 
 (defn save-block
   [text]
+  (assert/assert-have-count util/editor-q 1)
   (w/click util/editor-q)
   (w/fill util/editor-q text)
   (assert/assert-is-visible (loc/filter util/editor-q :has-text text)))
 
 (defn new-block
   [title]
-  (let [editor (util/get-editor)
-        blocks-count (util/blocks-count)]
+  (let [editor (util/get-editor)]
     (when-not editor (open-last-block))
     (assert/assert-editor-mode)
-    (k/enter)
-    (assert/assert-have-count ".ls-block" (inc blocks-count))
-    (assert/assert-editor-mode)
-    (save-block title)))
+    (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
+      (is (some? last-id))
+      (k/enter)
+      (assert/assert-is-visible
+       (loc/filter ".editor-wrapper"
+                   :has "textarea"
+                   :has-not (str "#" last-id)))
+      (assert/assert-editor-mode)
+      (save-block title))))
 
 ;; TODO: support tree
 (defn new-blocks
@@ -37,7 +48,7 @@
     (when-not editor? (open-last-block))
     (assert/assert-editor-mode)
     (let [value (util/get-edit-content)]
-      (if (string/blank? value)           ; empty block
+      (if (string/blank? value)         ; empty block
         (save-block (first titles))
         (new-block (first titles))))
     (doseq [title (rest titles)]
@@ -62,6 +73,7 @@
 
 (defn wait-editor-text
   [text]
+  (assert/assert-have-count util/editor-q 1)
   (w/wait-for (format ".editor-wrapper textarea:text('%s')" text)))
 
 (def copy #(k/press "ControlOrMeta+c" {:delay 100}))

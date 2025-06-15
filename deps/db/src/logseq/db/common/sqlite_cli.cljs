@@ -2,8 +2,10 @@
   "Primary ns to interact with DB files for DB and file graphs with node.js based CLIs"
   (:require ["better-sqlite3" :as sqlite3]
             ["fs" :as fs]
+            ["os" :as os]
             ["path" :as node-path]
             [cljs-bean.core :as bean]
+            [clojure.string :as string]
             ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
             [datascript.core]
             [datascript.storage :refer [IStorage]]
@@ -30,16 +32,12 @@
 
 (defn- upsert-addr-content!
   "Upsert addr+data-seq. Should be functionally equivalent to db-worker/upsert-addr-content!"
-  [db data delete-addrs]
+  [db data]
   (let [insert (.prepare db "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses")
-        delete (.prepare db "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);")
         insert-many (.transaction ^object db
                                   (fn [data]
                                     (doseq [item data]
-                                      (.run ^object insert item))
-                                    (doseq [addr delete-addrs]
-                                      (when addr
-                                        (.run ^object delete addr)))))]
+                                      (.run ^object insert item))))]
     (insert-many data)))
 
 (defn- restore-data-from-addr
@@ -59,16 +57,9 @@
   "Creates a datascript storage for sqlite. Should be functionally equivalent to db-worker/new-sqlite-storage"
   [db]
   (reify IStorage
-    (-store [_ addr+data-seq delete-addrs]
-            ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
-      (let [used-addrs (set (mapcat
-                             (fn [[addr data]]
-                               (cons addr
-                                     (when (map? data)
-                                       (:addresses data))))
-                             addr+data-seq))
-            delete-addrs (remove used-addrs delete-addrs)
-            data (map
+    (-store [_ addr+data-seq _delete-addrs]
+      ;; Only difference from db-worker impl is that js data maps don't start with '$' e.g. :$addr -> :addr
+      (let [data (map
                   (fn [[addr data]]
                     (let [data' (if (map? data) (dissoc data :addresses) data)
                           addresses (when (map? data)
@@ -78,22 +69,49 @@
                            :content (sqlite-util/transit-write data')
                            :addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data delete-addrs)))
+        (upsert-addr-content! db data)))
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
+
+(defn open-sqlite-datascript!
+  "Returns a map including `conn` for datascript connection and `sqlite` for sqlite connection"
+  ([db-full-path]
+   (open-sqlite-datascript! nil db-full-path))
+  ([graphs-dir db-name]
+   (let [[base-name db-full-path]
+         (if (nil? graphs-dir)
+           [(node-path/basename db-name) db-name]
+           [db-name (second (common-sqlite/get-db-full-path graphs-dir db-name))])
+         db (new sqlite db-full-path nil)
+        ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
+         schema (if (common-sqlite/local-file-based-graph? base-name)
+                  file-schema/schema
+                  db-schema/schema)]
+     (common-sqlite/create-kvs-table! db)
+     (let [storage (new-sqlite-storage db)
+           conn (common-sqlite/get-storage-conn storage schema)]
+       {:sqlite db
+        :conn conn}))))
 
 (defn open-db!
   "For a given database name, opens a sqlite db connection for it, creates
   needed sqlite tables if not created and returns a datascript connection that's
   connected to the sqlite db"
-  [graphs-dir db-name]
-  (let [[_db-sanitized-name db-full-path] (common-sqlite/get-db-full-path graphs-dir db-name)
-        db (new sqlite db-full-path nil)
-        ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
-        schema (if (common-sqlite/local-file-based-graph? db-name)
-                 file-schema/schema
-                 db-schema/schema)]
-    (common-sqlite/create-kvs-table! db)
-    (let [storage (new-sqlite-storage db)
-          conn (common-sqlite/get-storage-conn storage schema)]
-      conn)))
+  ([db-full-path]
+   (open-db! nil db-full-path))
+  ([graphs-dir db-name]
+   (:conn (open-sqlite-datascript! graphs-dir db-name))))
+
+(defn ->open-db-args
+  "Creates args for open-db from a graph arg. Works for relative and absolute paths and
+   defaults to ~/logseq/graphs/ when no '/' present in name"
+  [graph-dir-or-path]
+  ;; Pass full path directly to allow for paths that don't have standard graph naming convention
+  (if (node-path/isAbsolute graph-dir-or-path)
+    [graph-dir-or-path]
+    (if (string/includes? graph-dir-or-path "/")
+      (let [resolve-path' #(if (node-path/isAbsolute %) %
+                             ;; $ORIGINAL_PWD used by bb tasks to correct current dir
+                               (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
+        ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir-or-path)))
+      [(node-path/join (os/homedir) "logseq" "graphs") graph-dir-or-path])))

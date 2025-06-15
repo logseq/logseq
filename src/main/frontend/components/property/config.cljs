@@ -76,8 +76,7 @@
   (when (string? value)
     (let [page-name (string/trim value)]
       (when-not (string/blank? page-name)
-        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false
-                                                                :create-first-block? false})]
+        (p/let [page (db-page-handler/<create-class! page-name {:redirect? false})]
           (:block/uuid page))))))
 
 (rum/defc class-select
@@ -598,7 +597,7 @@
     (->>
      [(when with-title?
         [:h3.font-medium.px-2.py-4.opacity-90.flex.items-center.gap-1
-         (shui/tabler-icon "adjustments-alt") [:span "Configure property"]])
+         "Configure property"])
       (when-not special-built-in-prop?
         (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                    :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))}))

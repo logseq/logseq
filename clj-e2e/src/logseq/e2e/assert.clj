@@ -40,10 +40,7 @@
 
 (defn assert-editor-mode
   []
-  (let [klass ".editor-wrapper textarea"
-        editor (w/-query klass)]
-    (w/wait-for editor)
-    editor))
+  (assert-have-count ".editor-wrapper textarea" 1))
 
 (defn assert-selected-block-text
   [text]

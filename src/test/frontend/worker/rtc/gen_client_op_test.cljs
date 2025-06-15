@@ -130,8 +130,7 @@
       (testing "add page"
         (worker-page/create! repo conn (worker-state/get-config repo)
                              "TEST-PAGE"
-                             {:uuid page-uuid
-                              :create-first-block? false})
+                             {:uuid page-uuid})
         (is (some? (d/pull @conn '[*] [:block/uuid page-uuid])))
         (is (= {page-uuid #{:update-page :update}}
                (ops-coll=>block-uuid->op-types (client-op/get&remove-all-block-ops repo)))))

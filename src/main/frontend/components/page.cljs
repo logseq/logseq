@@ -28,7 +28,6 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
-            [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -36,7 +35,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.rum :as frontend-rum]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -101,94 +99,46 @@
 
 (declare page-cp)
 
-(if config/publishing?
-  (rum/defc dummy-block
-    [_page]
-    [:div])
-
-  (rum/defc dummy-block
-    [page]
-    (let [[hover set-hover!] (rum/use-state false)
-          click-handler-fn (fn []
-                             (p/let [result (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
-                                     result (:tx-data result)
-                                     first-child-id (first (map :block/uuid result))
-                                     first-child (when first-child-id (db/entity [:block/uuid first-child-id]))]
-                               (when first-child
-                                 (editor-handler/edit-block! first-child :max {:container-id :unknown-container}))))
-          drop-handler-fn (fn [^js event]
-                            (util/stop event)
-                            (p/let [block-uuids (state/get-selection-block-ids)
-                                    lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-                                    selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
-                                    blocks (if (seq selected) selected [@component-block/*dragging-block])
-                                    _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
-                              (js/setTimeout #(let [target-block page]
-                                                (dnd/move-blocks event blocks target-block nil :sibling))
-                                             0)))
-          *dummy-block-uuid (rum/use-ref (random-uuid))
-          *el-ref (rum/use-ref nil)
-          _ (frontend-rum/use-atom (@state/state :selection/blocks))
-          selection-ids (state/get-selection-block-ids)
-          selected? (contains? (set selection-ids) (rum/deref *dummy-block-uuid))
-          idstr (str (rum/deref *dummy-block-uuid))
-          focus! (fn [] (js/setTimeout #(some-> (rum/deref *el-ref) (.focus)) 16))]
-
-      ;; mounted
-      ;(hooks/use-effect! #(focus!) [])
-      (hooks/use-effect! #(if selected? (focus!)
-                              (some-> (rum/deref *el-ref) (.blur))) [selected?])
-
-      (shui/trigger-as
-       :div.ls-dummy-block.ls-block
-
-       {:style {:width "100%"
-                 ;; The same as .dnd-separator
-                :border-top (if hover
-                              "3px solid #ccc"
-                              nil)
-                :margin-left 20}
-        :ref *el-ref
-        :tabIndex 0
-        :on-click click-handler-fn
-        :id idstr
-        :blockid idstr
-        :class (when selected? "selected")}
-
-       [:div.flex.items-center
-        [:div.flex.items-center.mx-1 {:style {:height 24}}
-         [:span.bullet-container.cursor
-          [:span.bullet]]]
-
-        [:div.flex.flex-1.cursor-text
-         {:on-drag-enter #(set-hover! true)
-          :on-drag-over #(util/stop %)
-          :on-drop drop-handler-fn
-          :on-drag-leave #(set-hover! false)}
-         [:span.opacity-70.text
-          "Click here to edit..."]]]))))
-
 (rum/defc add-button
-  [args container-id]
-  (let [*bullet-ref (rum/use-ref nil)]
-    [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-     {:on-click (fn [e]
-                  (util/stop e)
-                  (state/set-state! :editor/container-id container-id)
-                  (editor-handler/api-insert-new-block! "" args))
-      :on-mouse-over #(dom/add-class! (rum/deref *bullet-ref) "opacity-50")
-      :on-mouse-leave #(dom/remove-class! (rum/deref *bullet-ref) "opacity-50")
-      :on-key-down (fn [e]
-                     (util/stop e)
-                     (when (= "Enter" (util/ekey e))
-                       (state/set-state! :editor/container-id container-id)
-                       (editor-handler/api-insert-new-block! "" args)))
-      :tab-index 0}
-     [:div.flex.flex-row
-      [:div.flex.items-center {:style {:height 28
-                                       :margin-left 22}}
-       [:span.bullet-container.cursor.opacity-0.transition-opacity.ease-in.duration-100 {:ref *bullet-ref}
-        [:span.bullet]]]]]))
+  [block container-id]
+  (let [*ref (rum/use-ref nil)
+        has-children? (:block/_parent block)
+        page? (ldb/page? block)
+        opacity-class (if has-children? "opacity-0" "opacity-50")]
+    (when page?
+      [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
+       {:class opacity-class
+        :data-block-id (:db/id block)
+        :ref *ref
+        :on-click (fn [e]
+                    (util/stop e)
+                    (state/set-state! :editor/container-id container-id)
+                    (editor-handler/api-insert-new-block! ""
+                                                          {:block-uuid (:block/uuid block)}))
+        :on-mouse-over (fn []
+                         (let [ref (rum/deref *ref)
+                               prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                           (cond
+                             (and prev-block (dom/has-class? prev-block "is-blank"))
+                             (dom/add-class! ref "opacity-0")
+                             (and prev-block has-children?)
+                             (dom/add-class! ref "opacity-50")
+                             :else
+                             (dom/add-class! ref "opacity-100"))))
+        :on-mouse-leave #(do
+                           (dom/remove-class! (rum/deref *ref) "opacity-50")
+                           (dom/remove-class! (rum/deref *ref) "opacity-100"))
+        :on-key-down (fn [e]
+                       (util/stop e)
+                       (when (= "Enter" (util/ekey e))
+                         (state/set-state! :editor/container-id container-id)
+                         (editor-handler/api-insert-new-block! "" block)))
+        :tab-index 0}
+       [:div.flex.flex-row
+        [:div.flex.items-center {:style {:height 28
+                                         :margin-left 22}}
+         [:span.bullet-container
+          [:span.bullet]]]]])))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -219,8 +169,9 @@
       (cond
         (and
          (not block?)
+         (not config/publishing?)
          (empty? children) block)
-        (dummy-block block)
+        (add-button block (:container-id config))
 
         :else
         (let [document-mode? (state/sub :document/mode?)
@@ -233,16 +184,9 @@
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
-          (let [add-button? (not (or config/publishing?
-                                     (let [last-child-id (model/get-block-deep-last-open-child-id (db/get-db) (:db/id (last blocks)))
-                                           block' (if last-child-id (db/entity last-child-id) (last blocks))
-                                           link (:block/link block')]
-                                       (string/blank? (:block/title (or link block'))))))]
-            [:div.relative
-             {:class (when add-button? "show-add-button")}
-             (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-             (let [args {:block-uuid block-id}]
-               (add-button args (:container-id config)))]))))))
+          [:div.relative
+           (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
+           (add-button block (:container-id config))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -459,7 +403,7 @@
        "Set property"))]])
 
 (rum/defc db-page-title
-  [page whiteboard-page? sidebar? container-id]
+  [page {:keys [whiteboard-page? sidebar? container-id tag-dialog?]}]
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
@@ -484,6 +428,7 @@
         :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
         :hide-title? sidebar?
         :sidebar? sidebar?
+        :tag-dialog? tag-dialog?
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
@@ -602,7 +547,7 @@
 
 (rum/defc sidebar-page-properties
   [config page]
-  (let [[collapsed? set-collapsed!] (rum/use-state true)]
+  (let [[collapsed? set-collapsed!] (rum/use-state (not (ldb/class? page)))]
     [:div.ls-sidebar-page-properties.flex.flex-col.gap-2.mt-2
      [:div
       (shui/button
@@ -623,7 +568,7 @@
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::tabs-rendered?)
-  [state {:keys [repo page preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
+  [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         *tabs-rendered? (::tabs-rendered? state)
         repo (or repo current-repo)
@@ -643,7 +588,7 @@
         *all-collapsed? (::all-collapsed? state)
         block-or-whiteboard? (or block? whiteboard?)
         home? (= :home (state/get-current-route))
-        show-tabs? (and db-based? (or class-page? (ldb/property? page)))
+        show-tabs? (and db-based? (and (or class-page? (ldb/property? page)) (not tag-dialog?)))
         tabs-rendered? (rum/react *tabs-rendered?)]
     (if page
       (when (or title block-or-whiteboard?)
@@ -673,7 +618,11 @@
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
                  (if db-based?
-                   (db-page-title page whiteboard-page? sidebar? (:container-id state))
+                   (db-page-title page
+                                  {:whiteboard-page? whiteboard-page?
+                                   :sidebar? sidebar?
+                                   :container-id (:container-id state)
+                                   :tag-dialog? tag-dialog?})
                    (page-title-cp page {:journal? journal?
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?})))
@@ -686,7 +635,7 @@
             (when show-tabs?
               (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))
 
-            (when (or (not show-tabs?) tabs-rendered?)
+            (when (and (or (not show-tabs?) tabs-rendered?) (not tag-dialog?))
               [:div.ls-page-blocks
                {:style {:margin-left (if whiteboard? 0 -20)}
                 :class (when-not sidebar?
@@ -696,7 +645,7 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when (and (not preview?) (or (not show-tabs?) tabs-rendered?))
-           [:div.ml-1.flex.flex-col.gap-4
+           [:div.ml-1.flex.flex-col.gap-8.mt-4
             (when today?
               (today-queries repo today? sidebar?))
 
@@ -710,7 +659,7 @@
               (class-component/class-children page))
 
               ;; referenced blocks
-            (when-not (or whiteboard? linked-refs? (and block? (not db-based?)))
+            (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
               [:div {:key "page-references"}
                (rum/with-key
                  (reference/references page {:sidebar? sidebar?})
@@ -722,6 +671,7 @@
 
             (when-not (or whiteboard? unlinked-refs?
                           sidebar?
+                          tag-dialog?
                           home?
                           (or class-page? property-page?)
                           (and block? (not db-based?)))
@@ -746,7 +696,7 @@
                (reset! *loading? false)
                (reset! *page (db/entity (:db/id page-block)))
                (when page-block
-                 (when-not preview-or-sidebar?
+                 (when-not (or preview-or-sidebar? (:tag-dialog? option))
                    (if-let [page-uuid (and (not (:db/id page*)) (not page-uuid?) (:block/uuid page-block))]
                      (route-handler/redirect-to-page! (str page-uuid) {:push false})
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
@@ -771,6 +721,10 @@
        (state/get-current-repo)
        "-"
        (or (:db/id option) page-name)))))
+
+(rum/defc page-container
+  [page-m option]
+  (page-cp (merge option page-m)))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
@@ -1173,14 +1127,14 @@
 
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
-  (let [page (or
-              (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
+  (let [current-page (or
+                      (and (= :page (state/sub [:route-match :data :name]))
+                           (state/sub [:route-match :path-params :name]))
+                      (date/today))
         theme (:ui/theme @state/state)
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
-        page-entity (db/get-page page)]
-    (page-graph-aux page
+        page-entity (db/get-page current-page)]
+    (page-graph-aux current-page
                     {:type (if (ldb/page? page-entity) :page :block)
                      :block/uuid (:block/uuid page-entity)
                      :theme theme
@@ -1199,10 +1153,10 @@
         (t :page/delete-confirmation)]]]
 
      [:ol.p-2.pt-4
-      (for [page pages]
+      (for [page-item pages]
         [:li
-         [:a {:href (rfe/href :page {:name (:block/uuid page)})}
-          (component-block/page-cp {} page)]])]
+         [:a {:href (rfe/href :page {:name (:block/uuid page-item)})}
+          (component-block/page-cp {} page-item)]])]
 
      [:p.px-2.opacity-50 [:small (str "Total: " (count pages))]]
 

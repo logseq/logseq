@@ -55,6 +55,9 @@
   [repo tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
+        journal-page (some (fn [d] (when (and (= :block/journal-day (:a d)) (:added d))
+                                     (d/entity db (:e d))))
+                           (:tx-data tx-report))
         journal-template? (some (fn [d] (and (:added d) (= (:a d) :block/tags) (= (:v d) journal-id))) (:tx-data tx-report))
         tx-data (some->> (:tx-data tx-report)
                          (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
@@ -63,12 +66,11 @@
                                    (let [object (d/entity db e)
                                          template-blocks (->> (mapcat (fn [id]
                                                                         (let [tag (d/entity db id)
-                                                                              journal? (= journal-id id)
                                                                               parents (ldb/get-class-extends tag)
                                                                               templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
                                                                           (cond->> templates
-                                                                            journal?
-                                                                            (map (fn [t] (assoc t :journal tag))))))
+                                                                            journal-page
+                                                                            (map (fn [t] (assoc t :journal journal-page))))))
                                                                       (set (map :v datoms)))
                                                               distinct
                                                               (sort-by :block/created-at)
@@ -213,11 +215,11 @@
           (nil? created-by-ent) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
-  [repo tx-report]
+  [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
-                      (commands/run-commands tx-report))
+                      (commands/run-commands conn tx-report))
         insert-templates-tx (insert-tag-templates repo tx-report)
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
@@ -226,7 +228,7 @@
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
     (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
-                           (compute-extra-tx-data repo tx-report))
+                           (compute-extra-tx-data repo conn tx-report))
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
                                                                         :outliner-op :pre-hook-invoke

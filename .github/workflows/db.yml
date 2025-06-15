@@ -9,7 +9,7 @@ on:
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
@@ -23,7 +23,7 @@ env:
   CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
-  NODE_VERSION: '22'
+  NODE_VERSION: '20'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:

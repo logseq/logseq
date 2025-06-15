@@ -7,7 +7,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db.common.view :as db-view]
+            [logseq.db.common.reference :as db-reference]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -15,7 +15,7 @@
 
 (rum/defc references-aux
   [page-entity config]
-  (let [filters (db-view/get-filters (db/get-db) page-entity)
+  (let [filters (db-reference/get-filters (db/get-db) page-entity)
         reference-filter (fn [{:keys [ref-pages-count]}]
                            (shui/button
                             {:title "Page filter"

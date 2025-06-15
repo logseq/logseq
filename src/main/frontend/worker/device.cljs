@@ -99,7 +99,7 @@
     (let [device-uuid (c.m/<? (<get-item item-key-device-id))]
       (when-not device-uuid
         (let [get-ws-create-task (new-get-ws-create-task token)
-              agent-data (js->clj (.toJSON js/navigator.userAgentData) :keywordize-keys true)
+              agent-data (js->clj (some-> js/navigator.userAgentData .toJSON) :keywordize-keys true)
               generated-device-name (string/join
                                      "-"
                                      [(:platform agent-data)

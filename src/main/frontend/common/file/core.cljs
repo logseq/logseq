@@ -30,42 +30,29 @@
     content))
 
 (defn- transform-content
-  [repo db {:block/keys [collapsed? format pre-block? title page properties] :as b} level {:keys [heading-to-list?]} context]
-  (let [db-based? (sqlite-util/db-based-graph? repo)
-        block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
-                                  (not (string/includes? title (str (:block/uuid b))))
-                                  (not db-based?))
+  [repo db {:block/keys [collapsed? format pre-block? properties] :as b} level {:keys [heading-to-list?]} context {:keys [db-based?]}]
+  (let [title (or (:block/raw-title b) (:block/title b))
+        block-ref-not-saved? (and (not db-based?)
+                                  (first (:block/_refs (d/entity db (:db/id b))))
+                                  (not (string/includes? title (str (:block/uuid b)))))
         heading (:heading properties)
-        markdown? (= :markdown format)
         title (if db-based?
                 ;; replace [[uuid]] with block's content
                 (db-content/recur-replace-uuid-in-block-title (d/entity db (:db/id b)))
                 title)
         content (or title "")
-        page-first-child? (= (:db/id b) (ldb/get-first-child db (:db/id page)))
-        pre-block? (or pre-block?
-                       (and page-first-child?
-                            markdown?
-                            (string/includes? (first (string/split-lines content)) ":: ")))
         content (cond
                   pre-block?
                   (let [content (string/trim content)]
                     (str content "\n"))
 
                   :else
-                  (let [;; first block is a heading, Markdown users prefer to remove the `-` before the content
-                        markdown-top-heading? (and markdown?
-                                                   page-first-child?
-                                                   heading)
-                        [prefix spaces-tabs]
+                  (let [[prefix spaces-tabs]
                         (cond
                           (= format :org)
                           [(->>
                             (repeat level "*")
                             (apply str)) ""]
-
-                          markdown-top-heading?
-                          ["" ""]
 
                           :else
                           (let [level (if (and heading-to-list? heading)
@@ -83,8 +70,7 @@
                                   content)
                         content (if db-based? content (content-with-collapsed-state repo format content collapsed?))
                         new-content (indented-block-content (string/trim content) spaces-tabs)
-                        sep (if (or markdown-top-heading?
-                                    (string/blank? new-content))
+                        sep (if (string/blank? new-content)
                               ""
                               " ")]
                     (str prefix sep new-content)))]
@@ -94,12 +80,13 @@
 
 (defn- tree->file-content-aux
   [repo db tree {:keys [init-level link] :as opts} context]
-  (let [block-contents (transient [])]
+  (let [db-based? (sqlite-util/db-based-graph? repo)
+        block-contents (transient [])]
     (loop [[f & r] tree level init-level]
       (if (nil? f)
         (->> block-contents persistent! flatten (remove nil?))
         (let [page? (nil? (:block/page f))
-              content (if (and page? (not link)) nil (transform-content repo db f level opts context))
+              content (if (and page? (not link)) nil (transform-content repo db f level opts context {:db-based? db-based?}))
               new-content
               (if-let [children (seq (:block/children f))]
                 (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
