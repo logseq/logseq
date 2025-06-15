@@ -2117,12 +2117,15 @@
   [config block children collapsed?]
   (let [ref?        (:ref? config)
         query?      (:custom-query? config)
+        library?    (:library? config)
         children    (when (coll? children)
                       (let [ref-matched-children-ids (:ref-matched-children-ids config)]
                         (cond->> (remove nil? children)
                           ref-matched-children-ids
                           ;; Block children will not be rendered if the filters do not match them
-                          (filter (fn [b] (ref-matched-children-ids (:db/id b)))))))]
+                          (filter (fn [b] (ref-matched-children-ids (:db/id b))))
+                          library?
+                          (filter ldb/page?))))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))

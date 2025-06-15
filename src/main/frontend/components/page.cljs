@@ -180,7 +180,8 @@
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
-                              :document/mode? document-mode?}
+                              :document/mode? document-mode?
+                              :library? (ldb/library? block)}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
