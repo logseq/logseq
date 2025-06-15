@@ -346,5 +346,4 @@ page2:
             (page/rename-page page-name (str page-name "-rename1")))
           (w/with-page @*page2
             (page/rename-page page-name (str page-name "-rename2"))))
-        (repl/pause)
         (validate-2-graphs)))))
