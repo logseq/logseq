@@ -418,6 +418,7 @@
                              (shui/popup-hide!)))}]
          (property-select (merge (:select-opts opts) {:on-chosen on-chosen
                                                       :input-opts input-opts
+                                                      :block block
                                                       :class-schema? class-schema?}))))]))
 
 (rum/defcs new-property < rum/reactive

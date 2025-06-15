@@ -2,6 +2,7 @@
   "RTC state indicator"
   (:require [clojure.pprint :as pprint]
             [frontend.common.missionary :as c.m]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.flows :as flows]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
@@ -11,8 +12,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
-            [rum.core :as rum]
-            [frontend.config :as config]))
+            [rum.core :as rum]))
 
 (comment
   (def rtc-state-schema
@@ -147,7 +147,7 @@
         unpushed-block-update-count (:pending-local-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
     [:div.cp__rtc-sync
-     [:div.hidden {:data-testid "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
+     [:div.hidden {"data-testid" "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)

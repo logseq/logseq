@@ -503,12 +503,21 @@
      {}
      block)))
 
+(defn- get-target-block-page
+  [target-block]
+  (or
+   (:db/id (:block/page target-block))
+   ;; target parent is a page
+   (when-let [parent (:block/parent target-block)]
+     (when (ldb/page? parent)
+       (:db/id parent)))
+   ;; target-block is a page itself
+   (:db/id target-block)))
+
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
-        target-page (or (:db/id (:block/page target-block))
-                        ;; target block is a page itself
-                        (:db/id target-block))
+        target-page (get-target-block-page target-block)
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
@@ -610,7 +619,7 @@
 
                              :else
                              [block sibling?])
-          sibling? (if (ldb/page? block) false sibling?)
+          ;; sibling? (if (ldb/page? block) false sibling?)
           block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
 
@@ -684,7 +693,7 @@
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
-        sibling? (if (ldb/page? target-block) false sibling?)
+        ;; sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
                                        (:block/title target-block)
                                        (string/blank? (:block/title target-block)))
@@ -824,10 +833,8 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         first-block-page (:db/id (:block/page block))
-        target-page (or (:db/id (:block/page target-block))
-                        (:db/id target-block))
+        target-page (get-target-block-page target-block)
         not-same-page? (not= first-block-page target-page)
-
         block-order (if sibling?
                       (db-order/gen-key (:block/order target-block)
                                         (:block/order (ldb/get-right-sibling target-block)))
@@ -840,7 +847,7 @@
                                    (:db/id (:block/parent target-block))
                                    (:db/id target-block))
                    :block/order block-order}
-                   not-same-page?
+                   (not (ldb/page? block))
                    (assoc :block/page target-page))]
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
@@ -985,7 +992,8 @@
                                                                           :sibling? true
                                                                           :indent? false})))
 
-            (when (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
+            (when parent
+                ;; (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))

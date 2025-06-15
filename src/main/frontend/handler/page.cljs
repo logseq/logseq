@@ -216,7 +216,7 @@
     (p/let [_ (when (:convert-page-to-tag? chosen-result)
                 (let [entity (db/entity (:db/id chosen-result))]
                   (when (and (ldb/page? entity) (not (ldb/class? entity)))
-                    (db-page-handler/convert-to-tag! entity))))
+                    (db-page-handler/convert-page-to-tag! entity))))
             chosen-result (if (:block/uuid chosen-result)
                             (db/entity [:block/uuid (:block/uuid chosen-result)])
                             chosen-result)

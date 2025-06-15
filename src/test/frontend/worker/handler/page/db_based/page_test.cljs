@@ -3,7 +3,8 @@
             [datascript.core :as d]
             [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.db :as db-db]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
@@ -30,11 +31,18 @@
             child-page2 (d/entity @conn [:block/uuid child-uuid2])
             ;; Create a child page for a class
             [_ child-uuid3] (worker-db-page/create! conn "c1/c2" {:split-namespace? true :class? true})
-            child-page3 (d/entity @conn [:block/uuid child-uuid3])]
-        (is (= ["foo" "bar"] (map :block/title (ldb/get-page-parents child-page)))
+            child-page3 (d/entity @conn [:block/uuid child-uuid3])
+            library (ldb/get-built-in-page @conn "Library")
+            bar (ldb/get-page @conn "bar")]
+        (is (= ["foo"] (map :block/title (:block/_parent library)))
+            "Namespace (non-class) pages are added to the Library page")
+        (is (= ["baz" "baz2"] (map :block/title (:block/_parent bar)))
+            "Child pages are created under the same parent")
+        (is (= ["foo" "bar"] (map :block/title [(:block/parent (:block/parent child-page))
+                                                (:block/parent child-page)]))
             "Child page with new parent has correct parents")
-        (is (= (map :block/uuid (ldb/get-page-parents child-page))
-               (map :block/uuid (ldb/get-page-parents child-page2)))
+        (is (= (map :block/uuid (db-db/get-page-parents child-page))
+               (map :block/uuid (db-db/get-page-parents child-page2)))
             "Child page with existing parents has correct parents")
         (is (= ["Root Tag" "c1"] (map :block/title (ldb/get-classes-parents [child-page3])))
             "Child class with new parent has correct parents")
@@ -52,8 +60,8 @@
       (let [_ (worker-db-page/create! conn "vim/keys" {:split-namespace? true})
             _ (worker-db-page/create! conn "emacs/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
-               (->> (d/q '[:find [(pull ?b [{:logseq.property/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
-                    (map #(get-in % [:logseq.property/parent :block/title]))
+               (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
+                    (map #(get-in % [:block/parent :block/title]))
                     set))
             "Two child pages with same name exist and have different parents")))
 

@@ -180,7 +180,8 @@
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
-                              :document/mode? document-mode?}
+                              :document/mode? document-mode?
+                              :library? (ldb/library? block)}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
@@ -407,7 +408,7 @@
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
-      :data-testid "page title"
+      "data-testid" "page title"
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
@@ -572,7 +573,6 @@
   (let [current-repo (state/sub :git/current-repo)
         *tabs-rendered? (::tabs-rendered? state)
         repo (or repo current-repo)
-        block-id (:block/uuid page)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
         property-page? (ldb/property? page)
@@ -633,18 +633,14 @@
               [:div.-mb-8
                (sidebar-page-properties config page)])
 
-            (when (and block? (not sidebar?) (not whiteboard?))
-              (let [config (merge config {:id "block-parent"
-                                          :block? true})]
-                [:div.mb-4
-                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
-
             (when show-tabs?
               (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))
 
             (when (and (or (not show-tabs?) tabs-rendered?) (not tag-dialog?))
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}}
+               {:style {:margin-left (if whiteboard? 0 -20)}
+                :class (when-not sidebar?
+                         "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
@@ -660,7 +656,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page title))
 
-            (when (and (ldb/page? page) (:logseq.property/_parent page))
+            (when (and (ldb/page? page) (:logseq.property.class/_extends page))
               (class-component/class-children page))
 
               ;; referenced blocks

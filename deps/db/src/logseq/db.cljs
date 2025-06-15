@@ -22,6 +22,14 @@
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
+(def built-in? entity-util/built-in?)
+(def built-in-class-property? db-db/built-in-class-property?)
+(def private-built-in-page? db-db/private-built-in-page?)
+
+(def write-transit-str sqlite-util/write-transit-str)
+(def read-transit-str sqlite-util/read-transit-str)
+(def build-favorite-tx db-db/build-favorite-tx)
+
 (defonce *transact-fn (atom nil))
 (defn register-transact-fn!
   [f]
@@ -241,6 +249,17 @@
                       (parse-uuid page-id-name-or-uuid))]
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
+
+(defn get-built-in-page
+  [db title]
+  (when db
+    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
+      (d/entity db [:block/uuid id]))))
+
+(defn library?
+  [page]
+  (and (built-in? page)
+       (= "Library" (:block/title page))))
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
@@ -470,14 +489,6 @@
              (when-not (hidden-or-internal-tag? e)
                e))))))
 
-(def built-in? entity-util/built-in?)
-(def built-in-class-property? db-db/built-in-class-property?)
-(def private-built-in-page? db-db/private-built-in-page?)
-
-(def write-transit-str sqlite-util/write-transit-str)
-(def read-transit-str sqlite-util/read-transit-str)
-(def build-favorite-tx db-db/build-favorite-tx)
-
 (defn get-key-value
   [db key-ident]
   (:kv/value (d/entity db key-ident)))
@@ -499,7 +510,7 @@
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
 (def get-all-properties db-db/get-all-properties)
-(def get-page-parents db-db/get-page-parents)
+(def get-class-extends db-db/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
 (def get-title-with-parents db-db/get-title-with-parents)
 (def class-instance? db-db/class-instance?)

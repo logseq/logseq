@@ -11,13 +11,13 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.graph :as common-graph]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.cli :as outliner-cli]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [promesa.core :as p]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)
