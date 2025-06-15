@@ -84,11 +84,21 @@
   (when (and (not (string/blank? q))
              (not (#{"config.edn" "custom.js" "custom.css"} q))
              (not config/publishing?))
-    (let [class? (string/starts-with? q "#")]
-      (->> [{:text (if class? "Create tag" "Create page")       :icon "new-page"
+    (let [class? (string/starts-with? q "#")
+          class-name (get-class-from-input q)
+          class (ldb/class? (db/get-case-page class-name))]
+      (->> [{:text (cond
+                     class "Configure tag"
+                     class? "Create tag"
+                     :else "Create page")
+             :icon "new-page"
              :icon-theme :gray
              :info (if class?
-                     (str "Create class called '" (get-class-from-input q) "'")
+                     (let [class-name (get-class-from-input q)
+                           class (db/get-case-page class-name)]
+                       (if class
+                         (str "Configure #" class-name)
+                         (str "Create tag called '" class-name "'")))
                      (str "Create page called '" q "'"))
              :source-create :page}]
            (remove nil?)))))
@@ -132,9 +142,15 @@
                                       (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
+        start-with-slash? (string/starts-with? input "/")
         order* (cond
                  (= search-mode :graph)
                  []
+
+                 start-with-slash?
+                 [["Filters" :filters (visible-items :filters)]
+                  ["Current page"   :current-page   (visible-items :current-page)]
+                  ["Nodes"          :nodes         (visible-items :nodes)]]
 
                  include-slash?
                  [(when-not node-exists?
@@ -276,7 +292,8 @@
 (defn- page-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
-        source-page (model/get-alias-source-page repo (:db/id entity))
+        source-page (or (model/get-alias-source-page repo (:db/id entity))
+                        (:alias page))
         icon (get-page-icon entity)
         title (block-handler/block-unique-title page)
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
@@ -286,6 +303,7 @@
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page) {}))
+              :alias (:alias page)
               :source-page (or source-page page))))
 
 (defn- block-item
@@ -435,9 +453,11 @@
 
 (defn- get-highlighted-page-uuid-or-name
   [state]
-  (let [highlighted-item (some-> state state->highlighted-item)]
-    (or (:block/uuid (:source-block highlighted-item))
-        (:block/uuid (:source-page highlighted-item)))))
+  (let [highlighted-item (some-> state state->highlighted-item)
+        block (or (:alias highlighted-item)
+                  (:source-block highlighted-item)
+                  (:source-page highlighted-item))]
+    (:block/uuid block)))
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
@@ -547,13 +567,12 @@
     (p/let [result (cond
                      create-class?
                      (db-page-handler/<create-class! class
-                                                     {:redirect? false
-                                                      :create-first-block? false})
+                                                     {:redirect? false})
                      create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
                      create-page? (page-handler/<create! @!input {:redirect? true}))]
       (shui/dialog-close! :ls-dialog-cmdk)
       (when (and create-class? result)
-        (state/sidebar-add-block! (state/get-current-repo) (:db/id result) :block)))))
+        (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])))))
 
 (defn- get-filter-user-input
   [input]
@@ -567,8 +586,11 @@
 
 (defmethod handle-action :filter [_ state _event]
   (let [item (some-> state state->highlighted-item)
-        !input (::input state)]
-    (reset! !input (get-filter-user-input @!input))
+        !input (::input state)
+        input-ref @(::input-ref state)]
+    (let [value (get-filter-user-input @!input)]
+      (reset! !input value)
+      (set! (.-value input-ref) value))
     (let [!filter (::filter state)
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
@@ -788,13 +810,14 @@
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
       esc? (let [filter' @(::filter state)]
-             (when-not (string/blank? input)
-               (util/stop e)
-               (handle-input-change state nil ""))
-             (when (and filter' (string/blank? input))
-               (util/stop e)
-               (reset! (::filter state) nil)
-               (load-results :default state)))
+             (if filter'
+               (do
+                 (util/stop e)
+                 (reset! (::filter state) nil)
+                 (load-results :default state))
+               (when-not (string/blank? input)
+                 (util/stop e)
+                 (handle-input-change state nil ""))))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
@@ -850,6 +873,7 @@
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :auto-focus true
        :autoComplete "off"
+       :autoCapitalize false
        :placeholder (input-placeholder false)
        :ref #(when-not @input-ref (reset! input-ref %))
        :on-change debounced-on-change
@@ -857,23 +881,12 @@
                   (when-let [on-blur (:on-input-blur opts)]
                     (on-blur input)))
        :on-composition-end (gfun/debounce (fn [e] (handle-input-change state e)) 100)
-       :on-key-down (gfun/debounce
-                     (fn [e]
-                       (p/let [value (.-value @input-ref)
-                               last-char (last value)
-                               backspace? (= (util/ekey e) "Backspace")
-                               filter-group (:group @(::filter state))
-                               slash? (= (util/ekey e) "/")
-                               namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
-                                                 (search/block-search (state/get-current-repo) (str value "/") {}))
-                               namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
-                         (when (and filter-group
-                                    (or (and slash? (not namespace-page-matched?))
-                                        (and backspace? (= last-char "/"))
-                                        (and backspace? (= input ""))))
-                           (reset! (::filter state) nil)
-                           (load-results :default state))))
-                     100)
+       :on-key-down (fn [e]
+                      (case (util/ekey e)
+                        "Esc"
+                        (when-not @(::filter state)
+                          (shui/dialog-close!))
+                        nil))
        :default-value input}]]))
 
 (defn rand-tip
@@ -1053,14 +1066,13 @@
                                       (and (contains? #{:create} group-filter)
                                            (= group-key :create))))))
                    results-ordered)]
-        (when-not (= ["Filters"] (map first items))
-          (if (seq items)
-            (for [[group-name group-key _group-count group-items] items]
-              (let [title (string/capitalize group-name)]
-                (result-group state title group-key group-items first-item sidebar?)))
-            [:div.flex.flex-col.p-4.opacity-50
-             (when-not (string/blank? @*input)
-               "No matched results")])))]
+        (if (seq items)
+          (for [[group-name group-key _group-count group-items] items]
+            (let [title (string/capitalize group-name)]
+              (result-group state title group-key group-items first-item sidebar?)))
+          [:div.flex.flex-col.p-4.opacity-50
+           (when-not (string/blank? @*input)
+             "No matched results")]))]
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]

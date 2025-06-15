@@ -97,7 +97,7 @@
         ent-maps* (db-malli-schema/datoms->entities datoms)
         ent-maps (mapv
                   ;; Remove some UI interactions adding this e.g. import
-                  #(dissoc % :block.temp/fully-loaded?)
+                  #(dissoc % :block.temp/fully-loaded? :block.temp/has-children?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
                  (-> (map (fn [e]

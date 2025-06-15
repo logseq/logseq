@@ -301,6 +301,86 @@
      [:span.handle-right.image-resize (assoc handle-props :ref *handle-right)]]))
 
 (defonce *resizing-image? (atom false))
+(rum/defc asset-container
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
+  [:div.asset-container
+   {:key "resize-asset-container"}
+   [:img.rounded-sm.relative
+    (merge
+     {:loading "lazy"
+      :referrerPolicy "no-referrer"
+      :src src
+      :title title}
+     metadata)]
+   (when (and (not breadcrumb?)
+              (not positioned?))
+     [:<>
+      (let [image-src (fs/asset-path-normalize src)]
+        [:.asset-action-bar {:aria-hidden "true"}
+         [:.flex
+          (when-not config/publishing?
+            [:button.asset-action-btn
+             {:title (t :asset/delete)
+              :tabIndex "-1"
+              :on-pointer-down util/stop
+              :on-click
+              (fn [e]
+                (util/stop e)
+                (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+                  (let [*local-selected? (atom local?)]
+                    (-> (shui/dialog-confirm!
+                         [:div.text-xs.opacity-60.-my-2
+                          (when (and local? (not= (:block/uuid asset-block) block-id))
+                            [:label.flex.gap-1.items-center
+                             (shui/checkbox
+                              {:default-checked @*local-selected?
+                               :on-checked-change #(reset! *local-selected? %)})
+                             (t :asset/physical-delete)])]
+                         {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                          :outside-cancel? true})
+                        (p/then (fn []
+                                  (shui/dialog-close!)
+                                  (editor-handler/delete-asset-of-block!
+                                   {:block-id block-id
+                                    :asset-block asset-block
+                                    :local? local?
+                                    :delete-local? @*local-selected?
+                                    :repo (state/get-current-repo)
+                                    :href src
+                                    :title title
+                                    :full-text full-text})))))))}
+             (ui/icon "trash")])
+
+          [:button.asset-action-btn
+           {:title (t :asset/copy)
+            :tabIndex "-1"
+            :on-pointer-down util/stop
+            :on-click (fn [e]
+                        (util/stop e)
+                        (-> (util/copy-image-to-clipboard image-src)
+                            (p/then #(notification/show! "Copied!" :success))))}
+           (ui/icon "copy")]
+
+          [:button.asset-action-btn
+           {:title (t :asset/maximize)
+            :tabIndex "-1"
+            :on-pointer-down util/stop
+            :on-click open-lightbox}
+
+           (ui/icon "maximize")]
+
+          (when (util/electron?)
+            [:button.asset-action-btn
+             {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+              :tabIndex "-1"
+              :on-pointer-down util/stop
+              :on-click (fn [e]
+                          (util/stop e)
+                          (if local?
+                            (ipc/ipc "openFileInFolder" image-src)
+                            (js/window.apis.openExternal image-src)))}
+             (shui/tabler-icon "folder-pin")])]])])])
+
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)
   {:will-unmount (fn [state]
@@ -310,101 +390,24 @@
   (let [breadcrumb? (:breadcrumb? config)
         positioned? (:property-position config)
         asset-block (:asset-block config)
-        asset-container [:div.asset-container {:key "resize-asset-container"}
-                         [:img.rounded-sm.relative
-                          (merge
-                           {:loading "lazy"
-                            :referrerPolicy "no-referrer"
-                            :src src
-                            :title title}
-                           metadata)]
-                         (when (and (not breadcrumb?)
-                                    (not positioned?))
-                           [:<>
-                            (let [image-src (fs/asset-path-normalize src)]
-                              [:.asset-action-bar {:aria-hidden "true"}
-                               [:.flex
-                                (when-not config/publishing?
-                                  [:button.asset-action-btn
-                                   {:title (t :asset/delete)
-                                    :tabIndex "-1"
-                                    :on-pointer-down util/stop
-                                    :on-click
-                                    (fn [e]
-                                      (util/stop e)
-                                      (when-let [block-id (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
-                                        (let [*local-selected? (atom local?)]
-                                          (-> (shui/dialog-confirm!
-                                               [:div.text-xs.opacity-60.-my-2
-                                                (when (and local? (not= (:block/uuid asset-block) block-id))
-                                                  [:label.flex.gap-1.items-center
-                                                   (shui/checkbox
-                                                    {:default-checked @*local-selected?
-                                                     :on-checked-change #(reset! *local-selected? %)})
-                                                   (t :asset/physical-delete)])]
-                                               {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                                :outside-cancel? true})
-                                              (p/then (fn []
-                                                        (shui/dialog-close!)
-                                                        (editor-handler/delete-asset-of-block!
-                                                         {:block-id block-id
-                                                          :asset-block asset-block
-                                                          :local? local?
-                                                          :delete-local? @*local-selected?
-                                                          :repo (state/get-current-repo)
-                                                          :href src
-                                                          :title title
-                                                          :full-text full-text})))))))}
-                                   (ui/icon "trash")])
-
-                                [:button.asset-action-btn
-                                 {:title (t :asset/copy)
-                                  :tabIndex "-1"
-                                  :on-pointer-down util/stop
-                                  :on-click (fn [e]
-                                              (util/stop e)
-                                              (-> (util/copy-image-to-clipboard image-src)
-                                                  (p/then #(notification/show! "Copied!" :success))))}
-                                 (ui/icon "copy")]
-
-                                [:button.asset-action-btn
-                                 {:title (t :asset/maximize)
-                                  :tabIndex "-1"
-                                  :on-pointer-down util/stop
-                                  :on-click open-lightbox}
-
-                                 (ui/icon "maximize")]
-
-                                (when (util/electron?)
-                                  [:button.asset-action-btn
-                                   {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-                                    :tabIndex "-1"
-                                    :on-pointer-down util/stop
-                                    :on-click (fn [e]
-                                                (util/stop e)
-                                                (if local?
-                                                  (ipc/ipc "openFileInFolder" image-src)
-                                                  (js/window.apis.openExternal image-src)))}
-                                   (shui/tabler-icon "folder-pin")])]])])]
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
                   (:width metadata))
         *width (get state ::size)
-        width (or @*width width)
-        style (when-not (util/mobile?)
-                (cond width
-                      {(if (:sidebar? config)
-                         :max-width :width) width}
-                      :else
-                      {}))
+        width (or @*width width 500)
+        metadata' (merge metadata (when width {:width width}))
         resizable? (and (not (mobile-util/native-platform?))
                         (not breadcrumb?)
-                        (not positioned?))]
+                        (not positioned?))
+        asset-container-cp (asset-container asset-block src title metadata'
+                                            {:breadcrumb? breadcrumb?
+                                             :positioned? positioned?
+                                             :local? local?
+                                             :full-text full-text})]
     (if (or (:disable-resize? config)
             (not resizable?))
-      asset-container
+      asset-container-cp
       [:div.ls-resize-image.rounded-md
-       (when style {:style style})
-       asset-container
+       asset-container-cp
        (resize-image-handles
         (fn [k ^js event]
           (let [dx (.-dx event)
@@ -611,11 +614,14 @@
 
 (declare page-reference)
 
-(defn open-page-ref
+(defn <open-page-ref
   [config page-entity e page-name contents-page?]
   (when (not (util/right-click? e))
-    (let [ignore-alias? (:ignore-alias? config)
-          page (or (and (not ignore-alias?) (first (:block/_alias page-entity))) page-entity)]
+    (p/let [ignore-alias? (:ignore-alias? config)
+            source-page (and (not ignore-alias?)
+                             (or (first (:block/_alias page-entity))
+                                 (db-async/<get-block-source (state/get-current-repo) (:db/id page-entity))))
+            page (or source-page page-entity)]
       (cond
         (gobj/get e "shiftKey")
         (when page
@@ -683,9 +689,13 @@
        :on-mouse-over #(reset! *hover? true)
        :on-mouse-leave #(reset! *hover? false)
        :on-click (fn [e]
-                   (when stop-click-event? (util/stop e)))
+                   (when (and stop-click-event? (not (util/link? (.-target e))))
+                     (util/stop e)))
        :on-pointer-down (fn [^js e]
                           (cond
+                            (util/link? (.-target e))
+                            nil
+
                             (and on-context-menu (= 2 (.-button e)))
                             nil
 
@@ -704,12 +714,12 @@
                           (util/stop e)
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
-                            (open-page-ref config page-entity e page-name contents-page?))
+                            (<open-page-ref config page-entity e page-name contents-page?))
                           (reset! *mouse-down? false)))
        :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not other-position?))
                             (util/stop e)
                             (state/clear-edit!)
-                            (open-page-ref config page-entity e page-name contents-page?)))}
+                            (<open-page-ref config page-entity e page-name contents-page?)))}
        on-context-menu
        (assoc :on-context-menu on-context-menu))
      (when (and show-icon? (not tag?))
@@ -887,7 +897,8 @@
      (if (boolean? in-popup?)
        (if (and (not (:preview? config))
                 (not in-popup?)
-                (or (not manual?) open?))
+                (or (not manual?) open?)
+                (not (state/editing?)))
          (popup-preview-impl children
                              {:visible? visible? :set-visible! set-visible!
                               :*timer *timer :*timer1 *timer1
@@ -911,6 +922,12 @@
      (let [inline-list (gp-mldoc/inline->edn v (mldoc/get-default-config format))]
        [:div.inline.mr-1 (map-inline config inline-list)]))))
 
+(defn- <get-block
+  [block-id]
+  (db-async/<get-block (state/get-current-repo) block-id
+                       {:children? false
+                        :skip-refresh? true}))
+
 (rum/defcs page-cp-inner < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [args (:rum/args state)
@@ -927,8 +944,7 @@
                (or (:skip-async-load? config) (:table-view? config))
                (reset! *result page)
                :else
-               (p/let [result (db-async/<get-block (state/get-current-repo) page-id-or-name {:children? false
-                                                                                             :skip-refresh? true})]
+               (p/let [result (<get-block page-id-or-name)]
                  (reset! *result result)))
 
              (assoc state :*entity *result)))}
@@ -1027,7 +1043,10 @@
                  (let [block (last (:rum/args state))
                        asset-type (:logseq.property.asset/type block)
                        path (path/path-join common-config/local-assets-dir (str (:block/uuid block) "." asset-type))]
-                   (p/let [result (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path)]
+                   (p/let [result (if config/publishing?
+                                    ;; publishing doesn't have window.pfs defined
+                                    true
+                                    (fs/file-exists? (config/get-repo-dir (state/get-current-repo)) path))]
                      (reset! (::file-exists? state) result))
                    state))}
   [state config block]
@@ -1038,9 +1057,10 @@
         {:keys [direction loaded total]} (state/sub :rtc/asset-upload-download-progress
                                                     {:path-in-sub-atom [repo (str (:block/uuid block))]})
         downloading? (and (= direction :download) (not= loaded total))
-        download-finished? (and (= direction :download) (= loaded total))]
+        asset-file-write-finished? (state/sub :assets/asset-file-write-finish
+                                              {:path-in-sub-atom [repo (str (:block/uuid block))]})]
     (cond
-      (or file-exists? download-finished?)
+      (or file-exists? asset-file-write-finished?)
       (asset-link (assoc config :asset-block block)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
@@ -1061,6 +1081,7 @@
         (contains? config/video-formats asset-type))))
 
 (declare block-positioned-properties)
+
 (rum/defc page-reference < rum/reactive db-mixins/query
   "Component for page reference"
   [{:keys [html-export? nested-link? show-brackets? id] :as config*} uuid-or-title* label]
@@ -1091,7 +1112,7 @@
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
                              (not contents-page?))]
-          (when-not (= (:db/id block) (:db/id (:block config)))
+          (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
             (cond
               (and asset? (img-audio-video? block))
               (asset-cp config block)
@@ -2097,7 +2118,11 @@
   (let [ref?        (:ref? config)
         query?      (:custom-query? config)
         children    (when (coll? children)
-                      (remove nil? children))]
+                      (let [ref-matched-children-ids (:ref-matched-children-ids config)]
+                        (cond->> (remove nil? children)
+                          ref-matched-children-ids
+                          ;; Block children will not be rendered if the filters do not match them
+                          (filter (fn [b] (ref-matched-children-ids (:db/id b)))))))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
@@ -2110,7 +2135,9 @@
                         (or ref? query?)
                         (assoc :ref-query-child? true)
                         true
-                        (assoc :block-children? true))]
+                        (assoc :block-children? true)
+                        (integer? (:block-level config))
+                        (update :block-level inc))]
           (block-list config' children))]])))
 
 (defn- block-content-empty?
@@ -2388,10 +2415,10 @@
                          [:div.opacity-75 (if show-query?
                                             "Hide query"
                                             "Set query")]))]
-    [:div.w-full
+    [:div
      {:class (if query?
                "inline-flex"
-               "inline")
+               "w-full inline")
       :on-mouse-over #(set-hover? true)
       :on-mouse-out #(set-hover? false)}
      (cond
@@ -2578,37 +2605,38 @@
           forbidden-edit? (target-forbidden-edit? target)]
       (when (and (not forbidden-edit?) (contains? #{1 0} button))
         (let [selection-blocks (state/get-selection-blocks)
-              starting-block (state/get-selection-start-block-or-first)]
+              starting-block (state/get-selection-start-block-or-first)
+              block-dom-element (util/rec-get-node target "ls-block")]
           (cond
             (and meta? shift?)
             (when-not (empty? selection-blocks)
               (util/stop e)
-              (editor-handler/highlight-selection-area! block-id {:append? true}))
+              (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
 
             meta?
             (do
               (util/stop e)
-              (let [block-dom-element (gdom/getElement block-id)]
-                (if (some #(= block-dom-element %) selection-blocks)
-                  (state/drop-selection-block! block-dom-element)
-                  (state/conj-selection-block! block-dom-element :down)))
+              (if (some #(= block-dom-element %) selection-blocks)
+                (state/drop-selection-block! block-dom-element)
+                (state/conj-selection-block! block-dom-element :down))
               (if (empty? (state/get-selection-blocks))
                 (state/clear-selection!)
-                (state/set-selection-start-block! block-id)))
+                (state/set-selection-start-block! block-dom-element)))
 
             (and shift? starting-block)
             (do
               (util/stop e)
               (util/clear-selection!)
-              (editor-handler/highlight-selection-area! block-id))
+              (editor-handler/highlight-selection-area! block-id block-dom-element))
 
             shift?
             (do
               (util/clear-selection!)
-              (state/set-selection-start-block! block-id))
+              (state/set-selection-start-block! block-dom-element))
 
             :else
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+              (util/mobile-keep-keyboard-open)
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
               (let [f #(p/do!
@@ -2639,7 +2667,7 @@
                  (state/pub-event! [:editor/save-code-editor])
                  (f))
 
-                (state/set-selection-start-block! block-id)))))))))
+                (state/set-selection-start-block! block-dom-element)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block children block-id top? block-content?]
@@ -2690,12 +2718,11 @@
   (let [*hover? (::hover? state)
         *hover-container? (::hover-container? state)
         private-tag? (ldb/private-tags (:db/ident tag))]
-    [:div.block-tag.items-center.relative
+    [:div.block-tag
      {:key (str "tag-" (:db/id tag))
-      :class (if @*hover?
-               (str "bg-gray-03 rounded "
-                    (if private-tag? "px-1" "pr-1"))
-               "pl-2 pr-1")
+      :class (str (when private-tag? "private-tag ")
+                  (when @*hover?
+                    (if private-tag? "!px-1" "!pl-0")))
       :on-mouse-over #(reset! *hover-container? true)
       :on-mouse-out #(reset! *hover-container? false)}
      [:div.flex.items-center
@@ -3073,50 +3100,52 @@
       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
-      [:div.flex.flex-1.flex-row.gap-1.items-center
-       (if (and editor-box edit? (not type-block-editor?))
-         [:div.editor-wrapper.flex.flex-1
-          {:id editor-id
-           :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
-          (ui/catch-error
-           (ui/block-error "Something wrong in the editor" {})
-           (editor-box {:block block
-                        :block-id uuid
-                        :block-parent-id block-id
-                        :format format}
-                       edit-input-id
-                       config))]
-         [:div.flex.flex-1.w-full.block-content-wrapper
-          {:style {:display "flex"}}
-          (when-let [actions-cp (:page-title-actions-cp config)]
-            (actions-cp block))
-          (block-content-with-error config block edit-input-id block-id *show-query? editor-box)
+      [:div.block-row.flex.flex-1.flex-row.gap-1.items-center
+       (let [content-cp [:div.flex.flex-1.w-full.block-content-wrapper
+                         {:style {:display "flex"}}
+                         (when-let [actions-cp (:page-title-actions-cp config)]
+                           (actions-cp block))
+                         (block-content-with-error config block edit-input-id block-id *show-query? editor-box)
 
-          (when (and (not hide-block-refs-count?)
-                     (not named?)
-                     (not (:table-block-title? config)))
-            [:div.flex.flex-row.items-center
-             (when (and (:embed? config)
-                        (:embed-parent config))
-               [:a.opacity-70.hover:opacity-100.svg-small.inline
-                {:on-pointer-down (fn [e]
-                                    (util/stop e)
-                                    (when-let [block (:embed-parent config)]
-                                      (editor-handler/edit-block! block :max)))}
-                svg/edit])
+                         (when (and (not hide-block-refs-count?)
+                                    (not named?)
+                                    (not (:table-block-title? config)))
+                           [:div.flex.flex-row.items-center
+                            (when (and (:embed? config)
+                                       (:embed-parent config))
+                              [:a.opacity-70.hover:opacity-100.svg-small.inline
+                               {:on-pointer-down (fn [e]
+                                                   (util/stop e)
+                                                   (when-let [block (:embed-parent config)]
+                                                     (editor-handler/edit-block! block :max)))}
+                               svg/edit])
 
-             (when block-reference-only?
-               [:a.opacity-70.hover:opacity-100.svg-small.inline
-                {:on-pointer-down (fn [e]
-                                    (util/stop e)
-                                    (editor-handler/edit-block! block :max))}
-                svg/edit])])
+                            (when block-reference-only?
+                              [:a.opacity-70.hover:opacity-100.svg-small.inline
+                               {:on-pointer-down (fn [e]
+                                                   (util/stop e)
+                                                   (editor-handler/edit-block! block :max))}
+                               svg/edit])])
 
-          (when-not (or (:table? config) (:property? config) (:page-title? config))
-            (block-refs-count block refs-count *hide-block-refs?))])
+                         (when-not (or (:table? config) (:property? config) (:page-title? config))
+                           (block-refs-count block refs-count *hide-block-refs?))]
+             editor-cp [:div.editor-wrapper.flex.flex-1.w-full
+                        {:id editor-id
+                         :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
+                        (ui/catch-error
+                         (ui/block-error "Something wrong in the editor" {})
+                         (editor-box {:block block
+                                      :block-id uuid
+                                      :block-parent-id block-id
+                                      :format format}
+                                     edit-input-id
+                                     config))]]
+         (if (and editor-box edit? (not type-block-editor?))
+           editor-cp
+           content-cp))
 
        (when-not (:table-block-title? config)
-         [:div.flex.flex-row.items-center.self-start.gap-1
+         [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
           (when (and db-based? (not table?))
             [:div.opacity-70.hover:opacity-100
              (block-positioned-properties config block :block-right)])
@@ -3354,7 +3383,8 @@
 
 (defn- block-mouse-over
   [^js e block *control-show? block-id doc-mode?]
-  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))]
+  (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
+        block-dom-node (util/rec-get-node (.-target e) "ls-block")]
     (when (and mouse-moving?
                (not @*dragging?)
                (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
@@ -3367,7 +3397,7 @@
       (when (non-dragging? e)
         (when-let [container (gdom/getElement "app-container-wrapper")]
           (dom/add-class! container "blocks-selection-mode"))
-        (editor-handler/highlight-selection-area! block-id {:append? true})))))
+        (editor-handler/highlight-selection-area! block-id block-dom-node {:append? true})))))
 
 (defn- block-mouse-leave
   [*control-show? block-id doc-mode?]
@@ -3480,7 +3510,6 @@
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
         table? (:table? config*)
-        sidebar? (:sidebar? config*)
         property? (:property? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
@@ -3648,15 +3677,17 @@
                                          :hide-block-refs-count? hide-block-refs-count?
                                          :*show-query? *show-query?}))])]
 
-         (when (and db-based? (not collapsed?) (not (or table? property?)))
+         (when (and db-based? (not collapsed?) (not (or table? property? (:page-title? config))))
            (block-positioned-properties config block :block-below))]
 
         (when (and @*show-right-menu? (not in-whiteboard?) (not (or table? property?)))
           (block-right-menu config block editing?))])
 
      (when (and db-based?
-                (or sidebar? (not collapsed?))
-                (not (or table? property?)))
+                (or (:tag-dialog? config)
+                    (and
+                     (not collapsed?)
+                     (not (or table? property?)))))
        [:div (when-not (:page-title? config) {:style {:padding-left 45}})
         (db-properties-cp config block {:in-block-container? true})])
 
@@ -3720,7 +3751,7 @@
 
 (defn- config-block-should-update?
   [old-state new-state]
-  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
+  (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet? :ref-matched-children-ids]
         b1                  (second (:rum/args old-state))
         b2                  (second (:rum/args new-state))
         result              (or
@@ -4273,9 +4304,12 @@
                                      (when (not (:block-children? config))
                                        {:top? top?
                                         :bottom? bottom?}))
-        (str (:block/uuid item)
-             (when linked-block
-               (str "-" (:block/uuid original-block))))))))
+        (str
+         (:container-id config)
+         "-"
+         (:block/uuid item)
+         (when linked-block
+           (str "-" (:block/uuid original-block))))))))
 
 (rum/defc block-list
   [config blocks]

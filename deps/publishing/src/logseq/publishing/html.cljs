@@ -2,10 +2,10 @@
   "This frontend only ns builds the publishing html including doing all the
 necessary db filtering"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.transit :as dt]
             [goog.string :as gstring]
             [goog.string.format]
-            [datascript.transit :as dt]
-            [datascript.core :as d]
             [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
@@ -126,12 +126,15 @@ necessary db filtering"
             [:script {:src "static/js/ui.js"}]
             [:script {:src "static/js/shared.js"}]
             [:script {:src "static/js/main.js"}]
-            [:script {:src "static/js/interact.min.js"}]
-            [:script {:src "static/js/highlight.min.js"}]
-            [:script {:src "static/js/katex.min.js"}]
-            [:script {:src "static/js/html2canvas.min.js"}]
-            [:script {:src "static/js/code-editor.js"}]
-            [:script {:src "static/js/custom.js"}]])))))
+            ;; Deferring scripts above results in errors
+            [:script {:defer true :src "static/js/interact.min.js"}]
+            [:script {:defer true :src "static/js/highlight.min.js"}]
+            [:script {:defer true :src "static/js/katex.min.js"}]
+            [:script {:defer true :type "module" :src "static/js/pdfjs/pdf.mjs"}]
+            [:script {:defer true :type "module" :src "static/js/pdf_viewer3.mjs"}]
+            [:script {:defer true :src "static/js/html2canvas.min.js"}]
+            [:script {:defer true :src "static/js/code-editor.js"}]
+            [:script {:defer true :src "static/js/custom.js"}]])))))
 
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the

@@ -9,7 +9,9 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -32,6 +34,19 @@
        (map :e)
        sort
        first))
+
+(defn get-block-alias
+  [db eid]
+  (->>
+   (d/q
+    '[:find [?e ...]
+      :in $ ?eid %
+      :where
+      (alias ?eid ?e)]
+    db
+    eid
+    (:alias rules/rules))
+   distinct))
 
 (comment
   (defn- get-built-in-files
@@ -139,8 +154,7 @@
   [db block-uuid]
   (let [ids (get-block-children-ids db block-uuid)]
     (when (seq ids)
-      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-        (d/pull-many db '[*] ids')))))
+      (map (fn [id] (d/entity db [:block/uuid id])) ids))))
 
 (defn- with-raw-title
   [m entity]
@@ -163,9 +177,13 @@
         (or
          (= (:db/id ref-block) id)
          (= id (:db/id (:block/page ref-block)))
+         (= id (:db/id (:logseq.property/view-for ref-block)))
          (entity-util/hidden? (:block/page ref-block))
          (entity-util/hidden? ref-block)
-         (contains? (set (map :db/id (:block/tags ref-block))) (:db/id entity))
+         (and (entity-util/class? entity)
+              (let [children (db-class/get-structured-children db id)
+                    class-ids (set (conj children id))]
+                (some class-ids (map :db/id (:block/tags ref-block)))))
          (some? (get ref-block (:db/ident entity)))))
       (or
        (= (:db/id ref-block) id)
@@ -174,17 +192,30 @@
 (defn get-block-refs-count
   [db id]
   (or
-   (some->> (d/entity db id)
-            :block/_refs
-            (remove (fn [ref-block] (hidden-ref? db ref-block id)))
-            count)
+   (let [with-alias (->> (get-block-alias db id)
+                         (cons id)
+                         distinct)]
+     (some->> with-alias
+              (map #(d/entity db %))
+              (mapcat :block/_refs)
+              (remove (fn [ref-block] (hidden-ref? db ref-block id)))
+              count))
    0))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id {:keys [children? children-only? nested-children? properties children-props]}]
-  (let [block (d/entity db (if (uuid? id)
-                             [:block/uuid id]
-                             id))
+  [db id-or-page-name {:keys [children? children-only? nested-children? properties children-props]}]
+  (let [block (let [eid (cond (uuid? id-or-page-name)
+                              [:block/uuid id-or-page-name]
+                              (integer? id-or-page-name)
+                              id-or-page-name
+                              :else nil)]
+                (cond
+                  eid
+                  (d/entity db eid)
+                  (string? id-or-page-name)
+                  (d/entity db (get-first-page-by-name db (name id-or-page-name)))
+                  :else
+                  nil))
         block-refs-count? (some #{:block.temp/refs-count} properties)
         whiteboard? (common-entity-util/whiteboard? block)]
     (when block
@@ -215,7 +246,8 @@
                             (if (= children-props '[*])
                               (entity->map block)
                               (-> (select-keys block children-props)
-                                  (with-raw-title block))))
+                                  (with-raw-title block)
+                                  (assoc :block.temp/has-children? (some? (:block/_parent block))))))
                           children)))]
         (if children-only?
           {:children children}

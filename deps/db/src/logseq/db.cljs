@@ -18,7 +18,6 @@
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
@@ -428,18 +427,7 @@
       ;; only return the first result for idiot-proof
     (first (:block/_alias (d/entity db alias-id)))))
 
-(defn get-block-alias
-  [db eid]
-  (->>
-   (d/q
-    '[:find [?e ...]
-      :in $ ?eid %
-      :where
-      (alias ?eid ?e)]
-    db
-    eid
-    (:alias rules/rules))
-   distinct))
+(def get-block-alias common-initial-data/get-block-alias)
 
 (defn page-alias-set
   [db page-id]

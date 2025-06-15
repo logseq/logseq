@@ -12,7 +12,7 @@ on:
       - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'deps/graph-parser/**'
       - 'deps/db/**'
@@ -28,7 +28,7 @@ env:
   # This is the same as 1.8.
   JAVA_VERSION: '11'
   # This is the latest node version we can run.
-  NODE_VERSION: '22'
+  NODE_VERSION: '20'
   BABASHKA_VERSION: '1.0.168'
 
 jobs:

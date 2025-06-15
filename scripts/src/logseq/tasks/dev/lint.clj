@@ -1,6 +1,6 @@
 (ns logseq.tasks.dev.lint
-  (:require [clojure.string :as string]
-            [babashka.process :refer [shell]]))
+  (:require [babashka.process :refer [shell]]
+            [clojure.string :as string]))
 
 (defn dev
   "Run all lint tasks
@@ -34,14 +34,14 @@
                           ;; remove files that aren't in a kondo dir
                           ((fn [x] (dissoc x nil))))]
     (if (seq dir-to-files)
-        (doseq [[dir* files*] dir-to-files]
-          (let [dir (if (= dir* "src") "." dir*)
-                files (mapv #(string/replace-first % (str dir "/") "") files*)
-                cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
-                _ (println cmd)
-                res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
-           (when (pos? (:exit res)) (System/exit (:exit res)))))
-        (println "No clj* files have changed to lint."))))
+      (doseq [[dir* files*] dir-to-files]
+        (let [dir (if (= dir* "src") "." dir*)
+              files (mapv #(string/replace-first % (str dir "/") "") files*)
+              cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
+              _ (println cmd)
+              res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
+          (when (pos? (:exit res)) (System/exit (:exit res)))))
+      (println "No clj* files have changed to lint."))))
 
 (defn- validate-frontend-not-in-worker
   []
@@ -62,12 +62,16 @@
   []
   (let [res (shell {:out :string :continue true}
                    "grep -r --exclude-dir=worker" "\\[frontend.worker.*:" "src/main/frontend")
-        req-lines (->> (:out res) string/split-lines)]
-    (if-not (and (= 1 (:exit res)) (= "" (:out res)))
-      (do
-        (println "The following worker requires should not be in frontend namespaces:")
-        (println (:out res))
-        (System/exit 1))
+        ;; allow reset-file b/c it's only affects tests
+        allowed-exceptions #{"src/main/frontend/handler/file_based/file.cljs:            [frontend.worker.file.reset :as file-reset]"}
+        invalid-lines (when (= 0 (:exit res))
+                        (remove #(some->> % (contains? allowed-exceptions))
+                                (string/split-lines (:out res))))
+        _ (when (> (:exit res) 1) (System/exit 1))]
+    (if (and (= 0 (:exit res)) (seq invalid-lines))
+      (do (println "The following worker requires should not be in frontend namespaces:")
+          (println (string/join "\n" invalid-lines))
+          (System/exit 1))
       (println "Valid frontend namespaces!"))))
 
 (defn worker-and-frontend-separate

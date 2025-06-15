@@ -665,6 +665,7 @@
   :editor/move-block-up           "Move block up"
   :editor/move-block-down         "Move block down"
   :editor/open-edit               "Edit selected block"
+  :editor/open-selected-blocks-in-sidebar "Open selected block(s) in sidebar"
   :editor/select-block-up         "Select block above"
   :editor/select-block-down       "Select block below"
   :editor/delete-selection        "Delete selected blocks"
@@ -786,7 +787,8 @@
   :dev/show-page-ast "(Dev) Show page AST"
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
-  :dev/fix-broken-graph "(Dev) Fix current broken graph"
+  :dev/fix-broken-graph "Fix current broken graph"
+  :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"
   :window/close "Close window"}}

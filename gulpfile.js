@@ -85,9 +85,9 @@ const common = {
         'node_modules/@glidejs/glide/dist/css/glide.theme.min.css',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'glide'))),
       () => gulp.src([
-        'node_modules/pdfjs-dist/build/pdf.js',
-        'node_modules/pdfjs-dist/build/pdf.worker.js',
-        'node_modules/pdfjs-dist/web/pdf_viewer.js',
+        'node_modules/pdfjs-dist/legacy/build/pdf.mjs',
+        'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
+        'node_modules/pdfjs-dist/legacy/web/pdf_viewer.mjs',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs'))),
       () => gulp.src([
         'node_modules/pdfjs-dist/cmaps/*.*',
@@ -170,17 +170,21 @@ const common = {
     cb()
   },
 
-  switchReactDevelopmentMode (cb) {
-    const reactFrom = path.join(outputPath, 'js', 'react.development.js')
-    const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
-    cp.execSync(`mv ${reactFrom} ${reactTo}`, { stdio: 'inherit' })
+  switchReactDevelopmentMode(cb) {
+    try {
+      const reactFrom = path.join(outputPath, 'js', 'react.development.js');
+      const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
+      fs.renameSync(reactFrom, reactTo);
 
-    const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js')
-    const reactDomTo = path.join(outputPath, 'js',
-      'react-dom.production.min.js')
-    cp.execSync(`mv ${reactDomFrom} ${reactDomTo}`, { stdio: 'inherit' })
+      const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
+      const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
+      fs.renameSync(reactDomFrom, reactDomTo);
 
-    cb()
+      cb();
+    } catch (err) {
+      console.error("Error during switchReactDevelopmentMode:", err);
+      cb(err);
+    }
   },
 }
 

@@ -20,6 +20,8 @@
      ~@body
      (loop [i# 5]
        (when (zero? i#) (throw (ex-info "wait-tx-updated failed" {:old m# :new (get-rtc-tx)})))
+       (util/wait-timeout 500)
+       (w/wait-for "button.cloud.on.idle")
        (util/wait-timeout 1000)
        (let [new-m# (get-rtc-tx)
              new-local-tx# (or (:local-tx new-m#) 0)
@@ -52,3 +54,21 @@
 (defn rtc-stop
   []
   (util/search-and-click "(Dev) RTC Stop"))
+
+(defmacro with-stop-restart-rtc
+  "- rtc stop on `stop-pw-pages` in order
+  - run `body`
+  - rtc start and exec `after-start-body` in order"
+  [stop-pw-pages start-pw-page+after-start-body & body]
+  (let [after-body
+        (cons
+         'do
+         (for [[p body] (partition 2 start-pw-page+after-start-body)]
+           `(w/with-page ~p
+              (rtc-start)
+              ~body)))]
+    `(do
+       (doseq [p# ~stop-pw-pages]
+         (w/with-page p# (rtc-stop)))
+       ~@body
+       ~after-body)))

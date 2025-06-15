@@ -49,6 +49,7 @@ charlie/
 docker
 android/app/src/main/assets/capacitor.plugin.json
 ios/App/App/capacitor.config.json
+ios/App/App/public
 
 startup.png
 
@@ -72,3 +73,4 @@ clj-e2e/.wally
 clj-e2e/resources
 clj-e2e/e2e-dump
 .dir-locals.el
+.projectile

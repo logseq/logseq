@@ -7,9 +7,11 @@
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [logseq.e2e.multi-tabs-basic-test]
             [logseq.e2e.outliner-basic-test]
             [logseq.e2e.plugins-basic-test]
+            [logseq.e2e.property-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-test]
@@ -21,7 +23,7 @@
 (reset! config/*port 3001)
 ;; show ui
 (reset! config/*headless false)
-(reset! config/*slow-mo 50)
+(reset! config/*slow-mo 30)
 
 (def *futures (atom {}))
 
@@ -34,6 +36,11 @@
   []
   (->> (future (run-tests 'logseq.e2e.commands-basic-test))
        (swap! *futures assoc :commands-test)))
+
+(defn run-property-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.property-basic-test))
+       (swap! *futures assoc :property-test)))
 
 (defn run-outliner-test
   []
@@ -72,7 +79,8 @@
              'logseq.e2e.outliner-basic-test
              'logseq.e2e.rtc-basic-test
              'logseq.e2e.plugins-basic-test
-             'logseq.e2e.reference-basic-test))
+             'logseq.e2e.reference-basic-test
+             'logseq.e2e.property-basic-test))
 
 (defn start
   []

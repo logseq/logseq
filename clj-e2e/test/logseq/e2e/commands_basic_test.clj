@@ -1,7 +1,5 @@
 (ns logseq.e2e.commands-basic-test
   (:require
-   [clj-time.core :as t]
-   [clj-time.local :as tl]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.assert :as assert]
@@ -297,12 +295,3 @@
     (util/exit-edit)
     (w/click "a.cloze")
     (w/wait-for "a.cloze-revealed")))
-
-(deftest new-property-test
-  (testing "new property"
-    (b/new-block "")
-    (util/input-command "add new property")
-    (util/input "p1")
-    (w/click "a:has-text(\"+ New option: p1\")")
-    (k/enter)
-    (is (= "p1" (util/get-text "a.property-k")))))

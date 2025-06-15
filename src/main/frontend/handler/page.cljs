@@ -11,7 +11,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
-            [frontend.db.model :as model]
             [frontend.fs :as fs]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.db-based.page :as db-page-handler]
@@ -25,14 +24,13 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.page :as page-util]
+            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
@@ -215,34 +213,38 @@
   (fn [chosen-result ^js e]
     (util/stop e)
     (state/clear-editor-action!)
-    (let [chosen-result (if (:block/uuid chosen-result)
-                          (db/entity [:block/uuid (:block/uuid chosen-result)])
-                          chosen-result)
-          target (first (:block/_alias chosen-result))
-          chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
-          chosen (:block/title chosen-result)
-          class? (and db-based?
-                      (or (string/includes? chosen (str (t :new-tag) " "))
-                          (ldb/class? chosen-result)))
-          inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
-          chosen (-> chosen
-                     (string/replace-first (str (t :new-tag) " ") "")
-                     (string/replace-first (str (t :new-page) " ") ""))
-          wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
-          chosen-last-part (if (text/namespace-page? chosen)
-                             (text/get-namespace-last-part chosen)
-                             chosen)
-          wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
-                        (ref/->page-ref chosen-last-part)
-                        chosen-last-part)
-          q (if (editor-handler/get-selected-text) "" q)
-          last-pattern (if wrapped?
-                         q
-                         (if (= \# (first q))
-                           (subs q 1)
-                           q))
-          last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
-          tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
+    (p/let [_ (when (:convert-page-to-tag? chosen-result)
+                (let [entity (db/entity (:db/id chosen-result))]
+                  (when (and (ldb/page? entity) (not (ldb/class? entity)))
+                    (db-page-handler/convert-page-to-tag! entity))))
+            chosen-result (if (:block/uuid chosen-result)
+                            (db/entity [:block/uuid (:block/uuid chosen-result)])
+                            chosen-result)
+            target (first (:block/_alias chosen-result))
+            chosen-result (if (and target (not (ldb/class? chosen-result)) (ldb/class? target)) target chosen-result)
+            chosen (:block/title chosen-result)
+            class? (and db-based?
+                        (or (string/includes? chosen (str (t :new-tag) " "))
+                            (ldb/class? chosen-result)))
+            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
+            chosen (-> chosen
+                       (string/replace-first (str (t :new-tag) " ") "")
+                       (string/replace-first (str (t :new-page) " ") ""))
+            wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
+            chosen-last-part (if (text/namespace-page? chosen)
+                               (text/get-namespace-last-part chosen)
+                               chosen)
+            wrapped-tag (if (and (util/safe-re-find #"\s+" chosen-last-part) (not wrapped?))
+                          (ref/->page-ref chosen-last-part)
+                          chosen-last-part)
+            q (if (editor-handler/get-selected-text) "" q)
+            last-pattern (if wrapped?
+                           q
+                           (if (= \# (first q))
+                             (subs q 1)
+                             q))
+            last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)
+            tag-in-page-auto-complete? (= page-ref/right-brackets (common-util/safe-subs edit-content current-pos (+ current-pos 2)))]
       (p/do!
        (editor-handler/insert-command! id
                                        (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
@@ -259,9 +261,14 @@
   (fn [chosen-result e]
     (util/stop e)
     (state/clear-editor-action!)
-    (p/let [chosen-result (if (:block/uuid chosen-result)
+    (p/let [_ (when-let [id (:block/uuid chosen-result)]
+                (db-async/<get-block (state/get-current-repo) id {:children? false}))
+            chosen-result (if (:block/uuid chosen-result)
                             (db/entity [:block/uuid (:block/uuid chosen-result)])
                             chosen-result)
+            _ (when-not chosen-result
+                (throw (ex-info "No chosen item"
+                                {:chosen chosen-result})))
             chosen (:block/title chosen-result)
             chosen' (string/replace-first chosen (str (t :new-page) " ") "")
             [chosen' chosen-result] (or (when (and (:nlp-date? chosen-result) (not (de/entity? chosen-result)))
@@ -278,7 +285,6 @@
                      (when-not (de/entity? chosen-result)
                        (<create! chosen'
                                  {:redirect? false
-                                  :create-first-block? false
                                   :split-namespace? true})))
             ref-text' (if result
                         (let [title (:block/title result)]
@@ -325,8 +331,7 @@
                (not config/publishing?))
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)
-                (config/local-file-based-graph? repo)
-                (and (= config/demo-repo repo) (not (mobile-util/native-platform?))))
+                (config/local-file-based-graph? repo))
         (let [title (date/today)
               today-page (util/page-name-sanity-lc title)
               format (state/get-preferred-format repo)
@@ -335,17 +340,13 @@
                          (p/do!
                           (<create! title {:redirect? false
                                            :split-namespace? false
-                                           :create-first-block? (if db-based?
-                                                                  true
-                                                                  (not (state/get-default-journal-template)))
                                            :today-journal? true})
                           (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
                           (ui-handler/re-render-root!)
                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
-          (when (db/page-empty? repo today-page)
+          (when-not (db/get-page today-page)
             (if db-based?
-              (when-not (model/get-journal-page title)
-                (create-f))
+              (create-f)
               (p/let [file-name (date/journal-title->default title)
                       file-rpath (str (config/get-journals-directory) "/" file-name "."
                                       (config/get-file-extension format))
