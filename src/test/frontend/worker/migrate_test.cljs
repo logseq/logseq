@@ -16,7 +16,8 @@
                      :block/updated-at
                      :block/created-at
                      :db/ident
-                     :block/uuid)
+                     :block/uuid
+                     :block/order)
              {:db/index true,
               :logseq.property/type :default,
               :db/valueType :db.type/ref,
@@ -24,7 +25,6 @@
               :block/title "Book",
               :db/cardinality :db.cardinality/one,
               :logseq.property/classes 156,
-              :block/order "a6",
               :block/name "book"}))
       (is (= (rest tx-data)
              [[:db/retract 156 :block/tags :logseq.class/Property]
