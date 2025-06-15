@@ -98,7 +98,6 @@
   [block editing?]
   (let [icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
-                         (shui/dialog-close!)
                          (shui/popup-hide-all!))
         on-chosen! (fn [_e icon]
                      (let [repo (state/get-current-repo)
@@ -155,8 +154,7 @@
                            :or {edit-block? true}}]
   (when-not (or (:logseq.property/hide? property)
                 (= (:db/ident property) :logseq.property/default-value))
-    (ui/hide-popups-until-preview-popup!)
-    (shui/dialog-close!))
+    (ui/hide-popups-until-preview-popup!))
   (let [<create-block (fn [block]
                         (if (and (contains? #{:default :url} (:logseq.property/type property))
                                  (not (db-property/many? property)))
@@ -187,19 +185,6 @@
           (editor-handler/edit-block! first-block :max {:container-id :unknown-container}))
         first-block))))
 
-(defn <set-class-as-property!
-  [repo property]
-  (db/transact! repo
-                [{:db/id (:db/id property)
-                  :db/ident (:db/ident property)
-                  :db/cardinality :db.cardinality/one
-                  :db/valueType :db.type/ref
-                  :db/index true
-                  :block/tags :logseq.class/Property
-                  :logseq.property/type :node
-                  :logseq.property/classes (:db/id property)}]
-                {:outliner-op :save-block}))
-
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
@@ -212,41 +197,37 @@
          many? (db-property/many? property)
          checkbox? (= :checkbox (:logseq.property/type property))
          blocks (get-operating-blocks block)]
-     (assert (qualified-keyword? property-id) "property to add must be a keyword")
-     (p/do!
-      (if (and class? class-schema?)
-        (p/do!
-         (when (ldb/class? property)
-           (<set-class-as-property! repo property))
-         (db-property-handler/class-add-property! (:db/id block) property-id))
-        (let [block-ids (map :block/uuid blocks)
-              set-query-list-view? (and (:logseq.property/query block)
-                                        (= property-id :logseq.property.view/type)
-                                        (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
-          (ui-outliner-tx/transact!
-           {:outliner-op :set-block-property}
-           (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
-           (when (and set-query-list-view?
-                      (nil? (:logseq.property.view/group-by-property block)))
-             (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
-                                                         (:db/id (db/entity :block/page))
-                                                         {:entity-id? entity-id?})))))
-      (when (seq (:view/selected-blocks @state/state))
-        (notification/show! "Property updated!" :success))
-      (when-not many?
-        (cond
-          exit-edit?
-          (do
+     (when-not (ldb/class? property)
+       (assert (qualified-keyword? property-id) "property to add must be a keyword")
+       (p/do!
+        (if (and class? class-schema?)
+          (db-property-handler/class-add-property! (:db/id block) property-id)
+          (let [block-ids (map :block/uuid blocks)
+                set-query-list-view? (and (:logseq.property/query block)
+                                          (= property-id :logseq.property.view/type)
+                                          (= property-value (:db/id (db/entity :logseq.property.view/type.list))))]
+            (ui-outliner-tx/transact!
+             {:outliner-op :set-block-property}
+             (property-handler/batch-set-block-property! repo block-ids property-id property-value {:entity-id? entity-id?})
+             (when (and set-query-list-view?
+                        (nil? (:logseq.property.view/group-by-property block)))
+               (property-handler/batch-set-block-property! repo block-ids :logseq.property.view/group-by-property
+                                                           (:db/id (db/entity :block/page))
+                                                           {:entity-id? entity-id?})))))
+        (when (seq (:view/selected-blocks @state/state))
+          (notification/show! "Property updated!" :success))
+        (when-not many?
+          (cond
+            exit-edit?
             (ui/hide-popups-until-preview-popup!)
-            (shui/dialog-close!))
-          selected?
-          (shui/popup-hide!)))
-      (when-not (or many? checkbox?)
-        (when-let [input (state/get-input)]
-          (.focus input)))
-      (when checkbox?
-        (state/set-editor-action-data! {:type :focus-property-value
-                                        :property property}))))))
+            selected?
+            (shui/popup-hide!)))
+        (when-not (or many? checkbox?)
+          (when-let [input (state/get-input)]
+            (.focus input)))
+        (when checkbox?
+          (state/set-editor-action-data! {:type :focus-property-value
+                                          :property property})))))))
 
 (defn- add-or-remove-property-value
   [block property value selected? {:keys [refresh-result-f entity-id?] :as opts}]
@@ -297,12 +278,12 @@
        (if (#{:logseq.property/deadline :logseq.property/scheduled} (:db/ident property))
          [:div "Repeat task"]
          [:div "Repeat " (if (= :date (:logseq.property/type property)) "date" "datetime")])]]
-     [:div.flex.flex-row.gap-2
-      [:div.flex.text-muted-foreground.mr-4
+     [:div.flex.flex-row.gap-2.ls-repeat-task-frequency
+      [:div.flex.text-muted-foreground
        "Every"]
 
       ;; recur frequency
-      [:div.w-6
+      [:div.w-10.mr-2
        (property-value block (db/entity :logseq.property.repeat/recur-frequency) opts)]
 
       ;; recur unit
@@ -358,7 +339,6 @@
                  state)
    :will-unmount (fn [state]
                    (shui/popup-hide!)
-                   (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
   [state id {:keys [block property datetime? on-change del-btn? on-delete]}]
@@ -388,15 +368,13 @@
             (let [journal (date/js-date->journal-title d)]
               (p/do!
                (when-not (db/get-page journal)
-                 (page-handler/<create! journal {:redirect? false
-                                                 :create-first-block? false}))
+                 (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
                  (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)
-                 (ui/hide-popups-until-preview-popup!)
-                 (shui/dialog-close!))))))]
+                 (ui/hide-popups-until-preview-popup!))))))]
     [:div.flex.flex-row.gap-2
      [:div.flex.flex-col
       (ui/nlp-calendar
@@ -596,7 +574,6 @@
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))
             create-options {:redirect? false
-                            :create-first-block? false
                             :tags (if inline-class-uuid
                                     [inline-class-uuid]
                                     ;; Only 1st class b/c page normally has
@@ -633,17 +610,17 @@
         clear-value-label [:div.flex.flex-row.items-center.gap-1.text-sm
                            (ui/icon "x" {:size 14})
                            [:div clear-value]]
-        [items _] (hooks/use-state (sort-select-items property selected-choices items))
+        [sorted-items set-items!] (hooks/use-state (sort-select-items property selected-choices items))
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
                          (not (and (ldb/class? block) (= (:db/ident property) :logseq.property.class/extends)))
                          (not= (:db/ident property) :logseq.property.view/type))
-                  (concat items
+                  (concat sorted-items
                           [{:value clear-value
                             :label clear-value-label
                             :clear? true}])
-                  items)
+                  sorted-items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
         k :on-chosen
         f (get opts k)
@@ -660,9 +637,14 @@
                 (when-not (false? (:exit-edit? opts))
                   (shui/popup-hide!)))
                (f chosen selected?)))]
+    (hooks/use-effect!
+     (fn []
+       (set-items! (sort-select-items property selected-choices items)))
+     [items])
     (select/select (assoc opts
                           :selected-choices selected-choices
                           :items items'
+                          :close-modal? false
                           k f'))))
 
 (defn- get-node-icon
@@ -961,10 +943,17 @@
                                 {:label label
                                  :value (:db/id value)}))
                          (distinct)))
-            items (->> (if (= :date type)
+            items (->> (cond
+                         (= :checkbox type)
+                         [{:label "True"
+                           :value true}
+                          {:label "False"
+                           :value false}]
+                         (= :date type)
                          (map (fn [m] (let [label (:block/title (db/entity (:value m)))]
                                         (when label
                                           (assoc m :label label)))) items)
+                         :else
                          items)
                        (remove nil?))
             on-chosen (fn [chosen selected?]
@@ -974,9 +963,10 @@
                                                          :exit-edit? exit-edit?
                                                          :refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
-            selected-choices (if (every? #(and (map? %) (:db/id %)) selected-choices')
-                               (map :db/id selected-choices')
-                               [selected-choices'])]
+            selected-choices (when-not (= type :checkbox)
+                               (if (every? #(and (map? %) (:db/id %)) selected-choices')
+                                 (map :db/id selected-choices')
+                                 [selected-choices']))]
         (select-aux block property
                     {:multiple-choices? multiple-choices?
                      :items items
@@ -1049,11 +1039,13 @@
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
         :else
-        [:div.w-full.h-full.jtrigger.ls-empty-text-property
+        [:div.w-full.h-full.jtrigger.ls-empty-text-property.text-muted-foreground
          {:tabIndex 0
           :class (if (:table-view? opts) "cursor-pointer" "cursor-text")
-          :style {:min-height 20}
-          :on-click #(<create-new-block! block property "")}]))))
+          :style {:min-height 20 :margin-left 3}
+          :on-click #(<create-new-block! block property "")}
+         (when (:class-schema? opts)
+           "Add description")]))))
 
 (rum/defc property-block-value
   [value block property page-cp opts]
@@ -1159,7 +1151,7 @@
         popup-content (fn content-fn [target]
                         [:div.property-select
                          (case type
-                           (:entity :number :default :url)
+                           (:entity :number :default :url :checkbox)
                            (select block property select-opts' opts)
 
                            (:node :class :property :page :date)
@@ -1174,6 +1166,7 @@
     (if editing?
       (popup-content nil)
       (let [show! (fn [e]
+                    (util/stop e)
                     (state/clear-selection!)
                     (let [target (when e (.-target e))]
                       (when-not (or config/publishing?
@@ -1189,7 +1182,7 @@
          {:ref *el
           :id trigger-id
           :tabIndex 0
-          :on-pointer-down show!
+          :on-click show!
           :on-key-down (fn [e]
                          (case (util/ekey e)
                            ("Backspace" "Delete")
@@ -1300,7 +1293,7 @@
         batch? (batch-operation?)
         closed-values? (seq (:property/closed-values property))
         select-type?' (or (select-type? block property)
-                          (and editing? batch? (contains? #{:default :url} type) (not closed-values?)))
+                          (and editing? batch? (contains? #{:default :url :checkbox} type) (not closed-values?)))
         select-opts {:on-chosen on-chosen}
         value (if (and (entity-map? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
@@ -1343,20 +1336,20 @@
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
-          (let [add-property! (fn []
-                                (let [value' (boolean (not value))]
-                                  (<add-property! block (:db/ident property) value' opts)
-                                  (when-let [on-checked-change (:on-checked-change opts)]
-                                    (on-checked-change value'))))]
+          (let [add-property! (fn [value]
+                                (<add-property! block (:db/ident property) value opts)
+                                (when-let [on-checked-change (:on-checked-change opts)]
+                                  (on-checked-change value)))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
                              :auto-focus editing?
                              :checked value
-                             :on-checked-change add-property!
+                             :on-checked-change (fn []
+                                                  (add-property! (boolean (not value))))
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
-                                              (add-property!))
+                                              (add-property! (boolean (not value))))
                                             (when (contains? #{"Backspace" "Delete"} (util/ekey e))
                                               (delete-block-property! block property)))})])
           ;; :others

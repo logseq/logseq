@@ -481,7 +481,6 @@
                                      (contains? #{:code} (:logseq.property.node/display-type code-block))
                                      (not= (:block/uuid edit-block) (:block/uuid (state/get-edit-block))))
                                 (editor-handler/edit-block! (or code-block edit-block) :max {:container-id (:container-id config)}))
-                              (state/set-editing-block-dom-id! (:block-parent-id config))
                               (state/set-block-component-editing-mode! true)
                               (state/set-state! :editor/code-block-context
                                                 {:editor editor

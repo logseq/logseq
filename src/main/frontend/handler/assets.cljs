@@ -240,7 +240,11 @@
         repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
-    (fs/write-plain-text-file! repo repo-dir file-path data {})))
+    (p/do!
+     (fs/write-plain-text-file! repo repo-dir file-path data {})
+     (state/update-state!
+      :assets/asset-file-write-finish
+      (fn [m] (assoc-in m [repo asset-block-id-str] (common-util/time-ms)))))))
 
 (defn <unlink-asset
   [repo asset-block-id asset-type]

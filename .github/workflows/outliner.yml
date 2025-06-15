@@ -12,7 +12,7 @@ on:
       - '.github/workflows/outliner.yml'
       - '!deps/outliner/**.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths:
       - 'deps/outliner/**'
       - 'deps/db/**'

@@ -4,7 +4,6 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require ["fs" :as fs]
             ["fs-extra$default" :as fse]
-            ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]
             [cljs.pprint :as pprint]
@@ -15,6 +14,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
@@ -210,14 +210,15 @@
             (println (str "Usage: $0 GRAPH-NAME [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (if (string/includes? graph-dir "/")
-                        ((juxt node-path/dirname node-path/basename) graph-dir)
-                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        db-path (node-path/join dir db-name "db.sqlite")
-        _ (when (fs/existsSync db-path)
+        init-conn-args (sqlite-cli/->open-db-args graph-dir)
+        db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
+        db-path (apply node-path/join init-conn-args)
+        ;; Only remove the directory if the directory is being overwritten
+        _ (when (and (= 2 (count init-conn-args)) (fs/existsSync db-path))
             (fse/removeSync db-path))
-        conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
-                                                  :classpath (cp/get-classpath)})
+        conn (apply outliner-cli/init-conn
+                    (conj init-conn-args {:additional-config (:config options)
+                                          :classpath (cp/get-classpath)}))
         init-data (create-init-data)
         _ (when (:file options) (fs/writeFileSync (:file options) (with-out-str (pprint/pprint init-data))))
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)
@@ -226,7 +227,6 @@
     (when (seq conflicting-names)
       (println "Error: Following names conflict -" (string/join "," conflicting-names))
       (js/process.exit 1))
-    (println "DB dir: " (node-path/join dir db-name))
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/title init-tx)) "blocks ...")
     (d/transact! conn init-tx)

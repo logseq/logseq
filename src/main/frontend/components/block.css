@@ -9,7 +9,6 @@
   @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
-    max-width: 100%;
 
     /* FIXME: img macros */
 
@@ -43,11 +42,6 @@
       .asset-action-bar {
         @apply opacity-100;
       }
-    }
-
-    > img {
-      max-width: unset;
-      width: 100%;
     }
   }
 
@@ -526,7 +520,7 @@
 
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
-    @apply absolute -top-4 opacity-0;
+    @apply absolute -top-5 opacity-0;
     left: -2px;
   }
 
@@ -540,10 +534,39 @@
 
 .ls-block {
   @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
+  container-type: inline-size;
+  container-name: ls-block;
 
   &.selected {
     @apply rounded;
   }
+}
+
+#main-content-container, #right-sidebar {
+    container-type: inline-size;
+}
+
+@container (max-width: 600px) {
+    .time-spent, .positioned-properties.block-right, .view-actions, .ls-page-title .block-tags {
+        display: none;
+    }
+
+    .block-row {
+        @apply flex-col gap-0;
+    }
+
+    .ls-block-right {
+        @apply gap-0 -ml-1;
+    }
+    .ls-page-title .ls-block-right {
+        @apply ml-0;
+    }
+}
+
+@container ls-block (max-width: 430px) {
+    .ls-properties-area {
+        display: none;
+    }
 }
 
 .ls-block h1,
@@ -992,7 +1015,15 @@ html.is-mac {
 }
 
 .block-tag {
-  @apply flex flex-row items-center;
+  @apply flex relative pl-2 pr-1;
+}
+
+.block-tag.private-tag {
+  @apply pl-1;
+}
+
+.block-tag:hover {
+  @apply bg-gray-03 rounded;
 }
 
 .block-tag a.tag {
@@ -1034,6 +1065,18 @@ html.is-mac {
 .ls-page-title .positioned-properties svg, .page-ref svg {
   width: 16px;
   height: 16px;
+}
+
+.ls-page-title {
+  .positioned-properties, .time-spent {
+    margin-top: 15px;
+  }
+}
+
+.ls-page-title .ls-properties-area {
+    .positioned-properties, .time-spent {
+        margin-top: initial;
+    }
 }
 
 .ls-page-title .ls-page-icon button {
@@ -1099,4 +1142,8 @@ html.is-mac {
     div[data-testid='virtuoso-item-list'] button {
         @apply mb-2;
     }
+}
+
+.ls-dialog-block {
+    @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
 }

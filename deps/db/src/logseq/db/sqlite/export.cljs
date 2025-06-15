@@ -527,8 +527,9 @@
 
 (defn- build-view-nodes-export
   "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
-  [db eids]
-  (let [nodes (map #(d/entity db %) eids)
+  [db rows {:keys [group-by?]}]
+  (let [eids (if group-by? (mapcat second rows) rows)
+        nodes (map #(d/entity db %) eids)
         property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
                                           vals
                                           (filter de/entity?))
@@ -859,7 +860,7 @@
           :page
           (build-page-export db (:page-id options))
           :view-nodes
-          (build-view-nodes-export db (:node-ids options))
+          (build-view-nodes-export db (:rows options) (select-keys options [:group-by?]))
           :selected-nodes
           (build-selected-nodes-export db (:node-ids options))
           :graph-ontology
