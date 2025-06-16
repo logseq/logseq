@@ -673,7 +673,9 @@
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
+        untitled? (when page-name
+                    (or (model/untitled-page? (:block/title page-entity))
+                        (and (ldb/page? page-entity) (string/blank? (:block/title page-entity)))))
         show-icon? (:show-icon? config)]
     [:a.relative
      (cond->
