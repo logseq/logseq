@@ -248,4 +248,4 @@
            frontend.common.thread-api/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true
-          :exclude-files ["src/test/docs-0.10.9/"]}}
+          :exclude-files ["src/test/docs-0.10.12/"]}}

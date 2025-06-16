@@ -1150,5 +1150,9 @@ html.is-mac {
 }
 
 .swipe-item {
-    touch-action: pan-y; /* disables horizontal scrolling on touch */
+  touch-action: pan-y; /* disables horizontal scrolling on touch */
+}
+
+.ls-dialog-block {
+  @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
 }
