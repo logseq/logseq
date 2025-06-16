@@ -1056,23 +1056,23 @@
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
               blocks (map db/entity lookup-refs)
-              non-page-blocks (remove ldb/page? blocks)
               pages (filter ldb/page? blocks)
-              library-page (ldb/get-built-in-page (db/get-db) "Library")
-              library-pages (when library-page
-                              (filter #(= (:db/id (:block/parent %)) (:db/id library-page)) pages))]
-          (if (seq library-pages)
-            (ui-outliner-tx/transact!
-             {:outliner-op :save-blocks}
-             (doseq [page library-pages]
-               (outliner-op/remove-block-property! (:db/id page) :block/parent)))
-            (when (seq non-page-blocks)
-              (let [top-level-blocks (when (seq blocks) (block-handler/get-top-level-blocks non-page-blocks))
-                    sorted-blocks (mapcat (fn [block]
-                                            (tree/get-sorted-block-and-children repo (:db/id block)))
-                                          top-level-blocks)]
-                (when (seq sorted-blocks)
-                  (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks))))))))))
+              pages-with-parent (filter :block/parent pages)]
+          (ui-outliner-tx/transact!
+           {:outliner-op :delete-blocks}
+           (doseq [page pages-with-parent]
+             (outliner-op/remove-block-property! (:db/id page) :block/parent))
+           (let [blocks' (if (seq pages-with-parent)
+                           (let [ids (set (map :db/id pages-with-parent))]
+                             (remove (fn [b] (ids (:db/id b))) blocks))
+                           blocks)]
+             (when (seq blocks')
+               (let [top-level-blocks (block-handler/get-top-level-blocks blocks')
+                     sorted-blocks (mapcat (fn [block]
+                                             (tree/get-sorted-block-and-children repo (:db/id block)))
+                                           top-level-blocks)]
+                 (when (seq sorted-blocks)
+                   (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."

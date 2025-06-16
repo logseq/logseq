@@ -2166,7 +2166,8 @@
         icon-size          (if collapsed? 12 14)
         icon               (icon-component/get-node-icon-cp block {:size icon-size :color? true :link? link?})
         with-icon?          (and (some? icon)
-                                 (or (db/page? block)
+                                 (or (and (db/page? block)
+                                          (not (:library? config)))
                                      (:logseq.property/icon block)
                                      link?
                                      (some :logseq.property/icon (:block/tags block))
