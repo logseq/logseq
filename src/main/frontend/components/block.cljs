@@ -663,8 +663,9 @@
    All page-names are sanitized except page-name-in-block"
   [state
    {:keys [contents-page? whiteboard-page? other-position? show-unique-title? stop-click-event?
-           on-context-menu]
-    :or {stop-click-event? true}
+           on-context-menu with-parent?]
+    :or {stop-click-event? true
+         with-parent? true}
     :as config}
    page-entity children label]
   (let [*hover? (::hover? state)
@@ -732,6 +733,11 @@
                                                                        :own-icon? true})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
+
+     (when (and (ldb/page? page-entity) with-parent?)
+       (when-let [parent (:block/parent page-entity)]
+         [:span.select-none (str (:block/title parent) "/")]))
+
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -3239,7 +3245,8 @@
       (let [parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
-                               [block (page-cp {:disable-preview? true} block) true]
+                               [block (page-cp {:disable-preview? true
+                                                :with-parent? false} block) true]
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
