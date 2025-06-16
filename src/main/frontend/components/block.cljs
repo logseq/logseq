@@ -2125,7 +2125,7 @@
                           ;; Block children will not be rendered if the filters do not match them
                           (filter (fn [b] (ref-matched-children-ids (:db/id b))))
                           library?
-                          (filter ldb/page?))))]
+                          (filter (fn [b] (and (ldb/page? b) (not (or (ldb/class? b) (ldb/property? b)))))))))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
