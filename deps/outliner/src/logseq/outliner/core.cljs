@@ -621,7 +621,6 @@
 
                              :else
                              [block sibling?])
-          ;; sibling? (if (ldb/page? block) false sibling?)
           block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
 
@@ -695,7 +694,6 @@
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
-        ;; sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
                                        (:block/title target-block)
                                        (string/blank? (:block/title target-block)))
@@ -784,9 +782,7 @@
   [db blocks]
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-        top-level-blocks* (->> (get-top-level-blocks top-level-blocks non-consecutive?)
-                               ;; (remove ldb/page?)
-                               )
+        top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
@@ -854,8 +850,11 @@
                    (assoc :block/page target-page))]
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
-                             (map (fn [id] {:block/uuid id
-                                            :block/page target-page}) children-ids)))
+                             (keep (fn [id]
+                                     (let [child (d/entity db [:block/uuid id])]
+                                       (when-not (ldb/page? child)
+                                         {:block/uuid id
+                                          :block/page target-page}))) children-ids)))
         target-from-property (:logseq.property/created-from-property target-block)
         block-from-property (:logseq.property/created-from-property block)
         property-tx (let [retract-property-tx (when block-from-property
@@ -996,7 +995,6 @@
                                                                           :indent? false})))
 
             (when parent
-                ;; (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))
