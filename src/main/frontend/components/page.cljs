@@ -100,11 +100,12 @@
 (declare page-cp)
 
 (rum/defc add-button
-  [block container-id]
+  [block {:keys [container-id] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
-        opacity-class (if has-children? "opacity-0" "opacity-50")]
+        opacity-class (if has-children? "opacity-0" "opacity-50")
+        config (dissoc config* :page)]
     (when page?
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
@@ -113,8 +114,8 @@
         :on-click (fn [e]
                     (util/stop e)
                     (state/set-state! :editor/container-id container-id)
-                    (editor-handler/api-insert-new-block! ""
-                                                          {:block-uuid (:block/uuid block)}))
+                    (editor-handler/api-insert-new-block! "" (merge config
+                                                                    {:block-uuid (:block/uuid block)})))
         :on-mouse-over (fn []
                          (let [ref (rum/deref *ref)
                                prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
@@ -132,7 +133,7 @@
                        (util/stop e)
                        (when (= "Enter" (util/ekey e))
                          (state/set-state! :editor/container-id container-id)
-                         (editor-handler/api-insert-new-block! "" block)))
+                         (editor-handler/api-insert-new-block! "" (merge config block))))
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
@@ -165,13 +166,14 @@
                      (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
-                     children)]
+                     children)
+          config (assoc config :library? (ldb/library? block))]
       (cond
         (and
          (not block?)
          (not config/publishing?)
          (empty? children) block)
-        (add-button block (:container-id config))
+        (add-button block config)
 
         :else
         (let [document-mode? (state/sub :document/mode?)
@@ -180,14 +182,13 @@
                               :db/id (:db/id block)
                               :block? block?
                               :editor-box editor/box
-                              :document/mode? document-mode?
-                              :library? (ldb/library? block)}
+                              :document/mode? document-mode?}
                              config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (add-button block (:container-id config))])))))
+           (add-button block config)])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
