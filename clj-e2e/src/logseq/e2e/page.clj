@@ -2,7 +2,8 @@
   (:require [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.selectors :as ws])
+            [wally.selectors :as ws]
+            [logseq.e2e.block :as b])
   (:import (com.microsoft.playwright TimeoutError)))
 
 (defn goto-page
@@ -30,3 +31,10 @@
   (w/click "button[title='More']")
   (w/click "[role='menuitem'] div:text('Delete page')")
   (w/click "div[role='alertdialog'] button:text('ok')"))
+
+(defn rename-page
+  [old-page-name new-page-name]
+  (goto-page old-page-name)
+  (w/click "div[data-testid='page title']")
+  (b/save-block new-page-name)
+  (k/esc))
