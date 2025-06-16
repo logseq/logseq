@@ -328,7 +328,7 @@ html.is-zoomed-native-ios {
 
 .cp__header {
     .ls-block-breadcrumb {
-        @apply text-sm pl-2;
+        @apply text-sm pl-4;
     }
     .breadcrumb {
         @apply flex items-center;
