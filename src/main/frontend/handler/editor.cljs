@@ -533,7 +533,8 @@
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
             :or {sibling? false
                  before? false
-                 edit-block? true}}]
+                 edit-block? true}
+            :as config}]
   (when (or page block-uuid)
     (let [repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
@@ -594,10 +595,11 @@
             (p/do!
              (ui-outliner-tx/transact!
               {:outliner-op :insert-blocks}
-              (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                            :keep-uuid? true
-                                                            :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?})
+              (outliner-insert-block! config block-m new-block
+                                      {:sibling? sibling?
+                                       :keep-uuid? true
+                                       :ordered-list? ordered-list?
+                                       :replace-empty-target? replace-empty-target?})
               (when (and db-based? (seq properties))
                 (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
              (when edit-block?
