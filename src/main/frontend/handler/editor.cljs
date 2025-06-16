@@ -842,6 +842,13 @@
                    (delete-block-aux! block)
                    (when edit-block-f (edit-block-f))))))))))))
 
+(defn move-blocks!
+  [blocks target sibling?]
+  (when (seq blocks)
+    (ui-outliner-tx/transact!
+     {:outliner-op :move-blocks}
+     (outliner-op/move-blocks! blocks target sibling?))))
+
 (defn delete-block!
   [repo]
   (delete-block-inner! repo (get-state)))
