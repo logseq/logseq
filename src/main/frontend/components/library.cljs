@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [frontend.components.select :as components-select]
             [frontend.db :as db]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.search :as search]
             [frontend.state :as state]
