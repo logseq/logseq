@@ -736,7 +736,8 @@
 
      (when (and (ldb/page? page-entity) with-parent?)
        (when-let [parent (:block/parent page-entity)]
-         [:span.select-none (str (:block/title parent) "/")]))
+         (when-not (ldb/library? parent)
+           [:span.select-none (str (:block/title parent) "/")])))
 
      [:span
       (if (and (coll? children) (seq children))
