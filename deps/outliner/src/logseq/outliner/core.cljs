@@ -334,7 +334,7 @@
           txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
           page-tx (let [block (d/entity db [:block/uuid block-id])]
                     (when (:block/pre-block? block)
-                      (let [id (:db/id (:block/page block))]
+                      (when-let [id (:db/id (:block/page block))]
                         [[:db/retract id :block/properties]
                          [:db/retract id :block/properties-order]
                          [:db/retract id :block/properties-text-values]
@@ -531,11 +531,13 @@
                                                       (let [ref-ids (set (map :block/uuid (:block/refs block)))]
                                                         (->> (set/intersection block-ids ref-ids)
                                                              (remove #{(:block/uuid block)})))))
-                           m {:db/id (:db/id block)
-                              :block/uuid uuid'
-                              :block/page target-page
-                              :block/parent parent
-                              :block/order order}
+                           m (cond->
+                              {:db/id (:db/id block)
+                               :block/uuid uuid'
+                               :block/parent parent
+                               :block/order order}
+                               (not (ldb/page? block))
+                               (assoc :block/page target-page))
                            result (->
                                    (if (de/entity? block)
                                      (assoc m :block/level (:block/level block))
