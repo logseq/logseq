@@ -1057,7 +1057,7 @@
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
               blocks (map db/entity lookup-refs)
               pages (filter ldb/page? blocks)
-              pages-with-parent (filter :block/parent pages)]
+              pages-with-parent (filter (fn [page] (and (:block/parent page) (not (string/blank? (:block/title page))))) pages)]
           (ui-outliner-tx/transact!
            {:outliner-op :delete-blocks}
            (doseq [page pages-with-parent]
