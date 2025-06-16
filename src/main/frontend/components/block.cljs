@@ -2451,6 +2451,9 @@
         db (db/get-db)
         query? (ldb/class-instance? (entity-plus/entity-memoized db :logseq.class/Query) block')]
     (cond
+      (and (:page-title? config) (ldb/page? block) (string/blank? (:block/title block)))
+      [:div.opacity-75 "Untitled"]
+
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
 
