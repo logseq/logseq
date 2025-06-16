@@ -88,9 +88,20 @@
                                     [?b :block/title ?title]
                                     [?b :block/tags ?tag-id]
                                     [(not= ?b ?eid)]
-                                    ;; same parent
+                                    ;; same extends
                                     [?b :logseq.property.class/extends ?bp]
                                     [?eid :logseq.property.class/extends ?ep]
+                                    [(= ?bp ?ep)]]
+                                  (:block/parent entity)
+                                  '[:find [?b ...]
+                                    :in $ ?eid ?title [?tag-id ...]
+                                    :where
+                                    [?b :block/title ?title]
+                                    [?b :block/tags ?tag-id]
+                                    [(not= ?b ?eid)]
+                                    ;; same parent
+                                    [?b :block/parent ?bp]
+                                    [?eid :block/parent ?ep]
                                     [(= ?bp ?ep)]]
                                   :else
                                   '[:find [?b ...]

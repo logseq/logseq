@@ -336,14 +336,21 @@
                    true
 
                    :else
-                   (not has-children?))]
+                   (not has-children?))
+        library? (:library? config)
+        new-block' (if library?
+                     (-> new-block
+                         (-> (assoc :block/tags #{:logseq.class/Page}
+                                    :block/name (util/page-name-sanity-lc (:block/title new-block)))
+                             (dissoc :block/page)))
+                     new-block)]
     (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
-     (outliner-op/insert-blocks! [new-block] current-block {:sibling? sibling?
-                                                            :keep-uuid? keep-uuid?
-                                                            :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?}))))
+     (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
+                                                             :keep-uuid? keep-uuid?
+                                                             :ordered-list? ordered-list?
+                                                             :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
