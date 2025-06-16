@@ -161,16 +161,27 @@
              ident (:db/ident class)
              new-property (sqlite-util/build-new-property
                            (:block/title class)
-                           (get-in class [:logseq.property/type :db/cardinality])
+                           (select-keys class [:logseq.property/type :db/cardinality])
                            {:title (:block/title class)
                             :ref-type? true
-                            :properties {:logseq.property/classes id}})
+                            :properties (merge
+                                         (select-keys class [:logseq.property/hide? :logseq.property/public?
+                                                             :logseq.property/view-context :logseq.property/ui-position
+                                                             :logseq.property/default-value :logseq.property/hide-empty-value :logseq.property/enable-history?])
+                                         {:logseq.property/classes id})})
              retract-property-attrs [[:db/retract id :block/tags :logseq.class/Property]
                                      [:db/retract id :logseq.property/type]
                                      [:db/retract id :db/cardinality]
                                      [:db/retract id :db/valueType]
                                      [:db/retract id :db/index]
-                                     [:db/retract id :logseq.property/classes]]
+                                     [:db/retract id :logseq.property/classes]
+                                     [:db/retract id :logseq.property/hide?]
+                                     [:db/retract id :logseq.property/public?]
+                                     [:db/retract id :logseq.property/view-context]
+                                     [:db/retract id :logseq.property/ui-position]
+                                     [:db/retract id :logseq.property/default-value]
+                                     [:db/retract id :logseq.property/hide-empty-value]
+                                     [:db/retract id :logseq.property/enable-history?]]
              datoms (d/datoms db :avet ident)]
          (concat [new-property]
                  retract-property-attrs

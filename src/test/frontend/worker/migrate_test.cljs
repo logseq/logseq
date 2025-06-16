@@ -19,7 +19,7 @@
                      :block/uuid
                      :block/order)
              {:db/index true,
-              :logseq.property/type :default,
+              :logseq.property/type :node,
               :db/valueType :db.type/ref,
               :block/tags #{:logseq.class/Property},
               :block/title "Book",
@@ -33,5 +33,12 @@
               [:db/retract 156 :db/valueType]
               [:db/retract 156 :db/index]
               [:db/retract 156 :logseq.property/classes]
+              [:db/retract 156 :logseq.property/hide?]
+              [:db/retract 156 :logseq.property/public?]
+              [:db/retract 156 :logseq.property/view-context]
+              [:db/retract 156 :logseq.property/ui-position]
+              [:db/retract 156 :logseq.property/default-value]
+              [:db/retract 156 :logseq.property/hide-empty-value]
+              [:db/retract 156 :logseq.property/enable-history?]
               [:db/retract 157 :user.class/Book-FrG9O7sY 155]
               [:db/add 157 (:db/ident new-property) 155]])))))
