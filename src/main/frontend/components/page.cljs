@@ -8,6 +8,7 @@
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.file-based.hierarchy :as hierarchy]
+            [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
             [frontend.components.property.config :as property-config]
@@ -629,6 +630,9 @@
                                         :fmt-journal? fmt-journal?
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
+
+            (when (and db-based? (ldb/library? page))
+              (library/add-pages page))
 
             (when (and db-based? sidebar? (ldb/page? page))
               [:div.-mb-8
