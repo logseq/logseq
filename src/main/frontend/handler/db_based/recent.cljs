@@ -26,5 +26,6 @@
        (filter db/page?)
        (remove ldb/hidden?)
        (remove (fn [e]
-                 (and (ldb/property? e)
-                      (true? (:logseq.property/hide? e)))))))
+                 (or (and (ldb/property? e)
+                          (true? (:logseq.property/hide? e)))
+                     (string/blank? (:block/title e)))))))
