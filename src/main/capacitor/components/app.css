@@ -44,6 +44,30 @@ html.has-mobile-keyboard {
   }
 }
 
+html {
+  &[data-theme=dark] {
+    &[data-color=logseq] {
+      --background: var(--ls-primary-background-color);
+      --ion-item-background: var(--ls-primary-background-color);
+
+      ion-toolbar::part(background), ion-tab-bar,
+      ion-tab-button, .block-modal-page, .block-modal-page > ion-header,
+      ion-content {
+        background-color: var(--lx-gray-01);
+      }
+
+      #mobile-editor-toolbar {
+        background: var(--ls-secondary-background-color);
+      }
+
+      .action-sheet-group.sc-ion-action-sheet-ios,
+      .alert-wrapper.sc-ion-alert-ios {
+        --background: var(--ls-primary-background-color);
+      }
+    }
+  }
+}
+
 ul {
   @apply !list-disc ml-1 mt-2 list-inside;
 
@@ -87,7 +111,7 @@ ion-buttons {
 
   z-index: 9999;
 
-  &-content {
+  & -content {
     @apply inset-0 flex items-end justify-center px-4 py-2
     pointer-events-none sm:px-6 sm:py-2 sm:items-start sm:justify-end;
   }
@@ -184,26 +208,25 @@ ion-content {
 }
 
 .ui__popover-content, .ui__dropdown-menu-content {
-    &[data-editor-popup-ref=page-search],
-    &[data-editor-popup-ref=page-search-hashtag],
-    &[data-editor-popup-ref=commands]
-    {
-        min-width: 61.8vw;
-        max-width: calc(100vw - 40px);
+  &[data-editor-popup-ref=page-search],
+  &[data-editor-popup-ref=page-search-hashtag],
+  &[data-editor-popup-ref=commands] {
+    min-width: 61.8vw;
+    max-width: calc(100vw - 40px);
 
-        &[data-side=top] {
-          max-height: var(--top-popup-content-max-height, 50vh);
-        }
-
-        &[data-side=bottom] {
-          max-height: var(--bottom-popup-content-max-height, 50vh);
-        }
+    &[data-side=top] {
+      max-height: var(--top-popup-content-max-height, 50vh);
     }
+
+    &[data-side=bottom] {
+      max-height: var(--bottom-popup-content-max-height, 50vh);
+    }
+  }
 }
 
 html[data-color=logseq] {
   &[data-theme=light] {
-    --ion-color-primary:var(--rx-logseq-11);
+    --ion-color-primary: var(--rx-logseq-11);
   }
 }
 
