@@ -7,6 +7,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -38,8 +39,12 @@
       :selected-choices selected-choices
       :on-chosen (fn [chosen selected?]
                    (if selected?
-                     (do
-                       (editor-handler/move-blocks! [{:db/id chosen}] library-page false)
+                     (let [last-child (->> (:block/_parent (db/entity (:db/id library-page)))
+                                           ldb/sort-by-order
+                                           last)
+                           target (or last-child library-page)
+                           sibling? (some? last-child)]
+                       (editor-handler/move-blocks! [{:db/id chosen}] target sibling?)
                        (set-selected-choices! (conj selected-choices chosen)))
                      (do
                        (db/transact! (state/get-current-repo)
