@@ -65,51 +65,55 @@
                                                           (string/join ns-util/parent-char))))
                                :type :warning}}))))
 
+(defn- another-id-q
+  [entity]
+  (cond
+    (ldb/property? entity)
+    ;; Property names are unique in that they can
+    ;; have the same names as built-in property names
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(missing? $ ?b :logseq.property/built-in?)]
+      [(not= ?b ?eid)]]
+    (:logseq.property.class/extends entity)
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]
+      ;; same extends
+      [?b :logseq.property.class/extends ?bp]
+      [?eid :logseq.property.class/extends ?ep]
+      [(= ?bp ?ep)]]
+    (:block/parent entity)
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]
+      ;; same parent
+      [?b :block/parent ?bp]
+      [?eid :block/parent ?ep]
+      [(= ?bp ?ep)]]
+    :else
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]]))
+
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
     (seq tags)
     (when-let [another-id (first
-                           (d/q (cond
-                                  (ldb/property? entity)
-                                  ;; Property names are unique in that they can
-                                  ;; have the same names as built-in property names
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(missing? $ ?b :logseq.property/built-in?)]
-                                    [(not= ?b ?eid)]]
-                                  (:logseq.property.class/extends entity)
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]
-                                    ;; same extends
-                                    [?b :logseq.property.class/extends ?bp]
-                                    [?eid :logseq.property.class/extends ?ep]
-                                    [(= ?bp ?ep)]]
-                                  (:block/parent entity)
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]
-                                    ;; same parent
-                                    [?b :block/parent ?bp]
-                                    [?eid :block/parent ?ep]
-                                    [(= ?bp ?ep)]]
-                                  :else
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]])
+                           (d/q (another-id-q entity)
                                 db
                                 (:db/id entity)
                                 new-title
