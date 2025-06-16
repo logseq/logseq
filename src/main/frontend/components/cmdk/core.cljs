@@ -295,7 +295,7 @@
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (get-page-icon entity)
-        title (block-handler/block-unique-title page)
+        title (block-handler/block-unique-title (or entity page))
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
