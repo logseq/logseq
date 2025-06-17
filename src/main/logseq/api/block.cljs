@@ -64,6 +64,11 @@
        property-name'
        (keyword (str "plugin.property" prefix) (encode-user-property-name property-name))))))
 
+(defn plugin-property-key?
+  [ident]
+  (some-> ident (str)
+    (string/starts-with? ":plugin.property.")))
+
 (defn into-readable-db-properties
   [properties]
   (some-> properties
@@ -83,24 +88,37 @@
        block)
      block)))
 
+(defn parse-property-json-value-if-need
+  [ident property-value]
+  (when-let [prop (and (string? property-value)
+                    (plugin-property-key? ident)
+                    (some-> ident (db-utils/entity)))]
+    (if (= (:logseq.property/type prop) :string)
+      (try
+        (js/JSON.parse property-value)
+        (catch js/Error _e
+          property-value))
+      property-value)))
+
 (defn infer-property-value-type-to-save!
   [ident value]
   (let [multi? false
         as-json? (coll? value)
         value-handle
-        (fn [_type]
-          (if multi?
-            (-> (for [v value]
-                  (when-let [page (some-> v (str) (string/trim))]
-                    (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
-                      (if (nil? id)
-                        (-> (page-handler/<create! page {:redirect? false})
+        (fn [type]
+          (let [as-json? (or (= type :string) as-json?)]
+            (if multi?
+              (-> (for [v value]
+                    (when-let [page (some-> v (str) (string/trim))]
+                      (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
+                        (if (nil? id)
+                          (-> (page-handler/<create! page {:redirect? false})
                             (p/then #(:db/id %)))
-                        id))))
+                          id))))
                 (p/all)
                 (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs true])))
-            (let [value (if as-json? (js/JSON.stringify (bean/->js value)) value)]
-              [ident value nil false])))
+              (let [value (if as-json? (js/JSON.stringify (bean/->js value)) value)]
+                [ident value nil false]))))
         ent (db-utils/entity ident)]
     (if (not ent)
       (let [type (cond
