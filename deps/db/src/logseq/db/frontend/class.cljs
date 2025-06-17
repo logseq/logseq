@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
@@ -153,3 +154,8 @@
   "Determines if keyword is a logseq class"
   [kw]
   (= logseq-class (namespace kw)))
+
+(defn user-class-namespace?
+  "Determines if namespace string is a user class"
+  [s]
+  (string/includes? s ".class"))

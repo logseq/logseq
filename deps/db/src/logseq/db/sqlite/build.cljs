@@ -66,7 +66,8 @@
 (defn- get-ident [all-idents kw]
   (if (and (qualified-keyword? kw)
            ;; Loosen checks to any property or class for build-existing-tx?
-           (db-property/property? kw))
+           (or (db-property/property? kw)
+               (db-class/user-class-namespace? (namespace kw))))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
