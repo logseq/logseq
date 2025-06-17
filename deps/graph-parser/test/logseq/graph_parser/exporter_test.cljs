@@ -212,6 +212,7 @@
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
+      (is (= 1 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
       (is (= 10
@@ -415,7 +416,14 @@
           "Asset has correct properties")
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
-          "Imported into Asset page"))
+          "Imported into Asset page")
+      ;; Quotes
+      (is (= {:block/tags [:logseq.class/Quote-block]
+              :logseq.property.node/display-type :quote}
+             (db-test/readable-properties (db-test/find-block-by-content @conn #"Saito"))))
+      (is (= "Saito: Cobb? Impossible. We were young men together. I'm an old man.\n...\nCobb: I've come back for you... to remind you of something. Something you once knew..."
+             (:block/title (db-test/find-block-by-content @conn #"Saito")))
+          "Quote node imports full multi-line quote"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
