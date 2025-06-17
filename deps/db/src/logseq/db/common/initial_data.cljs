@@ -161,10 +161,36 @@
     m))
 
 (defn- entity->map
-  [entity]
-  (-> (into {} entity)
-      (with-raw-title entity)
-      (assoc :db/id (:db/id entity))))
+  [entity & {:keys [level]
+             :or {level 0}}]
+  (let [opts {:level (inc level)}
+        f (if (> level 0)
+            identity
+            (fn [e]
+              (keep (fn [[k v]]
+                      (when-not (contains? #{:block/path-refs} k)
+                        (let [v' (cond
+                                   (= k :block/parent)
+                                   (:db/id v)
+                                   (= k :block/tags)
+                                   (set (map :db/id v))
+                                   (= k :logseq.property/created-by-ref)
+                                   (:db/id v)
+                                   (= k :block/refs)
+                                   (map #(select-keys % [:db/id :block/uuid :block/title]) v)
+                                   (de/entity? v)
+                                   (entity->map v opts)
+                                   (and (coll? v) (every? de/entity? v))
+                                   (map #(entity->map % opts) v)
+                                   :else
+                                   v)]
+                          [k v'])))
+                    e)))
+        m (->> (f entity)
+               (into {}))]
+    (-> m
+        (with-raw-title entity)
+        (assoc :db/id (:db/id entity)))))
 
 (defn hidden-ref?
   "Whether ref-block (for block with the `id`) should be hidden."
@@ -200,20 +226,8 @@
               count))
    0))
 
-(defn- update-entity->map
-  [m]
-  (update-vals m (fn [v]
-                   (cond
-                     (de/entity? v)
-                     (entity->map v)
-                     (and (coll? v) (every? de/entity? v))
-                     (map entity->map v)
-                     :else
-                     v))))
-
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id-or-page-name {:keys [children? children-props include-collapsed-children?
-                              properties]
+  [db id-or-page-name {:keys [children? properties include-collapsed-children?]
                        :or {include-collapsed-children? false}}]
   (let [block (let [eid (cond (uuid? id-or-page-name)
                               [:block/uuid id-or-page-name]
@@ -227,8 +241,7 @@
                   (d/entity db (get-first-page-by-name db (name id-or-page-name)))
                   :else
                   nil))
-        block-refs-count? (some #{:block.temp/refs-count} properties)
-        whiteboard? (common-entity-util/whiteboard? block)]
+        block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
       (let [children (when children?
                        (let [children (let [children (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
@@ -236,34 +249,15 @@
                                                         (:block/_parent block)
                                                         children)]
                                         (->> children'
-                                             (remove (fn [e] (:block/closed-value-property e)))))
-                             children-props (if whiteboard?
-                                              '[*]
-                                              (or children-props
-                                                  [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
-                                                   ;; pre-loading feature-related properties to avoid UI refreshing
-                                                   :logseq.property/status :logseq.property.node/display-type :block/tags :block/refs]))]
+                                             (remove (fn [e] (:block/closed-value-property e)))))]
                          (map
                           (fn [block]
-                            (-> (if (= children-props '[*])
-                                  block
-                                  (-> (select-keys block children-props)
-                                      (with-raw-title block)
-                                      (assoc :block.temp/has-children? (some? (:block/_parent block)))))
-                                update-entity->map
-                                (dissoc :block/path-refs)))
+                            (-> block
+                                (assoc :block.temp/has-children? (some? (:block/_parent block)))
+                                (dissoc :block/tx-id :block/created-at :block/updated-at)
+                                entity->map))
                           children)))
-            block' (if (seq properties)
-                     (-> (select-keys block properties)
-                         (with-raw-title block)
-                         (assoc :db/id (:db/id block)))
-                     (entity->map block))
-            block' (cond->
-                    block'
-                     true
-                     update-entity->map
-                     true
-                     (dissoc :block/path-refs)
+            block' (cond-> (entity->map block)
                      block-refs-count?
                      (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
         (cond->
