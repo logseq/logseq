@@ -930,9 +930,8 @@
           asset-name-to-uuids))
 
 (defn- handle-assets-in-block
-  [block* {:keys [assets ignored-assets]}]
-  (let [block (dissoc block* :block.temp/ast-blocks)
-        asset-links (find-all-asset-links (:block.temp/ast-blocks block*))]
+  [block {:keys [assets ignored-assets]}]
+  (let [asset-links (find-all-asset-links (:block.temp/ast-blocks block))]
     (if (seq asset-links)
       (let [asset-maps
             (keep
@@ -975,6 +974,16 @@
           (assoc :asset-blocks-tx asset-blocks)))
       {:block block})))
 
+(defn- handle-quote-in-block
+  [block]
+  ;; TODO: Use :block.temp/ast-blocks when there is a fn to convert them to text that user sees
+  (if-let [quote' (some->> (second (re-find #"(?s)#\+BEGIN_QUOTE(.*)#\+END_QUOTE" (:block/title block))) string/trim)]
+    (merge block
+           {:block/title quote'
+            :logseq.property.node/display-type :quote
+            :block/tags [:logseq.class/Quote-block]})
+    block))
+
 (defn- build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
   ;; (prn ::block-in block*)
@@ -994,12 +1003,13 @@
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
+                   handle-quote-in-block
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
                    ;; old whiteboards may have :block/left
-                   (dissoc :block/left :block/format)
-                   ;; ((fn [x] (prn :block-out x) x))
+                   (dissoc :block/left :block/format :block.temp/ast-blocks)
+                  ;;  ((fn [x] (prn :block-out x) x))
                    )]
     ;; Order matters as previous txs are referenced in block
     (concat properties-tx deadline-properties-tx asset-blocks-tx [block'])))
