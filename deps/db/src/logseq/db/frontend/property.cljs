@@ -623,6 +623,11 @@
   [s]
   (string/includes? s ".property"))
 
+(defn plugin-property?
+  "Determines if keyword is a plugin property"
+  [kw]
+  (string/starts-with? (namespace kw) "plugin.property."))
+
 (defn internal-property?
   "Determines if ident kw is an internal property. This includes db-attribute properties
    unlike logseq-property? and doesn't include non-property idents unlike internal-ident?"
