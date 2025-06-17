@@ -3,6 +3,7 @@
             [camel-snake-kebab.core :as csk]
             [frontend.util :as util]
             [datascript.impl.entity :as de]
+            [frontend.db.utils :as db-utils]
             [goog.object :as gobj]
             [cljs-bean.core :as bean]))
 
@@ -38,6 +39,7 @@
                 camel-case?
                 (csk/->camelCase)))
 
+            (de/entity? a) (:db/id a)
             (uuid? a) (str a)
 
             ;; @FIXME compatible layer for classic APIs

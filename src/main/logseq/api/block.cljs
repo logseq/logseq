@@ -35,19 +35,34 @@
     (keyword :logseq.property property-name)
     property-name))
 
+(defn sanitize-user-property-name
+  [k]
+  (if (string? k)
+    (-> k (string/trim)
+      (string/replace #"^[:_]+" "")
+      (string/lower-case))
+    k))
+
+(defn resolve-property-prefix-for-db
+  [^js plugin]
+  (when (some-> js/window.LSPlugin (.-PluginLocal))
+    (or (some-> plugin (.-id) (sanitize-user-property-name) (str "."))
+      "._api")))
+
 ;; FIXME: This ns should not be creating idents. This allows for ident conflicts
 ;; and assumes that names directly map to idents which is incorrect and breaks for multiple
 ;; cases e.g. a property that has been renamed or sanitized. Instead it should
 ;; find a property's ident by looking up the property in the db by its title
 (defn get-db-ident-for-user-property-name
   "Finds a property :db/ident for a given property name"
-  [property-name]
-  (let [property-name' (if (string? property-name)
-                         (keyword property-name) property-name)
-        property-name' (convert?to-built-in-property-name property-name')]
-    (if (qualified-keyword? property-name')
-      property-name'
-      (keyword "plugin.property" (encode-user-property-name property-name)))))
+  ([property-name] (get-db-ident-for-user-property-name property-name nil))
+  ([property-name prefix]
+   (let [property-name' (if (string? property-name)
+                          (keyword property-name) property-name)
+         property-name' (convert?to-built-in-property-name property-name')]
+     (if (qualified-keyword? property-name')
+       property-name'
+       (keyword (str "plugin.property" prefix) (encode-user-property-name property-name))))))
 
 (defn into-readable-db-properties
   [properties]
@@ -70,9 +85,10 @@
 
 (defn infer-property-value-type-to-save!
   [ident value]
-  (let [multi? (coll? value)
+  (let [multi? false
+        as-json? (coll? value)
         value-handle
-        (fn []
+        (fn [_type]
           (if multi?
             (-> (for [v value]
                   (when-let [page (some-> v (str) (string/trim))]
@@ -83,51 +99,58 @@
                         id))))
                 (p/all)
                 (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs true])))
-            [ident value nil false]))]
-    (if (not (db-utils/entity ident))
+            (let [value (if as-json? (js/JSON.stringify (bean/->js value)) value)]
+              [ident value nil false])))
+        ent (db-utils/entity ident)]
+    (if (not ent)
       (let [type (cond
                    (boolean? value) :checkbox
                    (number? value) :number
-                   (coll? value) :node
+                   (coll? value) :string
                    :else :default)
-            schema {:type type :cardinality (if multi? :many :one)}]
+            schema {:logseq.property/type type
+                    :db/cardinality (if multi? :many :one)}]
         (p/chain
-         (db-property-handler/upsert-property! ident schema {})
-         value-handle))
-      (value-handle))))
+          (db-property-handler/upsert-property! ident schema {})
+          (fn [] (value-handle type))))
+      (value-handle (:logseq.property/type ent)))))
 
 (defn save-db-based-block-properties!
-  [block properties]
-  (when-let [block-id (and (seq properties) (:db/id block))]
-    (let [properties (update-keys properties
-                                  (fn [k] (get-db-ident-for-user-property-name k)))
-          *properties-page-refs (volatile! {})]
-      (-> (for [ident (keys properties)]
-            (p/let [ret (infer-property-value-type-to-save! ident (get properties ident))] ret))
-          (p/all)
-          (p/chain
+  ([block properties] (save-db-based-block-properties! block properties nil))
+  ([block properties ^js plugin]
+   (when-let [block-id (and (seq properties) (:db/id block))]
+     (let [properties (update-keys properties
+                        (fn [k]
+                          (let [prefix (resolve-property-prefix-for-db plugin)]
+                            (get-db-ident-for-user-property-name k prefix))))
+           *properties-page-refs (volatile! {})]
+       (-> (for [ident (keys properties)]
+             (p/let [ret (infer-property-value-type-to-save! ident (get properties ident))]
+               ret))
+         (p/all)
+         (p/chain
            (fn [props]
              (->> props
-                  (reduce (fn [a [k v vs multi?]]
-                            (if multi?
-                              (do (vswap! *properties-page-refs assoc k vs) a)
-                              (assoc a k v))) {})
-                  (db-property-handler/set-block-properties! block-id)))
-          ;; handle page refs
+               (reduce (fn [a [k v vs multi?]]
+                         (if multi?
+                           (do (vswap! *properties-page-refs assoc k vs) a)
+                           (assoc a k v))) {})
+               (db-property-handler/set-block-properties! block-id)))
+           ;; handle page refs
            (fn []
              (when (seq @*properties-page-refs)
                (doseq [[ident refs] @*properties-page-refs]
                  (-> (property-handler/remove-block-property! (state/get-current-repo) block-id ident)
-                     (p/then
-                      (fn []
-                        (if (seq refs)
-                          (ui-outliner-tx/transact!
+                   (p/then
+                     (fn []
+                       (if (seq refs)
+                         (ui-outliner-tx/transact!
                            {:outliner-op :set-block-properties}
                            (doseq [eid refs]
                              (when (number? eid)
                                (property-handler/set-block-property!
-                                (state/get-current-repo) block-id ident eid))))
-                          (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder)))))))))))))
+                                 (state/get-current-repo) block-id ident eid))))
+                         (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder))))))))))))))
 
 (defn <sync-children-blocks!
   [block]
