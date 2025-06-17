@@ -314,8 +314,8 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
-     :header (when (:block/parent block) (block/breadcrumb {:disable-preview? true
-                                                            :search? true} repo id {}))
+     :header (block/breadcrumb {:disable-preview? true
+                                :search? true} repo id {})
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
