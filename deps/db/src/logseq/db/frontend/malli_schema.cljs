@@ -40,6 +40,11 @@
                             {:error/message "should be a valid user property namespace"}
                             user-property?]])
 
+(def plugin-property-ident
+  [:and :qualified-keyword [:fn
+                            {:error/message "should be a valid plugin property namespace"}
+                            db-property/plugin-property?]])
+
 (def logseq-ident-namespaces
   "Set of all namespaces Logseq uses for :db/ident except for
   db-attribute-ident. It's important to grow this list purposefully and have it
@@ -312,9 +317,19 @@
   (vec
    (concat
     [:map
-     ;; class-ident allows for a class to be used as a property
-     [:db/ident [:or user-property-ident class-ident]]
+     [:db/ident user-property-ident]
      [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+    property-common-schema-attrs
+    property-attrs
+    page-attrs
+    page-or-block-attrs)))
+
+(def plugin-property
+  (vec
+   (concat
+    [:map
+     [:db/ident plugin-property-ident]
+     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -322,9 +337,20 @@
 
 (def property-page
   [:multi {:dispatch (fn [m]
-                       (or (some->> (:db/ident m) db-property/logseq-property?)
-                           (contains? db-property/db-attribute-properties (:db/ident m))))}
-   [true internal-property]
+                       (let [ident (:db/ident m)]
+
+                         (cond
+                           (or (some->> ident db-property/logseq-property?)
+                               (contains? db-property/db-attribute-properties (:db/ident m)))
+                           :internal
+
+                           (some->> ident db-property/plugin-property?)
+                           :plugin
+
+                           :else
+                           :user)))}
+   [:internal internal-property]
+   [:plugin plugin-property]
    [:malli.core/default user-property]])
 
 (def hidden-page
