@@ -192,11 +192,62 @@
          move-top-parents-to-library
          update-children-parent-and-order)))))
 
+(defn separate-classes-and-properties
+  [conn _sqlite-db]
+  ;; find all properties that're classes, create new properties to separate them
+  ;; from classes.
+  (let [db @conn
+        class-ids (d/q
+                   '[:find [?b ...]
+                     :where
+                     [?b :block/tags ?t1]
+                     [?b :block/tags ?t2]
+                     [?t1 :db/ident :logseq.class/Property]
+                     [?t2 :db/ident :logseq.class/Tag]]
+                   db)]
+    (mapcat
+     (fn [id]
+       (let [class (d/entity db id)
+             ident (:db/ident class)
+             new-property (sqlite-util/build-new-property
+                           (:block/title class)
+                           (select-keys class [:logseq.property/type :db/cardinality])
+                           {:title (:block/title class)
+                            :ref-type? true
+                            :properties (merge
+                                         (select-keys class [:logseq.property/hide? :logseq.property/public?
+                                                             :logseq.property/view-context :logseq.property/ui-position
+                                                             :logseq.property/default-value :logseq.property/hide-empty-value :logseq.property/enable-history?])
+                                         {:logseq.property/classes id})})
+             retract-property-attrs [[:db/retract id :block/tags :logseq.class/Property]
+                                     [:db/retract id :logseq.property/type]
+                                     [:db/retract id :db/cardinality]
+                                     [:db/retract id :db/valueType]
+                                     [:db/retract id :db/index]
+                                     [:db/retract id :logseq.property/classes]
+                                     [:db/retract id :logseq.property/hide?]
+                                     [:db/retract id :logseq.property/public?]
+                                     [:db/retract id :logseq.property/view-context]
+                                     [:db/retract id :logseq.property/ui-position]
+                                     [:db/retract id :logseq.property/default-value]
+                                     [:db/retract id :logseq.property/hide-empty-value]
+                                     [:db/retract id :logseq.property/enable-history?]]
+             datoms (d/datoms db :avet ident)]
+         (concat [new-property]
+                 retract-property-attrs
+                 (mapcat
+                  (fn [d]
+                    [[:db/retract (:e d) ident (:v d)]
+                     [:db/add (:e d) (:db/ident new-property) (:v d)]])
+                  datoms))))
+     class-ids)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
-  [["65.1" {:fix fix-rename-parent-to-extends}]])
+  [["65.0" {:fix separate-classes-and-properties}]
+   ["65.1" {:fix fix-rename-parent-to-extends}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
