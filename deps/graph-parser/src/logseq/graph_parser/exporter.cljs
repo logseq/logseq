@@ -8,6 +8,7 @@
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
@@ -33,8 +34,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [clojure.walk :as walk]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -910,43 +910,67 @@
      ast-blocks)
     @results))
 
+(defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
+  (reduce (fn [acc [asset-name asset-uuid]]
+            (let [new-title (string/replace acc
+                                            (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
+                                                             asset-name
+                                                             "\\)(\\{[^}]*\\})?"))
+                                            (page-ref/->page-ref asset-uuid))]
+              (when (string/includes? new-title asset-name)
+                  (swap! ignored-assets conj
+                         {:reason "Some asset links were not updated to block references"
+                          :path asset-name
+                          :location {:block new-title}}))
+              new-title))
+          block-title
+          asset-name-to-uuids))
+
 (defn- handle-assets-in-block
   [block* {:keys [assets ignored-assets]}]
   (let [block (dissoc block* :block.temp/ast-blocks)
-        asset-links (find-all-asset-links (:block.temp/ast-blocks block*))
-        asset-link (first asset-links)
-        asset-name (some-> asset-link second :url second asset-path->name)]
-    (when (> (count asset-links) 1)
-      (swap! ignored-assets into
-             (map #(hash-map
-                    :reason "Multiple assets on one block. Only one asset per block is allowed"
-                    :path (-> % second :url second)
-                    :location {:block (:block/title block)})
-                  (rest asset-links))))
-    (if asset-name
-      (if-let [asset-data (get @assets asset-name)]
-        (if (:block/uuid asset-data)
-          ;; Link to existing assets instead of creating duplicates to preserve identity
-          (assoc block :block/title (page-ref/->page-ref (:block/uuid asset-data)))
-          (do
-            ;; (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
-            ;; (cljs.pprint/pprint asset-link)
-            (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid block))
-            (merge block
-                   {:block/tags [:logseq.class/Asset]
-                    :logseq.property.asset/type (:type asset-data)
-                    :logseq.property.asset/checksum (:checksum asset-data)
-                    :logseq.property.asset/size (:size asset-data)
-                    :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
-                   (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                     {:logseq.property.asset/resize-metadata metadata}))))
-        (do
-          (swap! ignored-assets conj
-                 {:reason "Asset file was not found when reading assets"
-                  :path (-> asset-link second :url second)
-                  :location {:block (:block/title block)}})
-          block))
-      block)))
+        asset-links (find-all-asset-links (:block.temp/ast-blocks block*))]
+    (if (seq asset-links)
+      (let [asset-maps
+            (keep
+             (fn [asset-link]
+               (let [asset-name (-> asset-link second :url second asset-path->name)]
+                 (if-let [asset-data (and asset-name (get @assets asset-name))]
+                   (if (:block/uuid asset-data)
+                     {:asset-name-uuid [asset-name (:block/uuid asset-data)]}
+                     (let [new-block (sqlite-util/block-with-timestamps
+                                      {:block/uuid (d/squuid)
+                                       :block/order (db-order/gen-key)
+                                       :block/page :logseq.class/Asset
+                                       :block/parent :logseq.class/Asset})
+                           new-asset (merge new-block
+                                            {:block/tags [:logseq.class/Asset]
+                                             :logseq.property.asset/type (:type asset-data)
+                                             :logseq.property.asset/checksum (:checksum asset-data)
+                                             :logseq.property.asset/size (:size asset-data)
+                                             :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
+                                            (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
+                                              {:logseq.property.asset/resize-metadata metadata}))]
+                      ;;  (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
+                      ;;  (cljs.pprint/pprint asset-link)
+                       (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-block))
+                       {:asset-name-uuid [asset-name (:block/uuid new-asset)]
+                        :asset new-asset}))
+                   (do
+                     (swap! ignored-assets conj
+                            {:reason "No asset data found for this asset path"
+                             :path (-> asset-link second :url second)
+                             :location {:block (:block/title block)}})
+                     nil))))
+             asset-links)
+            asset-blocks (keep :asset asset-maps)
+            asset-names-to-uuids
+            (into {} (map :asset-name-uuid asset-maps))]
+        (cond-> {:block
+                 (update block :block/title update-asset-links-in-block-title asset-names-to-uuids ignored-assets)}
+          (seq asset-blocks)
+          (assoc :asset-blocks-tx asset-blocks)))
+      {:block block})))
 
 (defn- build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
@@ -955,9 +979,11 @@
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
         {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block page-names-to-uuids options)
+        {block-after-assets :block :keys [asset-blocks-tx]}
+        (handle-assets-in-block block-after-built-in-props (select-keys import-state [:assets :ignored-assets]))
         ;; :block/page should be [:block/page NAME]
         journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
-        prepared-block (cond-> block-after-built-in-props
+        prepared-block (cond-> block-after-assets
                          journal-page-created-at
                          (assoc :block/created-at journal-page-created-at))
         block' (-> prepared-block
@@ -965,7 +991,6 @@
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                   (handle-assets-in-block (select-keys import-state [:assets :ignored-assets]))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -973,8 +998,8 @@
                    (dissoc :block/left :block/format)
                    ;; ((fn [x] (prn :block-out x) x))
                    )]
-    ;; Order matters as properties are referenced in block
-    (concat properties-tx deadline-properties-tx [block'])))
+    ;; Order matters as previous txs are referenced in block
+    (concat properties-tx deadline-properties-tx asset-blocks-tx [block'])))
 
 (defn- update-page-alias
   [m page-names-to-uuids]
