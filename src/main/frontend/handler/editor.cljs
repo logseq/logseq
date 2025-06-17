@@ -2090,8 +2090,7 @@
                      (db-async/<get-template-by-name (name db-id)))
              block (when (:block/uuid block)
                      (db-async/<get-block repo (:block/uuid block)
-                                          {:children? true
-                                           :nested-children? true}))]
+                                          {:children? true}))]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
@@ -3485,7 +3484,7 @@
             repo (state/get-current-repo)
             result (db-async/<get-block repo (or block-id page-id)
                                         {:children-only? true
-                                         :nested-children? true})
+                                         :include-collapsed-children? true})
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
@@ -3561,7 +3560,8 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children-only? true})
+     (db-async/<get-block repo block-id {:children-only? true
+                                         :include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))

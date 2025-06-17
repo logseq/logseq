@@ -1,7 +1,6 @@
 (ns logseq.db.common.initial-data
   "Provides db helper fns for graph initialization and lazy loading entities"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -132,27 +131,28 @@
 
 (defn get-block-children-ids
   "Returns children UUIDs"
-  [db block-uuid]
+  [db block-uuid & {:keys [include-collapsed-children?]
+                    :or {include-collapsed-children? true}}]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
-    (let [seen   (volatile! [])]
-      (loop [steps          100      ;check result every 100 steps
-             eids-to-expand [eid]]
+    (let [seen (volatile! [])]
+      (loop [eids-to-expand [eid]]
         (when (seq eids-to-expand)
-          (let [eids-to-expand*
-                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
-                uuids-to-add (remove nil? (map #(:block/uuid (d/entity db %)) eids-to-expand*))]
-            (when (and (zero? steps)
-                       (seq (set/intersection (set @seen) (set uuids-to-add))))
-              (throw (ex-info "bad outliner data, need to re-index to fix"
-                              {:seen @seen :eids-to-expand eids-to-expand})))
+          (let [children
+                (mapcat (fn [eid]
+                          (let [e (d/entity db eid)]
+                            (when (or include-collapsed-children?
+                                      (not (:block/collapsed? e))
+                                      (common-entity-util/page? e))
+                              (:block/_parent e)))) eids-to-expand)
+                uuids-to-add (keep :block/uuid children)]
             (vswap! seen (partial apply conj) uuids-to-add)
-            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
+            (recur (keep :db/id children)))))
       @seen)))
 
 (defn get-block-children
   "Including nested children."
-  [db block-uuid]
-  (let [ids (get-block-children-ids db block-uuid)]
+  [db block-uuid & {:as opts}]
+  (let [ids (get-block-children-ids db block-uuid opts)]
     (when (seq ids)
       (map (fn [id] (d/entity db [:block/uuid id])) ids))))
 
@@ -214,7 +214,9 @@
                      v))))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id-or-page-name {:keys [children? children-only? nested-children? properties children-props]}]
+  [db id-or-page-name {:keys [children? children-only? children-props include-collapsed-children?
+                              properties]
+                       :or {include-collapsed-children? false}}]
   (let [block (let [eid (cond (uuid? id-or-page-name)
                               [:block/uuid id-or-page-name]
                               (integer? id-or-page-name)
@@ -231,27 +233,19 @@
         whiteboard? (common-entity-util/whiteboard? block)]
     (when block
       (let [children (when (or children? children-only?)
-                       (let [page? (common-entity-util/page? block)
-                             children (->>
-                                       (cond
-                                         (and nested-children? (not page?))
-                                         (get-block-children db (:block/uuid block))
-                                         nested-children?
-                                         (:block/_page block)
-                                         :else
-                                         (let [short-page? (when page?
-                                                             (<= (count (:block/_page block)) 100))]
-                                           (if short-page?
-                                             (:block/_page block)
-                                             (:block/_parent block))))
-                                       (remove (fn [e] (or (:logseq.property/created-from-property e)
-                                                           (:block/closed-value-property e)))))
+                       (let [children (let [long-page? (when (common-entity-util/page? block)
+                                                         (>= (count (:block/_page block)) 100))
+                                            children (if long-page?
+                                                       (:block/_parent block)
+                                                       (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?}))]
+                                        (->> children
+                                             (remove (fn [e] (:block/closed-value-property e)))))
                              children-props (if whiteboard?
                                               '[*]
                                               (or children-props
                                                   [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
-                                                   ;; pre-loading feature-related properties to avoid UI refreshing
-                                                   :logseq.property/status :logseq.property.node/display-type :block/refs]))]
+                                                     ;; pre-loading feature-related properties to avoid UI refreshing
+                                                   :logseq.property/status :logseq.property.node/display-type :block/tags :block/refs]))]
                          (map
                           (fn [block]
                             (-> (if (= children-props '[*])
@@ -270,7 +264,7 @@
                              (assoc :db/id (:db/id block)))
                          (entity->map block))
                 block' (cond->
-                        (mark-block-fully-loaded block')
+                        (if children? (mark-block-fully-loaded block') block')
                          true
                          update-entity->map
                          true

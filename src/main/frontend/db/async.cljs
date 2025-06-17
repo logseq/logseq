@@ -80,11 +80,11 @@
                              (assoc opts :property-ident property-id))))
 
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? nested-children? skip-transact? skip-refresh? children-only? properties]
+  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? children-only? properties]
                             :or {children? true}
                             :as opts}]
 
-  ;; (prn :debug :<get-block id-uuid-or-name)
+  ;; (prn :debug :<get-block id-uuid-or-name :children? children?)
   ;; (js/console.trace)
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
@@ -99,10 +99,7 @@
                (and (util/uuid-string? name') name')
                id-uuid-or-name)]
     (cond
-      (and (:block.temp/fully-loaded? e) ; children may not be fully loaded
-           (not children-only?)
-           (not children?)
-           (not nested-children?)
+      (and (:block.temp/fully-loaded? e)
            (not (some #{:block.temp/refs-count} properties)))
       (p/promise e)
 
