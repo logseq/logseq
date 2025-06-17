@@ -2656,8 +2656,7 @@
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
               (let [f #(p/do!
-                        (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-                          (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+                        (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false})
                         (let [cursor-range (some-> (gdom/getElement block-id)
                                                    (dom/by-class "block-content-inner")
                                                    first

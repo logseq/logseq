@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require [clojure.set :as set]
+  (:require ["path" :as node-path]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -58,6 +59,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -1448,15 +1450,14 @@
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
-       (p/let [file-name (util/node-path.basename (.-name file))
-               file-name-without-ext (.-name (util/node-path.parse file-name))
+       (p/let [file-name (node-path/basename (.-name file))
+               file-name-without-ext (db-asset/asset-name->title file-name)
                checksum (assets-handler/get-file-checksum file)
                existing-asset (db-async/<get-asset-with-checksum repo checksum)]
          (if existing-asset
            existing-asset
            (p/let [block-id (ldb/new-block-id)
-                   ext (when file-name
-                         (string/lower-case (.substr (util/node-path.extname file-name) 1)))
+                   ext (when file-name (db-asset/asset-path->type file-name))
                    _ (when (string/blank? ext)
                        (throw (ex-info "File doesn't have a valid ext."
                                        {:file-name file-name})))
@@ -2116,8 +2117,7 @@
                      (db-async/<get-template-by-name (name db-id)))
              block (when (:block/uuid block)
                      (db-async/<get-block repo (:block/uuid block)
-                                          {:children? true
-                                           :nested-children? true}))]
+                                          {:children? true}))]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
@@ -3511,7 +3511,7 @@
             repo (state/get-current-repo)
             result (db-async/<get-block repo (or block-id page-id)
                                         {:children-only? true
-                                         :nested-children? true})
+                                         :include-collapsed-children? true})
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
@@ -3587,7 +3587,8 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children-only? true})
+     (db-async/<get-block repo block-id {:children-only? true
+                                         :include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))

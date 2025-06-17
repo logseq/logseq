@@ -422,8 +422,7 @@
     ;; load all nested children here for copy/export
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
-                                       {:nested-children? true
-                                        :skip-refresh? false})) ids))))
+                                       {:skip-refresh? false})) ids))))
 
 (defn run!
   []

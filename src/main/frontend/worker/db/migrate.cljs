@@ -232,7 +232,9 @@
                                      [:db/retract id :logseq.property/default-value]
                                      [:db/retract id :logseq.property/hide-empty-value]
                                      [:db/retract id :logseq.property/enable-history?]]
-             datoms (d/datoms db :avet ident)]
+             datoms (if (:db/index class)
+                      (d/datoms db :avet ident)
+                      (filter (fn [d] (= ident (:a d))) (d/datoms db :eavt)))]
          (concat [new-property]
                  retract-property-attrs
                  (mapcat

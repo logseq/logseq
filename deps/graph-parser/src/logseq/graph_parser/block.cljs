@@ -132,7 +132,7 @@
     (when (some-> block-id parse-uuid)
       block-id)))
 
-(defn- paragraph-block?
+(defn paragraph-block?
   [block]
   (and
    (vector? block)
@@ -711,36 +711,36 @@
 
 (defn extract-blocks
   "Extract headings from mldoc ast. Args:
-  *`blocks`: mldoc ast.
-  *  `content`: markdown or org-mode text.
-  *  `format`: content's format, it could be either :markdown or :org-mode.
-  *  `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+  * `ast`: mldoc ast.
+  * `content`: markdown or org-mode text.
+  * `format`: content's format, it could be either :markdown or :org-mode.
+  * `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
      * :db-graph-mode? : Set when a db graph in the frontend
      * :export-to-db-graph? : Set when exporting to a db graph"
-  [blocks content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
-  {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
+  [ast content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
+  {:pre [(seq ast) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
-        all-blocks (vec (reverse blocks))
+        all-blocks (vec (reverse ast))
         [blocks body pre-block-properties]
         (loop [headings []
-               blocks (reverse blocks)
+               ast-blocks (reverse ast)
                block-idx 0
                timestamps {}
                properties {}
                body []]
-          (if (seq blocks)
-            (let [[block pos-meta] (first blocks)]
+          (if (seq ast-blocks)
+            (let [[ast-block pos-meta] (first ast-blocks)]
               (cond
-                (paragraph-timestamp-block? block)
-                (let [timestamps (extract-timestamps block)
+                (paragraph-timestamp-block? ast-block)
+                (let [timestamps (extract-timestamps ast-block)
                       timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) (inc block-idx) timestamps' properties body))
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps' properties body))
 
-                (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) (inc block-idx) timestamps properties body))
+                (gp-property/properties-ast? ast-block)
+                (let [properties (extract-properties (second ast-block) (assoc user-config :format format))]
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps properties body))
 
-                (heading-block? block)
+                (heading-block? ast-block)
                 ;; for db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
                 (let [cut-multiline? (and export-to-db-graph?
                                           (when-let [prev-block (first (get all-blocks (dec block-idx)))]
@@ -762,14 +762,19 @@
                                       (and export-to-db-graph?
                                            (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
                                                 (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
-                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options')
-                      block'' (if (or db-graph-mode? export-to-db-graph?)
+                      block' (construct-block ast-block properties timestamps body encoded-content format pos-meta' options')
+                      block'' (cond
+                                db-graph-mode?
                                 block'
-                                (assoc block' :macros (extract-macros-from-ast (cons block body))))]
-                  (recur (conj headings block'') (rest blocks) (inc block-idx) {} {} []))
+                                export-to-db-graph?
+                                (assoc block' :block.temp/ast-blocks (cons ast-block body))
+                                :else
+                                (assoc block' :macros (extract-macros-from-ast (cons ast-block body))))]
+
+                  (recur (conj headings block'') (rest ast-blocks) (inc block-idx) {} {} []))
 
                 :else
-                (recur headings (rest blocks) (inc block-idx) timestamps properties (conj body block))))
+                (recur headings (rest ast-blocks) (inc block-idx) timestamps properties (conj body ast-block))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body
