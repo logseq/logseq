@@ -6,8 +6,8 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.db-ident :as db-ident]))
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Main property vars
 ;; ==================
@@ -621,6 +621,11 @@
   "Determines if namespace string is a user property"
   [s]
   (string/includes? s ".property"))
+
+(defn plugin-property?
+  "Determines if keyword is a plugin property"
+  [kw]
+  (string/starts-with? (namespace kw) "plugin.property."))
 
 (defn internal-property?
   "Determines if ident kw is an internal property. This includes db-attribute properties
