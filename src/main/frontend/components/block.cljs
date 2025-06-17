@@ -3285,7 +3285,7 @@
 (rum/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block]
                          :as opts}]
-  (let [[block set-block!] (hooks/use-state (db/entity [:block/uuid block-id]))]
+  (let [[block set-block!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (p/let [block (db-async/<get-block (state/get-current-repo)
@@ -3293,7 +3293,7 @@
                                           {:children? false
                                            :skip-refresh? true})
                _ (when-let [id (:db/id block)]
-                   (db-async/<get-block-parents (state/get-current-repo) id 1000))]
+                   (db-async/<get-block-parents (state/get-current-repo) id 9))]
          (set-block! block)))
      [])
     (when block
