@@ -29,20 +29,21 @@
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
   (when graph
-    [:span.flex.items-center
-     (if (or (config/local-file-based-graph? url)
-             (config/db-based-graph? url))
-       (let [local-dir (config/get-local-dir url)
-             graph-name (text-util/get-graph-name-from-path url)]
-         [:a.flex.items-center {:title    local-dir
-                                :on-click #(on-click graph)}
-          [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
-          (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
+    (let [db-based? (config/db-based-graph? url)]
+      [:span.flex.items-center
+       (if (or (config/local-file-based-graph? url) db-based?)
+         (let [local-dir (config/get-local-dir url)
+               graph-name (text-util/get-graph-name-from-path url)]
+           [:a.flex.items-center {:title    local-dir
+                                  :on-click #(on-click graph)}
+            [:span.pr-1 graph-name
+             (when (and GraphName (not (and remote? db-based?))) [:strong.pl-1 "(" GraphName ")"])]
+            (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
 
-       [:a.flex.items-center {:title    GraphUUID
-                              :on-click #(on-click graph)}
-        (db/get-repo-path (or url GraphName))
-        (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])]))
+         [:a.flex.items-center {:title    GraphUUID
+                                :on-click #(on-click graph)}
+          (db/get-repo-path (or url GraphName))
+          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (defn sort-repos-with-metadata-local
   [repos]
@@ -83,7 +84,8 @@
                                      (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
-                                     (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
+                                     (when-not (util/capacitor-new?)
+                                       (state/pub-event! [:graph/pull-down-remote-graph repo]))))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
 
@@ -109,8 +111,7 @@
            [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
             {:title title
              :on-click (fn []
-                         (let [has-prompt? true
-                               prompt-str (cond only-cloud?
+                         (let [prompt-str (cond only-cloud?
                                                 (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
                                                 db-based?
                                                 (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
@@ -142,9 +143,7 @@
                                           [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
                                      (p/then #(action-confirm-fn!))))]
 
-                           (if has-prompt?
-                             (confirm-fn!)
-                             (unlink-or-remote-fn!))))}
+                           (confirm-fn!)))}
             (if only-cloud? "Remove (server)" "Unlink (local)")]))]]]))
 
 (rum/defc repos-cp < rum/reactive
@@ -161,7 +160,8 @@
         repos (remove #(= (:url %) config/demo-repo) repos)
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
-     [:h1.title (t :graph/all-graphs)]
+     (when-not (util/capacitor-new?)
+       [:h1.title (t :graph/all-graphs)])
 
      [:div.pl-1.content.mt-3
 
@@ -170,21 +170,23 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))
 
-       [:div.flex.flex-row.my-4
-        (if util/web-platform?
-          [:div.mr-8
-           (ui/button
-            "Create a new graph"
-            :on-click #(state/pub-event! [:graph/new-db-graph]))]
-          (when (or (nfs-handler/supported?)
-                    (mobile-util/native-platform?))
+       (when-not (util/capacitor-new?)
+         [:div.flex.flex-row.my-4
+          (if util/web-platform?
             [:div.mr-8
              (ui/button
-              (t :open-a-directory)
-              :on-click #(state/pub-event! [:graph/setup-a-repo]))]))]]
+              "Create a new graph"
+              :on-click #(state/pub-event! [:graph/new-db-graph]))]
+            (when (or (nfs-handler/supported?)
+                      (mobile-util/native-platform?))
+              [:div.mr-8
+               (ui/button
+                (t :open-a-directory)
+                :on-click #(state/pub-event! [:graph/setup-a-repo]))]))])]
 
       (when (and (or (file-sync/enable-sync?)
-                     (state/enable-rtc?))
+                     (state/enable-rtc?)
+                     (user-handler/team-member?))
                  login?)
         [:div
          [:hr]
@@ -197,7 +199,8 @@
             :background "gray"
             :disabled remotes-loading?
             :on-click (fn []
-                        (file-sync/load-session-graphs)
+                        (when-not (util/capacitor-new?)
+                          (file-sync/load-session-graphs))
                         (p/do!
                          (rtc-handler/<get-remote-graphs)
                          (repo-handler/refresh-repos!))))]]

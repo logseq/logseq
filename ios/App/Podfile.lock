@@ -1,9 +1,4 @@
 PODS:
-  - AgeEncryption (1.0.6)
-  - Alamofire (5.6.2)
-  - AWSCore (2.27.10)
-  - AWSS3 (2.27.10):
-    - AWSCore (= 2.27.10)
   - Capacitor (7.2.0):
     - CapacitorCordova
   - CapacitorActionSheet (7.0.1):
@@ -21,6 +16,8 @@ PODS:
     - Capacitor
   - CapacitorKeyboard (7.0.1):
     - Capacitor
+  - CapacitorNetwork (7.0.1):
+    - Capacitor
   - CapacitorShare (7.0.1):
     - Capacitor
   - CapacitorSplashScreen (7.0.1):
@@ -33,10 +30,7 @@ PODS:
     - Capacitor
   - CapgoCapacitorNavigationBar (7.1.2):
     - Capacitor
-  - LogseqCapacitorFileSync (5.0.2):
-    - AgeEncryption (~> 1.0.6)
-    - Alamofire
-    - AWSS3
+  - JcesarmobileSslSkip (0.4.0):
     - Capacitor
   - SendIntent (0.0.1):
     - Capacitor
@@ -51,21 +45,15 @@ DEPENDENCIES:
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorKeyboard (from `../../node_modules/@capacitor/keyboard`)"
+  - "CapacitorNetwork (from `../../node_modules/@capacitor/network`)"
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
   - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
   - CapacitorVoiceRecorder (from `../../node_modules/capacitor-voice-recorder`)
   - "CapawesomeCapacitorBackgroundTask (from `../../node_modules/@capawesome/capacitor-background-task`)"
   - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
-  - "LogseqCapacitorFileSync (from `../../node_modules/@logseq/capacitor-file-sync`)"
+  - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
-
-SPEC REPOS:
-  trunk:
-    - AgeEncryption
-    - Alamofire
-    - AWSCore
-    - AWSS3
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -86,6 +74,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/haptics"
   CapacitorKeyboard:
     :path: "../../node_modules/@capacitor/keyboard"
+  CapacitorNetwork:
+    :path: "../../node_modules/@capacitor/network"
   CapacitorShare:
     :path: "../../node_modules/@capacitor/share"
   CapacitorSplashScreen:
@@ -98,16 +88,12 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capawesome/capacitor-background-task"
   CapgoCapacitorNavigationBar:
     :path: "../../node_modules/@capgo/capacitor-navigation-bar"
-  LogseqCapacitorFileSync:
-    :path: "../../node_modules/@logseq/capacitor-file-sync"
+  JcesarmobileSslSkip:
+    :path: "../../node_modules/@jcesarmobile/ssl-skip"
   SendIntent:
     :path: "../../node_modules/send-intent"
 
 SPEC CHECKSUMS:
-  AgeEncryption: 23c203675d5e4883a18b133ab1d5e61ff29e0c18
-  Alamofire: d368e1ff8a298e6dde360e35a3e68e6c610e7204
-  AWSCore: dbad318b7ff0fd86fb8387d3ad1f30049c05bc58
-  AWSS3: 0cf2cedb263368f624ca721e5c56a8cb59fc44bc
   Capacitor: 106e7a4205f4618d582b886a975657c61179138d
   CapacitorActionSheet: 24609588961cc27c87e8b033be92b5eee65b5d4c
   CapacitorApp: d63334c052278caf5d81585d80b21905c6f93f39
@@ -117,15 +103,16 @@ SPEC CHECKSUMS:
   CapacitorFilesystem: 307f97c27a265edf8396a1c9c235592fd8572fe3
   CapacitorHaptics: 70e47470fa1a6bd6338cd102552e3846b7f9a1b3
   CapacitorKeyboard: 969647d0ca2e5c737d7300088e2517aa832434e2
+  CapacitorNetwork: 07ec4c69c1bb696f41c23e00d31bda1bbb221bba
   CapacitorShare: 58d6c2da63b093e8693287b2d36db92435538435
   CapacitorSplashScreen: 19cd3573e57507e02d6f34597a8c421e00931487
   CapacitorStatusBar: 275cbf2f4dfc00388f519ef80c7ec22edda342c9
   CapacitorVoiceRecorder: 872ea857b497ce2c71afe3e4eb5de0a74290c0db
   CapawesomeCapacitorBackgroundTask: 834d797abc9933fac4354490d1a2f3c0e389b98d
   CapgoCapacitorNavigationBar: 3a0e93a40b7da3d3cb74c0410bb761a1525406be
-  LogseqCapacitorFileSync: 541dcd5492b8aeb2257cce3d18bb9ed5800cfcad
+  JcesarmobileSslSkip: b0f921e9d397a57f7983731209ca1ee244119c1f
   SendIntent: 0a17b6984c4f27e9dfa56513267ba2c044a5a6c8
 
-PODFILE CHECKSUM: d9e4df9f9578f817a4148a5e29ee928f271e4cc8
+PODFILE CHECKSUM: 6ad6123989fe311fd59e42e4371f1ce440fc2516
 
-COCOAPODS: 1.11.2
+COCOAPODS: 1.16.2

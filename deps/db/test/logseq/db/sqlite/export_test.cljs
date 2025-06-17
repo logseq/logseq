@@ -882,8 +882,8 @@
 (deftest build-import-can-import-existing-page-with-different-uuid
   (testing "By default any properties passed to an existing page are upserted"
     (test-import-existing-page {}
-                              {:logseq.property/description "second description"
-                               :logseq.property/exclude-from-graph-view true}))
+                               {:logseq.property/description "second description"
+                                :logseq.property/exclude-from-graph-view true}))
   (testing "With ::existing-pages-keep-properties?, existing properties on existing pages are not overwritten by imported data"
     (test-import-existing-page {:existing-pages-keep-properties? true}
                                {:logseq.property/description "first description"

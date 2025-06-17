@@ -1,17 +1,18 @@
 (ns frontend.handler.search
   "Provides util handler fns for search"
   (:require [clojure.string :as string]
-            [frontend.config :as config]
+            [dommy.core :as dom]
+            [electron.ipc :as ipc]
             [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.util :as util]
-            [promesa.core :as p]
             [logseq.graph-parser.text :as text]
-            [electron.ipc :as ipc]
-            [dommy.core :as dom]))
+            [promesa.core :as p]))
 
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
@@ -84,9 +85,9 @@
 (defn loop-find-in-page!
   [backward?]
   (if (and (get-in @state/state [:ui/find-in-page :active?])
-             (not (state/editing?)))
+           (not (state/editing?)))
     (do (state/set-state! [:ui/find-in-page :backward?] backward?)
-      (debounced-search))
+        (debounced-search))
     ;; return false to skip prevent default event behavior (Enter key)
     false))
 
@@ -157,3 +158,18 @@
                                         result)))
                              (conj result [:span content])))]
             [:p {:class "m-0"} elements]))))))
+
+(defn get-recents
+  []
+  (storage/get :recent-search-items))
+
+(defn add-recent!
+  [item]
+  (when-not (string/blank? item)
+    (let [recents (get-recents)]
+      (storage/set :recent-search-items
+                   (distinct (take 20 (cons item recents)))))))
+
+(defn clear-recents!
+  []
+  (storage/remove :recent-search-items))

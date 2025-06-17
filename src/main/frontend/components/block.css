@@ -483,7 +483,7 @@
 
   &[data-has-heading="2"], &:has(textarea.h2) {
     > .block-control-wrap {
-      @apply relative top-3;
+      @apply relative top-2.5;
     }
 
     .block-content-or-editor-wrap {
@@ -534,6 +534,11 @@
 
 .ls-block {
   @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
+  width: 100%;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  will-change: transform;
+
   container-type: inline-size;
   container-name: ls-block;
 
@@ -1144,6 +1149,10 @@ html.is-mac {
     }
 }
 
+.swipe-item {
+  touch-action: pan-y; /* disables horizontal scrolling on touch */
+}
+
 .ls-dialog-block {
-    @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
+  @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
 }

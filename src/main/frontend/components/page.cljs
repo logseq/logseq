@@ -136,7 +136,7 @@
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
-                                         :margin-left 22}}
+                                         :margin-left (if (util/mobile?) 0 22)}}
          [:span.bullet-container
           [:span.bullet]]]]])))
 
@@ -416,16 +416,24 @@
                   (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
                     (when-not (= (.-nodeName (.-target e)) "INPUT")
                       (.preventDefault e)
-                      (when (gobj/get e "shiftKey")
+                      (cond
+                        (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page)))))}
+                         :page)
+                        (util/mobile?)
+                        (route-handler/redirect-to-page! (:block/uuid page))
+                        :else
+                        nil))))}
 
      [:div.w-full.relative
       (component-block/block-container
        {:page-title? true
-        :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+        :page-title-actions-cp (when (and with-actions?
+                                          (not (util/mobile?))
+                                          (not= (:db/id (state/get-edit-block)) (:db/id page)))
+                                 db-page-title-actions)
         :hide-title? sidebar?
         :sidebar? sidebar?
         :tag-dialog? tag-dialog?
@@ -606,7 +614,7 @@
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-8.page-inner
+           [:div.relative.grid.gap-4.sm:gap-8.page-inner
             (when-not (or block? sidebar?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
@@ -644,7 +652,7 @@
 
             (when (and (or (not show-tabs?) tabs-rendered?) (not tag-dialog?))
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}}
+               {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
