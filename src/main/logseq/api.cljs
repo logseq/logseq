@@ -975,21 +975,23 @@
 (defn ^:export get_block_property
   [block-uuid key]
   (this-as this
-           (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
-             (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
-               (when (seq properties)
-                 (let [key (api-block/sanitize-user-property-name key)
-                       property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
-                       property-value (or (get properties key)
-                                          (get properties (keyword property-name))
-                                          (get properties
-                                               (api-block/get-db-ident-for-user-property-name
-                                                 property-name (api-block/resolve-property-prefix-for-db this))))
-                       property-value (if-let [property-id (:db/id property-value)]
-                                        (db/pull property-id) property-value)
-                       ret (sdk-utils/normalize-keyword-for-json property-value)]
-                   (bean/->js ret)))))))
+    (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+      (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
+        (when (seq properties)
+          (let [key (api-block/sanitize-user-property-name key)
+                property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+                ident (api-block/get-db-ident-for-user-property-name
+                        property-name (api-block/resolve-property-prefix-for-db this))
+                property-value (or (get properties key)
+                                 (get properties (keyword property-name))
+                                 (get properties ident))
+                property-value (if-let [property-id (:db/id property-value)]
+                                 (db/pull property-id) property-value)
+
+                parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
+            (or parsed-value
+              (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
