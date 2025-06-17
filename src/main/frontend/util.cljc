@@ -814,7 +814,7 @@
                              (pr-str
                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
+                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))

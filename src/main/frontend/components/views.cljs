@@ -909,7 +909,7 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (if (:block.temp/fully-loaded? block)
+        row' (if (:block.temp/load-status block)
                (assoc block :block.temp/refs-count (:block.temp/refs-count row))
                row)]
     (table-row-inner table row' props option)))
