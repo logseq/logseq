@@ -205,13 +205,13 @@
                                          block)
                                        block)]
                           [:div.flex.flex-col
-                           (when (and (:block/uuid block') (:block/parent block'))
+                           (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
                                 (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
-                           [:div.flex.flex-row.items-center.gap-1
+                           [:div.flex.flex-row.items-start
                             (when-not (or db-tag? (not db-based?))
-                              [:div.flex.items-center
+                              [:div.flex.items-center.h-5.mr-1.opacity-50
                                (cond
                                  (:nlp-date? block')
                                  (ui/icon "calendar" {:size 14})
@@ -225,7 +225,7 @@
                                  (db-model/whiteboard-page? block')
                                  (ui/icon "writing" {:size 14})
 
-                                 (or (ldb/page? block') (:page? block'))
+                                 (or (ldb/page? block') (:page? block))
                                  (ui/icon "file" {:size 14})
 
                                  (or (string/starts-with? (str (:block/title block')) (t :new-tag))
