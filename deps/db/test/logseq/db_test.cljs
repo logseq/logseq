@@ -23,7 +23,7 @@
 (deftest get-block-children-ids-on-bad-outliner-data
   (let [db (d/db-with (d/empty-db file-schema/schema)
                       broken-outliner-data-with-cycle)]
-    (is (= "bad outliner data, need to re-index to fix"
+    (is (= "bad outliner data"
            (try (ldb/get-block-children-ids db #uuid "e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
                 (catch :default e
                   (ex-message e)))))))
