@@ -202,6 +202,17 @@
               count))
    0))
 
+(defn- update-entity->map
+  [m]
+  (update-vals m (fn [v]
+                   (cond
+                     (de/entity? v)
+                     (entity->map v)
+                     (and (coll? v) (every? de/entity? v))
+                     (map entity->map v)
+                     :else
+                     v))))
+
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? children-only? nested-children? properties children-props]}]
   (let [block (let [eid (cond (uuid? id-or-page-name)
@@ -240,14 +251,16 @@
                                               (or children-props
                                                   [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
                                                    ;; pre-loading feature-related properties to avoid UI refreshing
-                                                   :logseq.property/status :logseq.property.node/display-type]))]
+                                                   :logseq.property/status :logseq.property.node/display-type :block/refs]))]
                          (map
                           (fn [block]
-                            (if (= children-props '[*])
-                              (entity->map block)
-                              (-> (select-keys block children-props)
-                                  (with-raw-title block)
-                                  (assoc :block.temp/has-children? (some? (:block/_parent block))))))
+                            (-> (if (= children-props '[*])
+                                  block
+                                  (-> (select-keys block children-props)
+                                      (with-raw-title block)
+                                      (assoc :block.temp/has-children? (some? (:block/_parent block)))))
+                                update-entity->map
+                                (dissoc :block/path-refs)))
                           children)))]
         (if children-only?
           {:children children}
@@ -259,15 +272,9 @@
                 block' (cond->
                         (mark-block-fully-loaded block')
                          true
-                         (update-vals (fn [v]
-                                        (cond
-                                          (de/entity? v)
-                                          (entity->map v)
-                                          (and (coll? v) (every? de/entity? v))
-                                          (map entity->map v)
-
-                                          :else
-                                          v)))
+                         update-entity->map
+                         true
+                         (dissoc :block/path-refs)
                          block-refs-count?
                          (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
             (cond->
