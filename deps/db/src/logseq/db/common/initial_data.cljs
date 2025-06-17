@@ -1,7 +1,6 @@
 (ns logseq.db.common.initial-data
   "Provides db helper fns for graph initialization and lazy loading entities"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -132,8 +131,7 @@
                     :or {include-collapsed-children? true}}]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
     (let [seen (volatile! #{})]
-      (loop [steps          100      ;check result every 100 steps
-             eids-to-expand [eid]]
+      (loop [eids-to-expand [eid]]
         (when (seq eids-to-expand)
           (let [children
                 (mapcat (fn [eid]
@@ -144,12 +142,8 @@
 
                               (:block/_parent e)))) eids-to-expand)
                 uuids-to-add (keep :block/uuid children)]
-            (when (and (zero? steps)
-                       (seq (set/intersection (set @seen) (set uuids-to-add))))
-              (throw (ex-info "bad outliner data"
-                              {:seen @seen :eids-to-expand eids-to-expand})))
             (vswap! seen (partial apply conj) uuids-to-add)
-            (recur (if (zero? steps) 100 (dec steps)) (keep :db/id children)))))
+            (recur (keep :db/id children)))))
       @seen)))
 
 (defn get-block-children
