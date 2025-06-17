@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
-            [cljs.test :refer [testing is]]
+            [cljs.test :refer [testing is are deftest]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -10,6 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]
@@ -93,6 +94,17 @@
    ;; TODO: Add actual default
    :default-config {}})
 
+;; Copied from db-import
+(defn- <read-asset-file [file assets]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+    (swap! assets assoc
+           (gp-exporter/asset-path->name (:path file))
+           {:size (.-length buffer)
+            :checksum checksum
+            :type (db-asset/asset-path->type (:path file))
+            :path (:path file)})))
+
 ;; Copied from db-import script and tweaked for an in-memory import
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
@@ -105,7 +117,12 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
-                         :<copy-asset #(swap! assets conj %)}
+                         :<read-asset <read-asset-file
+                         :<copy-asset (fn copy-asset [m]
+                                        (when-not (:block/uuid m)
+                                          (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
+                                                   "does not have a :block/uuid"))
+                                        (swap! assets conj m))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
@@ -128,6 +145,24 @@
 ;; Tests
 ;; =====
 
+(deftest update-asset-links-in-block-title
+  (are [x y]
+       (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))
+    ;; Standard image link with metadata
+    ["![greg-popovich-thumbs-up.png](../assets/greg-popovich-thumbs-up_1704749687791_0.png){:height 288, :width 100} says pop"
+     "assets/greg-popovich-thumbs-up_1704749687791_0.png"]
+    "[[UUID]] says pop"
+
+    ;; Image link with no metadata
+    ["![some-title](../assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png)"
+     "assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png"]
+    "[[UUID]]"
+
+    ;; 2nd link
+    ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
+     "assets/subdir/partydino.gif"]
+    "[[FIRST UUID]] and [[UUID]]"))
+
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
           start-time (cljs.core/system-time)
@@ -146,6 +181,7 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+    (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
     (is (= []
            (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
                        :where [?b :block/tags :logseq.class/Tag]]
@@ -170,8 +206,9 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 25 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 26 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
@@ -195,8 +232,9 @@
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 1 (count @assets))))
+      (is (= 3 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -365,7 +403,19 @@
       ;; Cards
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
-          "None of the card properties are imported since they are deprecated"))
+          "None of the card properties are imported since they are deprecated")
+
+      ;; Assets
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "png"
+              :logseq.property.asset/checksum "3d5e620cac62159d8196c118574bfea7a16e86fa86efd1c3fa15a00a0a08792d"
+              :logseq.property.asset/size 753471
+              :logseq.property.asset/resize-metadata {:height 288, :width 252}}
+             (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
+          "Asset has correct properties")
+      (is (= (d/entity @conn :logseq.class/Asset)
+             (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
+          "Imported into Asset page"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
