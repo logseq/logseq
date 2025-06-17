@@ -723,10 +723,13 @@
                 (db-async/<get-block repo page-uuid)))]
     block))
 
-(def ^:export insert_block
-  (fn [block-uuid-or-page-name content ^js opts]
+(defn ^:export insert_block
+  [block-uuid-or-page-name content ^js opts]
+
+  (this-as this
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
+
     (p/let [block? (util/uuid-string? (str block-uuid-or-page-name))
             block (<pull-block (str block-uuid-or-page-name))]
       (if (and block? (not block))
@@ -890,14 +893,15 @@
 (defn -resolve-property-prefix-for-db
   [^js plugin]
   (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? plugin))
-    (some-> (.-id plugin) (sanitize-user-property-name) (str "."))))
+    (or (some-> (.-id plugin) (sanitize-user-property-name) (str "."))
+      "._api")))
 
 (defn -get-property
   [^js plugin k]
   (when-let [k' (and (string? k) (some-> k (sanitize-user-property-name) (keyword)))]
     (let [prefix (-resolve-property-prefix-for-db plugin)]
       (p/let [k (if (qualified-keyword? k') k'
-                    (api-block/get-db-ident-for-user-property-name (str prefix k)))
+                    (api-block/get-db-ident-for-user-property-name k prefix))
               p (db-utils/pull k)] p))))
 
 (defn ^:export get_property
@@ -911,7 +915,7 @@
 
 (defn ^:export upsert_property
   "schema:
-    {:type :default | :keyword | :map | :date | :checkbox
+    {:type :default | :number | :date | :datetime | :checkbox | :url | :node
      :cardinality :many | :one
      :hide? true
      :view-context :page
@@ -920,18 +924,19 @@
   [k ^js schema ^js opts]
   (this-as this
            (when-let [k' (and (string? k) (keyword k))]
-             (let [prefix (when (some-> js/window.LSPlugin (.-PluginLocal) (instance? this))
-                            (str (.-id this) "."))]
+             (let [prefix (-resolve-property-prefix-for-db this)]
                (p/let [opts (or (some-> opts (bean/->clj)) {})
                        name (or (:name opts) (some-> (str k) (string/trim)))
                        k (if (qualified-keyword? k') k'
-                             (api-block/get-db-ident-for-user-property-name (str prefix k)))
+                             (api-block/get-db-ident-for-user-property-name k prefix))
                        schema (or (some-> schema (bean/->clj)
                                           (update-keys #(if (contains? #{:hide :public} %)
                                                           (keyword (str (name %) "?")) %))) {})
                        schema (cond-> schema
                                 (string? (:cardinality schema))
-                                (update :cardinality keyword)
+                                (-> (assoc :db/cardinality (keyword (:cardinality schema)))
+                                  (dissoc :cardinality))
+
                                 (string? (:type schema))
                                 (-> (assoc :logseq.property/type (keyword (:type schema)))
                                     (dissoc :type)))
