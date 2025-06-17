@@ -149,7 +149,7 @@
                       ;; nested children results
                       (let [blocks (->> (db-model/get-block-and-children repo uuid)
                                         (map (fn [b]
-                                               (dissoc (db-utils/pull (:db/id b)) :block.temp/fully-loaded?))))]
+                                               (dissoc (db-utils/pull (:db/id b)) :block.temp/load-status))))]
                         (first (outliner-tree/blocks->vec-tree blocks uuid)))
                       ;; attached shallow children
                       (assoc block :block/children

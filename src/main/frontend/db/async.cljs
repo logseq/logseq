@@ -97,9 +97,11 @@
             (db/get-page name'))
         id (or (and (:block/uuid e) (str (:block/uuid e)))
                (and (util/uuid-string? name') name')
-               id-uuid-or-name)]
+               id-uuid-or-name)
+        load-status (:block.temp/load-status e)]
     (cond
-      (and (:block.temp/fully-loaded? e)
+      (and (or (= load-status :full)
+               (and (= load-status :self) (not children?) (not children-only?)))
            (not (some #{:block.temp/refs-count} properties)))
       (p/promise e)
 
@@ -110,11 +112,18 @@
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
+                 ;; `full` means the block and its children have been loaded, `self`
+                 ;; means the block itself has been loaded.
+                 load-status' (if (or children? children-only?) :full :self)
+                 block-load-status-tx (when block
+                                        [{:db/id (:db/id block)
+                                          :block.temp/load-status load-status'}])
                  block-and-children (if block (cons block children) children)
                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                 tx-data (->> (remove (fn [b] (:block.temp/fully-loaded? (db/entity (:db/id b)))) block-and-children)
+                 tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b)))) block-and-children)
                               (common-util/fast-remove-nils)
-                              (remove empty?))]
+                              (remove empty?)
+                              (concat block-load-status-tx))]
              (when (seq tx-data) (d/transact! conn tx-data))
              (when-not skip-refresh?
                (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
@@ -126,7 +135,7 @@
 
 (defn <get-blocks
   [graph ids* & {:as opts}]
-  (let [ids (remove (fn [id] (:block.temp/fully-loaded? (db/entity id))) ids*)]
+  (let [ids (remove (fn [id] (:block.temp/load-status (db/entity id))) ids*)]
     (when (seq ids)
       (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
                                               (map (fn [id]
@@ -135,7 +144,7 @@
         (let [conn (db/get-db graph false)
               result' (map :block result)]
           (when (seq result')
-            (let [result'' (map (fn [b] (assoc b :block.temp/fully-loaded? true)) result')]
+            (let [result'' (map (fn [b] (assoc b :block.temp/load-status :self)) result')]
               (d/transact! conn result'')))
           result')))))
 

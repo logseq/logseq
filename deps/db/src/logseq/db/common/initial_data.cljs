@@ -85,10 +85,6 @@
       (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
       block)))
 
-(defn- mark-block-fully-loaded
-  [b]
-  (assoc b :block.temp/fully-loaded? true))
-
 (comment
   (defn- property-without-db-attrs
     [property]
@@ -214,7 +210,7 @@
                      v))))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
-  [db id-or-page-name {:keys [children? children-only? children-props include-collapsed-children?
+  [db id-or-page-name {:keys [children? children-props include-collapsed-children?
                               properties]
                        :or {include-collapsed-children? false}}]
   (let [block (let [eid (cond (uuid? id-or-page-name)
@@ -232,19 +228,18 @@
         block-refs-count? (some #{:block.temp/refs-count} properties)
         whiteboard? (common-entity-util/whiteboard? block)]
     (when block
-      (let [children (when (or children? children-only?)
-                       (let [children (let [long-page? (when (common-entity-util/page? block)
-                                                         (>= (count (:block/_page block)) 100))
-                                            children (if long-page?
-                                                       (:block/_parent block)
-                                                       (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?}))]
-                                        (->> children
+      (let [children (when children?
+                       (let [children (let [children (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
+                                            children' (if (>= (count children) 100)
+                                                        (:block/_parent block)
+                                                        children)]
+                                        (->> children'
                                              (remove (fn [e] (:block/closed-value-property e)))))
                              children-props (if whiteboard?
                                               '[*]
                                               (or children-props
                                                   [:db/id :block/uuid :block/parent :block/order :block/collapsed? :block/title
-                                                     ;; pre-loading feature-related properties to avoid UI refreshing
+                                                   ;; pre-loading feature-related properties to avoid UI refreshing
                                                    :logseq.property/status :logseq.property.node/display-type :block/tags :block/refs]))]
                          (map
                           (fn [block]
@@ -255,26 +250,24 @@
                                       (assoc :block.temp/has-children? (some? (:block/_parent block)))))
                                 update-entity->map
                                 (dissoc :block/path-refs)))
-                          children)))]
-        (if children-only?
-          {:children children}
-          (let [block' (if (seq properties)
-                         (-> (select-keys block properties)
-                             (with-raw-title block)
-                             (assoc :db/id (:db/id block)))
-                         (entity->map block))
-                block' (cond->
-                        (if children? (mark-block-fully-loaded block') block')
-                         true
-                         update-entity->map
-                         true
-                         (dissoc :block/path-refs)
-                         block-refs-count?
-                         (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
-            (cond->
-             {:block block'}
-              children?
-              (assoc :children children))))))))
+                          children)))
+            block' (if (seq properties)
+                     (-> (select-keys block properties)
+                         (with-raw-title block)
+                         (assoc :db/id (:db/id block)))
+                     (entity->map block))
+            block' (cond->
+                    block'
+                     true
+                     update-entity->map
+                     true
+                     (dissoc :block/path-refs)
+                     block-refs-count?
+                     (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
+        (cond->
+         {:block block'}
+          children?
+          (assoc :children children))))))
 
 (defn get-latest-journals
   [db]
