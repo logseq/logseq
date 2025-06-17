@@ -178,8 +178,7 @@
     (util/mobile-keep-keyboard-open)
     (let [repo (state/get-current-repo)]
       (p/do!
-       (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-         (db-async/<get-block repo (:db/id block) {:children? false}))
+       (db-async/<get-block repo (:db/id block) {:children? false})
        (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
        (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
          (state/clear-edit! {:clear-editing-block? false}))

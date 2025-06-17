@@ -130,8 +130,8 @@
                 area? (not (nil? (:image content)))
                 wrap-props #(if-let [stamp (:image content)]
                               (assoc %
-                                :hl-type :area
-                                :hl-stamp stamp)
+                                     :hl-type :area
+                                     :hl-stamp stamp)
                               %)
                 props {:id (if (string? id) (uuid id) id)
                        (pu/get-pid :logseq.property/ls-type) :annotation
@@ -140,11 +140,11 @@
                 properties (wrap-props props)]
             (when (string? text)
               (editor-handler/api-insert-new-block!
-                text (merge {:page (:block/name ref-page)
-                             :custom-uuid id
-                             :edit-block? (not area?)
-                             :properties properties}
-                       insert-opts)))))))))
+               text (merge {:page (:block/name ref-page)
+                            :custom-uuid id
+                            :edit-block? (not area?)
+                            :properties properties}
+                           insert-opts)))))))))
 
 (defn db-based-ensure-ref-block!
   [pdf-current {:keys [id content page properties] :as hl} insert-opts]
@@ -187,8 +187,7 @@
   [hls-page]
   (p/let [result (db-async/<get-block (state/get-current-repo)
                                       (:block/uuid hls-page)
-                                      {:children? true
-                                       :nested-children? false})]
+                                      {:children? true})]
     {:highlights (keep :logseq.property.pdf/hl-value result)}))
 
 (defn file-based-load-hls-data$

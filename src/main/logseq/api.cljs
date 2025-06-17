@@ -717,9 +717,7 @@
 (defn- <ensure-page-loaded
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)
-          block (db-async/<get-block repo (str block-uuid-or-page-name)
-                                     {:children-props '[*]
-                                      :nested-children? true})
+          block (db-async/<get-block repo (str block-uuid-or-page-name) {})
           _ (when-let [page-id (:db/id (:block/page block))]
               (when-let [page-uuid (:block/uuid (db/entity page-id))]
                 (db-async/<get-block repo page-uuid)))]

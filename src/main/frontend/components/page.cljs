@@ -696,7 +696,7 @@
                  *loading? (atom true)
                  page (db/get-page page-id-uuid-or-name)
                  *page (atom page)]
-             (when (:block.temp/fully-loaded? page) (reset! *loading? false))
+             (when (:block.temp/load-status page) (reset! *loading? false))
              (p/let [page-block (db-async/<get-block (state/get-current-repo) page-id-uuid-or-name)]
                (reset! *loading? false)
                (reset! *page (db/entity (:db/id page-block)))
