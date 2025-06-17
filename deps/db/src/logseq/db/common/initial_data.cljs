@@ -154,6 +154,7 @@
 
 (defn get-block-children
   "Including nested children."
+  {:arglists '([db block-uuid & {:keys [include-collapsed-children?]}])}
   [db block-uuid & {:as opts}]
   (let [ids (get-block-children-ids db block-uuid opts)]
     (when (seq ids)

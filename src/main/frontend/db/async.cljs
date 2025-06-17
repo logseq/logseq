@@ -112,8 +112,6 @@
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
-                 ;; `full` means the block and its children have been loaded, `self`
-                 ;; means the block itself has been loaded.
                  load-status' (if (or children? children-only?) :full :self)
                  block-load-status-tx (when block
                                         [{:db/id (:db/id block)
