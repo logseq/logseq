@@ -735,41 +735,45 @@
                 [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
                                          [nil (uuid block-uuid-or-page-name)]
                                          [block-uuid-or-page-name nil])
-                page-name              (when page-name (util/page-name-sanity-lc page-name))
-                _                      (when (and page-name
-                                                  (nil? (ldb/get-page (db/get-db) page-name)))
-                                         (page-handler/<create! block-uuid-or-page-name {}))
-                custom-uuid            (or customUUID (:id properties))
-                custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
-                edit-block?            (if (nil? focus) true focus)
-                _                      (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
-                                         (throw (js/Error.
-                                                 (util/format "Custom block UUID already exists (%s)." custom-uuid))))
-                block-uuid'            (if (and (not sibling) before block-uuid)
-                                         (let [block       (db/entity [:block/uuid block-uuid])
-                                               first-child (ldb/get-first-child (db/get-db) (:db/id block))]
-                                           (if first-child
-                                             (:block/uuid first-child)
-                                             block-uuid))
-                                         block-uuid)
+                page-name (when page-name (util/page-name-sanity-lc page-name))
+                _ (when (and page-name
+                          (nil? (ldb/get-page (db/get-db) page-name)))
+                    (page-handler/<create! block-uuid-or-page-name {}))
+                custom-uuid (or customUUID (:id properties))
+                custom-uuid (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
+                edit-block? (if (nil? focus) true focus)
+                _ (when (and custom-uuid (db-model/query-block-by-uuid custom-uuid))
+                    (throw (js/Error.
+                             (util/format "Custom block UUID already exists (%s)." custom-uuid))))
+                block-uuid' (if (and (not sibling) before block-uuid)
+                              (let [block (db/entity [:block/uuid block-uuid])
+                                    first-child (ldb/get-first-child (db/get-db) (:db/id block))]
+                                (if first-child
+                                  (:block/uuid first-child)
+                                  block-uuid))
+                              block-uuid)
                 insert-at-first-child? (not= block-uuid' block-uuid)
                 [sibling? before?] (if insert-at-first-child?
                                      [true true]
                                      [sibling before])
-                before?                (if (and (false? sibling?) before? (not insert-at-first-child?))
-                                         false
-                                         before?)
-                new-block              (editor-handler/api-insert-new-block!
-                                        content
-                                        {:block-uuid  block-uuid'
-                                         :sibling?    sibling?
-                                         :before?     before?
-                                         :edit-block? edit-block?
-                                         :page        page-name
-                                         :custom-uuid custom-uuid
-                                         :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
-                                         :properties  (merge properties
-                                                             (when custom-uuid {:id custom-uuid}))})]
+                db-base? (db-graph?)
+                before? (if (and (false? sibling?) before? (not insert-at-first-child?))
+                          false
+                          before?)
+                new-block (editor-handler/api-insert-new-block!
+                            content
+                            {:block-uuid block-uuid'
+                             :sibling? sibling?
+                             :before? before?
+                             :edit-block? edit-block?
+                             :page page-name
+                             :custom-uuid custom-uuid
+                             :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                             :properties (when (not db-base?)
+                                           (merge properties
+                                             (when custom-uuid {:id custom-uuid})))})
+                _ (when (and db-base? (some? properties))
+                    (api-block/save-db-based-block-properties! new-block properties))]
           (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
 (def ^:export insert_batch_block
@@ -951,16 +955,14 @@
            (p/let [keyname (sanitize-user-property-name keyname)
                    block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
                    repo (state/get-current-repo)
-                   _ (db-async/<get-block repo block-uuid :children? false)
-                   db? (config/db-based-graph? repo)
-                   key (-> (if (keyword? key) (name keyname) keyname) (util/safe-lower-case))
-                   key (if db?
-                         (api-block/get-db-ident-for-user-property-name
-                          (str (-resolve-property-prefix-for-db this) key))
-                         key)
-                   _ (when (and db? (not (db-utils/entity key)))
-                       (db-property-handler/upsert-property! key {} {:property-name keyname}))]
-             (property-handler/set-block-property! repo block-uuid key value))))
+                   block (db-async/<get-block repo block-uuid :children? false)
+                   db-base? (db-graph?)
+                   key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))]
+             (when block
+               (if db-base?
+                 (p/do!
+                   (api-block/save-db-based-block-properties! block {key' value}))
+                 (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
   [block-uuid key]
