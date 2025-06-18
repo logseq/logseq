@@ -7,17 +7,17 @@
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.graph :as graph]
             [logseq.e2e.keyboard :as k]
+            [logseq.e2e.locator :as loc]
             [logseq.e2e.multi-tabs-basic-test]
             [logseq.e2e.outliner-basic-test]
             [logseq.e2e.plugins-basic-test]
+            [logseq.e2e.property-basic-test]
             [logseq.e2e.reference-basic-test]
             [logseq.e2e.rtc-basic-test]
             [logseq.e2e.rtc-extra-test]
-            [logseq.e2e.property-basic-test]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.repl :as repl]
-            [logseq.e2e.locator :as loc]))
+            [wally.repl :as repl]))
 
 ;; Use port 3001 for local testing
 (reset! config/*port 3001)

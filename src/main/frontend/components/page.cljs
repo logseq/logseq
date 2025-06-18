@@ -8,6 +8,7 @@
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.file-based.hierarchy :as hierarchy]
+            [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
             [frontend.components.property.config :as property-config]
@@ -100,11 +101,12 @@
 (declare page-cp)
 
 (rum/defc add-button
-  [block container-id]
+  [block {:keys [container-id] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
-        opacity-class (if has-children? "opacity-0" "opacity-50")]
+        opacity-class (if has-children? "opacity-0" "opacity-50")
+        config (dissoc config* :page)]
     (when page?
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
@@ -113,8 +115,8 @@
         :on-click (fn [e]
                     (util/stop e)
                     (state/set-state! :editor/container-id container-id)
-                    (editor-handler/api-insert-new-block! ""
-                                                          {:block-uuid (:block/uuid block)}))
+                    (editor-handler/api-insert-new-block! "" (merge config
+                                                                    {:block-uuid (:block/uuid block)})))
         :on-mouse-over (fn []
                          (let [ref (rum/deref *ref)
                                prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
@@ -132,7 +134,7 @@
                        (util/stop e)
                        (when (= "Enter" (util/ekey e))
                          (state/set-state! :editor/container-id container-id)
-                         (editor-handler/api-insert-new-block! "" block)))
+                         (editor-handler/api-insert-new-block! "" (merge config block))))
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
@@ -165,13 +167,14 @@
                      (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
-                     children)]
+                     children)
+          config (assoc config :library? (ldb/library? block))]
       (cond
         (and
          (not block?)
          (not config/publishing?)
          (empty? children) block)
-        (add-button block (:container-id config))
+        (add-button block config)
 
         :else
         (let [document-mode? (state/sub :document/mode?)
@@ -186,7 +189,7 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (add-button block (:container-id config))])))))
+           (add-button block config)])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -407,7 +410,7 @@
   (let [with-actions? (not config/publishing?)]
     [:div.ls-page-title.flex.flex-1.w-full.content.items-start.title
      {:class (when-not whiteboard-page? "title")
-      :data-testid "page title"
+      "data-testid" "page title"
       :on-pointer-down (fn [e]
                          (when (util/right-click? e)
                            (state/set-state! :page-title/context {:page (:block/title page)
@@ -572,7 +575,6 @@
   (let [current-repo (state/sub :git/current-repo)
         *tabs-rendered? (::tabs-rendered? state)
         repo (or repo current-repo)
-        block-id (:block/uuid page)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
         property-page? (ldb/property? page)
@@ -629,22 +631,21 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
+            (when (and db-based? (ldb/library? page))
+              (library/add-pages page))
+
             (when (and db-based? sidebar? (ldb/page? page))
               [:div.-mb-8
                (sidebar-page-properties config page)])
-
-            (when (and block? (not sidebar?) (not whiteboard?))
-              (let [config (merge config {:id "block-parent"
-                                          :block? true})]
-                [:div.mb-4
-                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
             (when show-tabs?
               (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))
 
             (when (and (or (not show-tabs?) tabs-rendered?) (not tag-dialog?))
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}}
+               {:style {:margin-left (if whiteboard? 0 -20)}
+                :class (when-not sidebar?
+                         "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
@@ -660,7 +661,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page title))
 
-            (when (and (ldb/page? page) (:logseq.property/_parent page))
+            (when (and (ldb/page? page) (:logseq.property.class/_extends page))
               (class-component/class-children page))
 
               ;; referenced blocks

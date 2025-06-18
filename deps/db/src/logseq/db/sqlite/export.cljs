@@ -7,16 +7,16 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -166,7 +166,7 @@
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
                                               ;; For overlapping class properties, these would be built in :classes
-                                              :logseq.property/parent :logseq.property.class/properties
+                                              :logseq.property.class/extends :logseq.property.class/properties
                                               (into db-property/schema-properties db-property/public-db-attribute-properties))]
                     [(:db/ident ent)
                      (cond-> build-property
@@ -191,10 +191,10 @@
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
     (and (not shallow-copy?)
-         (:logseq.property/parent class-ent)
-         (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
+         (:logseq.property.class/extends class-ent)
+         (not= :logseq.class/Root (:db/ident (:logseq.property.class/extends class-ent))))
     (assoc :build/class-parent
-           (:db/ident (:logseq.property/parent class-ent)))))
+           (:db/ident (:logseq.property.class/extends class-ent)))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
@@ -589,7 +589,7 @@
         classes
         (->> class-ents
              (map (fn [ent]
-                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property/parent db-property/public-db-attribute-properties)]
+                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property.class/extends db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)

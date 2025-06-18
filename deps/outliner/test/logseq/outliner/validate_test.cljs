@@ -65,7 +65,7 @@
           (db-test/find-page-by-title @conn "Fruit")))
         "Allow class to have same name as a page")))
 
-(deftest validate-parent-property
+(deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:prop1 {:logseq.property/type :default}}
                :classes {:Class1 {} :Class2 {}}
@@ -73,34 +73,30 @@
                [{:page {:block/title "page1"}}
                 {:page {:block/title "page2"}}]})
         page1 (db-test/find-page-by-title @conn "page1")
-        page2 (db-test/find-page-by-title @conn "page2")
         class1 (db-test/find-page-by-title @conn "Class1")
         class2 (db-test/find-page-by-title @conn "Class2")
         property (db-test/find-page-by-title @conn "prop1")]
 
     (testing "valid parent and child combinations"
-      (is (nil? (outliner-validate/validate-parent-property page1 [page2]))
-          "parent page to child page is valid")
-      (is (nil? (outliner-validate/validate-parent-property class1 [class2]))
+      (is (nil? (outliner-validate/validate-extends-property class1 [class2]))
           "parent class to child class is valid"))
 
     (testing "invalid parent and child combinations"
       (are [parent child]
            (thrown-with-msg?
             js/Error
-            #"Can't set"
-            (outliner-validate/validate-parent-property parent [child]))
+            #"Can't extend"
+            (outliner-validate/validate-extends-property parent [child]))
 
         class1 page1
         page1 class1
-        property page1
         property class1))
 
     (testing "built-in tag can't have parent changed"
       (is (thrown-with-msg?
            js/Error
            #"Can't change.*built-in"
-           (outliner-validate/validate-parent-property (entity-plus/entity-memoized @conn :logseq.class/Task)
+           (outliner-validate/validate-extends-property (entity-plus/entity-memoized @conn :logseq.class/Task)
                                                        [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
@@ -168,9 +164,9 @@
 
     (testing "Validate property relationships"
       (let [parent-child-pairs (d/q '[:find ?parent ?child
-                                      :where [?child :logseq.property/parent ?parent]] @conn)]
+                                      :where [?child :logseq.property.class/extends ?parent]] @conn)]
         (doseq [[parent-id child-id] parent-child-pairs]
           (let [parent (d/entity @conn parent-id)
                 child (d/entity @conn child-id)]
-            (is (nil? (#'outliner-validate/validate-parent-property-have-same-type parent [child]))
+            (is (nil? (#'outliner-validate/validate-extends-property-have-correct-type parent [child]))
                 (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))

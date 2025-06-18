@@ -1,10 +1,10 @@
 (ns logseq.common.config-test
-  (:require [cljs.test :refer [deftest is]]
-            [clojure.string :as string]
-            [logseq.common.config :as common-config]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
             #?(:org.babashka/nbb [nbb.classpath :as cp])
-            ["fs" :as fs]
-            ["path" :as node-path]))
+            [cljs.test :refer [deftest is]]
+            [clojure.string :as string]
+            [logseq.common.config :as common-config]))
 
 (deftest remove-hidden-files
   (let [files ["pages/foo.md" "pages/bar.md"

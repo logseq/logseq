@@ -73,7 +73,7 @@
     :logseq.property/icon :block/alias :logseq.property/enable-history?
     :logseq.property/exclude-from-graph-view :logseq.property/template-applied-to
     :logseq.property/hide-empty-value :logseq.property.class/hide-from-node
-    :logseq.property/page-tags :logseq.property/parent
+    :logseq.property/page-tags :logseq.property.class/extends
     :logseq.property/publishing-public? :logseq.property.user/avatar
     :logseq.property.user/email :logseq.property.user/name})
 

@@ -179,7 +179,7 @@
         :block/order "a2"
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
                           :t 1        ;; not used
@@ -249,7 +249,7 @@
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-remove-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -406,7 +406,7 @@ result:
           :block/left [:block/uuid uuid1-client]
           :block/parent [:block/uuid page1-uuid]}]
         (ldb/get-page @conn page-name)
-        {:sibling? true :keep-uuid? true}))
+        {:sibling? false :keep-uuid? true}))
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
                           {page2-uuid {:op :update-page

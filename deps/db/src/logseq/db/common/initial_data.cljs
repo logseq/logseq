@@ -1,6 +1,7 @@
 (ns logseq.db.common.initial-data
   "Provides db helper fns for graph initialization and lazy loading entities"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -329,7 +330,9 @@
    rseq
    (keep (fn [datom]
            (let [e (d/entity db (:e datom))]
-             (when (and (common-entity-util/page? e) (not (entity-util/hidden? e)))
+             (when (and (common-entity-util/page? e)
+                        (not (entity-util/hidden? e))
+                        (not (string/blank? (:block/title e))))
                e))))
    (take 30)))
 
