@@ -270,13 +270,32 @@
          tag-properties))
      class-ids)))
 
+(defn add-missing-db-ident-for-tags
+  [conn _sqlite-db]
+  (let [db @conn
+        class-ids (d/q
+                   '[:find [?b ...]
+                     :where
+                     [?b :block/tags :logseq.class/Tag]
+                     [(missing? $ ?b :db/ident)]]
+                   db)]
+    (mapcat
+     (fn [id]
+       (let [title (:block/title (d/entity db id))]
+         [[:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]
+          [:db/retract id :block/tags :logseq.class/Page]
+          [:db/retract id :block/refs :logseq.class/Page]
+          [:db/retract id :block/path-refs :logseq.class/Page]]))
+     class-ids)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
   [["65.0" {:fix separate-classes-and-properties}]
    ["65.1" {:fix fix-rename-parent-to-extends}]
-   ["65.2" {:fix fix-tag-properties}]])
+   ["65.2" {:fix fix-tag-properties}]
+   ["65.3" {:fix add-missing-db-ident-for-tags}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
