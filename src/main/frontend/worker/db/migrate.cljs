@@ -314,6 +314,21 @@
                 [:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]])))
      property-ids)))
 
+(defn remove-block-order-for-tags
+  [conn _sqlite-db]
+  ;; find all properties that're tags
+  (let [db @conn
+        tag-ids (d/q
+                 '[:find [?b ...]
+                   :where
+                   [?b :block/tags :logseq.class/Tag]
+                   [?b :block/order]]
+                 db)]
+    (map
+     (fn [id]
+       [:db/retract id :block/order])
+     tag-ids)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -322,7 +337,8 @@
    ["65.1" {:fix fix-rename-parent-to-extends}]
    ["65.2" {:fix fix-tag-properties}]
    ["65.3" {:fix add-missing-db-ident-for-tags}]
-   ["65.4" {:fix fix-using-properties-as-tags}]])
+   ["65.4" {:fix fix-using-properties-as-tags}]
+   ["65.5" {:fix remove-block-order-for-tags}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
