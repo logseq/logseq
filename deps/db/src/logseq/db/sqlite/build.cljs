@@ -393,7 +393,7 @@
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
-  [properties classes {:keys [graph-namespace build-existing-tx?]}]
+  [properties classes {:keys [graph-namespace]}]
   (let [property-idents (->> (keys properties)
                              (map #(vector %
                                            (if graph-namespace
@@ -411,9 +411,8 @@
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
-    (when-not build-existing-tx?
-      (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
-              "Class and property db-idents are unique and do not overlap"))
+    (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
+            "Class and property db-idents are unique and do not overlap")
     all-idents))
 
 (defn- build-page-tx [page all-idents page-uuids properties options]
