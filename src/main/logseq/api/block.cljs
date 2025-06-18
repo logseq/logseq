@@ -102,10 +102,9 @@
 
 (defn infer-property-value-type-to-save!
   [ident value]
-  (let [multi? false
-        as-json? (coll? value)
+  (let [as-json? (coll? value)
         value-handle
-        (fn [type]
+        (fn [type multi?]
           (let [as-json? (or (= type :string) as-json?)]
             (if multi?
               (-> (for [v value]
@@ -127,11 +126,24 @@
                    (coll? value) :string
                    :else :default)
             schema {:logseq.property/type type
-                    :db/cardinality (if multi? :many :one)}]
+                    :db/cardinality :one}]
         (p/chain
           (db-property-handler/upsert-property! ident schema {})
-          (fn [] (value-handle type))))
-      (value-handle (:logseq.property/type ent)))))
+          (fn [] (value-handle type false))))
+      (let [value-multi? (vector? value)
+            ident (:db/ident ent)
+            ent-type (:logseq.property/type ent)
+            ent-type-str? (= ent-type :string)
+            ent-multi? (= (:db/cardinality ent) :db.cardinality/many)
+            cardinality-want-illegal-changed? (and (not value-multi?) ent-multi?)]
+        (when cardinality-want-illegal-changed?
+          (throw (js/Error. "Multiple property type can not be changed.")))
+        (p/chain
+          (db-property-handler/upsert-property! ident
+            {:logseq.property/type ent-type
+             :db/cardinality (if (and (not ent-type-str?) value-multi?) :many :one)}
+            {})
+          #(value-handle ent-type ent-multi?))))))
 
 (defn save-db-based-block-properties!
   ([block properties] (save-db-based-block-properties! block properties nil))
