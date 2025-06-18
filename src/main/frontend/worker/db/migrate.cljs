@@ -193,6 +193,22 @@
          move-top-parents-to-library
          update-children-parent-and-order)))))
 
+(defn- retract-property-attributes
+  [id]
+  [[:db/retract id :block/tags :logseq.class/Property]
+   [:db/retract id :logseq.property/type]
+   [:db/retract id :db/cardinality]
+   [:db/retract id :db/valueType]
+   [:db/retract id :db/index]
+   [:db/retract id :logseq.property/classes]
+   [:db/retract id :logseq.property/hide?]
+   [:db/retract id :logseq.property/public?]
+   [:db/retract id :logseq.property/view-context]
+   [:db/retract id :logseq.property/ui-position]
+   [:db/retract id :logseq.property/default-value]
+   [:db/retract id :logseq.property/hide-empty-value]
+   [:db/retract id :logseq.property/enable-history?]])
+
 (defn separate-classes-and-properties
   [conn _sqlite-db]
   ;; find all properties that're classes, create new properties to separate them
@@ -218,19 +234,7 @@
                                                              :logseq.property/view-context :logseq.property/ui-position
                                                              :logseq.property/default-value :logseq.property/hide-empty-value :logseq.property/enable-history?])
                                          {:logseq.property/classes id})})
-             retract-property-attrs [[:db/retract id :block/tags :logseq.class/Property]
-                                     [:db/retract id :logseq.property/type]
-                                     [:db/retract id :db/cardinality]
-                                     [:db/retract id :db/valueType]
-                                     [:db/retract id :db/index]
-                                     [:db/retract id :logseq.property/classes]
-                                     [:db/retract id :logseq.property/hide?]
-                                     [:db/retract id :logseq.property/public?]
-                                     [:db/retract id :logseq.property/view-context]
-                                     [:db/retract id :logseq.property/ui-position]
-                                     [:db/retract id :logseq.property/default-value]
-                                     [:db/retract id :logseq.property/hide-empty-value]
-                                     [:db/retract id :logseq.property/enable-history?]]
+             retract-property-attrs (retract-property-attributes id)
              datoms (if (:db/index class)
                       (d/datoms db :avet ident)
                       (filter (fn [d] (= ident (:a d))) (d/datoms db :eavt)))
@@ -288,6 +292,28 @@
           [:db/retract id :block/path-refs :logseq.class/Page]]))
      class-ids)))
 
+(defn fix-using-properties-as-tags
+  [conn _sqlite-db]
+  ;; find all properties that're tags
+  (let [db @conn
+        property-ids (->>
+                      (d/q
+                       '[:find ?b ?i
+                         :where
+                         [?b :block/tags :logseq.class/Tag]
+                         [?b :db/ident ?i]]
+                       db)
+                      (filter (fn [[_ ident]] (= "user.property" (namespace ident))))
+                      (map first))]
+    (mapcat
+     (fn [id]
+       (let [property (d/entity @conn id)
+             title (:block/title property)]
+         (into (retract-property-attributes id)
+               [[:db/retract id :logseq.property/parent]
+                [:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]])))
+     property-ids)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -295,7 +321,8 @@
   [["65.0" {:fix separate-classes-and-properties}]
    ["65.1" {:fix fix-rename-parent-to-extends}]
    ["65.2" {:fix fix-tag-properties}]
-   ["65.3" {:fix add-missing-db-ident-for-tags}]])
+   ["65.3" {:fix add-missing-db-ident-for-tags}]
+   ["65.4" {:fix fix-using-properties-as-tags}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
