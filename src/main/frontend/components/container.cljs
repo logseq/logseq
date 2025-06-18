@@ -48,6 +48,7 @@
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
@@ -159,7 +160,8 @@
                 (if (and parent
                          (not (or (ldb/class? page)
                                   (and (:logseq.property/built-in? parent)
-                                       (= (:block/title parent) "Library")))))
+                                       (= (:block/title parent)
+                                          common-config/library-page-name)))))
                   (str (:block/title parent) ns-util/parent-char title')
                   title')))]
 
