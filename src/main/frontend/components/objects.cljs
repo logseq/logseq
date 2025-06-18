@@ -32,7 +32,9 @@
    :header views/header-cp
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
+             [:div.block-content.overflow-hidden
+              {:style {:max-height 30}}
+              (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
 
 (comment

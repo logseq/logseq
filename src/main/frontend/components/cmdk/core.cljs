@@ -332,8 +332,6 @@
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
-            blocks (search/fuzzy-search blocks @!input {:limit 100
-                                                        :extract-fn :block/title})
             items (keep (fn [block]
                           (if (:page? block)
                             (page-item repo block)
