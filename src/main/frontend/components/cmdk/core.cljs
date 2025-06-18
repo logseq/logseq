@@ -127,14 +127,15 @@
                          (or (let [page (some-> (text/get-namespace-last-part input)
                                                 string/trim
                                                 db/get-page)
-                                   parent-title (:block/title (:logseq.property/parent page))
+                                   parent-title (:block/title (:block/parent page))
                                    namespace? (string/includes? input "/")]
                                (and page
                                     (or (not namespace?)
                                         (and
                                          parent-title
                                          (= (util/page-name-sanity-lc parent-title)
-                                            (util/page-name-sanity-lc (nth (reverse (string/split input "/")) 1)))))))
+                                            (some-> (util/nth-safe (reverse (string/split input "/")) 1)
+                                                    util/page-name-sanity-lc))))))
                              (some (fn [block]
                                      (and
                                       (:block/tags block)
@@ -294,13 +295,16 @@
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
         icon (get-page-icon entity)
-        title (block-handler/block-unique-title page)
+        title (block-handler/block-unique-title (or entity page))
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
               :icon-theme :gray
               :text title'
-              :source-page (or source-page page)
-              :alias (:alias page))))
+              :header (when (:block/parent entity)
+                        (block/breadcrumb {:disable-preview? true
+                                           :search? true} repo (:block/uuid page) {}))
+              :alias (:alias page)
+              :source-page (or source-page page))))
 
 (defn- block-item
   [repo block current-page !input]
@@ -310,7 +314,8 @@
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
-     :header (when-not (db/page? block) (block/breadcrumb {:search? true} repo id {}))
+     :header (block/breadcrumb {:disable-preview? true
+                                :search? true} repo id {})
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))

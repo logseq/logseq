@@ -69,7 +69,7 @@
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
-                                                        :data-testid url}
+                                                        "data-testid" url}
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo

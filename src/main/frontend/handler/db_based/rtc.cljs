@@ -81,14 +81,17 @@
 (defn- notification-upload-higher-schema-graph!
   [repo]
   (notification/show!
-   [:div "The local graph has a higher schema version than the graph on the server."
-    (shui/button
-     {:on-click
-      (fn [e]
-        (util/stop e)
-        (p/do! (<rtc-branch-graph! repo)
-               (rtc-flows/trigger-rtc-start repo)))}
-     "Upload to server")]
+   [:div.flex.flex-col.gap-2
+    [:div "The local graph has a higher schema version than the graph on the server."]
+    [:div
+     (shui/button
+      {:size :sm
+       :on-click
+       (fn [e]
+         (util/stop e)
+         (p/do! (<rtc-branch-graph! repo)
+                (rtc-flows/trigger-rtc-start repo)))}
+      "Upload to server")]]
    :warning false))
 
 (defn <rtc-start!

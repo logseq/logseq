@@ -354,6 +354,9 @@
                           (gobj/get range "endContainer")
                           (gobj/get range "endOffset"))
                  (let [contents (.cloneContents pre-caret-range)
+                       ;; Remove all `.select-none` nodes
+                       _  (doseq [el (.querySelectorAll contents ".select-none")]
+                            (.remove el))
                        html (some-> (first (.-childNodes contents))
                                     (gobj/get "innerHTML")
                                     str)
@@ -365,7 +368,7 @@
                                        (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
                                        ;; multiple lines with a new line
                                        (string/ends-with? html "<br></div></div></span></div></div></div>")))
-                       value (.toString pre-caret-range)]
+                       value (.-textContent contents)]
                    (if br-ended?
                      (str value "\n")
                      value)))))
@@ -814,7 +817,7 @@
                              (pr-str
                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
+                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))

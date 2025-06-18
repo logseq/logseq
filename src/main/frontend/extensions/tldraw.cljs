@@ -53,8 +53,7 @@
   (block/breadcrumb {:preview? true}
                     (state/get-current-repo)
                     (uuid (gobj/get props "blockId"))
-                    {:end-separator? (gobj/get props "endSeparator")
-                     :level-limit (gobj/get props "levelLimit" 3)}))
+                    {:end-separator? (gobj/get props "endSeparator")})) -
 
 (rum/defc tweet
   [props]

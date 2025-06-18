@@ -8,10 +8,17 @@
   ;; rule "parent" is optimized for parent node -> child node nesting queries
   {:parent
    '[[(parent ?p ?c)
-      [?c :logseq.property/parent ?p]]
+      [?c :block/parent ?p]]
      [(parent ?p ?c)
-      [?t :logseq.property/parent ?p]
+      [?t :block/parent ?p]
       (parent ?t ?c)]]
+
+   :class-extends
+   '[[(class-extends ?p ?c)
+      [?c :logseq.property.class/extends ?p]]
+     [(class-extends ?p ?c)
+      [?t :logseq.property.class/extends ?p]
+      (class-extends ?t ?c)]]
 
    :alias
    '[[(alias ?e2 ?e1)
@@ -136,7 +143,7 @@
       [?b :block/tags ?tc]
       (or
        [(= ?t ?tc)]
-       (parent ?t ?tc))]
+       (class-extends ?t ?tc))]
 
     :has-property-or-object-property
     '[(has-property-or-object-property? ?b ?prop)
@@ -236,7 +243,7 @@
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-object-property #{:object-has-class-property}
-   :object-has-class-property #{:parent}
+   :object-has-class-property #{:class-extends}
    :has-simple-query-property #{:has-property-or-object-property}
    :has-private-simple-query-property #{:has-property-or-object-property}
    :property-default-value #{:existing-property-value :property-missing-value}

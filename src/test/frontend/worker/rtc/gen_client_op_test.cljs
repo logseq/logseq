@@ -89,7 +89,7 @@
     (let [conn (db-test/create-conn)
           tx-data [[:db/add 1000000 :block/uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6" 536870954]
                    [:db/add 1000000 :block/updated-at 1720019497643 536870954]
-                   [:db/add 1000000 :logseq.property/parent :logseq.class/Root 536870954]
+                   [:db/add 1000000 :logseq.property.class/extends :logseq.class/Root 536870954]
                    [:db/add 1000000 :block/created-at 1720019497643 536870954]
                    [:db/add 1000000 :db/ident :user.class/zzz 536870954]
                    [:db/add 1000000 :block/tags :logseq.class/Tag 536870954]
@@ -109,7 +109,7 @@
                         [:block/created-at "[\"~#'\",1720019497643]"]
                         [:block/tags #uuid "00000002-5389-0208-3000-000000000000"]
                         [:block/title "[\"~#'\",\"zzz\"]"]
-                        [:logseq.property/parent #uuid "00000002-2737-8382-7000-000000000000"]
+                        [:logseq.property.class/extends #uuid "00000002-2737-8382-7000-000000000000"]
                        ;;1. shouldn't have :db/ident, :db/ident is special, will be handled later
                         ])}]]
            (map (fn [[op-type _t op-value]]
@@ -179,7 +179,7 @@
   (let [repo (state/get-current-repo)
         db (conn/get-db repo true)
         ent (d/entity db :logseq.class/Template)
-        av-coll-attrs #{:logseq.property.class/properties :logseq.property/built-in? :logseq.property/parent
+        av-coll-attrs #{:logseq.property.class/properties :logseq.property/built-in? :logseq.property.class/extends
                         :block/tags :block/title}]
     #_{:clj-kondo/ignore [:unresolved-symbol :invalid-arity]}
     (is (->> (me/find (subject/generate-rtc-ops-from-class-entities [ent])

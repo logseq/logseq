@@ -134,7 +134,6 @@
  :page/logseq-is-having-a-problem "Logseqになにか問題があります。きちんと動く状態に戻すため、以下の項目を上から順番に実行してください："
  :page/step "ステップ{1}"
  :page/try "試す"
- :page/delete-confirmation "このページとページのファイルを削除してもよいですか？"
  :page/open-in-finder "ディレクトリで開く"
  :page/open-with-default-app "既定のアプリで開く"
  :page/make-public "パブリッシュのため公開する"

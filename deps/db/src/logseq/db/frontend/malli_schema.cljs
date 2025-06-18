@@ -282,7 +282,9 @@
    (concat
     [:map
      ;; journal-day is only set for journal pages
-     [:block/journal-day {:optional true} :int]]
+     [:block/journal-day {:optional true} :int]
+     [:block/parent {:optional true} :int]
+     [:block/order {:optional true} block-order]]
     page-attrs
     page-or-block-attrs)))
 
@@ -290,7 +292,8 @@
   (vec
    (concat
     [:map
-     [:db/ident class-ident]]
+     [:db/ident class-ident]
+     [:logseq.property.class/extends {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
 

@@ -148,13 +148,6 @@
                                           :hide? true
                                           :view-context :block}
                                  :queryable? true}
-     :logseq.property/parent {:title "Parent"
-                              :schema {:type :node
-                                       :public? true
-                                       :view-context :page}
-                              :queryable? true
-                              :properties
-                              {:logseq.property/description "Provides parent-child relationships between nodes. For tags this enables inheritance and for pages this enables namespaces."}}
      :logseq.property/default-value {:title "Default value"
                                      :schema {:type :entity
                                               :public? false
@@ -165,6 +158,14 @@
                                                      :public? false
                                                      :hide? true
                                                      :view-context :property}}
+     ;; TODO: support cardinality many for extends
+     :logseq.property.class/extends {:title "Extends"
+                                     :schema {:type :class
+                                              :public? true
+                                              :view-context :class}
+                                     :queryable? true
+                                     :properties
+                                     {:logseq.property/description "This enables tags to inherit properties from other tags"}}
      :logseq.property.class/properties {:title "Tag Properties"
                                         :schema {:type :property
                                                  :cardinality :many

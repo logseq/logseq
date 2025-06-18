@@ -6,12 +6,12 @@
             [babashka.cli :as cli]
             [clojure.edn :as edn]
             [datascript.core :as d]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [validate-db]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [validate-db]))
 
 (defn- resolve-path
   "If relative path, resolve with $ORIGINAL_PWD"

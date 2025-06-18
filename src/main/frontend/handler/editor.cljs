@@ -1,5 +1,6 @@
 (ns ^:no-doc frontend.handler.editor
-  (:require [clojure.set :as set]
+  (:require ["path" :as node-path]
+            [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [dommy.core :as dom]
@@ -58,6 +59,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -336,14 +338,21 @@
                    true
 
                    :else
-                   (not has-children?))]
+                   (not has-children?))
+        library? (:library? config)
+        new-block' (if library?
+                     (-> new-block
+                         (-> (assoc :block/tags #{:logseq.class/Page}
+                                    :block/name (util/page-name-sanity-lc (:block/title new-block)))
+                             (dissoc :block/page)))
+                     new-block)]
     (ui-outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
-     (outliner-op/insert-blocks! [new-block] current-block {:sibling? sibling?
-                                                            :keep-uuid? keep-uuid?
-                                                            :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?}))))
+     (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
+                                                             :keep-uuid? keep-uuid?
+                                                             :ordered-list? ordered-list?
+                                                             :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -526,7 +535,8 @@
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
             :or {sibling? false
                  before? false
-                 edit-block? true}}]
+                 edit-block? true}
+            :as config}]
   (when (or page block-uuid)
     (let [repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
@@ -587,10 +597,11 @@
             (p/do!
              (ui-outliner-tx/transact!
               {:outliner-op :insert-blocks}
-              (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                            :keep-uuid? true
-                                                            :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?})
+              (outliner-insert-block! config block-m new-block
+                                      {:sibling? sibling?
+                                       :keep-uuid? true
+                                       :ordered-list? ordered-list?
+                                       :replace-empty-target? replace-empty-target?})
               (when (and db-based? (seq properties))
                 (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
              (when edit-block?
@@ -833,6 +844,13 @@
                    (delete-block-aux! block)
                    (when edit-block-f (edit-block-f))))))))))))
 
+(defn move-blocks!
+  [blocks target sibling?]
+  (when (seq blocks)
+    (ui-outliner-tx/transact!
+     {:outliner-op :move-blocks}
+     (outliner-op/move-blocks! blocks target sibling?))))
+
 (defn delete-block!
   [repo]
   (delete-block-inner! repo (get-state)))
@@ -1046,14 +1064,24 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (->> (map db/entity lookup-refs)
-                          (remove ldb/page?))
-              top-level-blocks (when (seq blocks) (block-handler/get-top-level-blocks blocks))
-              sorted-blocks (mapcat (fn [block]
-                                      (tree/get-sorted-block-and-children repo (:db/id block)))
-                                    top-level-blocks)]
-          (when (seq sorted-blocks)
-            (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))
+              blocks (map db/entity lookup-refs)
+              pages (filter ldb/page? blocks)
+              pages-with-parent (filter (fn [page] (and (:block/parent page) (not (string/blank? (:block/title page))))) pages)]
+          (ui-outliner-tx/transact!
+           {:outliner-op :delete-blocks}
+           (doseq [page pages-with-parent]
+             (outliner-op/remove-block-property! (:db/id page) :block/parent))
+           (let [blocks' (if (seq pages-with-parent)
+                           (let [ids (set (map :db/id pages-with-parent))]
+                             (remove (fn [b] (ids (:db/id b))) blocks))
+                           blocks)]
+             (when (seq blocks')
+               (let [top-level-blocks (block-handler/get-top-level-blocks blocks')
+                     sorted-blocks (mapcat (fn [block]
+                                             (tree/get-sorted-block-and-children repo (:db/id block)))
+                                           top-level-blocks)]
+                 (when (seq sorted-blocks)
+                   (delete-blocks! repo (map :block/uuid sorted-blocks) sorted-blocks dom-blocks)))))))))))
 
 (def url-regex
   "Didn't use link/plain-link as it is incorrectly detects words as urls."
@@ -1422,15 +1450,14 @@
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
-       (p/let [file-name (util/node-path.basename (.-name file))
-               file-name-without-ext (.-name (util/node-path.parse file-name))
+       (p/let [file-name (node-path/basename (.-name file))
+               file-name-without-ext (db-asset/asset-name->title file-name)
                checksum (assets-handler/get-file-checksum file)
                existing-asset (db-async/<get-asset-with-checksum repo checksum)]
          (if existing-asset
            existing-asset
            (p/let [block-id (ldb/new-block-id)
-                   ext (when file-name
-                         (string/lower-case (.substr (util/node-path.extname file-name) 1)))
+                   ext (when file-name (db-asset/asset-path->type file-name))
                    _ (when (string/blank? ext)
                        (throw (ex-info "File doesn't have a valid ext."
                                        {:file-name file-name})))
@@ -2090,8 +2117,7 @@
                      (db-async/<get-template-by-name (name db-id)))
              block (when (:block/uuid block)
                      (db-async/<get-block repo (:block/uuid block)
-                                          {:children? true
-                                           :nested-children? true}))]
+                                          {:children? true}))]
        (when (:db/id block)
          (let [journal? (ldb/journal? target)
                target (or target (state/get-edit-block))
@@ -3485,7 +3511,7 @@
             repo (state/get-current-repo)
             result (db-async/<get-block repo (or block-id page-id)
                                         {:children-only? true
-                                         :nested-children? true})
+                                         :include-collapsed-children? true})
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
@@ -3561,7 +3587,8 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children-only? true})
+     (db-async/<get-block repo block-id {:children-only? true
+                                         :include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
      (state/set-collapsed-block! block-id false))))

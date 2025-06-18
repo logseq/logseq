@@ -9,4 +9,8 @@
   :block/raw-title {:doc "like `:block/title`,
                           but when eval `(:block/raw-title block-entity)`, return raw title of this block"}
   :kv/value        {:doc "Used to store key-value, the value could be anything,
-                          e.g. {:db/ident :logseq.kv/xxx :kv/value value}"})
+                          e.g. {:db/ident :logseq.kv/xxx :kv/value value}"}
+
+;; :block.temp/xxx keywords
+  :block.temp/load-status {:doc "`:full` means the block and its children have been loaded,
+                                 `:self` means the block itself has been loaded."})
