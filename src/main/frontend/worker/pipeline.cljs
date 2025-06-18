@@ -184,7 +184,8 @@
 
 (defn- add-created-by-ref-hook
   [db-before db-after tx-data tx-meta]
-  (when (and (not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta)))
+  (when (and (not (or (:undo? tx-meta) (:redo? tx-meta)
+                      (:rtc-tx? tx-meta) (:rtc-download-graph? tx-meta)))
              (seq tx-data))
     (when-let [decoded-id-token (some-> (worker-state/get-id-token) worker-util/parse-jwt)]
       (let [created-by-ent (d/entity db-after [:block/uuid (uuid (:sub decoded-id-token))])
@@ -208,7 +209,9 @@
                    ;; update created-by when block change from empty-block-title to non-empty
                    (and (keyword-identical? :block/title attr)
                         (not (string/blank? value))
-                        (string/blank? (:block/title (d/entity db-before e))))
+                        (let [origin-title (:block/title (d/entity db-before e))]
+                          (and (some? origin-title)
+                               (string/blank? origin-title))))
                    [:db/add e :logseq.property/created-by-ref created-by-id])))
              tx-data)]
         (cond->> add-created-by-tx-data
