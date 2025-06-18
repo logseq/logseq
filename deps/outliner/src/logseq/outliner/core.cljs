@@ -12,6 +12,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -222,6 +223,16 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+(defn- add-missing-tag-idents
+  [db tags]
+  (mapcat
+   (fn [t]
+     (when-not (:db/ident t)
+       (let [eid [:block/uuid (:block/uuid t)]]
+         [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db (:block/title t))]
+          [:db/retract eid :block/tags :logseq.class/Page]])))
+   tags))
+
 (extend-type Entity
   otree/INode
   (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes outliner-op]
@@ -314,9 +325,14 @@
         (swap! *txs-state conj
                (dissoc m :db/other-tx)))
 
-      ;; delete tags when title changed
       (when (and db-based? (:block/tags block-entity) block-entity)
-        (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
+        (let [;; delete tags when title changed
+              tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
+          (when (seq tx-data)
+            (swap! *txs-state (fn [txs] (concat txs tx-data))))))
+
+      (when db-based?
+        (let [tx-data (add-missing-tag-idents db (:block/tags m))]
           (when (seq tx-data)
             (swap! *txs-state (fn [txs] (concat txs tx-data))))))
 

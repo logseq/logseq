@@ -407,7 +407,7 @@
                                         (if graph-namespace
                                           (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
                                                                               (name %))
-                                          (db-class/create-user-class-ident-from-name (name %)))))
+                                          (db-class/create-user-class-ident-from-name nil (name %)))))
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
