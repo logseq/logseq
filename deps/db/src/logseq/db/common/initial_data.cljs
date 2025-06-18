@@ -174,7 +174,7 @@
                                    (= k :block/parent)
                                    (:db/id v)
                                    (= k :block/tags)
-                                   (set (map :db/id v))
+                                   (map #(select-keys % [:db/id]) v)
                                    (= k :logseq.property/created-by-ref)
                                    (:db/id v)
                                    (= k :block/refs)

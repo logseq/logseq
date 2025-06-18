@@ -909,9 +909,15 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (if (:block.temp/load-status block)
-               (assoc block :block.temp/refs-count (:block.temp/refs-count row))
-               row)]
+        row' (some->
+              (if (:block.temp/load-status block)
+                (assoc block :block.temp/refs-count (:block.temp/refs-count row))
+                row)
+              (update :block/tags (fn [tags]
+                                    (keep (fn [tag]
+                                            (when-let [id (:db/id tag)]
+                                              (db/entity id)))
+                                          tags))))]
     (table-row-inner table row' props option)))
 
 (rum/defc search
