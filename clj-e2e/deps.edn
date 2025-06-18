@@ -5,6 +5,7 @@
                                     :sha "8571fae7c51400ac61c8b1026cbfba68279bc461"}
         ;; io.github.zmedelis/bosquet {:mvn/version "2025.03.28"}
         org.clj-commons/claypoole          {:mvn/version "1.2.2"}
+        metosin/jsonista                   {:mvn/version "0.3.13"}
         clj-time/clj-time                  {:mvn/version "0.15.2"}}
  :aliases
  {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
