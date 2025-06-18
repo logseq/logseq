@@ -118,7 +118,8 @@
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
    #{:logseq.property/created-from-property :logseq.property/value
      :logseq.property.history/scalar-value :logseq.property.history/block
-     :logseq.property.history/property :logseq.property.history/ref-value}))
+     :logseq.property.history/property :logseq.property.history/ref-value
+     :logseq.property.class/extends}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -289,13 +290,20 @@
     page-or-block-attrs)))
 
 (def class-page
-  (vec
-   (concat
-    [:map
-     [:db/ident class-ident]
-     [:logseq.property.class/extends {:optional true} :int]]
-    page-attrs
-    page-or-block-attrs)))
+  [:or
+   (vec
+    (concat
+     [:map
+      [:db/ident class-ident]
+      [:logseq.property.class/extends :int]]
+     page-attrs
+     page-or-block-attrs))
+   (vec
+    (concat
+     [:map
+      [:db/ident [:= :logseq.class/Root]]]
+     page-attrs
+     page-or-block-attrs))])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
@@ -492,8 +500,7 @@
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    [:block/created-at {:optional true} :int]
-   [:block/updated-at {:optional true} :int]
-   [:block/properties {:optional true} block-properties]])
+   [:block/updated-at {:optional true} :int]])
 
 (defn entity-dispatch-key [db ent]
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)
