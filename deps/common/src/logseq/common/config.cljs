@@ -34,6 +34,7 @@
 
 (defonce favorites-page-name "$$$favorites")
 (defonce views-page-name "$$$views")
+(defonce library-page-name "Library")
 
 (defn local-asset?
   [s]

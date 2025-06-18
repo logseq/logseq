@@ -431,7 +431,7 @@
              (set (->> db-class/built-in-classes
                        vals
                        (map :title)
-                       (concat ["Library"])
+                       (concat [common-config/library-page-name])
                        (map #(-> % string/lower-case keyword))))))
 
 (def file-built-in-property-names
@@ -1746,7 +1746,7 @@
 (defn- move-top-parent-pages-to-library
   [conn repo-or-conn]
   (let [db @conn
-        library-page (ldb/get-built-in-page db "Library")
+        library-page (ldb/get-built-in-page db common-config/library-page-name)
         library-id (:block/uuid library-page)
         top-parent-pages (->> (d/datoms db :avet :block/parent)
                               (keep (fn [d]

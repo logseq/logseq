@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.class :as db-class]
@@ -83,7 +84,7 @@
     (entity-util/page? entity)
     (let [parents' (->> (get-page-parents entity)
                         (remove (fn [e]
-                                  (and (:logseq.property/built-in? e) (= "Library" (:block/title e))))))]
+                                  (and (:logseq.property/built-in? e) (= common-config/library-page-name (:block/title e))))))]
       (string/join
        ns-util/parent-char
        (map :block/title (conj (vec parents') entity))))

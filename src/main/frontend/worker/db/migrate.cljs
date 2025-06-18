@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.util :as worker-util]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -160,9 +161,9 @@
                                 [[:db/retract id old-p]
                                  [:db/add id new-p' prop-value]]))})
             rename-property-tx (f conn)
-            library-page (if-let [page (ldb/get-built-in-page db "Library")]
+            library-page (if-let [page (ldb/get-built-in-page db common-config/library-page-name)]
                            page
-                           (-> (sqlite-util/build-new-page "Library")
+                           (-> (sqlite-util/build-new-page common-config/library-page-name)
                                sqlite-create-graph/mark-block-as-built-in))
             library-id (:block/uuid library-page)
             library-page-tx (when-not (de/entity? library-page)

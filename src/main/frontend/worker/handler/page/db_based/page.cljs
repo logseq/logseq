@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
@@ -94,7 +95,7 @@
 (defn- page-with-parent-and-order
   "Apply to namespace pages"
   [db page & {:keys [parent]}]
-  (let [library (ldb/get-built-in-page db "Library")]
+  (let [library (ldb/get-built-in-page db common-config/library-page-name)]
     (when (nil? library)
       (throw (ex-info "Library page doesn't exist" {})))
     (assoc page

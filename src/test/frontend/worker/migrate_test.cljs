@@ -1,8 +1,10 @@
 (ns frontend.worker.migrate-test
   (:require ["fs" :as fs-node]
             [cljs.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]))
 
 (deftest test-fix-rename-parent-to-extends
@@ -68,8 +70,8 @@
               [:db/add 141 :logseq.property.class/extends 1]
               [:db/retract 137 :logseq.property/parent]
               [:db/add 137 :logseq.property.class/extends 1]
-              {:block/name "library",
-               :block/title "Library",
+              {:block/name (string/lower-case common-config/library-page-name),
+               :block/title common-config/library-page-name,
                :block/uuid #uuid "00000004-1294-7765-6000-000000000000",
                :block/tags #{:logseq.class/Page},
                :logseq.property/built-in? true}
