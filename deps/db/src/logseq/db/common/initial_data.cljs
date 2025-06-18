@@ -336,6 +336,14 @@
                e))))
    (take 30)))
 
+(defn- get-all-user-datoms
+  [db]
+  (when (d/entity db :logseq.property.user/email)
+    (mapcat
+     (fn [d]
+       (d/datoms db :eavt (:e d)))
+     (d/datoms db :avet :logseq.property.user/email))))
+
 (defn get-initial-data
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
@@ -360,6 +368,7 @@
                             (get-structured-datoms db))
         recent-updated-pages (let [pages (get-recent-updated-pages db)]
                                (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
+        user-datoms (get-all-user-datoms db)
         pages-datoms (if db-graph?
                        (let [contents-id (get-first-page-by-title db "Contents")
                              views-id (get-first-page-by-title db common-config/views-page-name)]
@@ -371,6 +380,7 @@
         data (distinct
               (concat idents
                       structured-datoms
+                      user-datoms
                       favorites
                       recent-updated-pages
                       views
