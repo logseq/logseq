@@ -941,14 +941,15 @@
 
 ;; block properties
 (defn ^:export upsert_block_property
-  [block-uuid keyname value]
+  [block-uuid keyname ^js value]
   (this-as this
            (p/let [keyname (api-block/sanitize-user-property-name keyname)
                    block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
                    repo (state/get-current-repo)
                    block (db-async/<get-block repo block-uuid :children? false)
                    db-base? (db-graph?)
-                   key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))]
+                   key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
+                   value (bean/->clj value)]
              (when block
                (if db-base?
                  (p/do!
