@@ -178,7 +178,7 @@
                                    (= k :logseq.property/created-by-ref)
                                    (:db/id v)
                                    (= k :block/refs)
-                                   (map #(select-keys % [:db/id :block/uuid :block/title]) v)
+                                   (map #(select-keys % [:db/id :block/uuid :block/title :logseq.property/status :block/tags]) v)
                                    (de/entity? v)
                                    (entity->map v opts)
                                    (and (coll? v) (every? de/entity? v))
