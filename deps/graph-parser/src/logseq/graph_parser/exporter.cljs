@@ -974,12 +974,54 @@
           (assoc :asset-blocks-tx asset-blocks)))
       {:block block})))
 
+(defn- ast->text
+  "Given an ast block, convert it to text for use as a block title. This is a
+  slimmer version of handler.export.text/export-blocks-as-markdown"
+  [ast-block {:keys [log-fn]
+              :or {log-fn prn}}]
+  (let [extract
+        (fn extract [node]
+          (let [extract-emphasis
+                (fn extract-emphasis [node]
+                  (let [[[type'] coll'] node]
+                    (case type'
+                      "Bold"
+                      (vec (concat ["**"] (mapcat extract coll') ["**"]))
+                      "Italic"
+                      (vec (concat ["*"] (mapcat extract coll') ["*"]))
+                      "Strike_through"
+                      (vec (concat ["~~"] (mapcat extract coll') ["~~"]))
+                      "Highlight"
+                      (vec (concat ["^^"] (mapcat extract coll') ["^^"]))
+                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))]
+            (cond
+              (and (vector? node) (#{"Inline_Html" "Plain"} (first node)))
+              [(second node)]
+              (and (vector? node) (#{"Break_Line" "Hard_Break_Line"} (first node)))
+              ["\n"]
+              (and (vector? node) (= (first node) "Link"))
+              [(:full_text (second node))]
+              (and (vector? node) (#{"Paragraph" "Quote"} (first node)))
+              (mapcat extract (second node))
+              (and (vector? node) (= (first node) "Tag"))
+              (into ["#"] (mapcat extract (second node)))
+              (and (vector? node) (= (first node) "Emphasis"))
+              (extract-emphasis (second node))
+              :else
+              (do
+                (log-fn :ast->text "Ignored ast node" :node node)
+                []))))]
+    (->> (extract ast-block)
+        ;;  ((fn [x] (prn :X x) x))
+         (apply str)
+         string/trim)))
+
 (defn- handle-quote-in-block
-  [block]
-  ;; TODO: Use :block.temp/ast-blocks when there is a fn to convert them to text that user sees
-  (if-let [quote' (some->> (second (re-find #"(?s)#\+BEGIN_QUOTE(.*)#\+END_QUOTE" (:block/title block))) string/trim)]
+  "If a block contains a quote, convert block to #Quote node"
+  [block opts]
+  (if-let [ast-block (first (filter #(= "Quote" (first %)) (:block.temp/ast-blocks block)))]
     (merge block
-           {:block/title quote'
+           {:block/title (ast->text ast-block opts)
             :logseq.property.node/display-type :quote
             :block/tags [:logseq.class/Quote-block]})
     block))
@@ -1003,7 +1045,7 @@
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                   handle-quote-in-block
+                   (handle-quote-in-block (select-keys options [:log-fn]))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
