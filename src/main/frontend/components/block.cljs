@@ -394,7 +394,10 @@
                   (:width metadata))
         *width (get state ::size)
         width (or @*width width 500)
-        metadata' (merge metadata (when width {:width width}))
+        metadata' (merge
+                   {:width width
+                    :height 125}
+                   metadata)
         resizable? (and (not (mobile-util/native-platform?))
                         (not breadcrumb?)
                         (not positioned?))
@@ -1063,9 +1066,6 @@
         file (str (:block/uuid block) "." asset-type)
         file-exists? @(::file-exists? state)
         repo (state/get-current-repo)
-        {:keys [direction loaded total]} (state/sub :rtc/asset-upload-download-progress
-                                                    {:path-in-sub-atom [repo (str (:block/uuid block))]})
-        downloading? (and (= direction :download) (not= loaded total))
         asset-file-write-finished? (state/sub :assets/asset-file-write-finish
                                               {:path-in-sub-atom [repo (str (:block/uuid block))]})]
     (cond
@@ -1076,11 +1076,8 @@
                   nil
                   nil)
 
-      (or downloading? (false? file-exists?))
-      (shui/skeleton {:class "h-[125px] w-[250px] rounded-xl"})
-
       :else
-      nil)))
+      (shui/skeleton {:class "h-[125px] w-[250px] rounded-xl"}))))
 
 (defn- img-audio-video?
   [block]
