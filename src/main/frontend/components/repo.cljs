@@ -199,8 +199,8 @@
             :on-click (fn []
                         (file-sync/load-session-graphs)
                         (p/do!
-                         (rtc-handler/<get-remote-graphs)
-                         (repo-handler/refresh-repos!))))]]
+                          (rtc-handler/<get-remote-graphs)
+                          (repo-handler/refresh-repos!))))]]
          (repos-inner remote-graphs)])]]))
 
 (defn- repos-dropdown-links [repos current-repo downloading-graph-id & {:as opts}]
