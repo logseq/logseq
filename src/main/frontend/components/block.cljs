@@ -3700,6 +3700,7 @@
           (block-right-menu config block editing?))])
 
      (when (and db-based?
+                (not (:library? config))
                 (or (:tag-dialog? config)
                     (and
                      (not collapsed?)
