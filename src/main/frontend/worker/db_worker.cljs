@@ -571,7 +571,8 @@
   [repo]
   (when-let [^js db (worker-state/get-sqlite-conn repo :db)]
     (.exec db "PRAGMA wal_checkpoint(2)"))
-  (<export-db-file repo))
+  (p/let [data (<export-db-file repo)]
+    (Comlink/transfer data #js [(.-buffer data)])))
 
 (def-thread-api :thread-api/import-db
   [repo data]
