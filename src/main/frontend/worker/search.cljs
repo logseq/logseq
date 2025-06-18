@@ -273,7 +273,7 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :limit - Number of result to limit search results. Defaults to 100
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only?]
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only? library-page-search?]
                           :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
@@ -308,26 +308,29 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (let [{:keys [id page title snippet]} result
                                     block-id (uuid id)]
                                 (when-let [block (d/entity @conn [:block/uuid block-id])]
-                                  (when (if dev?
-                                          true
-                                          (if built-in?
-                                            (or (not (ldb/built-in? block))
-                                                (not (ldb/private-built-in-page? block))
-                                                (ldb/class? block))
-                                            (or (not (ldb/built-in? block))
-                                                (ldb/class? block))))
-                                    {:db/id (:db/id block)
-                                     :block/uuid block-id
-                                     :block/title (if (ldb/page? block)
-                                                    (ldb/get-title-with-parents block)
-                                                    (or snippet title))
-                                     :block/page (if (common-util/uuid-string? page)
-                                                   (uuid page)
-                                                   nil)
-                                     :block/tags (seq (map :db/id (:block/tags block)))
-                                     :page? (ldb/page? block)
-                                     :alias (some-> (first (:block/_alias block))
-                                                    (select-keys [:block/uuid :block/title]))}))))))
+                                  (when-not (and library-page-search?
+                                                 (or (:block/parent block)
+                                                     (not (ldb/internal-page? block)))) ; remove pages that already have parents
+                                    (when (if dev?
+                                            true
+                                            (if built-in?
+                                              (or (not (ldb/built-in? block))
+                                                  (not (ldb/private-built-in-page? block))
+                                                  (ldb/class? block))
+                                              (or (not (ldb/built-in? block))
+                                                  (ldb/class? block))))
+                                      {:db/id (:db/id block)
+                                       :block/uuid block-id
+                                       :block/title (if (ldb/page? block)
+                                                      (ldb/get-title-with-parents block)
+                                                      (or snippet title))
+                                       :block/page (if (common-util/uuid-string? page)
+                                                     (uuid page)
+                                                     nil)
+                                       :block/tags (seq (map :db/id (:block/tags block)))
+                                       :page? (ldb/page? block)
+                                       :alias (some-> (first (:block/_alias block))
+                                                      (select-keys [:block/uuid :block/title]))})))))))
           page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
       (->>
        (concat page-or-object-result

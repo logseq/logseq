@@ -40,7 +40,7 @@
             highlighted-text (string/replace normal-text query-re "<:hlmarker>$1<:hlmarker>")
             segs (string/split highlighted-text #"<:hlmarker>")]
         (if (seq segs)
-          (into [:span {:data-testid text-string}]
+          (into [:span {"data-testid" text-string}]
                 (map-indexed (fn [i seg]
                                (if (even? i)
                                  [:span seg]
@@ -82,7 +82,7 @@
                                       :style {:color "var(--lx-gray-11)"}}
         (highlight-query header)])
      ;; main row
-     [:div.flex.items-center.gap-3
+     [:div.flex.items-start.gap-3
       [:div.w-5.h-5.rounded.flex.items-center.justify-center
        {:style {:background (when (#{:gradient} icon-theme) "linear-gradient(-65deg, #8AE8FF, #5373E7, #369EFF, #00B1CC)")
                 :box-shadow (when (#{:gradient} icon-theme) "inset 0 0 0 1px rgba(255,255,255,0.3) ")}

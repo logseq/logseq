@@ -282,7 +282,7 @@
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
                              (when class-parent
-                               {:logseq.property/parent
+                               {:logseq.property.class/extends
                                 (or (class-db-ids class-parent)
                                     (if (db-malli-schema/class? class-parent)
                                       class-parent

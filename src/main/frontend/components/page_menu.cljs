@@ -151,7 +151,7 @@
           (when (and db-based? (ldb/internal-page? page))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
-                                   (db-page-handler/convert-to-tag! page))}})
+                                   (db-page-handler/convert-page-to-tag! page))}})
 
           (when (and db-based? (ldb/class? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-tag-to-page)

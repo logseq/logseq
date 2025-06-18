@@ -134,7 +134,6 @@
  :page/logseq-is-having-a-problem "Logseq'te bir sorun var. Tekrar çalışır duruma getirmek için lütfen aşağıdaki güvenli adımları sırayla deneyin:"
  :page/step "{1}. Adım"
  :page/try "Deneyin"
- :page/delete-confirmation "Bu sayfayı ve dosyasını silmek istediğinizden emin misiniz?"
  :page/open-in-finder "Dizini aç"
  :page/open-with-default-app "Varsayılan uygulamayla aç"
  :page/make-public "Yayımlamak için herkese açık hale getir"

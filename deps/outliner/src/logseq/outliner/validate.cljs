@@ -46,59 +46,74 @@
                      :payload {:message "Built-in pages can't be edited"
                                :type :warning}}))))
 
-(defn- validate-unique-by-parent-and-name [db entity new-title]
+(defn- validate-unique-by-extends-and-name [db entity new-title]
   (when-let [_res (seq (d/q '[:find [?b ...]
                               :in $ ?eid ?type ?title
                               :where
                               [?b :block/title ?title]
-                              [?b :logseq.property/parent ?type]
+                              [?b :logseq.property.class/extends ?type]
                               [(not= ?b ?eid)]]
                             db
                             (:db/id entity)
-                            (:db/id (:logseq.property/parent entity))
+                            (:db/id (:logseq.property.class/extends entity))
                             new-title))]
     (throw (ex-info "Duplicate page by parent"
                     {:type :notification
                      :payload {:message (str "Another page named " (pr-str new-title) " already exists for parents "
-                                             (pr-str (->> (ldb/get-page-parents entity)
+                                             (pr-str (->> (ldb/get-class-extends entity)
                                                           (map :block/title)
                                                           (string/join ns-util/parent-char))))
                                :type :warning}}))))
+
+(defn- another-id-q
+  [entity]
+  (cond
+    (ldb/property? entity)
+    ;; Property names are unique in that they can
+    ;; have the same names as built-in property names
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(missing? $ ?b :logseq.property/built-in?)]
+      [(not= ?b ?eid)]]
+    (:logseq.property.class/extends entity)
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]
+      ;; same extends
+      [?b :logseq.property.class/extends ?bp]
+      [?eid :logseq.property.class/extends ?ep]
+      [(= ?bp ?ep)]]
+    (:block/parent entity)
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]
+      ;; same parent
+      [?b :block/parent ?bp]
+      [?eid :block/parent ?ep]
+      [(= ?bp ?ep)]]
+    :else
+    '[:find [?b ...]
+      :in $ ?eid ?title [?tag-id ...]
+      :where
+      [?b :block/title ?title]
+      [?b :block/tags ?tag-id]
+      [(not= ?b ?eid)]]))
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
   (cond
     (seq tags)
     (when-let [another-id (first
-                           (d/q (cond
-                                  (ldb/property? entity)
-                                  ;; Property names are unique in that they can
-                                  ;; have the same names as built-in property names
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(missing? $ ?b :logseq.property/built-in?)]
-                                    [(not= ?b ?eid)]]
-                                  (:logseq.property/parent entity)
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]
-                                    ;; same parent
-                                    [?b :logseq.property/parent ?bp]
-                                    [?eid :logseq.property/parent ?ep]
-                                    [(= ?bp ?ep)]]
-                                  :else
-                                  '[:find [?b ...]
-                                    :in $ ?eid ?title [?tag-id ...]
-                                    :where
-                                    [?b :block/title ?title]
-                                    [?b :block/tags ?tag-id]
-                                    [(not= ?b ?eid)]])
+                           (d/q (another-id-q entity)
                                 db
                                 (:db/id entity)
                                 new-title
@@ -117,13 +132,13 @@
                                                                 (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
                                      :type :warning}})))))
 
-    (:logseq.property/parent entity)
-    (validate-unique-by-parent-and-name db entity new-title)))
+    (:logseq.property.class/extends entity)
+    (validate-unique-by-extends-and-name db entity new-title)))
 
 (defn ^:api validate-unique-by-name-tag-and-block-type
   "Validates uniqueness of nodes for the following cases:
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique for a :logseq.property/parent"
+   - Page names are unique for a :logseq.property.class/extends"
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
@@ -154,32 +169,29 @@
                      :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
                                :type :error}}))))
 
-(defn- validate-parent-property-have-same-type
-  "Validates whether given parent and children are valid. Allows 'class' and
-  'page' types to have a relationship with their own type. May consider allowing more
-  page types if they don't cause systemic bugs"
+(defn- validate-extends-property-have-correct-type
+  "Validates whether given parent and children are classes"
   [parent-ent child-ents]
-  (when (or (and (ldb/class? parent-ent) (not (every? ldb/class? child-ents)))
-            (and (ldb/internal-page? parent-ent) (not (every? ldb/internal-page? child-ents)))
-            (not ((some-fn ldb/class? ldb/internal-page?) parent-ent)))
-    (throw (ex-info "Can't set this page as a parent because the child page is a different type"
+  (when (or (not (ldb/class? parent-ent))
+            (not (every? ldb/class? child-ents)))
+    (throw (ex-info "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
                     {:type :notification
-                     :payload {:message "Can't set this page as a parent because the child page is a different type"
-                               :type :warning}
+                     :payload {:message "Can't extend this page since either it is not a tag or is extending from a page that is not a tag"
+                               :type :error}
                      :blocks (map #(select-keys % [:db/id :block/title]) (remove ldb/class? child-ents))}))))
 
-(defn- disallow-built-in-class-parent-change
+(defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
     (throw (ex-info "Can't change the parent of a built-in tag"
                     {:type :notification
                      :payload {:message "Can't change the parent of a built-in tag"
-                               :type :warning}}))))
+                               :type :error}}))))
 
-(defn validate-parent-property
+(defn validate-extends-property
   [parent-ent child-ents]
-  (disallow-built-in-class-parent-change parent-ent child-ents)
-  (validate-parent-property-have-same-type parent-ent child-ents))
+  (disallow-built-in-class-extends-change parent-ent child-ents)
+  (validate-extends-property-have-correct-type parent-ent child-ents))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
   [db _block-eids v]

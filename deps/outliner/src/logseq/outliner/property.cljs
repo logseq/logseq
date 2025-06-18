@@ -314,8 +314,8 @@
            _ (when (= property-id :block/tags)
                (outliner-validate/validate-tags-property @conn block-eids v))
            property (d/entity @conn property-id)
-           _ (when (= (:db/ident property) :logseq.property/parent)
-               (outliner-validate/validate-parent-property
+           _ (when (= (:db/ident property) :logseq.property.class/extends)
+               (outliner-validate/validate-extends-property
                 (if (number? v) (d/entity @conn v) v)
                 (map #(d/entity @conn %) block-eids)))
            _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -359,9 +359,9 @@
                        property-id :logseq.property/empty-placeholder}]
                      {:outliner-op :save-block})
 
-      (and (ldb/class? block) (= property-id :logseq.property/parent))
+      (and (ldb/class? block) (= property-id :logseq.property.class/extends))
       (ldb/transact! conn
-                     [[:db/add (:db/id block) :logseq.property/parent :logseq.class/Root]]
+                     [[:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
                      {:outliner-op :save-block})
 
       (contains? db-property/db-attribute-properties property-id)
@@ -387,8 +387,8 @@
           db-attribute? (some? (db-schema/schema property-id))]
       (when (= property-id :block/tags)
         (outliner-validate/validate-tags-property @conn [block-eid] v))
-      (when (= property-id :logseq.property/parent)
-        (outliner-validate/validate-parent-property v [block]))
+      (when (= property-id :logseq.property.class/extends)
+        (outliner-validate/validate-extends-property v [block]))
       (cond
         db-attribute?
         (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself

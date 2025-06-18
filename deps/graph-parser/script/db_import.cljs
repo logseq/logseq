@@ -10,6 +10,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.asset :as db-asset]
@@ -18,8 +19,7 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]
-            [promesa.core :as p]
-            [logseq.common.config :as common-config]))
+            [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
 (def original-transact! d/transact!)

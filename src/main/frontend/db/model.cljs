@@ -529,10 +529,10 @@ independent of format as format specific heading characters are stripped"
           view-context (get m :logseq.property/view-context :all)]
       (or (contains? #{:logseq.property/query} (:db/ident m))
           (and (not block-page?) (contains? #{:block/alias} (:db/ident m)))
-        ;; Filters out properties from being in wrong :view-context and :never view-contexts
+          ;; Filters out properties from being in wrong :view-context and :never view-contexts
           (and (not= view-context :all) (not (contains? block-types view-context)))
-          (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m)))
-        ;; Filters out adding buggy class properties e.g. Alias and Parent
+          (and (ldb/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident m)))
+          ;; Filters out adding buggy class properties e.g. Alias and Parent
           (and class-schema? (ldb/public-built-in-property? m) (:logseq.property/view-context m))))))
 
 (defn get-all-properties
@@ -577,7 +577,7 @@ independent of format as format specific heading characters are stripped"
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
     (->>
-     (if (first (:logseq.property/_parent class))        ; has children classes
+     (if (first (:logseq.property.class/_extends class))        ; has children classes
        (let [all-classes (conj (->> (get-structured-children repo class-id)
                                     (map #(db-utils/entity repo %)))
                                class)]

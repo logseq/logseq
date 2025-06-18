@@ -11,7 +11,6 @@
   :kv/value        {:doc "Used to store key-value, the value could be anything,
                           e.g. {:db/ident :logseq.kv/xxx :kv/value value}"}
 
-
-  ;; :block.temp/xxx keywords
+;; :block.temp/xxx keywords
   :block.temp/load-status {:doc "`:full` means the block and its children have been loaded,
                                  `:self` means the block itself has been loaded."})
