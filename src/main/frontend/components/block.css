@@ -378,7 +378,7 @@
   @apply rounded transition-[background];
 
   .bracket {
-    @apply opacity-30;
+    @apply opacity-30 inline-flex;
   }
 
   &:hover {

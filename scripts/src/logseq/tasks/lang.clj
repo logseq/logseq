@@ -1,13 +1,13 @@
 (ns logseq.tasks.lang
   "Tasks related to language translations"
-  (:require [clojure.set :as set]
+  (:require [babashka.cli :as cli]
+            [babashka.fs :as fs]
+            [babashka.process :refer [shell]]
+            [borkdude.rewrite-edn :as rewrite]
+            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
-            [logseq.tasks.util :as task-util]
-            [babashka.cli :as cli]
-            [babashka.process :refer [shell]]
-            [babashka.fs :as fs]
-            [borkdude.rewrite-edn :as rewrite]))
+            [logseq.tasks.util :as task-util]))
 
 (defn- get-dicts
   []

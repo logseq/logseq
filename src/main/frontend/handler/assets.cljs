@@ -11,10 +11,10 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.asset :as db-asset]
             [medley.core :as medley]
             [missionary.core :as m]
-            [promesa.core :as p]
-            [logseq.db.frontend.asset :as db-asset])
+            [promesa.core :as p])
   (:import [missionary Cancelled]))
 
 (defn alias-enabled?
@@ -50,15 +50,6 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
-(defn- convert-platform-protocol
-  [full-path]
-
-  (cond-> full-path
-    (and (string? full-path)
-         (mobile-util/native-platform?))
-    (string/replace-first
-     #"^(file://|assets://)" common-config/capacitor-protocol-with-prefix)))
-
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -87,7 +78,7 @@
                     (if has-schema?
                       (path/path-join graph-root rpath)
                       (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
-        (convert-platform-protocol ret)))))
+        ret))))
 
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"

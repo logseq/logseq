@@ -41,7 +41,7 @@
 (deftest escape-regex-chars
   (testing "ensure the result is a valid regex string"
     (are [x]
-        (some? (re-find (re-pattern  (common-util/escape-regex-chars x)) x))
+         (some? (re-find (re-pattern  (common-util/escape-regex-chars x)) x))
       "[[page-name]]"
       "end-with-backslash\\"
       "\\[]{}().+*?|$^")))

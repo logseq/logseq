@@ -84,9 +84,9 @@
     (is (= (count (dissoc db-class/built-in-classes :logseq.class/Root))
            (count (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
                        (map #(d/entity @conn (:e %)))
-                       (mapcat :logseq.property/_parent)
+                       (mapcat :logseq.property.class/_extends)
                        set)))
-        "Reverse lookup of :logseq.property/parent correctly fetches number of child classes")))
+        "Reverse lookup of :logseq.property.class/extends correctly fetches number of child classes")))
 
 (deftest new-graph-initializes-default-properties-correctly
   (let [conn (db-test/create-conn)]

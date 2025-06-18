@@ -63,10 +63,10 @@
                       (merge ex-data' {:page-name page-name
                                        :page-names (sort (keys @page-names-to-uuids))})))))
 
-(defn- replace-namespace-with-parent [block page-names-to-uuids]
+(defn- replace-namespace-with-parent [block page-names-to-uuids parent-k]
   (if (:block/namespace block)
     (-> (dissoc block :block/namespace)
-        (assoc :logseq.property/parent
+        (assoc parent-k
                {:block/uuid (get-page-uuid page-names-to-uuids
                                            (get-in block [:block/namespace :block/name])
                                            {:block block :block/namespace (:block/namespace block)})}))
@@ -130,7 +130,7 @@
               db
               (ns-util/get-last-part full-name))
          (map #(d/entity db %))
-         (some #(let [parents (->> (ldb/get-page-parents %)
+         (some #(let [parents (->> (ldb/get-class-extends %)
                                    (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                                    vec)]
                   (when (= full-name (string/join ns-util/namespace-char (map :block/name (conj parents %))))
@@ -175,7 +175,7 @@
                              (dissoc :block/created-at :block/updated-at)
                              (merge (add-missing-timestamps
                                      (select-keys tag-block [:block/created-at :block/updated-at])))
-                             (replace-namespace-with-parent page-names-to-uuids))]
+                             (replace-namespace-with-parent page-names-to-uuids :logseq.property.class/extends))]
             (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
             (assert (:block/uuid class-m') "Class must have a :block/uuid")
             [:block/uuid (:block/uuid class-m')]))))))
@@ -427,9 +427,12 @@
 (def all-built-in-names
   "All built-in properties and classes as a set of keywords"
   (set/union all-built-in-property-file-ids
+             ;; This should list all new pages introduced with db graph
              (set (->> db-class/built-in-classes
                        vals
-                       (map #(-> % :title string/lower-case keyword))))))
+                       (map :title)
+                       (concat [common-config/library-page-name])
+                       (map #(-> % string/lower-case keyword))))))
 
 (def file-built-in-property-names
   "File-graph built-in property names that are supported. Expressed as set of keywords"
@@ -739,7 +742,7 @@
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
-  "Adds page properties including special handling for :logseq.property/parent"
+  "Adds page properties including special handling for :logseq.property.class/extends or :block/parent"
   [{:block/keys [properties] :as block*} db {:keys [page-names-to-uuids classes-tx]} refs
    {:keys [user-options log-fn import-state] :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
@@ -752,7 +755,8 @@
                 class-m (find-or-create-class db ((some-fn ::original-title :block/title) block) (:all-idents import-state) block)
                 class-m' (-> block
                              (merge class-m)
-                             (assoc :logseq.property/parent
+                             (dissoc :block/namespace)
+                             (assoc :logseq.property.class/extends
                                     (let [new-class (first parent-classes-from-properties)
                                           class-m (find-or-create-class db new-class (:all-idents import-state))
                                           class-m' (merge class-m
@@ -762,9 +766,8 @@
                                       (when (:new-class? (meta class-m)) (swap! classes-tx conj class-m'))
                                       [:block/uuid (:block/uuid class-m')])))]
             class-m')
-          block)
-        block'' (replace-namespace-with-parent block' page-names-to-uuids)]
-    {:block block'' :properties-tx properties-tx}))
+          (replace-namespace-with-parent block page-names-to-uuids :block/parent))]
+    {:block block' :properties-tx properties-tx}))
 
 (defn- pretty-print-dissoc
   "Remove list of keys from a given map string while preserving whitespace"
@@ -918,10 +921,10 @@
                                                              "\\)(\\{[^}]*\\})?"))
                                             (page-ref/->page-ref asset-uuid))]
               (when (string/includes? new-title asset-name)
-                  (swap! ignored-assets conj
-                         {:reason "Some asset links were not updated to block references"
-                          :path asset-name
-                          :location {:block new-title}}))
+                (swap! ignored-assets conj
+                       {:reason "Some asset links were not updated to block references"
+                        :path asset-name
+                        :location {:block new-title}}))
               new-title))
           block-title
           asset-name-to-uuids))
@@ -1025,10 +1028,11 @@
   "Like ldb/get-page-parents but using all-existing-page-uuids"
   [node all-existing-page-uuids]
   (let [get-parent (fn get-parent [n]
-                     (when (:block/uuid (:logseq.property/parent n))
-                       (or (get all-existing-page-uuids (:block/uuid (:logseq.property/parent n)))
-                           (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid (:logseq.property/parent n))))
-                                           {:node n})))))]
+                     (let [parent (or (:logseq.property.class/extends n) (:block/parent n))]
+                       (when-let [parent-id (:block/uuid parent)]
+                         (or (get all-existing-page-uuids parent-id)
+                             (throw (ex-info (str "No parent page found for " (pr-str (:block/uuid parent)))
+                                             {:node n}))))))]
     (when-let [parent (get-parent node)]
       (loop [current-parent parent
              parents' []]
@@ -1063,7 +1067,7 @@
   (let [;; These attributes are not allowed to be transacted because they must not change across files
         disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                :block/created-at :block/updated-at]
-        allowed-attributes (into [:block/tags :block/alias :logseq.property/parent :db/ident]
+        allowed-attributes (into [:block/tags :block/alias :block/parent :logseq.property.class/extends :db/ident]
                                  (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                        m))
         block-changes (select-keys m allowed-attributes)]
@@ -1267,6 +1271,15 @@
                                       (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
                                       file-built-in-property-names)})}))
 
+(defn- retract-parent-and-page-tag
+  [col]
+  (vec
+   (mapcat (fn [b]
+             (let [eid [:block/uuid (:block/uuid b)]]
+               [[:db/retract eid :block/parent]
+                [:db/retract eid :block/tags :logseq.class/Page]]))
+           col)))
+
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
@@ -1295,8 +1308,7 @@
                         {:block/uuid existing-page-uuid})))
              (set/intersection new-properties (set (map keyword (keys existing-pages)))))
         ;; Could do this only for existing pages but the added complexity isn't worth reducing the tx noise
-        retract-page-tag-from-properties-tx (map #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                                                 (concat property-pages-tx converted-property-pages-tx))
+        retract-page-tag-from-properties-tx (retract-parent-and-page-tag (concat property-pages-tx converted-property-pages-tx))
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
@@ -1420,17 +1432,18 @@
         (->> pages-tx'
              ;; Existing pages that have converted to property or class
              (filter #(and (:db/ident %) (get existing-pages' (:block/uuid %))))
-             (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)))]
+             retract-parent-and-page-tag)]
     {:pages-tx
      (mapv (fn [page]
              (if (or (contains? classes (:block/uuid page))
                      (contains? existing-properties (:block/uuid page)))
-               (update page :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
+               (-> page
+                   (update :block/tags (fn [tags] (vec (remove #(= % :logseq.class/Page) tags))))
+                   (dissoc :block/parent))
                page))
            pages-tx')
      :retract-page-tags-tx
-     (into (mapv #(vector :db/retract [:block/uuid (:block/uuid %)] :block/tags :logseq.class/Page)
-                 classes-tx)
+     (into (retract-parent-and-page-tag classes-tx)
            retract-page-tag-from-existing-pages)}))
 
 (defn- save-from-tx
@@ -1730,6 +1743,26 @@
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
 
+(defn- move-top-parent-pages-to-library
+  [conn repo-or-conn]
+  (let [db @conn
+        library-page (ldb/get-built-in-page db common-config/library-page-name)
+        library-id (:block/uuid library-page)
+        top-parent-pages (->> (d/datoms db :avet :block/parent)
+                              (keep (fn [d]
+                                      (let [child (d/entity db (:e d))
+                                            parent (d/entity db (:v d))]
+                                        (when (and (nil? (:block/parent parent)) (ldb/page? child) (ldb/page? parent))
+                                          parent))))
+                              (common-util/distinct-by :block/uuid))
+        tx-data (map
+                 (fn [parent]
+                   {:db/id (:db/id parent)
+                    :block/parent [:block/uuid library-id]
+                    :block/order (db-order/gen-key)})
+                 top-parent-pages)]
+    (ldb/transact! repo-or-conn tx-data)))
+
 (defn export-file-graph
   "Main fn which exports a file graph given its files and imports them
    into a DB graph. Files is expected to be a seq of maps with a :path key.
@@ -1781,6 +1814,7 @@
                           (select-keys options [:notify-user :set-ui-state]))
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
+        (move-top-parent-pages-to-library conn repo-or-conn)
         {:import-state (-> (:import-state doc-options)
                            ;; don't leak full asset content (which could be large) out of this ns
                            (dissoc :assets))

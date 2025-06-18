@@ -77,14 +77,13 @@
                             (= type order-list-type)))
         prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
-    (letfn [(page-fn? [b] (some-> b :block/name some?))
-            (order-sibling-list [b]
+    (letfn [(order-sibling-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)

@@ -27,12 +27,12 @@
 
      :logseq.class/Journal
      {:title "Journal"
-      :properties {:logseq.property/parent :logseq.class/Page
+      :properties {:logseq.property.class/extends :logseq.class/Page
                    :logseq.property.journal/title-format "MMM do, yyyy"}}
 
      :logseq.class/Whiteboard
      {:title "Whiteboard"
-      :properties {:logseq.property/parent :logseq.class/Page}}
+      :properties {:logseq.property.class/extends :logseq.class/Page}}
 
      :logseq.class/Task
      {:title "Task"
@@ -50,7 +50,7 @@
      :logseq.class/Cards
      {:title "Cards"
       :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
-                   :logseq.property/parent :logseq.class/Query}}
+                   :logseq.property.class/extends :logseq.class/Query}}
 
      :logseq.class/Asset
      {:title "Asset"
@@ -95,7 +95,7 @@
   "Children of :logseq.class/Page"
   (set
    (keep (fn [[class-ident m]]
-           (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
+           (when (= (get-in m [:properties :logseq.property.class/extends]) :logseq.class/Page) class-ident))
          built-in-classes)))
 
 (def page-classes
@@ -121,13 +121,13 @@
 (defn get-structured-children
   [db eid]
   (->>
-   (d/q '[:find [?children ...]
-          :in $ ?parent %
+   (d/q '[:find [?c ...]
+          :in $ ?p %
           :where
-          (parent ?parent ?children)]
+          (class-extends ?p ?c)]
         db
         eid
-        (:parent rules/rules))
+        (:class-extends rules/rules))
    (remove #{eid})))
 
 ;; Helper fns
