@@ -1,6 +1,7 @@
 (ns logseq.e2e.assert
   (:import [com.microsoft.playwright.assertions PlaywrightAssertions])
   (:require [clojure.test :as t]
+            [logseq.e2e.locator :as loc]
             [wally.main :as w]))
 
 (def assert-that PlaywrightAssertions/assertThat)
@@ -17,7 +18,9 @@
 
 (defn assert-non-editor-mode
   []
-  (assert-is-hidden (w/get-by-test-id "block editor")))
+  (assert-is-hidden (loc/or "[data-testid='block editor']"
+                            ;; TODO: remove this when this prop-name fixed on dom
+                            "[datatestid='block editor']")))
 
 (defn assert-in-normal-mode?
   "- not editing mode
