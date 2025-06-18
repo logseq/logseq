@@ -223,9 +223,12 @@ DROP TRIGGER IF EXISTS blocks_au;
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
-    (let [title (-> block
-                    (update :block/title ldb/get-title-with-parents)
-                    db-content/recur-replace-uuid-in-block-title)]
+    (let [title (cond->
+                 (-> block
+                     (update :block/title ldb/get-title-with-parents)
+                     db-content/recur-replace-uuid-in-block-title)
+                  (ldb/journal? block)
+                  (str " " (:block/journal-day block)))]
       (when uuid
         {:id (str uuid)
          :page (str (or (:block/uuid page) uuid))

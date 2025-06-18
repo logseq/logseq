@@ -1633,8 +1633,10 @@
                               (when nlp-pages?
                                 (map (fn [title] {:block/title title :nlp-date? true :page? true})
                                      date/nlp-pages)))
-                      (search/fuzzy-search q {:extract-fn :block/title :limit 50}))]
-    (sort-by (complement :page?) result')))
+                      (search/fuzzy-search q {:extract-fn :block/title :limit 50}))
+          result'' (let [ids (set (map :block/uuid result'))]
+                     (concat result' (remove (fn [item] (ids (:block/uuid item))) matched)))]
+    (sort-by (complement :page?) result'')))
 
 (defn <get-matched-templates
   [q]
