@@ -2,9 +2,10 @@
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.handler.page.db-based.page :as worker-db-page]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.db :as db-db]))
+            [logseq.db.frontend.db :as db-db]
+            [logseq.db.test.helper :as db-test]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
@@ -32,7 +33,7 @@
             ;; Create a child page for a class
             [_ child-uuid3] (worker-db-page/create! conn "c1/c2" {:split-namespace? true :class? true})
             child-page3 (d/entity @conn [:block/uuid child-uuid3])
-            library (ldb/get-built-in-page @conn "Library")
+            library (ldb/get-built-in-page @conn common-config/library-page-name)
             bar (ldb/get-page @conn "bar")]
         (is (= ["foo"] (map :block/title (:block/_parent library)))
             "Namespace (non-class) pages are added to the Library page")

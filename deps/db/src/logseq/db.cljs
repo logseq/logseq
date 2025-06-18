@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
@@ -259,7 +260,7 @@
 (defn library?
   [page]
   (and (built-in? page)
-       (= "Library" (:block/title page))))
+       (= common-config/library-page-name (:block/title page))))
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
