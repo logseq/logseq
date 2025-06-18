@@ -20,7 +20,6 @@
            ~qualified-keyword-name
            (fn ~(symbol (str "thread-api--" (name qualified-keyword-name))) ~params ~@body)))
 
-
 #?(:cljs (def *profile (volatile! {})))
 
 #?(:cljs
@@ -36,7 +35,8 @@
                (if (fn? result) ;; missionary task is a fn
                  (js/Promise. result)
                  result)]
-           (p/chain
-            result-promise
-            ldb/write-transit-str))
+           (p/let [result' result-promise]
+             (if (instance? js/Uint8Array result')
+               result'
+               (ldb/write-transit-str result'))))
          (throw (ex-info (str "not found thread-api: " qualified-kw-str) {}))))))

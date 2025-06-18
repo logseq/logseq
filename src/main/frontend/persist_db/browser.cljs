@@ -91,13 +91,15 @@
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
           wrapped-worker (fn [qkw direct-pass-args? & args]
-                           (-> (.remoteInvoke ^js wrapped-worker*
-                                              (str (namespace qkw) "/" (name qkw))
-                                              direct-pass-args?
-                                              (if direct-pass-args?
-                                                (into-array args)
-                                                (ldb/write-transit-str args)))
-                               (p/chain ldb/read-transit-str)))
+                           (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                         (str (namespace qkw) "/" (name qkw))
+                                                         direct-pass-args?
+                                                         (if direct-pass-args?
+                                                           (into-array args)
+                                                           (ldb/write-transit-str args)))]
+                             (if (instance? js/Uint8Array result)
+                               result
+                               (ldb/read-transit-str result))))
           t1 (util/time-ms)]
       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
