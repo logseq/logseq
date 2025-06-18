@@ -201,10 +201,8 @@
         class-ids (d/q
                    '[:find [?b ...]
                      :where
-                     [?b :block/tags ?t1]
-                     [?b :block/tags ?t2]
-                     [?t1 :db/ident :logseq.class/Property]
-                     [?t2 :db/ident :logseq.class/Tag]]
+                     [?b :block/tags :logseq.class/Property]
+                     [?b :block/tags :logseq.class/Tag]]
                    db)]
     (mapcat
      (fn [id]
@@ -235,8 +233,13 @@
                                      [:db/retract id :logseq.property/enable-history?]]
              datoms (if (:db/index class)
                       (d/datoms db :avet ident)
-                      (filter (fn [d] (= ident (:a d))) (d/datoms db :eavt)))]
+                      (filter (fn [d] (= ident (:a d))) (d/datoms db :eavt)))
+             tag-properties (->> (d/datoms db :avet :logseq.property.class/properties id)
+                                 (mapcat (fn [d]
+                                           [[:db/retract (:e d) (:a d) (:v d)]
+                                            [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]])))]
          (concat [new-property]
+                 tag-properties
                  retract-property-attrs
                  (mapcat
                   (fn [d]
@@ -245,12 +248,35 @@
                   datoms))))
      class-ids)))
 
+(defn fix-tag-properties
+  [conn _sqlite-db]
+  ;; find all classes that're still used as properties
+  (let [db @conn
+        class-ids (d/q
+                   '[:find [?b ...]
+                     :where
+                     [?b :block/tags :logseq.class/Tag]
+                     [?b1 :logseq.property.class/properties ?b]]
+                   db)]
+    (mapcat
+     (fn [id]
+       (let [class (d/entity db id)
+             property-id (first (ldb/page-exists? db (:block/title class) :logseq.class/Property))
+             tag-properties (when property-id
+                              (->> (d/datoms db :avet :logseq.property.class/properties id)
+                                   (mapcat (fn [d]
+                                             [[:db/retract (:e d) (:a d) (:v d)]
+                                              [:db/add (:e d) (:a d) property-id]]))))]
+         tag-properties))
+     class-ids)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
    and :fix."
   [["65.0" {:fix separate-classes-and-properties}]
-   ["65.1" {:fix fix-rename-parent-to-extends}]])
+   ["65.1" {:fix fix-rename-parent-to-extends}]
+   ["65.2" {:fix fix-tag-properties}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
