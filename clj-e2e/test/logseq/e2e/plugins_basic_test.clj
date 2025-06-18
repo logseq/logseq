@@ -2,6 +2,7 @@
   (:require
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
+   [jsonista.core :as json]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
@@ -42,9 +43,10 @@
         ns1 (string/lower-case (if (and ns? (not inbuilt?))
                                  (str "sdk." (first ns')) "api"))
         name1 (if ns? (to-snake-case (last ns')) tag)
-        estr (format "args => { const o=logseq.%1$s; return o['%2$s']?.apply(null, args || []); }" ns1 name1)]
-    ;(prn "Debug: eval-js #" estr (vec args))
-    (w/eval-js estr (vec args))))
+        estr (format "s => { const args = JSON.parse(s);const o=logseq.%1$s; return o['%2$s']?.apply(null, args || []); }" ns1 name1)]
+    (let [args (json/write-value-as-string (vec args))]
+      ;(prn "Debug: eval-js #" estr args)
+      (w/eval-js estr args))))
 
 (defn- assert-api-ls-block!
   ([ret] (assert-api-ls-block! ret 1))
@@ -56,9 +58,9 @@
 
 (deftest apis-related-test
   (testing "block related apis"
-    (page/new-page "test-apis")
-    (ls-api-call! :ui.showMsg "hello world" "error")
-    (let [ret (ls-api-call! :editor.appendBlockInPage "test-apis" "append-block-in-page-0")
+    (page/new-page "test-block-apis")
+    (ls-api-call! :ui.showMsg "hello world" "info")
+    (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-apis" "append-block-in-page-0")
           uuid' (assert-api-ls-block! ret)]
       (-> (ls-api-call! :editor.insertBlock uuid' "insert-0")
         (assert-api-ls-block!))
@@ -66,4 +68,24 @@
       (k/esc)
       (w/wait-for ".block-title-wrap:text('append-but-updated-0')")
       (ls-api-call! :editor.removeBlock uuid')
-      (assert-api-ls-block! uuid' 0))))
+      (assert-api-ls-block! uuid' 0)))
+
+  (testing "block properties related apis"
+    (page/new-page "test-block-properties-apis")
+    (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-properties-apis" "block-in-page-0" {:properties {:p1 1}})
+          uuid' (assert-api-ls-block! ret)
+          prop1 (ls-api-call! :editor.getBlockProperty uuid' "p1")
+          props1 (ls-api-call! :editor.getBlockProperties uuid' "p1")]
+      (w/wait-for ".property-k:text('p1')")
+      (is (= 1 (get prop1 "value")))
+      (is (= (get prop1 "ident") ":plugin.property._api/p1"))
+      (is (= 1 (get props1 ":plugin.property._api/p1")))
+      (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2")
+      (ls-api-call! :editor.upsertBlockProperty uuid' "p3" true)
+      (let [prop2 (ls-api-call! :editor.getBlockProperty uuid' "p2")
+            prop3 (ls-api-call! :editor.getBlockProperty uuid' "p3")]
+        (w/wait-for ".property-k:text('p2')")
+        (is (= "p2" (get prop2 "value")))
+        (is (true? prop3)))
+      (prn uuid'))
+    ))

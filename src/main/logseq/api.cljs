@@ -989,7 +989,11 @@
                                  (get properties ident))
                 property-value (if-let [property-id (:db/id property-value)]
                                  (db/pull property-id) property-value)
-
+                property-value (cond-> property-value
+                                 (map? property-value)
+                                 (assoc
+                                   :value (:logseq.property/value property-value)
+                                   :ident ident))
                 parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
             (or parsed-value
               (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))))
