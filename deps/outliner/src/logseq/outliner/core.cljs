@@ -227,7 +227,7 @@
   [db tags]
   (mapcat
    (fn [t]
-     (when-not (:db/ident t)
+     (when (and (not (:db/id t)) (not (:db/ident t)) (:block/uuid t)) ; new tag without db/ident
        (let [eid [:block/uuid (:block/uuid t)]]
          [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db (:block/title t))]
           [:db/retract eid :block/tags :logseq.class/Page]])))
