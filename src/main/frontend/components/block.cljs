@@ -4481,15 +4481,16 @@
               [:div
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (let [{top-level-blocks true others false} (group-by
-                                                          (fn [b] (= (:db/id page) (:db/id (first b))))
-                                                          parent-blocks)
-                    sorted-parent-blocks (concat top-level-blocks others)]
-                (for [[parent blocks] sorted-parent-blocks]
-                  (let [top-level? (= (:db/id parent) (:db/id page))]
-                    (rum/with-key
-                      (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
-                      (:db/id parent)))))
+              (fn []
+                (let [{top-level-blocks true others false} (group-by
+                                                            (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                            parent-blocks)
+                      sorted-parent-blocks (concat top-level-blocks others)]
+                  (for [[parent blocks] sorted-parent-blocks]
+                    (let [top-level? (= (:db/id parent) (:db/id page))]
+                      (rum/with-key
+                        (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
+                        (:db/id parent))))))
               {:debug-id page})])))]
 
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
@@ -4528,7 +4529,8 @@
                   [:div
                    (page-cp config page)
                    (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                  (when-not whiteboard? (blocks-container config blocks))
+                  (fn []
+                    (when-not whiteboard? (blocks-container config blocks)))
                   {})])))))]
 
      :else
