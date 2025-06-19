@@ -82,10 +82,31 @@
       (is (= 1 (get props1 ":plugin.property._api/p1")))
       (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2")
       (ls-api-call! :editor.upsertBlockProperty uuid' "p3" true)
+      (ls-api-call! :editor.upsertBlockProperty uuid' "p4" {:a 1, :b [2, 3]})
       (let [prop2 (ls-api-call! :editor.getBlockProperty uuid' "p2")
-            prop3 (ls-api-call! :editor.getBlockProperty uuid' "p3")]
+            prop3 (ls-api-call! :editor.getBlockProperty uuid' "p3")
+            prop4 (ls-api-call! :editor.getBlockProperty uuid' "p4")]
         (w/wait-for ".property-k:text('p2')")
         (is (= "p2" (get prop2 "value")))
-        (is (true? prop3)))
-      (prn uuid'))
-    ))
+        (is (true? prop3))
+        (is (= prop4 {"a" 1, "b" [2 3]})))
+      (ls-api-call! :editor.removeBlockProperty uuid' "p4")
+      (is (nil? (w/find-one-by-text ".property-k" "p4")))
+      (ls-api-call! :editor.upsertBlockProperty uuid' "p3" false)
+      (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2-updated")
+      (w/wait-for ".block-title-wrap:text('p2-updated')")
+      (let [props (ls-api-call! :editor.getBlockProperties uuid')]
+        (is (= (get props ":plugin.property._api/p3") false))
+        (is (= (get props ":plugin.property._api/p2") "p2-updated")))))
+
+  (testing "properties management related apis"
+    (let [_ (ls-api-call! :editor.upsertProperty "o1")
+          _ (ls-api-call! :editor.upsertProperty "o2" {:type "number"})
+          ;_ (ls-api-call! :editor.upsertProperty "user.property/o3" {:type "node"})
+          prop1 (ls-api-call! :editor.getProperty "o1")
+          prop2 (ls-api-call! :editor.getProperty "o2")
+          prop3 (ls-api-call! :editor.getProperty "user.property/o3")]
+      (is (= (get prop1 "ident") ":plugin.property._api/o1"))
+      (is (= (get prop1 "type") "default"))
+      (is (= (get prop2 "type") "number"))
+      (is (nil? prop3)))))
