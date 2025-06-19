@@ -230,6 +230,7 @@
      (when (and (not (:db/id t)) (not (:db/ident t)) (:block/uuid t)) ; new tag without db/ident
        (let [eid [:block/uuid (:block/uuid t)]]
          [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db (:block/title t))]
+          [:db/add eid :logseq.property.class/extends :logseq.class/Root]
           [:db/retract eid :block/tags :logseq.class/Page]])))
    tags))
 
