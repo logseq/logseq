@@ -254,8 +254,7 @@
                           (fn [block]
                             (-> block
                                 (assoc :block.temp/has-children? (some? (:block/_parent block)))
-                                (dissoc :block/tx-id :block/created-at :block/updated-at)
-                                entity->map))
+                                (entity->map)))
                           children)))
             block' (cond-> (entity->map block {:properties (set properties)})
                      block-refs-count?

@@ -112,10 +112,11 @@
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
-                 load-status' (if (or children? children-only?) :full :self)
+                 load-status' (if (and (or children? children-only?) (empty? properties)) :full :self)
                  block-load-status-tx (when block
                                         [{:db/id (:db/id block)
                                           :block.temp/load-status load-status'}])
+                 children (map (fn [child] (assoc child :block.temp/load-status :self)) children)
                  block-and-children (if block (cons block children) children)
                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
                  tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b)))) block-and-children)
