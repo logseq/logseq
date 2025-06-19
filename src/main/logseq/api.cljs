@@ -936,9 +936,10 @@
 (defn ^:export remove_property
   [k]
   (this-as this
-           (p/let [prop (-get-property this k)]
-             (when-let [uuid (:block/uuid prop)]
-               (page-common-handler/<delete! uuid nil nil)))))
+    (p/let [prop (-get-property this k)]
+      (when-let [uuid (and (api-block/plugin-property-key? (:db/ident prop))
+                        (:block/uuid prop))]
+        (page-common-handler/<delete! uuid nil nil)))))
 
 ;; block properties
 (defn ^:export upsert_block_property
