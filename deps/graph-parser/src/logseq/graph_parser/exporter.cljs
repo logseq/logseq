@@ -796,13 +796,61 @@
         (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
         query-str))))
 
+(defn- ast->text
+  "Given an ast block, convert it to text for use as a block title. This is a
+  slimmer version of handler.export.text/export-blocks-as-markdown"
+  [ast-block {:keys [log-fn]
+              :or {log-fn prn}}]
+  (let [extract
+        (fn extract [node]
+          (let [extract-emphasis
+                (fn extract-emphasis [node]
+                  (let [[[type'] coll'] node]
+                    (case type'
+                      "Bold"
+                      (vec (concat ["**"] (mapcat extract coll') ["**"]))
+                      "Italic"
+                      (vec (concat ["*"] (mapcat extract coll') ["*"]))
+                      "Strike_through"
+                      (vec (concat ["~~"] (mapcat extract coll') ["~~"]))
+                      "Highlight"
+                      (vec (concat ["^^"] (mapcat extract coll') ["^^"]))
+                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))]
+            (cond
+              (and (vector? node) (#{"Inline_Html" "Plain" "Inline_Hiccup"} (first node)))
+              [(second node)]
+              (and (vector? node) (#{"Break_Line" "Hard_Break_Line"} (first node)))
+              ["\n"]
+              (and (vector? node) (= (first node) "Link"))
+              [(:full_text (second node))]
+              (and (vector? node) (#{"Paragraph" "Quote"} (first node)))
+              (mapcat extract (second node))
+              (and (vector? node) (= (first node) "Tag"))
+              (into ["#"] (mapcat extract (second node)))
+              (and (vector? node) (= (first node) "Emphasis"))
+              (extract-emphasis (second node))
+              (and (vector? node) (= ["Custom" "query"] (take 2 node)))
+              [(get node 4)]
+              (and (vector? node) (= (first node) "Code"))
+              ["`" (second node) "`"]
+              :else
+              (do
+                (log-fn :ast->text "Ignored ast node" :node node)
+                []))))]
+    (->> (extract ast-block)
+        ;;  ((fn [x] (prn :X x) x))
+         (apply str)
+         string/trim)))
+
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
   [{:block/keys [title] :as block*}
    db page-names-to-uuids refs
    {{:keys [property-classes]} :user-options :as options}]
   (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
-        advanced-query (some->> (second (re-find #"(?s)#\+BEGIN_QUERY(.*)#\+END_QUERY" title)) string/trim)
+        advanced-query (some-> (first (filter #(= ["Custom" "query"] (take 2 %)) (:block.temp/ast-blocks block*)))
+                               (ast->text (select-keys options [:log-fn]))
+                               string/trim)
         additional-props (cond-> {}
                            ;; Order matters as we ensure a simple query gets priority
                            (macro-util/query-macro? title)
@@ -982,48 +1030,6 @@
           (seq asset-blocks)
           (assoc :asset-blocks-tx asset-blocks)))
       {:block block})))
-
-(defn- ast->text
-  "Given an ast block, convert it to text for use as a block title. This is a
-  slimmer version of handler.export.text/export-blocks-as-markdown"
-  [ast-block {:keys [log-fn]
-              :or {log-fn prn}}]
-  (let [extract
-        (fn extract [node]
-          (let [extract-emphasis
-                (fn extract-emphasis [node]
-                  (let [[[type'] coll'] node]
-                    (case type'
-                      "Bold"
-                      (vec (concat ["**"] (mapcat extract coll') ["**"]))
-                      "Italic"
-                      (vec (concat ["*"] (mapcat extract coll') ["*"]))
-                      "Strike_through"
-                      (vec (concat ["~~"] (mapcat extract coll') ["~~"]))
-                      "Highlight"
-                      (vec (concat ["^^"] (mapcat extract coll') ["^^"]))
-                      (throw (ex-info (str "Failed to wrap Emphasis AST block of type " (pr-str type')) {})))))]
-            (cond
-              (and (vector? node) (#{"Inline_Html" "Plain"} (first node)))
-              [(second node)]
-              (and (vector? node) (#{"Break_Line" "Hard_Break_Line"} (first node)))
-              ["\n"]
-              (and (vector? node) (= (first node) "Link"))
-              [(:full_text (second node))]
-              (and (vector? node) (#{"Paragraph" "Quote"} (first node)))
-              (mapcat extract (second node))
-              (and (vector? node) (= (first node) "Tag"))
-              (into ["#"] (mapcat extract (second node)))
-              (and (vector? node) (= (first node) "Emphasis"))
-              (extract-emphasis (second node))
-              :else
-              (do
-                (log-fn :ast->text "Ignored ast node" :node node)
-                []))))]
-    (->> (extract ast-block)
-        ;;  ((fn [x] (prn :X x) x))
-         (apply str)
-         string/trim)))
 
 (defn- handle-quotes
   "If a block contains a quote, convert block to #Quote node"

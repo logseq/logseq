@@ -396,10 +396,10 @@
               :logseq.property/query "{:query (task todo doing)}"
               :block/tags [:logseq.class/Query]
               :logseq.property.table/ordered-columns [:block/title]}
-             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with")))
+             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has correct query properties")
       (is (= "tasks with todo and doing"
-             (:block/title (db-test/find-block-by-content @conn #"tasks with")))
+             (:block/title (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has custom title migrated")
 
       ;; Cards
