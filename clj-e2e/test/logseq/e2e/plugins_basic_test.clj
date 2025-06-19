@@ -91,6 +91,8 @@
         (is (true? prop3))
         (is (= prop4 {"a" 1, "b" [2 3]})))
       (ls-api-call! :editor.removeBlockProperty uuid' "p4")
+      ;; wait for react re-render
+      (util/wait-timeout 16)
       (is (nil? (w/find-one-by-text ".property-k" "p4")))
       (ls-api-call! :editor.upsertBlockProperty uuid' "p3" false)
       (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2-updated")
