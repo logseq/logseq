@@ -200,7 +200,7 @@
 (def ^:private *graph-uuid->*online-users (atom {}))
 (defn- get-or-create-*online-users
   [graph-uuid]
-  (assert (uuid? graph-uuid))
+  (assert (uuid? graph-uuid) graph-uuid)
   (if-let [*online-users (get @*graph-uuid->*online-users graph-uuid)]
     *online-users
     (let [*online-users (atom nil)]

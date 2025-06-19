@@ -508,8 +508,10 @@
 
 (def-thread-api :thread-api/transact
   [repo tx-data tx-meta context]
-  (when repo (worker-state/set-db-latest-tx-time! repo))
-  (when-let [conn (worker-state/get-datascript-conn repo)]
+  (assert (some? repo))
+  (worker-state/set-db-latest-tx-time! repo)
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (assert (some? conn) {:repo repo})
     (try
       (let [tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
                        (map (fn [m]
@@ -530,7 +532,7 @@
                        (seq tx-data')
                        (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
 
-           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
+          ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
 
           (worker-util/profile "Worker db transact"
                                (ldb/transact! conn tx-data' tx-meta')))

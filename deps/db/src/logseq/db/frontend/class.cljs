@@ -136,17 +136,19 @@
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."
-  [class-name]
-  (db-ident/create-db-ident-from-name "user.class" class-name))
+  [db class-name]
+  (let [db-ident (db-ident/create-db-ident-from-name "user.class" class-name)]
+    (if db
+      (db-ident/ensure-unique-db-ident db db-ident)
+      db-ident)))
 
 (defn build-new-class
   "Builds a new class with a unique :db/ident. Also throws exception for user
   facing messages when name is invalid"
   [db page-m]
   {:pre [(string? (:block/title page-m))]}
-  (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
-    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))
+  (let [db-ident (create-user-class-ident-from-name db (:block/title page-m))]
+    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident))))
 
 (defonce logseq-class "logseq.class")
 

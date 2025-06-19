@@ -393,6 +393,10 @@
   (state/set-state! :rtc/log data))
 
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+  (assert (= (:major (db-schema/parse-schema-version db-schema/version))
+             (:major (db-schema/parse-schema-version graph-schema-version)))
+          {:app db-schema/version
+           :remote-graph graph-schema-version})
   (->
    (p/do!
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000))
@@ -437,6 +441,7 @@
          (p/then (fn [result]
                    (p/resolve! d result)))
          (p/catch (fn [error]
+                    (log/error :event-error error :event (first payload))
                     (let [type :handle-system-events/failed]
                       (state/pub-event! [:capture-error {:error error
                                                          :payload {:type type
