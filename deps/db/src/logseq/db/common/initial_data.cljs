@@ -162,14 +162,15 @@
     m))
 
 (defn- entity->map
-  [entity & {:keys [level]
+  [entity & {:keys [level properties]
              :or {level 0}}]
   (let [opts {:level (inc level)}
         f (if (> level 0)
             identity
             (fn [e]
               (keep (fn [[k v]]
-                      (when-not (contains? #{:block/path-refs} k)
+                      (when (and (not (contains? #{:block/path-refs} k))
+                                 (or (empty? properties) (properties k)))
                         (let [v' (cond
                                    (= k :block/parent)
                                    (:db/id v)
@@ -256,7 +257,7 @@
                                 (dissoc :block/tx-id :block/created-at :block/updated-at)
                                 entity->map))
                           children)))
-            block' (cond-> (entity->map block)
+            block' (cond-> (entity->map block {:properties (set properties)})
                      block-refs-count?
                      (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
         (cond->
