@@ -36,7 +36,7 @@
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
           (state/sidebar-remove-deleted-block! ids)))
 
-      (let [conn (db/get-db repo false)]
+      (when-let [conn (db/get-db repo false)]
         (cond
           initial-pages?
           (do
