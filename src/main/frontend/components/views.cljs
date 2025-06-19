@@ -82,8 +82,7 @@
 
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
-  (let [idx (.indexOf data (:db/id row))
-        id (str (:db/id row) "-" "checkbox")
+  (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)
         {:keys [last-selected-idx row-selection]} state
@@ -99,17 +98,19 @@
                    (when (and (.-shiftKey e) last-selected-idx)
                      ;; add selection
                      (util/stop e)
-                     (when (not= last-selected-idx idx)
-                       (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
-                         (when (seq new-ids)
-                           (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
-                             (set-row-selection! row-selection')))))))
+                     (let [idx (.indexOf data (:db/id row))]
+                       (when (not= last-selected-idx idx)
+                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                           (when (seq new-ids)
+                             (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
+                               (set-row-selection! row-selection'))))))))
        :on-checked-change (fn [v]
                             (p/do!
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
                              (if v
-                               (set-last-selected-idx! idx)
+                               (let [idx (.indexOf data (:db/id row))]
+                                 (set-last-selected-idx! idx))
                                (when (= (:db/id row) last-selected-idx)
                                  (set-last-selected-idx! nil)))
                              (row-toggle-selected! row-selection row v)))
