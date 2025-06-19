@@ -102,12 +102,10 @@
                                                                             :target (.-target e)}]))})]))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class {:keys [current-page? sidebar?]}]
+  [state class config]
   (when class
     (let [class (db/sub-block (:db/id class))
-          config {:container-id (:container-id state)
-                  :current-page? current-page?
-                  :sidebar? sidebar?}
+          config (assoc config :container-id (:container-id state))
           properties (outliner-property/get-class-properties class)]
       [:div.ml-1
        (class-objects-inner config class properties)])))
@@ -147,11 +145,10 @@
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property current-page?]
+  [state property config]
   (when property
     (let [property' (db/sub-block (:db/id property))
-          config {:container-id (:container-id state)
-                  :current-page? current-page?}
+          config (assoc config :container-id (:container-id state))
           ;; Show tags to help differentiate property rows
           properties (if (= (:db/ident property) :block/tags)
                        [property']

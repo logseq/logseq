@@ -503,10 +503,6 @@
        (plugins/hook-ui-items :pagebar)])))
 
 (rum/defc tabs < rum/static
-  {:did-mount (fn [state]
-                (let [*tabs-rendered? (:*tabs-rendered? (last (:rum/args state)))]
-                  (reset! *tabs-rendered? true)
-                  state))}
   [page opts]
   (let [class? (ldb/class? page)
         property? (ldb/property? page)
@@ -546,7 +542,7 @@
       (when property?
         (shui/tabs-content
          {:value "property"}
-         (objects/property-related-objects page (:current-page? opts)))))]))
+         (objects/property-related-objects page opts))))]))
 
 (rum/defc sidebar-page-properties
   [config page]
@@ -570,14 +566,18 @@
   (rum/local false ::all-collapsed?)
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
-  (rum/local false ::tabs-rendered?)
+  (rum/local false ::objects-ready?)
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
   (let [current-repo (state/sub :git/current-repo)
-        *tabs-rendered? (::tabs-rendered? state)
+        *objects-ready? (::objects-ready? state)
+        config (assoc config :*objects-ready? *objects-ready?)
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
         property-page? (ldb/property? page)
+        objects-ready? (if (or class-page? property-page?)
+                         (rum/react *objects-ready?)
+                         true)
         title (:block/title page)
         journal? (db/journal-page? title)
         db-based? (config/db-based-graph? repo)
@@ -591,8 +591,7 @@
         *all-collapsed? (::all-collapsed? state)
         block-or-whiteboard? (or block? whiteboard?)
         home? (= :home (state/get-current-route))
-        show-tabs? (and db-based? (and (or class-page? (ldb/property? page)) (not tag-dialog?)))
-        tabs-rendered? (rum/react *tabs-rendered?)]
+        show-tabs? (and db-based? (and (or class-page? (ldb/property? page)) (not tag-dialog?)))]
     (if page
       (when (or title block-or-whiteboard?)
         [:div.flex-1.page.relative.cp__page-inner-wrap
@@ -639,9 +638,9 @@
                (sidebar-page-properties config page)])
 
             (when show-tabs?
-              (tabs page {:current-page? option :sidebar? sidebar? :*tabs-rendered? *tabs-rendered?}))
+              (tabs page {:current-page? option :sidebar? sidebar? :*objects-ready? *objects-ready?}))
 
-            (when (and (or (not show-tabs?) tabs-rendered?) (not tag-dialog?))
+            (when (and (not show-tabs?) (not tag-dialog?))
               [:div.ls-page-blocks
                {:style {:margin-left (if whiteboard? 0 -20)}
                 :class (when-not sidebar?
@@ -650,7 +649,7 @@
                                                    :container-id (:container-id state)
                                                    :whiteboard? whiteboard?}))])])
 
-         (when (and (not preview?) (or (not show-tabs?) tabs-rendered?))
+         (when (and (not preview?) (or (not show-tabs?) objects-ready?))
            [:div.ml-1.flex.flex-col.gap-8.mt-4
             (when today?
               (today-queries repo today? sidebar?))
@@ -664,7 +663,7 @@
             (when (and (ldb/page? page) (:logseq.property.class/_extends page))
               (class-component/class-children page))
 
-              ;; referenced blocks
+            ;; referenced blocks
             (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
               [:div {:key "page-references"}
                (rum/with-key
