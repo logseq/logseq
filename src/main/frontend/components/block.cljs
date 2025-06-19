@@ -381,6 +381,7 @@
                             (js/window.apis.openExternal image-src)))}
              (shui/tabler-icon "folder-pin")])]])])])
 
+;; TODO: store image height and width for better ux
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
   (rum/local nil ::size)
   {:will-unmount (fn [state]
@@ -393,10 +394,12 @@
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
                   (:width metadata))
         *width (get state ::size)
-        width (or @*width width 500)
+        width (or @*width width 250)
         metadata' (merge
-                   {:width width
-                    :height 125}
+                   (cond->
+                    {:height 125}
+                     width
+                     (assoc :width width))
                    metadata)
         resizable? (and (not (mobile-util/native-platform?))
                         (not breadcrumb?)
@@ -1068,16 +1071,12 @@
         repo (state/get-current-repo)
         asset-file-write-finished? (state/sub :assets/asset-file-write-finish
                                               {:path-in-sub-atom [repo (str (:block/uuid block))]})]
-    (cond
-      (or file-exists? asset-file-write-finished?)
+    (when (or file-exists? asset-file-write-finished?)
       (asset-link (assoc config :asset-block block)
                   (:block/title block)
                   (path/path-join (str "../" common-config/local-assets-dir) file)
                   nil
-                  nil)
-
-      :else
-      (shui/skeleton {:class "h-[125px] w-[250px] rounded-xl"}))))
+                  nil))))
 
 (defn- img-audio-video?
   [block]
