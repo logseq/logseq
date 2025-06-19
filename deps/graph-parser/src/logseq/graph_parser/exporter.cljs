@@ -13,6 +13,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.macro :as macro-util]
             [logseq.common.util.namespace :as ns-util]
@@ -1024,7 +1025,7 @@
          (apply str)
          string/trim)))
 
-(defn- handle-quote-in-block
+(defn- handle-quotes
   "If a block contains a quote, convert block to #Quote node"
   [block opts]
   (if-let [ast-block (first (filter #(= "Quote" (first %)) (:block.temp/ast-blocks block)))]
@@ -1033,6 +1034,42 @@
             :logseq.property.node/display-type :quote
             :block/tags [:logseq.class/Quote-block]})
     block))
+
+(defn- handle-embeds
+  "If a block contains page or block embeds, converts block to a :block/link based embed"
+  [block page-names-to-uuids {:keys [log-fn]
+                              :or {log-fn prn}}]
+  (let [results (atom [])
+        ;; Combine this prewalk with find-asset-links if we do this prewalk again
+        _ (when (string/includes? (:block/title block) "{{embed")
+            (walk/prewalk
+             (fn [x]
+               (when (and (vector? x)
+                          (= "Macro" (first x))
+                          (= "embed" (:name (second x))))
+                 (swap! results conj x))
+               x)
+             (:block.temp/ast-blocks block)))]
+    (if-let [embed-node (first @results)]
+      (cond
+        (page-ref/page-ref? (str (first (:arguments (second embed-node)))))
+        (let [page-uuid (get-page-uuid page-names-to-uuids
+                                       (some-> (page-ref/get-page-name (first (:arguments (second embed-node))))
+                                               common-util/page-name-sanity-lc)
+                                       {:block block})]
+          (merge block
+                 {:block/title ""
+                  :block/link [:block/uuid page-uuid]}))
+        (block-ref/block-ref? (str (first (:arguments (second embed-node)))))
+        (let [block-uuid (uuid (block-ref/get-block-ref-id (first (:arguments (second embed-node)))))]
+          (merge block
+                 {:block/title ""
+                  :block/link [:block/uuid block-uuid]}))
+        :else
+        (do
+          (log-fn :invalid-embed-arguments "Ignore embed because of invalid arguments" :args (:arguments (second embed-node)))
+          block))
+      block)))
 
 (defn- build-block-tx
   [db block* pre-blocks {:keys [page-names-to-uuids] :as per-file-state} {:keys [import-state journal-created-ats] :as options}]
@@ -1053,7 +1090,8 @@
                    (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db (:user-options options) per-file-state (:all-idents import-state))
-                   (handle-quote-in-block (select-keys options [:log-fn]))
+                   (handle-embeds page-names-to-uuids (select-keys options [:log-fn]))
+                   (handle-quotes (select-keys options [:log-fn]))
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
@@ -1527,7 +1565,7 @@
                       :or {notify-user #(println "[WARNING]" (:msg %))
                            log-fn prn}
                       :as *options}]
-  (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
+  (let [options (assoc *options :notify-user notify-user :log-fn log-fn :file file)
         {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
         tx-options (merge (build-tx-options options)
                           {:journal-created-ats (build-journal-created-ats pages)})
