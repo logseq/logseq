@@ -110,4 +110,6 @@
       (is (= (get prop1 "type") "default"))
       (is (= (get prop2 "type") "number"))
       (is (= (get prop3 "ident") ":user.property/o3"))
-      (is (= (get prop3 "type") "node")))))
+      (is (= (get prop3 "type") "node"))
+      (ls-api-call! :editor.removeProperty "o2")
+      (is (nil? (w/find-one-by-text ".property-k" "o2"))))))
