@@ -84,7 +84,7 @@
                             :or {children? true}
                             :as opts}]
 
-  ;; (prn :debug :<get-block id-uuid-or-name :children? children?)
+  ;; (prn :debug :<get-block id-uuid-or-name :children? children? :properties properties)
   ;; (js/console.trace)
   (let [name' (str id-uuid-or-name)
         opts (assoc opts :children? children?)
@@ -112,17 +112,11 @@
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
-                 load-status' (if (and (or children? children-only?) (empty? properties)) :full :self)
-                 block-load-status-tx (when block
-                                        [{:db/id (:db/id block)
-                                          :block.temp/load-status load-status'}])
-                 children (map (fn [child] (assoc child :block.temp/load-status :self)) children)
                  block-and-children (if block (cons block children) children)
                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
                  tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b)))) block-and-children)
                               (common-util/fast-remove-nils)
-                              (remove empty?)
-                              (concat block-load-status-tx))]
+                              (remove empty?))]
              (when (seq tx-data) (d/transact! conn tx-data))
              (when-not skip-refresh?
                (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
@@ -143,8 +137,7 @@
         (let [conn (db/get-db graph false)
               result' (map :block result)]
           (when (seq result')
-            (let [result'' (map (fn [b] (assoc b :block.temp/load-status :self)) result')]
-              (d/transact! conn result'')))
+            (d/transact! conn result'))
           result')))))
 
 (defn <get-block-parents
