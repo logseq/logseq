@@ -607,7 +607,7 @@
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-8.page-inner
+           [:div.relative.grid.gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
@@ -650,7 +650,7 @@
                                                    :whiteboard? whiteboard?}))])])
 
          (when (and (not preview?) (or (not show-tabs?) objects-ready?))
-           [:div.ml-1.flex.flex-col.gap-8.mt-4
+           [:div.ml-1.flex.flex-col.gap-8
             (when today?
               (today-queries repo today? sidebar?))
 
