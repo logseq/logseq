@@ -429,6 +429,26 @@
              (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
           "Imports full quote with various ast types"))
 
+    (testing "embeds"
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "page embed")
+                 first
+                 (select-keys [:block/title])))
+          "Page embed linked correctly")
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "test block embed")
+                 first
+                 (select-keys [:block/title])))
+          "Block embed linked correctly"))
+
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
              (:db/ident (db-test/find-page-by-title @conn "life")))
