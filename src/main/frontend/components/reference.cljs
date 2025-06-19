@@ -76,7 +76,7 @@
   (ui/lazy-visible
    (fn []
      (references-inner entity config))
-   {:trigger-once? true}))
+   {}))
 
 (rum/defc unlinked-references
   [entity config]

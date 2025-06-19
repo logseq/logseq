@@ -2032,9 +2032,9 @@
        ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
 
 (defn- load-view-data-aux
-  [view-entity view-parent {:keys [query? query-entity-ids sorting filters input
-                                   view-feature-type group-by-property-ident
-                                   set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
+  [config view-entity view-parent {:keys [query? query-entity-ids sorting filters input
+                                          view-feature-type group-by-property-ident
+                                          set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
   (c.m/run-task*
    (m/sp
      (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -2046,26 +2046,28 @@
          :else
          (when (or (not query?) need-query?)
            (try
-             (let [{:keys [data ref-pages-count ref-matched-children-ids properties]}
-                   (c.m/<?
-                    (<load-view-data view-entity
-                                     (cond->
-                                      {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                        (:db/id view-parent))
-                                       :view-feature-type view-feature-type
-                                       :group-by-property-ident group-by-property-ident
-                                       :input input
-                                       :filters filters
-                                       :sorting sorting}
-                                       query?
-                                       (assoc :query-entity-ids query-entity-ids))))]
+             (let [opts (cond->
+                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                           (:db/id view-parent))
+                          :view-feature-type view-feature-type
+                          :group-by-property-ident group-by-property-ident
+                          :input input
+                          :filters filters
+                          :sorting sorting}
+                          query?
+                          (assoc :query-entity-ids query-entity-ids))
+                   {:keys [data ref-pages-count ref-matched-children-ids properties]}
+                   (c.m/<? (<load-view-data view-entity opts))]
                (set-data! data)
                (when ref-pages-count
                  (set-ref-pages-count! ref-pages-count)
                  (set-ref-matched-children-ids! ref-matched-children-ids))
                (set-properties! properties))
              (finally
-               (set-loading! false)))))))))
+               (set-loading! false)
+               (when (contains? #{:class-objects :property-objects} view-feature-type)
+                 (when-let [*objects-ready? (:*objects-ready? config)]
+                   (reset! *objects-ready? true)))))))))))
 
 (rum/defc view-aux
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
@@ -2101,7 +2103,7 @@
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         [ref-matched-children-ids set-ref-matched-children-ids!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
-                         (load-view-data-aux view-entity view-parent
+                         (load-view-data-aux config view-entity view-parent
                                              {:query? query?
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input
