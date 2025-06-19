@@ -53,7 +53,7 @@
   (let [block (db/sub-block (:db/id entity))]
     (references-aux block config)))
 
-(rum/defc references
+(rum/defc references-inner
   [entity config]
   (when-let [id (:db/id entity)]
     (let [[has-references? set-has-references!] (hooks/use-state nil)]
@@ -70,6 +70,13 @@
                                "Linked References: Unexpected error."
                                "Linked References: Unexpected error. Please re-index your graph first."))
          (references-cp entity config))))))
+
+(rum/defc references
+  [entity config]
+  (ui/lazy-visible
+   (fn []
+     (references-inner entity config))
+   {:trigger-once? true}))
 
 (rum/defc unlinked-references
   [entity config]
