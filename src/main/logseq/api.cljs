@@ -893,11 +893,11 @@
 (defn ^:export get_property
   [k]
   (this-as this
-           (p/let [prop (-get-property this k)]
-             (-> prop
-                 (assoc :type (:logseq.property/type prop))
-                 (sdk-utils/normalize-keyword-for-json)
-                 (bean/->js)))))
+    (p/let [prop (-get-property this k)]
+      (some-> prop
+        (assoc :type (:logseq.property/type prop))
+        (sdk-utils/normalize-keyword-for-json)
+        (bean/->js)))))
 
 (defn ^:export upsert_property
   "schema:
@@ -992,7 +992,8 @@
                 property-value (cond-> property-value
                                  (map? property-value)
                                  (assoc
-                                   :value (:logseq.property/value property-value)
+                                   :value (or (:logseq.property/value property-value)
+                                            (:block/title property-value))
                                    :ident ident))
                 parsed-value (api-block/parse-property-json-value-if-need ident property-value)]
             (or parsed-value
