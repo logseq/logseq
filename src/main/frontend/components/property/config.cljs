@@ -731,7 +731,7 @@
                 ;; Any property should be removable from Tag Properties
                  (if class-schema?
                    (contains? (set (map :db/id (:logseq.property.class/properties owner-block))) (:db/id property))
-                   (not (contains? #{:logseq.property.class/extends} (:db/ident property)))))
+                   (not (contains? #{:logseq.property.class/extends :logseq.property.class/properties} (:db/ident property)))))
 
         (dropdown-editor-menuitem
          {:id :delete-property :icon :x
