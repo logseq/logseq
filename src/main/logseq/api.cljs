@@ -912,9 +912,9 @@
            (when-let [k' (and (string? k) (keyword k))]
              (let [prefix (api-block/resolve-property-prefix-for-db this)]
                (p/let [opts (or (some-> opts (bean/->clj)) {})
-                       name (or (:name opts) (some-> (str k) (string/trim)))
                        k (if (qualified-keyword? k') k'
                              (api-block/get-db-ident-for-user-property-name k prefix))
+                       name (or (:name opts) (some-> k (name)))
                        schema (or (some-> schema (bean/->clj)
                                           (update-keys #(if (contains? #{:hide :public} %)
                                                           (keyword (str (name %) "?")) %))) {})
@@ -929,7 +929,8 @@
                        p (db-property-handler/upsert-property! k schema
                                                                (cond-> opts
                                                                  name
-                                                                 (assoc :property-name name)))]
+                                                                 (assoc :property-name name)))
+                       p (db-utils/pull (:db/id p))]
                  (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
 
 (defn ^:export remove_property
