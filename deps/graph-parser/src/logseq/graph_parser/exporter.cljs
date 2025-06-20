@@ -310,33 +310,41 @@
           (dissoc :block/priority)))
     block))
 
-(defn- update-block-deadline
-  ":block/title doesn't contain DEADLINE.* text so unable to detect timestamp
-  or repeater usage and notify user that they aren't supported"
-  [block page-names-to-uuids {:keys [user-config]}]
-  (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
-    (let [title (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
-          existing-journal-page (some->> title
-                                         common-util/page-name-sanity-lc
-                                         (get @page-names-to-uuids)
-                                         (hash-map :block/uuid))
-          deadline-page (->
-                         (or existing-journal-page
-                            ;; FIXME: Register new pages so that two different refs to same new page
-                            ;; don't create different uuids and thus an invalid page
+(defn- find-or-create-deadline-scheduled-value
+  "Given a :block/scheduled or :block/deadline value, creates the datetime property value
+   and any optional journal tx associated with that value"
+  [date-int page-names-to-uuids user-config]
+  (let [title (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config))
+        existing-journal-page (some->> title
+                                       common-util/page-name-sanity-lc
+                                       (get @page-names-to-uuids)
+                                       (hash-map :block/uuid))
+        journal-page (-> (or existing-journal-page
                              (let [page-m (sqlite-util/build-new-page title)]
                                (assoc page-m
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
-          time-long (tc/to-long (date-time-util/int->local-date date-int))
-          datetime-property (if (:block/deadline block) :logseq.property/deadline :logseq.property/scheduled)]
-      {:block
-       (-> block
-           (assoc datetime-property time-long)
-           (dissoc :block/deadline :block/scheduled :block/repeated?))
-       :properties-tx (when-not existing-journal-page [deadline-page])})
-    {:block block :properties-tx []}))
+        time-long (tc/to-long (date-time-util/int->local-date date-int))]
+    {:property-value time-long
+     :journal-tx (when-not existing-journal-page [journal-page])}))
+
+(defn- update-block-deadline-and-scheduled
+  "Converts :block/deadline and :block/scheduled to their new logseq properties."
+  [block page-names-to-uuids {:keys [user-config]}]
+  (let [{deadline-value :property-value deadline-tx :journal-tx}
+        (when (:block/deadline block)
+          (find-or-create-deadline-scheduled-value (:block/deadline block) page-names-to-uuids user-config))
+        {scheduled-value :property-value scheduled-tx :journal-tx}
+        (when (:block/scheduled block)
+          (find-or-create-deadline-scheduled-value (:block/scheduled block) page-names-to-uuids user-config))]
+    {:block
+     (cond-> (dissoc block :block/deadline :block/scheduled :block/repeated?)
+       (some? deadline-value)
+       (assoc :logseq.property/deadline deadline-value)
+       (some? scheduled-value)
+       (assoc :logseq.property/scheduled scheduled-value))
+     :properties-tx (distinct (concat deadline-tx scheduled-tx))}))
 
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
@@ -1032,7 +1040,7 @@
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
-        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block page-names-to-uuids options)
+        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline-and-scheduled block page-names-to-uuids options)
         {block-after-assets :block :keys [asset-blocks-tx]}
         (handle-assets-in-block block-after-built-in-props (select-keys import-state [:assets :ignored-assets]))
         ;; :block/page should be [:block/page NAME]
