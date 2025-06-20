@@ -717,7 +717,6 @@
 
 (defn ^:export insert_block
   [block-uuid-or-page-name content ^js opts]
-
   (this-as this
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
@@ -768,7 +767,7 @@
                                            (merge properties
                                              (when custom-uuid {:id custom-uuid})))})
                 _ (when (and db-base? (some? properties))
-                    (api-block/save-db-based-block-properties! new-block properties))]
+                    (api-block/save-db-based-block-properties! new-block properties this))]
           (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
 (def ^:export insert_batch_block
@@ -945,18 +944,18 @@
 (defn ^:export upsert_block_property
   [block-uuid keyname ^js value]
   (this-as this
-           (p/let [keyname (api-block/sanitize-user-property-name keyname)
-                   block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   repo (state/get-current-repo)
-                   block (db-async/<get-block repo block-uuid :children? false)
-                   db-base? (db-graph?)
-                   key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
-                   value (bean/->clj value)]
-             (when block
-               (if db-base?
-                 (p/do!
-                   (api-block/save-db-based-block-properties! block {key' value}))
-                 (property-handler/set-block-property! repo block-uuid key' value))))))
+    (p/let [keyname (api-block/sanitize-user-property-name keyname)
+            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            repo (state/get-current-repo)
+            block (db-async/<get-block repo block-uuid :children? false)
+            db-base? (db-graph?)
+            key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
+            value (bean/->clj value)]
+      (when block
+        (if db-base?
+          (p/do!
+            (api-block/save-db-based-block-properties! block {key' value} this))
+          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
   [block-uuid key]
