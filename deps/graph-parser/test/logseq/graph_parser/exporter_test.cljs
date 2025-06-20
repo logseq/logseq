@@ -331,10 +331,11 @@
                  date-time-util/ms->journal-day))
           "deadline block has correct journal as property value")
 
-      (is (= 20221125
-             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only scheduled"))
-                 :logseq.property/scheduled
-                 date-time-util/ms->journal-day))
+      (is (= {:logseq.property/scheduled 20221125
+              :logseq.property/deadline 20221125}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn #"deadline and scheduled"))
+                 (select-keys [:logseq.property/scheduled :logseq.property/deadline])
+                 (update-vals date-time-util/ms->journal-day)))
           "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
