@@ -148,7 +148,7 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when (and db-based? (ldb/internal-page? page))
+          (when (and db-based? (ldb/internal-page? page) (not (:logseq.property/built-in? page)))
             {:title (t :page/convert-to-tag)
              :options {:on-click (fn []
                                    (db-page-handler/convert-page-to-tag! page))}})
