@@ -46,7 +46,7 @@
 (defn resolve-property-prefix-for-db
   [^js plugin]
   (when (some-> js/window.LSPlugin (.-PluginLocal))
-    (or (some-> plugin (.-id) (sanitize-user-property-name) (str "."))
+    (or (some->> plugin (.-id) (sanitize-user-property-name) (str "."))
       "._api")))
 
 ;; FIXME: This ns should not be creating idents. This allows for ident conflicts
