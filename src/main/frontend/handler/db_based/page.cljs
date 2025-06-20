@@ -49,6 +49,8 @@
         (notification/show! (str "A tag with the name \"" (:block/title page-entity) "\" already exists.") :warning false)
         (:block/parent page-entity)
         (notification/show! "Namespaced pages can't be tags" :error false)
+        (outliner-validate/uneditable-page? page-entity)
+        (notification/show! "Built-in pages can't be edited" :error)
         :else
         (let [txs [(db-class/build-new-class (db/get-db)
                                              {:db/id (:db/id page-entity)
@@ -60,32 +62,34 @@
 
 (defn convert-tag-to-page!
   [entity]
-  (if (db/page-exists? (:block/title entity) #{:logseq.class/Page})
-    (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
-    (when-not (:logseq.property/built-in? entity)
-      (if (seq (:logseq.property.class/_extends entity))
-        (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)
-        (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
-          (let [convert-fn
-                (fn convert-fn []
-                  (let [page-txs [[:db/retract (:db/id entity) :db/ident]
-                                  [:db/retract (:db/id entity) :block/tags :logseq.class/Tag]
-                                  [:db/retract (:db/id entity) :logseq.property.class/extends]
-                                  [:db/retract (:db/id entity) :logseq.property.class/properties]
-                                  [:db/add (:db/id entity) :block/tags :logseq.class/Page]]
-                        obj-txs (mapcat (fn [obj]
-                                          (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
-                                            [{:db/id (:db/id obj)
-                                              :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
-                                             [:db/retract (:db/id obj) :block/tags (:db/id entity)]]))
-                                        objects)
-                        txs (concat page-txs obj-txs)]
-                    (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
-            (-> (shui/dialog-confirm!
-                 "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
-                 {:id :convert-tag-to-page
-                  :data-reminder :ok})
-                (p/then convert-fn))))))))
+  (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
+        (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
+        (outliner-validate/uneditable-page? entity)
+        (notification/show! "Built-in tags can't be edited" :error)
+        :else
+        (if (seq (:logseq.property.class/_extends entity))
+          (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)
+          (p/let [objects (db-async/<get-tag-objects (state/get-current-repo) (:db/id entity))]
+            (let [convert-fn
+                  (fn convert-fn []
+                    (let [page-txs [[:db/retract (:db/id entity) :db/ident]
+                                    [:db/retract (:db/id entity) :block/tags :logseq.class/Tag]
+                                    [:db/retract (:db/id entity) :logseq.property.class/extends]
+                                    [:db/retract (:db/id entity) :logseq.property.class/properties]
+                                    [:db/add (:db/id entity) :block/tags :logseq.class/Page]]
+                          obj-txs (mapcat (fn [obj]
+                                            (let [tags (map #(db/entity (state/get-current-repo) (:db/id %)) (:block/tags obj))]
+                                              [{:db/id (:db/id obj)
+                                                :block/title (db-content/replace-tag-refs-with-page-refs (:block/title obj) tags)}
+                                               [:db/retract (:db/id obj) :block/tags (:db/id entity)]]))
+                                          objects)
+                          txs (concat page-txs obj-txs)]
+                      (db/transact! (state/get-current-repo) txs {:outliner-op :save-block})))]
+              (-> (shui/dialog-confirm!
+                   "Converting a tag to page also removes its tag properties and its tag from all nodes tagged with it. Are you ok with that?"
+                   {:id :convert-tag-to-page
+                    :data-reminder :ok})
+                  (p/then convert-fn)))))))
 
 (defn <create-class!
   "Creates a class page and provides class-specific error handling"
