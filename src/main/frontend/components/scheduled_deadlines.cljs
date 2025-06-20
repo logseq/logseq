@@ -1,14 +1,14 @@
 (ns frontend.components.scheduled-deadlines
-  (:require [frontend.date :as date]
+  (:require [clojure.string :as string]
+            [frontend.components.block :as block]
+            [frontend.components.content :as content]
+            [frontend.components.editor :as editor]
+            [frontend.date :as date]
+            [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.components.content :as content]
-            [frontend.components.block :as block]
-            [clojure.string :as string]
-            [frontend.components.editor :as editor]
-            [rum.core :as rum]
-            [frontend.db.async :as db-async]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn- scheduled-or-deadlines?
   [page-name]
@@ -16,7 +16,7 @@
        (not (true? (state/scheduled-deadlines-disabled?)))
        (= (string/lower-case page-name) (string/lower-case (date/journal-name)))))
 
-(rum/defcs scheduled-and-deadlines-inner < rum/reactive
+(rum/defcs scheduled-and-deadlines < rum/reactive
   {:init (fn [state]
            (let [*result (atom nil)
                  page-name (first (:rum/args state))]
@@ -29,19 +29,15 @@
     (when (seq scheduled-or-deadlines)
       [:div.scheduled-or-deadlines.mt-8
        (ui/foldable
-        [:h2.font-medium "SCHEDULED AND DEADLINE"]
-        [:div.scheduled-deadlines.references-blocks.mb-6
-         (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
-                                          {:id (str page-name "-agenda")
-                                           :ref? true
-                                           :group-by-page? true
-                                           :editor-box editor/box}
-                                          {})]
-           (content/content page-name {:hiccup ref-hiccup}))]
-        {:title-trigger? true})])))
-
-(rum/defc scheduled-and-deadlines
-  [page-name]
-  (ui/lazy-visible
-   (fn [] (scheduled-and-deadlines-inner page-name))
-   {:debug-id "scheduled-and-deadlines"}))
+        [:div "SCHEDULED AND DEADLINE"]
+        (fn []
+          [:div.scheduled-deadlines.references-blocks.mb-6
+           (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
+                                            {:id (str page-name "-agenda")
+                                             :ref? true
+                                             :group-by-page? true
+                                             :editor-box editor/box}
+                                            {})]
+             (content/content page-name {:hiccup ref-hiccup}))])
+        {:title-trigger? true
+         :default-collapsed? true})])))

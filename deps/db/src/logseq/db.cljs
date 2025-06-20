@@ -72,9 +72,12 @@
      (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
-                          (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block/level :block/container :db/other-tx
-                                  :block/unordered)
+                          (cond->
+                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                   :block/level :block/container :db/other-tx
+                                   :block/unordered)
+                            (not @*transact-fn)
+                            (dissoc :block.temp/load-status))
                           m)) tx-data)
          tx-data (->> (remove-temp-block-data tx-data)
                       (common-util/fast-remove-nils)

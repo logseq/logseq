@@ -162,14 +162,15 @@
     m))
 
 (defn- entity->map
-  [entity & {:keys [level]
+  [entity & {:keys [level properties]
              :or {level 0}}]
   (let [opts {:level (inc level)}
         f (if (> level 0)
             identity
             (fn [e]
               (keep (fn [[k v]]
-                      (when-not (contains? #{:block/path-refs} k)
+                      (when (and (not (contains? #{:block/path-refs} k))
+                                 (or (empty? properties) (properties k)))
                         (let [v' (cond
                                    (= k :block/parent)
                                    (:db/id v)
@@ -242,23 +243,34 @@
                   nil))
         block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
+      ;; (prn :debug :get-block (:db/id block) (:block/title block) :children? children?)
       (let [children (when children?
-                       (let [children (let [children (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
-                                            children' (if (>= (count children) 100)
+                       (let [children-blocks (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
+                             large-page? (>= (count children-blocks) 100)
+                             children (let [children' (if large-page?
                                                         (:block/_parent block)
-                                                        children)]
+                                                        children-blocks)]
                                         (->> children'
-                                             (remove (fn [e] (:block/closed-value-property e)))))]
+                                             (remove (fn [e] (:block/closed-value-property e)))))
+                             children-ids (set (map :db/id children))]
                          (map
                           (fn [block]
-                            (-> block
-                                (assoc :block.temp/has-children? (some? (:block/_parent block)))
-                                (dissoc :block/tx-id :block/created-at :block/updated-at)
-                                entity->map))
+                            (let [collapsed? (:block/collapsed? block)]
+                              (-> block
+                                  (entity->map)
+                                  (assoc :block.temp/has-children? (some? (:block/_parent block))
+                                         :block.temp/load-status (if (and (not collapsed?)
+                                                                          (or (and large-page?
+                                                                                   (every? children-ids (map :db/id (:block/_parent block))))
+                                                                              (not large-page?)))
+                                                                   :full
+                                                                   :self)))))
                           children)))
-            block' (cond-> (entity->map block)
+            block' (cond-> (entity->map block {:properties (set properties)})
                      block-refs-count?
-                     (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block))))]
+                     (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block)))
+                     true
+                     (assoc :block.temp/load-status (if (and children? (empty? properties)) :full :self)))]
         (cond->
          {:block block'}
           children?
