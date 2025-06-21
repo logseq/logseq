@@ -114,13 +114,12 @@
   [db new-title {:block/keys [tags] :as entity}]
   (cond
     (seq tags)
-    (let [matching-pages (d/q (cond
-                                (ldb/property? entity)
-                                db
-                                (:db/id entity)
-                                new-title
-                                (map :db/id tags))
-                                this-tags (set (map :db/ident tags))]
+    (let [matching-pages (d/q (another-id-q entity)
+                              db
+                              (:db/id entity)
+                              new-title
+                              (map :db/id tags))
+                              this-tags (set (map :db/ident tags))]
       (when-let [duplicate-page (first (filter (fn [page-id]
                                                 (let [page (d/entity db page-id)
                                                       page-tags (set (map :db/ident (:block/tags page)))]
