@@ -130,7 +130,7 @@
                        {:type :notification
                         :payload {:message (str "Another page named " (pr-str new-title) " already exists with the same tags: "
                                                (string/join ", "
-                                                           (map (fn [id] (str "#" (:block/title (d/entity db id)))) tags)))
+                                                           (map (fn [tag] (str "#" (:block/title tag))) tags)))
                                  :type :warning}}))))
 
     (:logseq.property.class/extends entity)
