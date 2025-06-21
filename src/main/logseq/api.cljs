@@ -942,9 +942,9 @@
 
 ;; block properties
 (defn ^:export upsert_block_property
-  [block-uuid keyname ^js value]
+  [block-uuid key ^js value]
   (this-as this
-    (p/let [keyname (api-block/sanitize-user-property-name keyname)
+    (p/let [keyname (api-block/sanitize-user-property-name key)
             block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             repo (state/get-current-repo)
             block (db-async/<get-block repo block-uuid :children? false)
@@ -960,19 +960,19 @@
 (defn ^:export remove_block_property
   [block-uuid key]
   (this-as this
-           (p/let [key (api-block/sanitize-user-property-name key)
-                   block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
-                   db? (config/db-based-graph? (state/get-current-repo))
-                   key-ns? (and (keyword? key) (namespace key))
-                   key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
-                   key (if (and db? (not key-ns?))
-                         (api-block/get-db-ident-for-user-property-name
-                           key (api-block/resolve-property-prefix-for-db this))
-                         key)]
-             (property-handler/remove-block-property!
-              (state/get-current-repo)
-              block-uuid key))))
+    (p/let [key (api-block/sanitize-user-property-name key)
+            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
+            db? (config/db-based-graph? (state/get-current-repo))
+            key-ns? (and (keyword? key) (namespace key))
+            key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
+            key (if (and db? (not key-ns?))
+                  (api-block/get-db-ident-for-user-property-name
+                    key (api-block/resolve-property-prefix-for-db this))
+                  key)]
+      (property-handler/remove-block-property!
+        (state/get-current-repo)
+        block-uuid key))))
 
 (defn ^:export get_block_property
   [block-uuid key]

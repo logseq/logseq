@@ -16,22 +16,15 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.db :as ldb]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property :as db-property]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
-(defn- encode-user-property-name
-  [k]
-  (if (string? k)
-    (-> k (string/trim)
-        (string/replace "/" "")
-        (string/replace " " ""))
-    k))
-
 (defn convert?to-built-in-property-name
   [property-name]
   (if (and (not (qualified-keyword? property-name))
-           (contains? #{:background-color} property-name))
+        (contains? #{:background-color} property-name))
     (keyword :logseq.property property-name)
     property-name))
 
@@ -39,15 +32,17 @@
   [k]
   (if (string? k)
     (-> k (string/trim)
-      (string/replace #"^[:_]+" "")
+      (string/replace " " "")
+      (string/replace #"^[:_\s]+" "")
       (string/lower-case))
     k))
 
 (defn resolve-property-prefix-for-db
   [^js plugin]
-  (when (some-> js/window.LSPlugin (.-PluginLocal))
-    (or (some->> plugin (.-id) (sanitize-user-property-name) (str "."))
-      "._api")))
+  (->> (when (some-> js/window.LSPlugin (.-PluginLocal))
+         (or (some->> plugin (.-id) (sanitize-user-property-name) (str "."))
+           "._api"))
+    (str "plugin.property")))
 
 ;; FIXME: This ns should not be creating idents. This allows for ident conflicts
 ;; and assumes that names directly map to idents which is incorrect and breaks for multiple
@@ -55,14 +50,13 @@
 ;; find a property's ident by looking up the property in the db by its title
 (defn get-db-ident-for-user-property-name
   "Finds a property :db/ident for a given property name"
-  ([property-name] (get-db-ident-for-user-property-name property-name nil))
+  ([property-name] (get-db-ident-for-user-property-name property-name "user.property"))
   ([property-name prefix]
    (let [property-name' (if (string? property-name)
                           (keyword property-name) property-name)
          property-name' (convert?to-built-in-property-name property-name')]
-     (if (qualified-keyword? property-name')
-       property-name'
-       (db-ident/create-db-ident-from-name (str "plugin.property" prefix) (encode-user-property-name property-name)))))
+     (if (qualified-keyword? property-name') property-name'
+       (db-ident/create-db-ident-from-name prefix (name property-name) false)))))
 
 (defn plugin-property-key?
   [ident]
@@ -72,17 +66,17 @@
 (defn into-readable-db-properties
   [properties]
   (some-> properties
-          (db-pu/readable-properties
-           {:original-key? true :key-fn str})))
+    (db-pu/readable-properties
+      {:original-key? true :key-fn str})))
 
 (defn into-properties
   ([block] (into-properties (state/get-current-repo) block))
   ([repo block]
    (if (some-> repo (config/db-based-graph?))
      (let [props (some->> block
-                          (filter (fn [[k _]] (db-property/property? k)))
-                          (into {})
-                          (into-readable-db-properties))
+                   (filter (fn [[k _]] (db-property/property? k)))
+                   (into {})
+                   (into-readable-db-properties))
            block (update block :block/properties merge props)
            block (apply dissoc (concat [block] (keys props)))]
        block)
@@ -186,7 +180,7 @@
   [block]
   (when block
     (db-async/<get-block (state/get-current-repo)
-                         (:block/uuid (:block/parent block)) {:children? true})))
+      (:block/uuid (:block/parent block)) {:children? true})))
 
 (defn get_block
   [id-or-uuid ^js opts]
@@ -194,19 +188,19 @@
                      (db-utils/pull id-or-uuid)
                      (and id-or-uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid))))]
     (when (or (true? (some-> opts (.-includePage)))
-              (not (contains? block :block/name)))
+            (not (contains? block :block/name)))
       (when-let [uuid (:block/uuid block)]
         (let [{:keys [includeChildren]} (bean/->clj opts)
               repo (state/get-current-repo)
               block (if includeChildren
                       ;; nested children results
                       (let [blocks (->> (db-model/get-block-and-children repo uuid)
-                                        (map (fn [b]
-                                               (dissoc (db-utils/pull (:db/id b)) :block.temp/load-status))))]
+                                     (map (fn [b]
+                                            (dissoc (db-utils/pull (:db/id b)) :block.temp/load-status))))]
                         (first (outliner-tree/blocks->vec-tree blocks uuid)))
                       ;; attached shallow children
                       (assoc block :block/children
-                             (map #(list :uuid (:block/uuid %))
-                                  (db/get-block-immediate-children repo uuid))))
+                        (map #(list :uuid (:block/uuid %))
+                          (db/get-block-immediate-children repo uuid))))
               block (into-properties repo block)]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
