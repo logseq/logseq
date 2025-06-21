@@ -66,7 +66,7 @@
   ([user-namespace name-string]
    (create-db-ident-from-name user-namespace name-string true))
   ([user-namespace name-string random-suffix?]
-   {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string)]}
+   {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string) (boolean? random-suffix?)]}
    (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
      "New ident is not allowed to use an internal namespace")
    (if #?(:org.babashka/nbb true
