@@ -62,7 +62,7 @@
          property-name' (convert?to-built-in-property-name property-name')]
      (if (qualified-keyword? property-name')
        property-name'
-       (keyword (str "plugin.property" prefix) (encode-user-property-name property-name))))))
+       (db-ident/create-db-ident-from-name (str "plugin.property" prefix) (encode-user-property-name property-name)))))
 
 (defn plugin-property-key?
   [ident]
