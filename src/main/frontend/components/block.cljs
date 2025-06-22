@@ -537,17 +537,33 @@
              title
              [:span [:span.opacity-70 "[[📚"] title [:span.opacity-70 "]]"]])]
 
-          db-based?
+          (util/mobile?)
+          [:a.asset-ref {:href @src
+                         :on-click share-fn}
+           title]
+
+          (and db-based? util/web-platform?)
           (let [file-name (str (:block/title (:asset-block config)) "." (name ext))]
-            [:a.asset-ref.is-plaintext
+            [:a.asset-ref
              {:href @src
               :download file-name}
              file-name])
 
+          (and (util/electron?) (:asset-block config))
+          (let [asset-block (:asset-block config)
+                file-name (if db-based?
+                            (str (:block/title asset-block) "." (name ext))
+                            href)]
+            [:a.asset-ref
+             {:on-click (fn [e]
+                          (util/stop e)
+                          (let [repo-dir (config/get-repo-dir repo)
+                                file-fpath (path/path-join repo-dir (str "assets/" (:block/uuid asset-block) "." (name ext)))]
+                            (js/window.apis.openPath file-fpath)))}
+             file-name])
+
           :else
-          [:a.asset-ref {:href @src
-                         :on-click share-fn}
-           title])))))
+          title)))))
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
