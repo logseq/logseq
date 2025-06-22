@@ -102,13 +102,14 @@
            {:asChild true}
            (shui/button
             {:variant "ghost"
-             :class "!px-1"
+             :class "graph-action-btn !px-1"
              :size :sm}
             (ui/icon "dots" {:size 15})))
           (shui/dropdown-menu-content
            {:align "end"}
            (shui/dropdown-menu-item
             {:key "delete-locally"
+             :class "delete-local-graph-menu-item"
              :on-click (fn []
                          (let [prompt-str (if db-based?
                                             (str "Are you sure to permanently delete the graph \"" graph-name "\" from Logseq?")
@@ -122,10 +123,11 @@
                                (p/then (fn []
                                          (repo-handler/remove-repo! repo)
                                          (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
-            "Delete")
+            "Delete local graph")
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
               {:key "delete-remotely"
+               :class "delete-remote-graph-menu-item"
                :on-click (fn []
                            (let [prompt-str (str "Are you sure to permanently delete the graph \"" graph-name "\" from our server?")]
                              (-> (shui/dialog-confirm!
