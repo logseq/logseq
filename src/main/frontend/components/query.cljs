@@ -8,6 +8,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.react :as react]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -129,13 +130,20 @@
 
 (rum/defcs custom-query* < rum/reactive db-mixins/query
   {:init (fn [state]
-           (assoc state ::result (atom nil)))}
+           (let [[config q] (:rum/args state)]
+             (assoc state
+                    ::result (atom nil)
+                    ::collapsed? (atom (or (:collapsed? q) (:collapsed? config))))))}
   [state {:keys [*query-error db-graph? dsl-query? built-in-query? table? current-block] :as config}
-   {:keys [builder query view collapsed?] :as q}]
+   {:keys [builder query view _collapsed?] :as q}]
   (let [*result (::result state)
-        collapsed?' (:collapsed? config)
-        result' (query-result/run-custom-query config q *result *query-error)
-        result (when result' (query-result/transform-query-result config q result'))
+        *collapsed? (::collapsed? state)
+        collapsed? (rum/react *collapsed?)
+        [k result] (query-result/run-custom-query config q *result *query-error)
+        result (some->> result
+                        (query-result/transform-query-result config q))
+        _ (when k
+            (react/set-q-collapsed! k collapsed?))
         ;; Remove hidden pages from result
         result (if (and (coll? result) (not (map? result)))
                  (->> result
@@ -169,7 +177,7 @@
                                             :page-list? page-list?
                                             :*result *result
                                             :result result
-                                            :collapsed? collapsed?'}))
+                                            :collapsed? collapsed?}))
 
          (when (and dsl-query? builder) builder)
 
@@ -180,9 +188,10 @@
              (fn []
                (custom-query-inner config q opts))
              {:default-collapsed? collapsed?
-              :title-trigger? true})]
+              :title-trigger? true
+              :on-pointer-down #(reset! *collapsed? %)})]
            [:div.bd
-            (when-not collapsed?'
+            (when-not collapsed?
               (custom-query-inner config q opts))])]))))
 
 (rum/defcs custom-query < rum/static

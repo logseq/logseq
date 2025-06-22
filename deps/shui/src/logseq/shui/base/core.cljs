@@ -44,13 +44,12 @@
     (apply button-base props' children)))
 
 (defn button-icon
-  [variant icon-name {:keys [icon-props size] :as props} child]
-
+  [variant icon-name {:keys [icon-props button-size] :as props} child]
   (button
-   (merge (dissoc props :icon-props :size)
+   (merge (dissoc props :icon-props :button-size)
           {:variant variant
            :data-button :icon
-           :style (when size {:width size :height size})})
+           :style (when button-size {:width button-size :height button-size})})
    (tabler-icon/root (name icon-name) (merge {:size 20} icon-props))
    child))
 

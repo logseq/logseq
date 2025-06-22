@@ -418,7 +418,6 @@
  :page/copy-page-url                                "Copiar URL de la página"
  :page/created-at                                   "Creada el"
  :page/delete                                       "Eliminar página"
- :page/delete-confirmation                          "¿Está seguro que desea eliminar esta página y su archivo?"
  :page/illegal-page-name                            "¡Nombre de página ilegal!"
  :page/logseq-is-having-a-problem                   "Logseq está teniendo un problema. Para intentar volver a un estado de trabajo, intenta los siguientes pasos seguros en orden:"
  :page/make-private                                 "Hacer privada"

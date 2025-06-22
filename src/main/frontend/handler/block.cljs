@@ -76,14 +76,13 @@
                             (= type order-list-type)))
         prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
-    (letfn [(page-fn? [b] (some-> b :block/name some?))
-            (order-sibling-list [b]
+    (letfn [(order-sibling-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
@@ -176,8 +175,7 @@
   (when (and (not config/publishing?) (:block/uuid block))
     (let [repo (state/get-current-repo)]
       (p/do!
-       (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-         (db-async/<get-block repo (:db/id block) {:children? false}))
+       (db-async/<get-block repo (:db/id block) {:children? false})
        (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
        (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
          (state/clear-edit! {:clear-editing-block? false}))

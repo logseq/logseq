@@ -42,21 +42,21 @@
        (m/eduction (map some?))))
 
 (defn- <invoke-db-worker*
-  [qkw direct-pass-args? args-list]
+  [qkw direct-pass? args-list]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw direct-pass-args? args-list)))
+    (apply worker qkw direct-pass? args-list)))
 
 (defn <invoke-db-worker
   "invoke db-worker thread api"
   [qkw & args]
   (<invoke-db-worker* qkw false args))
 
-(defn <invoke-db-worker-direct-pass-args
+(defn <invoke-db-worker-direct-pass
   "invoke db-worker thread api.
-  But directly pass args to db-worker(won't do transit-write on them)."
+  But directly pass args to db-worker, and result from db-worker as well."
   [qkw & args]
   (<invoke-db-worker* qkw true args))
 
@@ -420,7 +420,7 @@
                       [(>= ?d ?start)]
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
-             :collapsed? false}
+             :collapsed? true}
             {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
@@ -432,7 +432,7 @@
                       [(< ?d ?next)]]
              :inputs [:today :7d-after]
              :group-by-page? false
-             :collapsed? false}]}
+             :collapsed? true}]}
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on

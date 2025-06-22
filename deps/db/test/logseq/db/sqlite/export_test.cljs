@@ -695,6 +695,8 @@
           {:page {:block/uuid property-uuid}
            :blocks [{:block/title "property block1"}]}
           ;; built-in pages
+          {:page {:block/title "Library" :build/properties {:logseq.property/built-in? true}}
+           :blocks []}
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
           {:page {:block/title common-config/favorites-page-name
@@ -795,36 +797,6 @@
     (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
     (is (= (::sqlite-export/graph-files original-data) (::sqlite-export/graph-files imported-graph))
         "All :file/path entities are imported")))
-
-(deftest import-graph-with-overlapping-ontology-properties
-  (let [overlapping-uuid (random-uuid)
-        original-data
-        {:properties {:user.property/p1
-                      {:block/uuid overlapping-uuid
-                       :build/keep-uuid? true
-                       :logseq.property/type :node
-                       :build/property-classes [:user.property/p1]}
-                      :user.property/p2 {:logseq.property/type :default}}
-         :classes {:user.class/C1 {}
-                   :user.property/p1
-                   {:build/keep-uuid? true
-                    :block/uuid overlapping-uuid
-                    :build/class-parent :user.class/C1
-                    :build/class-properties [:user.property/p2]}}
-         :pages-and-blocks
-         [{:page {:block/uuid overlapping-uuid}
-           :blocks [{:block/title "b1"
-                     :build/children [{:block/title "b2"}]}]}]
-         :build-existing-tx? true}
-        conn (db-test/create-conn-with-blocks original-data)
-        conn2 (db-test/create-conn)
-        imported-graph (export-graph-and-import-to-another-graph conn conn2 {:exclude-built-in-pages? true})]
-
-    (is (= (sort-pages-and-blocks (:pages-and-blocks original-data)) (:pages-and-blocks imported-graph)))
-    (is (= (expand-properties (:properties original-data)) (:properties imported-graph)))
-    (is (= (expand-classes (:classes original-data))
-           (-> (:classes imported-graph)
-               (medley/dissoc-in [:user.property/p1 :build/properties]))))))
 
 (defn- test-import-existing-page [import-options expected-page-properties]
   (let [original-data

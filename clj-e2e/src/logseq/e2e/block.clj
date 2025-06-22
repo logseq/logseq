@@ -33,6 +33,7 @@
     (assert/assert-editor-mode)
     (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
       (is (some? last-id))
+      (k/press "Control+e")
       (k/enter)
       (assert/assert-is-visible
        (loc/filter ".editor-wrapper"

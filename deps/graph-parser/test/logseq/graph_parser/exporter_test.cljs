@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
-            [cljs.test :refer [testing is]]
+            [cljs.test :refer [testing is are deftest]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -10,6 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.rules :as rules]
@@ -93,6 +94,17 @@
    ;; TODO: Add actual default
    :default-config {}})
 
+;; Copied from db-import
+(defn- <read-asset-file [file assets]
+  (p/let [buffer (fs/readFileSync (:path file))
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+    (swap! assets assoc
+           (gp-exporter/asset-path->name (:path file))
+           {:size (.-length buffer)
+            :checksum checksum
+            :type (db-asset/asset-path->type (:path file))
+            :path (:path file)})))
+
 ;; Copied from db-import script and tweaked for an in-memory import
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
@@ -105,7 +117,12 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
-                         :<copy-asset #(swap! assets conj %)}
+                         :<read-asset <read-asset-file
+                         :<copy-asset (fn copy-asset [m]
+                                        (when-not (:block/uuid m)
+                                          (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
+                                                   "does not have a :block/uuid"))
+                                        (swap! assets conj m))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
@@ -128,6 +145,24 @@
 ;; Tests
 ;; =====
 
+(deftest update-asset-links-in-block-title
+  (are [x y]
+       (= y (@#'gp-exporter/update-asset-links-in-block-title (first x) {(second x) "UUID"} (atom {})))
+    ;; Standard image link with metadata
+    ["![greg-popovich-thumbs-up.png](../assets/greg-popovich-thumbs-up_1704749687791_0.png){:height 288, :width 100} says pop"
+     "assets/greg-popovich-thumbs-up_1704749687791_0.png"]
+    "[[UUID]] says pop"
+
+    ;; Image link with no metadata
+    ["![some-title](../assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png)"
+     "assets/CleanShot_2022-10-12_at_15.53.20@2x_1665561216083_0.png"]
+    "[[UUID]]"
+
+    ;; 2nd link
+    ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
+     "assets/subdir/partydino.gif"]
+    "[[FIRST UUID]] and [[UUID]]"))
+
 (deftest-async ^:integration export-docs-graph-with-convert-all-tags
   (p/let [file-graph-dir "test/resources/docs-0.10.12"
           start-time (cljs.core/system-time)
@@ -146,6 +181,7 @@
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
     (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+    (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
     (is (= []
            (->> (d/q '[:find (pull ?b [:block/title {:block/tags [:db/ident]}])
                        :where [?b :block/tags :logseq.class/Tag]]
@@ -170,11 +206,13 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 25 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 26 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
       (is (= 10
@@ -195,8 +233,9 @@
           "Correct number of user classes")
       (is (= 4 (count (d/datoms @conn :avet :block/tags :logseq.class/Whiteboard))))
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 1 (count @assets))))
+      (is (= 3 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -292,10 +331,11 @@
                  date-time-util/ms->journal-day))
           "deadline block has correct journal as property value")
 
-      (is (= 20221125
-             (-> (db-test/readable-properties (db-test/find-block-by-content @conn "only scheduled"))
-                 :logseq.property/scheduled
-                 date-time-util/ms->journal-day))
+      (is (= {:logseq.property/scheduled 20221125
+              :logseq.property/deadline 20221125}
+             (-> (db-test/readable-properties (db-test/find-block-by-content @conn #"deadline and scheduled"))
+                 (select-keys [:logseq.property/scheduled :logseq.property/deadline])
+                 (update-vals date-time-util/ms->journal-day)))
           "scheduled block converted to correct deadline")
 
       (is (= 1 (count (d/q '[:find [(pull ?b [*]) ...]
@@ -326,7 +366,7 @@
              (:block/alias (db-test/readable-properties (db-test/find-page-by-title @conn "chat-gpt"))))
           "alias set correctly")
       (is (= ["y"]
-             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :logseq.property/parent]]
+             (->> (d/q '[:find [?b ...] :where [?b :block/title "y"] [?b :block/parent]]
                        @conn)
                   first
                   (d/entity @conn)
@@ -365,7 +405,29 @@
       ;; Cards
       (is (= {:block/tags [:logseq.class/Card]}
              (db-test/readable-properties (db-test/find-block-by-content @conn "card 1")))
-          "None of the card properties are imported since they are deprecated"))
+          "None of the card properties are imported since they are deprecated")
+
+      ;; Assets
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "png"
+              :logseq.property.asset/checksum "3d5e620cac62159d8196c118574bfea7a16e86fa86efd1c3fa15a00a0a08792d"
+              :logseq.property.asset/size 753471
+              :logseq.property.asset/resize-metadata {:height 288, :width 252}}
+             (db-test/readable-properties (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
+          "Asset has correct properties")
+      (is (= (d/entity @conn :logseq.class/Asset)
+             (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
+          "Imported into Asset page")
+      ;; Quotes
+      (is (= {:block/tags [:logseq.class/Quote-block]
+              :logseq.property.node/display-type :quote}
+             (db-test/readable-properties (db-test/find-block-by-content @conn #"Saito"))))
+      (is (= "markdown quote\n[[wut]]\nline 3"
+             (:block/title (db-test/find-block-by-content @conn #"markdown quote")))
+          "Markdown quote imports as full multi-line quote")
+      (is (= "*Italic* ~~Strikethrough~~ ^^Highlight^^ #[[foo]]\n**Learn Datalog Today** is an interactive tutorial designed to teach you the [Datomic](http://datomic.com/) dialect of [Datalog](http://en.wikipedia.org/wiki/Datalog). Datalog is a declarative **database query language** with roots in logic programming. Datalog has similar expressive power as [SQL](http://en.wikipedia.org/wiki/Sql)."
+             (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
+          "Imports full quote with various ast types"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
@@ -390,14 +452,15 @@
 
     (testing "namespaces"
       (let [expand-children (fn expand-children [ent parent]
-                              (if-let [children (:logseq.property/_parent ent)]
+                              (if-let [children (:block/_parent ent)]
                                 (cons {:parent (:block/title parent) :child (:block/title ent)}
                                       (mapcat #(expand-children % ent) children))
                                 [{:parent (:block/title parent) :child (:block/title ent)}]))]
+        ;; check pages only
         (is (= [{:parent "n1" :child "x"}
                 {:parent "x" :child "z"}
                 {:parent "x" :child "y"}]
-               (rest (expand-children (db-test/find-page-by-title @conn "n1") nil)))
+               (take 3 (rest (expand-children (db-test/find-page-by-title @conn "n1") nil))))
             "First namespace tests duplicate parent page name")
         (is (= [{:parent "n2" :child "x"}
                 {:parent "x" :child "z"}
@@ -590,7 +653,8 @@
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %)
                       ["journals/2024_02_23.md" "pages/url.md" "pages/Whiteboard___Tool.md"
-                       "pages/Whiteboard___Arrow_head_toggle.md"])
+                       "pages/Whiteboard___Arrow_head_toggle.md"
+                       "pages/Library.md"])
           conn (db-test/create-conn)
           _ (import-files-to-db files conn {:property-classes ["type"]})
           _ (@#'gp-exporter/export-class-properties conn conn)]
@@ -675,9 +739,9 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property/parent :block/title]))
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property.class/extends :block/title]))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property/parent :block/title]))
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property.class/extends :block/title]))
         "New page correctly set as class parent")))
 
 (deftest-async export-files-with-property-pages-disabled

@@ -187,8 +187,7 @@
   [hls-page]
   (p/let [result (db-async/<get-block (state/get-current-repo)
                                       (:block/uuid hls-page)
-                                      {:children? true
-                                       :nested-children? false})]
+                                      {:children? true})]
     {:highlights (keep :logseq.property.pdf/hl-value result)}))
 
 (defn file-based-load-hls-data$

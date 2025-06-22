@@ -87,28 +87,25 @@
                              reverse)
 
                            :else
-                           (sort-ref-entities-by-single-property entities sorting get-value-fn)
+                           (let [ref-type? (= :db.type/ref (:db/valueType property))]
+                             (if (or ref-type? (not (contains?
+                                                     #{:block/updated-at :block/created-at :block/title}
+                                                     (:db/ident property))))
+                               (sort-ref-entities-by-single-property entities sorting get-value-fn)
+                               (let [datoms (cond->
+                                             (->> (d/datoms db :avet id)
+                                                  (common-util/distinct-by :e)
+                                                  vec)
+                                              (not asc?)
+                                              rseq)
+                                     row-ids (set (map :db/id entities))
+                                     id->row (zipmap (map :db/id entities) entities)]
+                                 (keep
+                                  (fn [d]
+                                    (when (row-ids (:e d))
+                                      (id->row (:e d))))
+                                  datoms)))))
 
-                           ;; (let [ref-type? (= :db.type/ref (:db/valueType property))]
-                           ;;   (if ref-type?
-                           ;;     (sort-ref-entities-by-single-property entities sorting get-value-fn)
-
-                           ;;     ;; FIXME: entity may not have the value
-                           ;;     ;; (let [datoms (cond->
-                           ;;     ;;               (->> (d/datoms db :avet id)
-                           ;;     ;;                    (common-util/distinct-by :e)
-                           ;;     ;;                    vec)
-                           ;;     ;;                (not asc?)
-                           ;;     ;;                rseq)
-                           ;;     ;;       row-ids (set (map :db/id entities))
-                           ;;     ;;       id->row (zipmap (map :db/id entities) entities)]
-                           ;;     ;;   (keep
-                           ;;     ;;    (fn [d]
-                           ;;     ;;      (when (row-ids (:e d))
-                           ;;     ;;        (id->row (:e d))))
-                           ;;     ;;    datoms))
-                           ;;     ))
-                           )
                          distinct)]
     (if partition?
       (partition-by get-value-fn sorted-entities)

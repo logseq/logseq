@@ -165,8 +165,6 @@
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
-                                              ;; For overlapping class properties, these would be built in :classes
-                                              :logseq.property/parent :logseq.property.class/properties
                                               (into db-property/schema-properties db-property/public-db-attribute-properties))]
                     [(:db/ident ent)
                      (cond-> build-property
@@ -191,10 +189,10 @@
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
     (and (not shallow-copy?)
-         (:logseq.property/parent class-ent)
-         (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
+         (:logseq.property.class/extends class-ent)
+         (not= :logseq.class/Root (:db/ident (:logseq.property.class/extends class-ent))))
     (assoc :build/class-parent
-           (:db/ident (:logseq.property/parent class-ent)))))
+           (:db/ident (:logseq.property.class/extends class-ent)))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
@@ -589,13 +587,13 @@
         classes
         (->> class-ents
              (map (fn [ent]
-                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property/parent db-property/public-db-attribute-properties)]
+                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property.class/extends db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)
                                 (assoc :build/properties
                                        (-> (buildable-properties db ent-properties properties options)
-                                           (dissoc :logseq.property/classes :logseq.property.class/properties))))))))
+                                           (dissoc :logseq.property.class/properties))))))))
              (into {}))]
     (cond-> {}
       (seq properties)
