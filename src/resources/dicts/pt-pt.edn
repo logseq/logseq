@@ -54,7 +54,6 @@
  :page/logseq-is-having-a-problem "Logseq está tendo um problema. Para tentar colocá-lo de volta em um estado de funcionamento, por favor tente os seguintes passos seguros em ordem:"
  :page/step "Passo {1}"
  :page/try "Tentar"
- :page/delete-confirmation "Tem a certeza de que quer apagar esta página e o respetivo ficheiro?"
  :page/open-in-finder "Abrir em pasta"
  :page/open-with-default-app "Abrir com a aplicação predefinida"
  :page/make-public "Tornar pública para publicação"

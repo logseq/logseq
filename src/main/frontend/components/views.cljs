@@ -82,8 +82,7 @@
 
 (rum/defc row-checkbox < rum/static
   [{:keys [row-selected? row-toggle-selected! data state data-fns]} row _column]
-  (let [idx (.indexOf data (:db/id row))
-        id (str (:db/id row) "-" "checkbox")
+  (let [id (str (:db/id row) "-" "checkbox")
         [show? set-show!] (rum/use-state false)
         checked? (row-selected? row)
         {:keys [last-selected-idx row-selection]} state
@@ -99,17 +98,19 @@
                    (when (and (.-shiftKey e) last-selected-idx)
                      ;; add selection
                      (util/stop e)
-                     (when (not= last-selected-idx idx)
-                       (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
-                         (when (seq new-ids)
-                           (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
-                             (set-row-selection! row-selection')))))))
+                     (let [idx (.indexOf data (:db/id row))]
+                       (when (not= last-selected-idx idx)
+                         (let [new-ids (keep (fn [idx] (util/nth-safe data idx)) (range (min last-selected-idx idx) (inc (max last-selected-idx idx))))]
+                           (when (seq new-ids)
+                             (let [row-selection' (update row-selection :selected-ids set/union (set new-ids))]
+                               (set-row-selection! row-selection'))))))))
        :on-checked-change (fn [v]
                             (p/do!
                              (when v (db-async/<get-block (state/get-current-repo) (:db/id row) {:skip-refresh? true
                                                                                                  :children? false}))
                              (if v
-                               (set-last-selected-idx! idx)
+                               (let [idx (.indexOf data (:db/id row))]
+                                 (set-last-selected-idx! idx))
                                (when (= (:db/id row) last-selected-idx)
                                  (set-last-selected-idx! nil)))
                              (row-toggle-selected! row-selection row v)))
@@ -910,9 +911,15 @@
 (rum/defc table-row < rum/reactive db-mixins/query
   [table row props option]
   (let [block (db/sub-block (:db/id row))
-        row' (if (:block.temp/fully-loaded? block)
-               (assoc block :block.temp/refs-count (:block.temp/refs-count row))
-               row)]
+        row' (some->
+              (if (:block.temp/load-status block)
+                (assoc block :block.temp/refs-count (:block.temp/refs-count row))
+                row)
+              (update :block/tags (fn [tags]
+                                    (keep (fn [tag]
+                                            (when-let [id (:db/id tag)]
+                                              (db/entity id)))
+                                          tags))))]
     (table-row-inner table row' props option)))
 
 (rum/defc search
@@ -1525,8 +1532,9 @@
            (shui/table-footer (add-new-row (:view-entity option) table)))]]))))
 
 (rum/defc list-view < rum/static
-  [{:keys [config ref-matched-children-ids] :as option} view-entity {:keys [rows]} *scroller-ref]
-  (let [lazy-item-render (fn [rows idx]
+  [{:keys [config ref-matched-children-ids view-feature-type] :as option} view-entity {:keys [rows]} *scroller-ref]
+  (let [references-view? (contains? #{:linked-references :unlinked-references} view-feature-type)
+        lazy-item-render (fn [rows idx]
                            (lazy-item rows idx (assoc option :list-view? true)
                                       (fn [block]
                                         (let [config' (cond->
@@ -1538,17 +1546,21 @@
                                           (block-container config' block)))))
         list-cp (fn [rows]
                   (when (seq rows)
-                    (ui/virtualized-list
-                     {:ref #(reset! *scroller-ref %)
-                      :class "content"
-                      :custom-scroll-parent (get-scroll-parent config)
-                      :increase-viewport-by {:top 64 :bottom 64}
-                      :compute-item-key (fn [idx]
-                                          (let [block-id (util/nth-safe rows idx)]
-                                            (str "list-row-" block-id)))
-                      :total-count (count rows)
-                      :skipAnimationFrameInResizeObserver true
-                      :item-content (fn [idx] (lazy-item-render rows idx))})))
+                    (if references-view?
+                      [:div.content
+                       (for [[idx _row] (medley/indexed rows)]
+                         (lazy-item-render rows idx))]
+                      (ui/virtualized-list
+                       {:ref #(reset! *scroller-ref %)
+                        :class "content"
+                        :custom-scroll-parent (get-scroll-parent config)
+                        :increase-viewport-by {:top 64 :bottom 64}
+                        :compute-item-key (fn [idx]
+                                            (let [block-id (util/nth-safe rows idx)]
+                                              (str "list-row-" block-id)))
+                        :total-count (count rows)
+                        :skipAnimationFrameInResizeObserver true
+                        :item-content (fn [idx] (lazy-item-render rows idx))}))))
         breadcrumb (state/get-component :block/breadcrumb)
         all-numbers? (every? number? rows)]
     (if all-numbers?
@@ -1939,61 +1951,62 @@
      {:ref *view-ref}
      (ui/foldable
       (view-head view-parent view-entity table columns input sorting set-input! add-new-object! option)
-      [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
-       (filters-row view-entity table option)
+      (fn []
+        [:div.ls-view-body.flex.flex-col.gap-2.grid.mt-1
+         (filters-row view-entity table option)
 
-       (let [view-opts {:*scroller-ref *scroller-ref
-                        :display-type display-type
-                        :row-selection row-selection
-                        :add-new-object! add-new-object!}]
-         (if (and group-by-property-ident (not (number? (first (:rows table)))))
-           (when (seq (:rows table))
-             [:div.flex.flex-col.border-t.pt-2.gap-2
-              (map-indexed
-               (fn [idx [value group]]
-                 (let [add-new-object! (when (fn? add-new-object!)
-                                         (fn [_]
-                                           (add-new-object! view-entity table
-                                                            {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                       table' (shui/table-option (-> table-map
-                                                     (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                     (assoc :data group ; data for this group
-                                                            )))
-                       readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                      (db-property/property-value-content %)
-                                                      (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                      "Empty"
-                                                      :else
-                                                      (str %))
-                       group-by-page? (or (= :block/page group-by-property-ident)
-                                          (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
-                   (rum/with-key
-                     (ui/foldable
-                      [:div
-                       {:class (when-not list-view? "my-4")}
-                       (cond
-                         group-by-page?
-                         (if value
-                           (let [c (state/get-component :block/page-cp)]
-                             (c {:disable-preview? true} value))
-                           [:div.text-muted-foreground.text-sm
-                            "Pages"])
+         (let [view-opts {:*scroller-ref *scroller-ref
+                          :display-type display-type
+                          :row-selection row-selection
+                          :add-new-object! add-new-object!}]
+           (if (and group-by-property-ident (not (number? (first (:rows table)))))
+             (when (seq (:rows table))
+               [:div.flex.flex-col.border-t.pt-2.gap-2
+                (map-indexed
+                 (fn [idx [value group]]
+                   (let [add-new-object! (when (fn? add-new-object!)
+                                           (fn [_]
+                                             (add-new-object! view-entity table
+                                                              {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                         table' (shui/table-option (-> table-map
+                                                       (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                       (assoc :data group ; data for this group
+                                                              )))
+                         readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                        (db-property/property-value-content %)
+                                                        (= (:db/ident %) :logseq.property/empty-placeholder)
+                                                        "Empty"
+                                                        :else
+                                                        (str %))
+                         group-by-page? (or (= :block/page group-by-property-ident)
+                                            (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
+                     (rum/with-key
+                       (ui/foldable
+                        [:div
+                         {:class (when-not list-view? "my-4")}
+                         (cond
+                           group-by-page?
+                           (if value
+                             (let [c (state/get-component :block/page-cp)]
+                               (c {:disable-preview? true} value))
+                             [:div.text-muted-foreground.text-sm
+                              "Pages"])
 
-                         (some? value)
-                         (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                           [:div.flex.flex-row.gap-1.items-center
-                            (when icon (icon-component/icon icon {:color? true}))
-                            (readable-property-value value)])
-                         :else
-                         (str "No " (:block/title group-by-property)))]
-                      (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                        (if list-view? [:div.-ml-2 render] render))
-                      {:title-trigger? false})
-                     (str (:db/id view-entity) "-group-idx-" idx))))
-               (:rows table))])
-           (view-cp view-entity table
-                    (assoc option :group-by-property-ident group-by-property-ident)
-                    view-opts)))]
+                           (some? value)
+                           (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                             [:div.flex.flex-row.gap-1.items-center
+                              (when icon (icon-component/icon icon {:color? true}))
+                              (readable-property-value value)])
+                           :else
+                           (str "No " (:block/title group-by-property)))]
+                        (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                          (if list-view? [:div.-ml-2 render] render))
+                        {:title-trigger? false})
+                       (str (:db/id view-entity) "-group-idx-" idx))))
+                 (:rows table))])
+             (view-cp view-entity table
+                      (assoc option :group-by-property-ident group-by-property-ident)
+                      view-opts)))])
       (merge {:title-trigger? false} foldable-options))]))
 
 (rum/defcs view-container
@@ -2029,9 +2042,9 @@
        ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
 
 (defn- load-view-data-aux
-  [view-entity view-parent {:keys [query? query-entity-ids sorting filters input
-                                   view-feature-type group-by-property-ident
-                                   set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
+  [config view-entity view-parent {:keys [query? query-entity-ids sorting filters input
+                                          view-feature-type group-by-property-ident
+                                          set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
   (c.m/run-task*
    (m/sp
      (let [need-query? (and query? (seq query-entity-ids) (or sorting filters (not (string/blank? input))))]
@@ -2043,26 +2056,28 @@
          :else
          (when (or (not query?) need-query?)
            (try
-             (let [{:keys [data ref-pages-count ref-matched-children-ids properties]}
-                   (c.m/<?
-                    (<load-view-data view-entity
-                                     (cond->
-                                      {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
-                                                        (:db/id view-parent))
-                                       :view-feature-type view-feature-type
-                                       :group-by-property-ident group-by-property-ident
-                                       :input input
-                                       :filters filters
-                                       :sorting sorting}
-                                       query?
-                                       (assoc :query-entity-ids query-entity-ids))))]
+             (let [opts (cond->
+                         {:view-for-id (or (:db/id (:logseq.property/view-for view-entity))
+                                           (:db/id view-parent))
+                          :view-feature-type view-feature-type
+                          :group-by-property-ident group-by-property-ident
+                          :input input
+                          :filters filters
+                          :sorting sorting}
+                          query?
+                          (assoc :query-entity-ids query-entity-ids))
+                   {:keys [data ref-pages-count ref-matched-children-ids properties]}
+                   (c.m/<? (<load-view-data view-entity opts))]
                (set-data! data)
                (when ref-pages-count
                  (set-ref-pages-count! ref-pages-count)
                  (set-ref-matched-children-ids! ref-matched-children-ids))
                (set-properties! properties))
              (finally
-               (set-loading! false)))))))))
+               (set-loading! false)
+               (when (contains? #{:class-objects :property-objects} view-feature-type)
+                 (when-let [*objects-ready? (:*objects-ready? config)]
+                   (reset! *objects-ready? true)))))))))))
 
 (rum/defc view-aux
   [view-entity {:keys [config view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
@@ -2098,7 +2113,7 @@
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
         [ref-matched-children-ids set-ref-matched-children-ids!] (hooks/use-state nil)
         load-view-data (fn load-view-data []
-                         (load-view-data-aux view-entity view-parent
+                         (load-view-data-aux config view-entity view-parent
                                              {:query? query?
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input

@@ -66,7 +66,8 @@
 (defn- get-ident [all-idents kw]
   (if (and (qualified-keyword? kw)
            ;; Loosen checks to any property or class for build-existing-tx?
-           (db-property/property? kw))
+           (or (db-property/property? kw)
+               (db-class/user-class-namespace? (namespace kw))))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
@@ -281,7 +282,7 @@
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
                              (when class-parent
-                               {:logseq.property/parent
+                               {:logseq.property.class/extends
                                 (or (class-db-ids class-parent)
                                     (if (db-malli-schema/class? class-parent)
                                       class-parent
@@ -392,7 +393,7 @@
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
-  [properties classes {:keys [graph-namespace build-existing-tx?]}]
+  [properties classes {:keys [graph-namespace]}]
   (let [property-idents (->> (keys properties)
                              (map #(vector %
                                            (if graph-namespace
@@ -406,13 +407,12 @@
                                         (if graph-namespace
                                           (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
                                                                               (name %))
-                                          (db-class/create-user-class-ident-from-name (name %)))))
+                                          (db-class/create-user-class-ident-from-name nil (name %)))))
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
-    (when-not build-existing-tx?
-      (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
-              "Class and property db-idents are unique and do not overlap"))
+    (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
+            "Class and property db-idents are unique and do not overlap")
     all-idents))
 
 (defn- build-page-tx [page all-idents page-uuids properties options]

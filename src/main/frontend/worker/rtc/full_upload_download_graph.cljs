@@ -447,29 +447,30 @@
 
 (defn new-task--download-graph-from-s3
   [graph-uuid graph-name s3-url]
-  (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
-                                                  :message "downloading graph data"
-                                                  :graph-uuid graph-uuid})
-    (let [{:keys [status body] :as r} (m/? (http/get s3-url {:with-credentials? false}))
-          repo                        (str sqlite-util/db-version-prefix graph-name)]
-      (if (not= 200 status)
-        (throw (ex-info "download-graph from s3 failed" {:resp r}))
-        (do
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
-                                                        :message "transacting graph data to local db"
-                                                        :graph-uuid graph-uuid})
-          (let [all-blocks (ldb/read-transit-str body)]
-            (worker-state/set-rtc-downloading-graph! true)
-            (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
-            (client-op/update-graph-uuid repo graph-uuid)
-            (when-not rtc-const/RTC-E2E-TEST
-              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
-            (worker-state/set-rtc-downloading-graph! false)
-            (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
-                                                          :message "download completed"
+  (let [graph-uuid (if (string? graph-uuid) (parse-uuid graph-uuid) graph-uuid)]
+    (m/sp
+      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
+                                                    :message "downloading graph data"
+                                                    :graph-uuid graph-uuid})
+      (let [{:keys [status body] :as r} (m/? (http/get s3-url {:with-credentials? false}))
+            repo                        (str sqlite-util/db-version-prefix graph-name)]
+        (if (not= 200 status)
+          (throw (ex-info "download-graph from s3 failed" {:resp r}))
+          (do
+            (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
+                                                          :message "transacting graph data to local db"
                                                           :graph-uuid graph-uuid})
-            nil))))))
+            (let [all-blocks (ldb/read-transit-str body)]
+              (worker-state/set-rtc-downloading-graph! true)
+              (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
+              (client-op/update-graph-uuid repo graph-uuid)
+              (when-not rtc-const/RTC-E2E-TEST
+                (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
+              (worker-state/set-rtc-downloading-graph! false)
+              (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
+                                                            :message "download completed"
+                                                            :graph-uuid graph-uuid})
+              nil)))))))
 
 (defn new-task--branch-graph
   [get-ws-create-task repo conn graph-uuid major-schema-version]

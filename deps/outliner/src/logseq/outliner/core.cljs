@@ -12,6 +12,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.file-based.schema :as file-schema]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -222,6 +223,17 @@
          (map (fn [tag]
                 [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
+(defn- add-missing-tag-idents
+  [db tags]
+  (mapcat
+   (fn [t]
+     (when (and (not (:db/id t)) (not (:db/ident t)) (:block/uuid t)) ; new tag without db/ident
+       (let [eid [:block/uuid (:block/uuid t)]]
+         [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db (:block/title t))]
+          [:db/add eid :logseq.property.class/extends :logseq.class/Root]
+          [:db/retract eid :block/tags :logseq.class/Page]])))
+   tags))
+
 (extend-type Entity
   otree/INode
   (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes outliner-op]
@@ -240,7 +252,7 @@
           m* (cond->
               (-> data'
                   (dissoc :block/children :block/meta :block/unordered
-                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?
+                          :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
                   common-util/remove-nils
 
@@ -261,7 +273,7 @@
                                    (not= block-title (:block/title block-entity)))
           _ (when (and db-based? page? block-title)
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
-          m* (if (and db-based? page-title-changed?)
+          m* (if (and db-based? page-title-changed? (not (and page? (:block/parent block-entity))))
                (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
                      page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (assoc m* :block/name page-name))
@@ -272,6 +284,11 @@
                        (:block/title m*)
                        (not= (:block/title m*) (:block/title block-entity)))
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
+          _ (when (and db-based? (seq (:block/tags m*)))
+              ;; Add built-in? b/c it's not available here
+              (doseq [tag (map #(assoc % :logseq.property/built-in?
+                                       (contains? sqlite-create-graph/built-in-pages-names (:block/title %))) (:block/tags m*))]
+                (outliner-validate/validate-built-in-pages tag {:message "Built-in page can't be a tag"})))
           m (cond-> m*
               db-based?
               (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
@@ -314,9 +331,14 @@
         (swap! *txs-state conj
                (dissoc m :db/other-tx)))
 
-      ;; delete tags when title changed
       (when (and db-based? (:block/tags block-entity) block-entity)
-        (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
+        (let [;; delete tags when title changed
+              tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
+          (when (seq tx-data)
+            (swap! *txs-state (fn [txs] (concat txs tx-data))))))
+
+      (when db-based?
+        (let [tx-data (add-missing-tag-idents db (:block/tags m))]
           (when (seq tx-data)
             (swap! *txs-state (fn [txs] (concat txs tx-data))))))
 
@@ -334,7 +356,7 @@
           txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
           page-tx (let [block (d/entity db [:block/uuid block-id])]
                     (when (:block/pre-block? block)
-                      (let [id (:db/id (:block/page block))]
+                      (when-let [id (:db/id (:block/page block))]
                         [[:db/retract id :block/properties]
                          [:db/retract id :block/properties-order]
                          [:db/retract id :block/properties-text-values]
@@ -503,12 +525,21 @@
      {}
      block)))
 
+(defn- get-target-block-page
+  [target-block]
+  (or
+   (:db/id (:block/page target-block))
+   ;; target parent is a page
+   (when-let [parent (:block/parent target-block)]
+     (when (ldb/page? parent)
+       (:db/id parent)))
+   ;; target-block is a page itself
+   (:db/id target-block)))
+
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
-        target-page (or (:db/id (:block/page target-block))
-                        ;; target block is a page itself
-                        (:db/id target-block))
+        target-page (get-target-block-page target-block)
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
@@ -522,11 +553,13 @@
                                                       (let [ref-ids (set (map :block/uuid (:block/refs block)))]
                                                         (->> (set/intersection block-ids ref-ids)
                                                              (remove #{(:block/uuid block)})))))
-                           m {:db/id (:db/id block)
-                              :block/uuid uuid'
-                              :block/page target-page
-                              :block/parent parent
-                              :block/order order}
+                           m (cond->
+                              {:db/id (:db/id block)
+                               :block/uuid uuid'
+                               :block/parent parent
+                               :block/order order}
+                               (not (ldb/page? block))
+                               (assoc :block/page target-page))
                            result (->
                                    (if (de/entity? block)
                                      (assoc m :block/level (:block/level block))
@@ -610,7 +643,6 @@
 
                              :else
                              [block sibling?])
-          sibling? (if (ldb/page? block) false sibling?)
           block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
 
@@ -684,7 +716,6 @@
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
-        sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
                                        (:block/title target-block)
                                        (string/blank? (:block/title target-block)))
@@ -773,8 +804,7 @@
   [db blocks]
   (let [top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-        top-level-blocks* (->> (get-top-level-blocks top-level-blocks non-consecutive?)
-                               (remove ldb/page?))
+        top-level-blocks* (get-top-level-blocks top-level-blocks non-consecutive?)
         top-level-blocks (remove :logseq.property/built-in? top-level-blocks*)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
@@ -824,10 +854,8 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         first-block-page (:db/id (:block/page block))
-        target-page (or (:db/id (:block/page target-block))
-                        (:db/id target-block))
+        target-page (get-target-block-page target-block)
         not-same-page? (not= first-block-page target-page)
-
         block-order (if sibling?
                       (db-order/gen-key (:block/order target-block)
                                         (:block/order (ldb/get-right-sibling target-block)))
@@ -840,12 +868,15 @@
                                    (:db/id (:block/parent target-block))
                                    (:db/id target-block))
                    :block/order block-order}
-                   not-same-page?
+                   (not (ldb/page? block))
                    (assoc :block/page target-page))]
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
-                             (map (fn [id] {:block/uuid id
-                                            :block/page target-page}) children-ids)))
+                             (keep (fn [id]
+                                     (let [child (d/entity db [:block/uuid id])]
+                                       (when-not (ldb/page? child)
+                                         {:block/uuid id
+                                          :block/page target-page}))) children-ids)))
         target-from-property (:logseq.property/created-from-property target-block)
         block-from-property (:logseq.property/created-from-property block)
         property-tx (let [retract-property-tx (when block-from-property
@@ -985,7 +1016,7 @@
                                                                           :sibling? true
                                                                           :indent? false})))
 
-            (when (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
+            (when parent
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))

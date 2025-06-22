@@ -36,7 +36,7 @@
         (let [ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) deleted-block-uuids)]
           (state/sidebar-remove-deleted-block! ids)))
 
-      (let [conn (db/get-db repo false)]
+      (when-let [conn (db/get-db repo false)]
         (cond
           initial-pages?
           (do
@@ -63,7 +63,7 @@
                             (if (contains? #{:create-property-text-block :insert-blocks} (:outliner-op tx-meta))
                               (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
                                                                                    {:db/id (:e datom)
-                                                                                    :block.temp/fully-loaded? true})) tx-data)]
+                                                                                    :block.temp/load-status :self})) tx-data)]
                                 (concat update-blocks-fully-loaded tx-data))
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
