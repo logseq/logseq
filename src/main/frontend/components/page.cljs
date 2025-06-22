@@ -640,7 +640,7 @@
             (when show-tabs?
               (tabs page {:current-page? option :sidebar? sidebar? :*objects-ready? *objects-ready?}))
 
-            (when (and (not show-tabs?) (not tag-dialog?))
+            (when (not tag-dialog?)
               [:div.ls-page-blocks
                {:style {:margin-left (if whiteboard? 0 -20)}
                 :class (when-not sidebar?
