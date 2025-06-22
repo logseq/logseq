@@ -42,27 +42,28 @@
   "Convert id ref backs to page name refs using refs."
   [content* refs* & {:keys [replace-block-id?]
                      :or {replace-block-id? false}}]
-  (let [refs (if replace-block-id?
+  (when (string? content*)
+    (let [refs (if replace-block-id?
                ;; The caller need to handle situations including
                ;; mutual references and circle references.
-               refs*
-               (filter common-entity-util/page? refs*))
-        content (str content*)]
-    (if (re-find id-ref-pattern content)
-      (reduce
-       (fn [content ref]
-         (if (:block/title ref)
-           (let [content' (if (not (string/includes? (:block/title ref) " "))
-                            (string/replace content
-                                            (str "#" (page-ref/->page-ref (:block/uuid ref)))
-                                            (str "#" (:block/title ref)))
-                            content)]
-             (string/replace content' (page-ref/->page-ref (:block/uuid ref))
-                             (page-ref/->page-ref (:block/title ref))))
-           content))
-       content
-       (sort-refs refs))
-      content)))
+                 refs*
+                 (filter common-entity-util/page? refs*))
+          content (str content*)]
+      (if (re-find id-ref-pattern content)
+        (reduce
+         (fn [content ref]
+           (if (:block/title ref)
+             (let [content' (if (not (string/includes? (:block/title ref) " "))
+                              (string/replace content
+                                              (str "#" (page-ref/->page-ref (:block/uuid ref)))
+                                              (str "#" (:block/title ref)))
+                              content)]
+               (string/replace content' (page-ref/->page-ref (:block/uuid ref))
+                               (page-ref/->page-ref (:block/title ref))))
+             content))
+         content
+         (sort-refs refs))
+        content))))
 
 (defn get-matched-ids
   [content]

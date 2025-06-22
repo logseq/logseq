@@ -1,6 +1,6 @@
 (ns logseq.tasks.dev.lint
-  (:require [clojure.string :as string]
-            [babashka.process :refer [shell]]))
+  (:require [babashka.process :refer [shell]]
+            [clojure.string :as string]))
 
 (defn dev
   "Run all lint tasks
@@ -34,14 +34,14 @@
                           ;; remove files that aren't in a kondo dir
                           ((fn [x] (dissoc x nil))))]
     (if (seq dir-to-files)
-        (doseq [[dir* files*] dir-to-files]
-          (let [dir (if (= dir* "src") "." dir*)
-                files (mapv #(string/replace-first % (str dir "/") "") files*)
-                cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
-                _ (println cmd)
-                res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
-           (when (pos? (:exit res)) (System/exit (:exit res)))))
-        (println "No clj* files have changed to lint."))))
+      (doseq [[dir* files*] dir-to-files]
+        (let [dir (if (= dir* "src") "." dir*)
+              files (mapv #(string/replace-first % (str dir "/") "") files*)
+              cmd (str "cd " dir " && clj-kondo --lint " (string/join " " files))
+              _ (println cmd)
+              res (apply shell {:dir dir :continue :true} "clj-kondo --lint" files)]
+          (when (pos? (:exit res)) (System/exit (:exit res)))))
+      (println "No clj* files have changed to lint."))))
 
 (defn- validate-frontend-not-in-worker
   []

@@ -766,13 +766,13 @@ Some bindings in this fn:
                           #(sort-by % (fn [m prop] (get-in m [:block/properties prop])))
                           identity)
                transform-fn (comp sort-by' random-samples)]
-           (query-react/react-query repo
-                                    {:query query'
-                                     :query-string query-string
-                                     :rules rules}
-                                    (merge
-                                     {:transform-fn transform-fn}
-                                     query-opts))))))))
+           (last (query-react/react-query repo
+                                          {:query query'
+                                           :query-string query-string
+                                           :rules rules}
+                                          (merge
+                                           {:transform-fn transform-fn}
+                                           query-opts)))))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"
@@ -783,18 +783,18 @@ Some bindings in this fn:
           {query* :query :keys [sort-by blocks? rules]} (parse query-string {:db-graph? db-graph?})]
       (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                        :block-attrs (when db-graph? db-block-attrs)}))]
-        (query-react/react-query repo
-                                 (merge
-                                  query-m
-                                  {:query query'
-                                   :rules rules})
-                                 (merge
-                                  query-opts
-                                  (when sort-by
-                                    {:transform-fn
-                                     (if db-graph?
-                                       identity
-                                       #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
+        (last (query-react/react-query repo
+                                       (merge
+                                        query-m
+                                        {:query query'
+                                         :rules rules})
+                                       (merge
+                                        query-opts
+                                        (when sort-by
+                                          {:transform-fn
+                                           (if db-graph?
+                                             identity
+                                             #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))
 
 (defn query-contains-filter?
   [query' filter-name]

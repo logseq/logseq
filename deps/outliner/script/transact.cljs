@@ -2,8 +2,8 @@
   "This script generically runs transactions against the queried blocks"
   (:require [clojure.edn :as edn]
             [datascript.core :as d]
-            [logseq.db.frontend.rules :as rules]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
+            [logseq.db.frontend.rules :as rules]
             [logseq.outliner.db-pipeline :as db-pipeline]
             [nbb.core :as nbb]))
 

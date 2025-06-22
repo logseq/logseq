@@ -153,6 +153,10 @@
         (util/input-command command)
         (k/enter)
         (assert/assert-editor-mode)
+        ;; FIXME: cannot exit edit by k/esc???
+        ;; (util/exit-edit)
+        (k/esc)
+        (b/new-block "temp fix")
         (util/exit-edit)
         (is (= command (util/get-text ".property-k")))
         (is (= "Today" (util/get-text ".ls-datetime a.page-ref")))))))

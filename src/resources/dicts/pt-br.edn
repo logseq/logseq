@@ -130,7 +130,6 @@
  :page/logseq-is-having-a-problem "Logseq está com um problema. Para tentar fazê-lo voltar a funcionar, siga as etapas seguras a seguir:"
  :page/step "Etapa {1}"
  :page/try "Tentar"
- :page/delete-confirmation "Tem certeza de que deseja excluir esta página e seu arquivo?"
  :page/open-in-finder "Abrir no diretório"
  :page/open-with-default-app "Abrir com o aplicativo padrão"
  :page/make-public "Torná-la pública para publicação"

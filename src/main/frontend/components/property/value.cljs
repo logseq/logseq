@@ -561,7 +561,7 @@
         page-entity (ldb/get-case-page (db/get-db) page)
         id (:db/id page-entity)
         class? (or (= :block/tags (:db/ident property))
-                   (and (= :logseq.property/parent (:db/ident property))
+                   (and (= :logseq.property.class/extends (:db/ident property))
                         (ldb/class? block)))
         ;; Note: property and other types shouldn't be converted to class
         page? (ldb/internal-page? page-entity)]
@@ -585,7 +585,7 @@
           (:db/id page)))
 
       (and class? page? id)
-      (p/let [_ (db-page-handler/convert-to-tag! page-entity)]
+      (p/let [_ (db-page-handler/convert-page-to-tag! page-entity)]
         id)
 
       :else
@@ -614,7 +614,7 @@
         items' (->>
                 (if (and (seq selected-choices)
                          (not multiple-choices?)
-                         (not (and (ldb/class? block) (= (:db/ident property) :logseq.property/parent)))
+                         (not (and (ldb/class? block) (= (:db/ident property) :logseq.property.class/extends)))
                          (not= (:db/ident property) :logseq.property.view/type))
                   (concat sorted-items
                           [{:value clear-value
@@ -674,11 +674,11 @@
                              (if (every? entity-map? v)
                                (map :db/id v)
                                [(:db/id v)])))
-        parent-property? (= (:db/ident property) :logseq.property/parent)
-        children-pages (when parent-property? (model/get-structured-children repo (:db/id block)))
+        extends-property? (= (:db/ident property) :logseq.property.class/extends)
+        children-pages (when extends-property? (model/get-structured-children repo (:db/id block)))
         property-type (:logseq.property/type property)
         nodes (cond
-                parent-property?
+                extends-property?
                 (let [;; Disallows cyclic hierarchies
                       exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                                       (conj (:block/uuid block))) ; break cycle
@@ -779,7 +779,7 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or (and parent-property? (contains? (set children-pages) (:db/id block)))
+                 :show-new-when-not-exact-match? (if (or (and extends-property? (contains? (set children-pages) (:db/id block)))
                                                          ;; Don't allow creating private tags
                                                          (and (= :block/tags (:db/ident property))
                                                               (seq (set/intersection (set (map :db/ident classes'))
@@ -869,20 +869,20 @@
         non-root-classes (cond-> (remove (fn [c] (= (:db/ident c) :logseq.class/Root)) classes)
                            class?
                            (conj (frontend.db/entity :logseq.class/Tag)))
-        parent-property? (= (:db/ident property) :logseq.property/parent)]
+        extends-property? (= (:db/ident property) :logseq.property.class/extends)]
 
     ;; effect runs once
     (hooks/use-effect!
      (fn []
        (cond
-         (and parent-property? (not (ldb/class? block))
+         (and extends-property? (not (ldb/class? block))
               (ldb/internal-page? block))
          (p/let [result (db-async/<get-tag-pages repo (:db/id (db/entity :logseq.class/Page)))
                  result' (->> result
                               (remove ldb/built-in?))]
            (set-result-and-initial-choices! result'))
 
-         parent-property?
+         extends-property?
          nil
 
          (seq non-root-classes)
@@ -1499,15 +1499,15 @@
                          (multiple-values block property opts)
 
                          :else
-                         (let [parent? (= property-ident :logseq.property/parent)
+                         (let [extends? (= property-ident :logseq.property.class/extends)
                                value-cp (property-scalar-value block property v
                                                                (merge
                                                                 opts
                                                                 {:editor-id editor-id
                                                                  :dom-id dom-id}))
-                               page-ancestors (when parent?
+                               page-ancestors (when extends?
                                                 (let [ancestor-pages (loop [parents [block]]
-                                                                       (if-let [parent (:logseq.property/parent (last parents))]
+                                                                       (if-let [parent (:logseq.property.class/extends (last parents))]
                                                                          (when-not (contains? (set parents) parent)
                                                                            (recur (conj parents parent)))
                                                                          parents))]
