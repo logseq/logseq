@@ -930,8 +930,7 @@
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? _entry]
-                                                 (when-not (= in-view? visible?)
-                                                   (set-visible! in-view?)))})
+                                                 (set-visible! in-view?))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in? placeholder))))
 

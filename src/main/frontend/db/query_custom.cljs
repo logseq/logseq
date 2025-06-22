@@ -80,7 +80,7 @@
                         (assoc query-opts :query-string (str query)))]
      (if (or (list? (:query query'))
              (not= :find (first (:query query')))) ; dsl query
-       (query-dsl/custom-query repo query' query-opts)
+       [nil (query-dsl/custom-query repo query' query-opts)]
        (query-react/react-query repo
                                 (add-rules-to-query query' {:db-graph? db-graph?})
                                 query-opts)))))

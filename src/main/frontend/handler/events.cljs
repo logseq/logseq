@@ -14,6 +14,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
             [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
@@ -83,6 +84,7 @@
 
 (defn- graph-switch
   [graph]
+  (react/clear-query-state!)
   (let [db-based? (config/db-based-graph? graph)]
     (state/set-current-repo! graph)
     (page-handler/init-commands!)
