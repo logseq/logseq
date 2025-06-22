@@ -207,7 +207,8 @@
                 (query/custom-query (component-block/wrap-query-components
                                      {:attr {:class "mt-10"}
                                       :editor-box editor/box
-                                      :page page-cp})
+                                      :page page-cp
+                                      :built-in-query? true})
                                     query'))
                (str repo "-custom-query-" (:query query')))))]))))
 
