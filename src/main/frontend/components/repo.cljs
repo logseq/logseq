@@ -125,7 +125,7 @@
             "Delete")
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
-              {:key "delete-remotelly"
+              {:key "delete-remotely"
                :on-click (fn []
                            (let [prompt-str (str "Are you sure to permanently delete the graph \"" graph-name "\" from our server?")]
                              (-> (shui/dialog-confirm!
