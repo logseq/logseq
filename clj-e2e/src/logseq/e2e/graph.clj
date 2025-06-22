@@ -2,9 +2,9 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
             [logseq.e2e.assert :as assert]
+            [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [logseq.e2e.locator :as loc]))
+            [wally.main :as w]))
 
 (defn- refresh-all-remote-graphs
   []
@@ -39,14 +39,11 @@
 (defn remove-remote-graph
   [graph-name]
   (wait-for-remote-graph graph-name)
-  (let [local-unlink-button-q
-        (.first (w/-query (format "div[data-testid='logseq_db_%s'] a:has-text(\"Unlink (local)\")" graph-name)))]
-    (if (.isVisible local-unlink-button-q)
-      (do (w/click local-unlink-button-q)
-          (w/click "div[role='alertdialog'] button:text('ok')")
-          (remove-remote-graph graph-name))
-      (do (w/click (format "div[data-testid='logseq_db_%s'] a:has-text(\"Remove (server)\")" graph-name))
-          (w/click "div[role='alertdialog'] button:text('ok')")))))
+  (let [action-btn
+        (.first (w/-query (format "div[data-testid='logseq_db_%s'] .graph-action-btn" graph-name)))]
+    (w/click action-btn)
+    (w/click ".delete-remote-graph-menu-item")
+    (w/click "div[role='alertdialog'] button:text('ok')")))
 
 (defn switch-graph
   [to-graph-name wait-sync?]
