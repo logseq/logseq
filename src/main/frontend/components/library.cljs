@@ -59,7 +59,7 @@
 
 (rum/defc add-pages
   [library-page]
-  [:div.ls-add-pages.px-1
+  [:div.ls-add-pages.px-1.mt-4
    (shui/button
     {:variant :secondary
      :size :sm
@@ -72,4 +72,4 @@
                      (select-pages library-page)])
                   {:align :start}))}
     (ui/icon "plus" {:size 16})
-    "Add pages to Library")])
+    "Add existing pages to Library")])
