@@ -651,7 +651,7 @@
 (def-thread-api :thread-api/validate-db
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (worker-db-validate/validate-db @conn)))
+    (worker-db-validate/validate-db conn)))
 
 (def-thread-api :thread-api/export-edn
   [repo options]
