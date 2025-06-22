@@ -223,16 +223,20 @@ DROP TRIGGER IF EXISTS blocks_au;
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
-    (let [title (cond->
-                 (-> block
-                     (update :block/title ldb/get-title-with-parents)
-                     db-content/recur-replace-uuid-in-block-title)
-                  (ldb/journal? block)
-                  (str " " (:block/journal-day block)))]
-      (when uuid
-        {:id (str uuid)
-         :page (str (or (:block/uuid page) uuid))
-         :title (if (page-or-object? block) title (sanitize title))}))))
+    (try
+      (let [title (cond->
+                   (-> block
+                       (update :block/title ldb/get-title-with-parents)
+                       db-content/recur-replace-uuid-in-block-title)
+                    (ldb/journal? block)
+                    (str " " (:block/journal-day block)))]
+        (when uuid
+          {:id (str uuid)
+           :page (str (or (:block/uuid page) uuid))
+           :title (if (page-or-object? block) title (sanitize title))}))
+      (catch :default e
+        (prn "Error: failed to run block->index on block " (:db/id block))
+        (js/console.error e)))))
 
 (defn build-fuzzy-search-indice
   "Build a block title indice from scratch.
