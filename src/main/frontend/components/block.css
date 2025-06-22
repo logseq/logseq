@@ -542,6 +542,10 @@
   }
 }
 
+.ls-table .ls-block {
+  container-type: initial;
+}
+
 #main-content-container, #right-sidebar {
     container-type: inline-size;
 }
