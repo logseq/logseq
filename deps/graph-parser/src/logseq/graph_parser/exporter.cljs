@@ -1397,17 +1397,26 @@
   "Separates new pages from new properties tx in preparation for properties to
   be transacted separately. Also builds property pages tx and converts existing
   pages that are now properties"
-  [pages-tx old-properties existing-pages import-state]
+  [pages-tx old-properties existing-pages import-state upstream-properties]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
         ;; _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
         property-pages-tx (map (fn [{block-uuid :block/uuid :block/keys [title]}]
                                  (let [property-name (keyword (string/lower-case title))
-                                       db-ident (get-ident @(:all-idents import-state) property-name)]
-                                   (sqlite-util/build-new-property db-ident
-                                                                   (get-property-schema @(:property-schemas import-state) property-name)
-                                                                   {:title title :block-uuid block-uuid})))
+                                       db-ident (get-ident @(:all-idents import-state) property-name)
+                                       upstream-property (get upstream-properties property-name)]
+                                   (sqlite-util/build-new-property
+                                    db-ident
+                                    ;; Tweak new properties that have upstream changes in flight to behave like
+                                    ;; existing properties i.e. they should be defined by the upstream property
+                                    (if (and upstream-property
+                                             (#{:date :node} (:from-type upstream-property))
+                                             (= :default (get-in upstream-property [:schema :logseq.property/type])))
+                                      ;; Assumes :many for :date and :node like infer-property-schema-and-get-property-change
+                                      {:logseq.property/type (:from-type upstream-property) :db/cardinality :many}
+                                      (get-property-schema @(:property-schemas import-state) property-name))
+                                    {:title title :block-uuid block-uuid})))
                                properties-tx)
         converted-property-pages-tx
         (map (fn [kw-name]
@@ -1561,7 +1570,8 @@
 
 (defn- save-from-tx
   "Save importer state from given txs"
-  [txs {:keys [import-state]}]
+  [txs {:keys [import-state] :as _opts}]
+  ;; (when (string/includes? (:file _opts) "some-file.md") (cljs.pprint/pprint txs))
   (when-let [nodes (seq (filter :block/name txs))]
     (swap! (:all-existing-page-uuids import-state) merge (into {} (map (juxt :block/uuid identity) nodes)))))
 
@@ -1600,7 +1610,7 @@
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
-        (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
+        (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
         ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
         main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true ::path file})
