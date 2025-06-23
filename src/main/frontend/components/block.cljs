@@ -58,6 +58,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
+            [frontend.mobile.core :as mobile]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
@@ -3012,14 +3013,19 @@
                                                 (block-content-on-pointer-down e block block-id edit-input-id content config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :key (str "block-content-" uuid)
-              :content-editable (and (mobile-util/native-ios?) (not page-title?))}
+              :key (str "block-content-" uuid)}
+       (and (mobile-util/native-ios?) (not page-title?))
+       (assoc :content-editable true
+              :data-readonly true
+              :on-key-down util/stop
+              :on-before-input util/stop
+              :on-input util/stop)
        true
        (merge attrs))
 
      [:<>
       (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
-              (not (contains? #{:code} (:logseq.property.node/display-type block))))
+                 (not (contains? #{:code} (:logseq.property.node/display-type block))))
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner

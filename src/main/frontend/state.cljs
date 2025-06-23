@@ -1218,7 +1218,9 @@ Similar to re-frame subscriptions"
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
         (dom/remove-class! node "selected")
         (when (dom/has-class? node "ls-table-row")
-          (.blur node))))))
+          (.blur node))))
+    (doseq [node (dom/sel ".block-content[contenteditable=true]")]
+      (dom/set-attr! node "contenteditable" "false"))))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1242,7 +1244,9 @@ Similar to re-frame subscriptions"
 (defn clear-selection!
   []
   (dom-clear-selection!)
-  (state-clear-selection!))
+  (state-clear-selection!)
+  (doseq [node (dom/sel ".block-content[contenteditable=false]")]
+    (dom/set-attr! node "contenteditable" "true")))
 
 (defn get-selection-start-block-or-first
   []

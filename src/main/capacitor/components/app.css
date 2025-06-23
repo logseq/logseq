@@ -241,3 +241,9 @@ html[data-color=logseq] {
 .graph-switcher .action-sheet-button {
   font-size: 1.125em;
 }
+
+div.block-content[contenteditable][data-readonly] {
+    user-select: text;          /* allow text selection */
+    caret-color: transparent;   /* hide caret */
+    outline: none;              /* remove focus outline */
+}
