@@ -2951,6 +2951,7 @@
         deadline (when-not db-based? (:block/deadline block))
         format (if db-based? :markdown (or (:block/format block) :markdown))
         pre-block? (when-not db-based? (:block/pre-block? block))
+        page-title? (:page-title? config)
         collapsed? (:collapsed? config)
         content (if db-based?
                   (:block/raw-title block)
@@ -3011,13 +3012,14 @@
                                                 (block-content-on-pointer-down e block block-id edit-input-id content config))))))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :key (str "block-content-" uuid)}
+              :key (str "block-content-" uuid)
+              :content-editable (and (mobile-util/native-ios?) (not page-title?))}
        true
        (merge attrs))
 
      [:<>
       (when (and (> (count content) (state/block-content-max-length (state/get-current-repo)))
-                 (not (contains? #{:code} (:logseq.property.node/display-type block))))
+              (not (contains? #{:code} (:logseq.property.node/display-type block))))
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
