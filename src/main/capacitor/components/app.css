@@ -54,6 +54,10 @@ html {
       --ion-item-color: var(--ls-primary-text-color);
       --ion-item-border-color: var(--ls-border-color);
 
+      input, textarea {
+          caret-color: var(--ls-primary-text-color);
+      }
+
       ion-toolbar::part(background), ion-tab-bar,
       ion-tab-button, .block-modal-page, .block-modal-page > ion-header,
       ion-content {
