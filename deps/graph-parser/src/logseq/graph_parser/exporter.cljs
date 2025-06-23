@@ -458,6 +458,8 @@
   "Special keywords in previous query table"
   {:page :block/title
    :block :block/title
+   :tags :block/tags
+   :alias :block/alias
    :created-at :block/created-at
    :updated-at :block/updated-at})
 
