@@ -102,45 +102,46 @@
 
 (rum/defc add-button
   [block {:keys [container-id] :as config*}]
-  (let [*ref (rum/use-ref nil)
-        has-children? (:block/_parent block)
-        page? (ldb/page? block)
-        opacity-class (if has-children? "opacity-0" "opacity-50")
-        config (dissoc config* :page)]
-    (when page?
-      [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
-       {:class opacity-class
-        :data-block-id (:db/id block)
-        :ref *ref
-        :on-click (fn [e]
-                    (util/stop e)
-                    (state/set-state! :editor/container-id container-id)
-                    (editor-handler/api-insert-new-block! "" (merge config
-                                                                    {:block-uuid (:block/uuid block)})))
-        :on-mouse-over (fn []
-                         (let [ref (rum/deref *ref)
-                               prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
-                           (cond
-                             (and prev-block (dom/has-class? prev-block "is-blank"))
-                             (dom/add-class! ref "opacity-0")
-                             (and prev-block has-children?)
-                             (dom/add-class! ref "opacity-50")
-                             :else
-                             (dom/add-class! ref "opacity-100"))))
-        :on-mouse-leave #(do
-                           (dom/remove-class! (rum/deref *ref) "opacity-50")
-                           (dom/remove-class! (rum/deref *ref) "opacity-100"))
-        :on-key-down (fn [e]
-                       (util/stop e)
-                       (when (= "Enter" (util/ekey e))
-                         (state/set-state! :editor/container-id container-id)
-                         (editor-handler/api-insert-new-block! "" (merge config block))))
-        :tab-index 0}
-       [:div.flex.flex-row
-        [:div.flex.items-center {:style {:height 28
-                                         :margin-left (if (util/mobile?) 0 22)}}
-         [:span.bullet-container
-          [:span.bullet]]]]])))
+  (when-not (util/capacitor-new?)
+    (let [*ref (rum/use-ref nil)
+          has-children? (:block/_parent block)
+          page? (ldb/page? block)
+          opacity-class (if has-children? "opacity-0" "opacity-50")
+          config (dissoc config* :page)]
+      (when page?
+        [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
+         {:class opacity-class
+          :data-block-id (:db/id block)
+          :ref *ref
+          :on-click (fn [e]
+                      (util/stop e)
+                      (state/set-state! :editor/container-id container-id)
+                      (editor-handler/api-insert-new-block! "" (merge config
+                                                                      {:block-uuid (:block/uuid block)})))
+          :on-mouse-over (fn []
+                           (let [ref (rum/deref *ref)
+                                 prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                             (cond
+                               (and prev-block (dom/has-class? prev-block "is-blank"))
+                               (dom/add-class! ref "opacity-0")
+                               (and prev-block has-children?)
+                               (dom/add-class! ref "opacity-50")
+                               :else
+                               (dom/add-class! ref "opacity-100"))))
+          :on-mouse-leave #(do
+                             (dom/remove-class! (rum/deref *ref) "opacity-50")
+                             (dom/remove-class! (rum/deref *ref) "opacity-100"))
+          :on-key-down (fn [e]
+                         (util/stop e)
+                         (when (= "Enter" (util/ekey e))
+                           (state/set-state! :editor/container-id container-id)
+                           (editor-handler/api-insert-new-block! "" (merge config block))))
+          :tab-index 0}
+         [:div.flex.flex-row
+          [:div.flex.items-center {:style {:height 28
+                                           :margin-left (if (util/mobile?) 0 22)}}
+           [:span.bullet-container
+            [:span.bullet]]]]]))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -577,6 +578,8 @@
   (rum/local nil   ::current-page)
   (rum/local false ::objects-ready?)
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
+  (when (nil? page)
+    (js/console.trace))
   (let [current-repo (state/sub :git/current-repo)
         *objects-ready? (::objects-ready? state)
         config (assoc config :*objects-ready? *objects-ready?)
@@ -587,6 +590,7 @@
         objects-ready? (if (or class-page? property-page?)
                          (rum/react *objects-ready?)
                          true)
+        _ (prn :debug :page page :option option)
         title (:block/title page)
         journal? (db/journal-page? title)
         db-based? (config/db-based-graph? repo)
@@ -705,10 +709,9 @@
                  *loading? (atom true)
                  page (db/get-page page-id-uuid-or-name)
                  *page (atom page)]
-             (when (:block.temp/load-status page) (reset! *loading? false))
              (p/let [page-block (db-async/<get-block (state/get-current-repo) page-id-uuid-or-name)]
-               (reset! *loading? false)
                (reset! *page (db/entity (:db/id page-block)))
+               (reset! *loading? false)
                (when page-block
                  (when-not (or preview-or-sidebar? (:tag-dialog? option))
                    (if-let [page-uuid (and (not (:db/id page*)) (not page-uuid?) (:block/uuid page-block))]
@@ -724,6 +727,8 @@
   (let [loading? (rum/react (::loading? state))
         page (rum/react (::*page state))]
     (when (and page (not loading?))
+      (prn :debug :page page
+           :title (:block/title page))
       (page-inner (assoc option :page page)))))
 
 (rum/defcs page-cp
