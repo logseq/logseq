@@ -388,16 +388,17 @@
       (shui/popup-show!
        nil
        (fn []
-         [:div.flex.items-center.justify-center.mt-8.text-2xl
-          (ui/loading (str "Downloading " graph-name))])))
+         [:div.flex.items-center.justify-center.mt-8
+          (ui/loading (str "Downloading " graph-name))])
+       {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
     (when (util/mobile?)
-      (shui/popup-hide!)))
+      (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (js/console.error e)
               (when (util/mobile?)
-                (shui/popup-hide!)
+                (shui/popup-hide! :download-rtc-graph)
                 ;; TODO: notify error
                 )))))
 
