@@ -49,6 +49,10 @@ html {
     &[data-color=logseq] {
       --background: var(--ls-primary-background-color);
       --ion-item-background: var(--ls-primary-background-color);
+      --ion-text-color: var(--ls-primary-text-color);
+      --ion-toolbar-color: var(--ls-link-text-color);
+      --ion-item-color: var(--ls-primary-text-color);
+      --ion-item-border-color: var(--ls-border-color);
 
       ion-toolbar::part(background), ion-tab-bar,
       ion-tab-button, .block-modal-page, .block-modal-page > ion-header,
@@ -63,6 +67,8 @@ html {
       .action-sheet-group.sc-ion-action-sheet-ios,
       .alert-wrapper.sc-ion-alert-ios {
         --background: var(--ls-primary-background-color);
+        --button-background: var(--ls-primary-background-color);
+        --button-color: var(--ls-primary-text-color);
       }
     }
   }
