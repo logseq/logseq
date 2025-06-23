@@ -1,6 +1,7 @@
 (ns capacitor.components.popup
   (:require [capacitor.ionic :as ion]
             [capacitor.state :as state]
+            [dommy.core :as dom]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
@@ -46,8 +47,16 @@
 
 (defn popup-hide!
   [& args]
-  (when-not @*last-popup-modal?
-    (apply shui-popup/hide! args)))
+  (cond
+    (= :download-rtc-graph (first args))
+    (do
+      (state/set-popup! nil)
+      (js/setTimeout
+       #(.select (dom/sel1 "ion-tabs") "home") 1000))
+
+    :else
+    (when-not @*last-popup-modal?
+      (apply shui-popup/hide! args))))
 
 (set! shui/popup-show! popup-show!)
 (set! shui/popup-hide! popup-hide!)
