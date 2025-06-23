@@ -132,6 +132,10 @@ ion-buttons {
     #app-container-wrapper {
       @apply relative -top-6;
     }
+
+    .ls-view-body {
+      @apply max-w-[90vw];
+    }
   }
 }
 
