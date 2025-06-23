@@ -206,7 +206,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 26 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 27 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -253,7 +253,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 19
+      (is (= 20
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -523,7 +523,11 @@
         (is (= "20"
                (:user.property/duration (db-test/readable-properties (db-test/find-block-by-content @conn "existing :number to :default"))))
             "existing :number property value correctly saved as :default")
+        (is (= :default
+               (:logseq.property/type (d/entity @conn :user.property/people2)))
+            ":node property changes to :default when :node is defined in same file")
 
+        ;; tests :node :many to :default transition after :node is defined in separate file
         (is (= {:logseq.property/type :default :db/cardinality :db.cardinality/many}
                (select-keys (d/entity @conn :user.property/people) [:logseq.property/type :db/cardinality]))
             ":node property to :default value changes to :default and keeps existing cardinality")
