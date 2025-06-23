@@ -189,7 +189,8 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (add-button block config)])))))
+           (when-not (and (util/capacitor-new?) (seq blocks))
+             (add-button block config))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -580,6 +581,7 @@
   (let [current-repo (state/sub :git/current-repo)
         *objects-ready? (::objects-ready? state)
         config (assoc config :*objects-ready? *objects-ready?)
+        page (or page (some-> (:db/id option) db/entity))
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
