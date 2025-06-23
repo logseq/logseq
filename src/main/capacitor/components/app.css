@@ -178,7 +178,7 @@ ion-content {
 
     &[data-has-heading="1"], &:has(textarea.h1) {
       > .block-control-wrap, > .block-control-wrap > .block-control {
-        @apply mt-4.5;
+        @apply mt-[18px];
       }
     }
 
