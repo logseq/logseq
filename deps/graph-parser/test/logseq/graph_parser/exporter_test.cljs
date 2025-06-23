@@ -396,10 +396,10 @@
               :logseq.property/query "{:query (task todo doing)}"
               :block/tags [:logseq.class/Query]
               :logseq.property.table/ordered-columns [:block/title]}
-             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with")))
+             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has correct query properties")
       (is (= "tasks with todo and doing"
-             (:block/title (db-test/find-block-by-content @conn #"tasks with")))
+             (:block/title (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has custom title migrated")
 
       ;; Cards
@@ -428,6 +428,26 @@
       (is (= "*Italic* ~~Strikethrough~~ ^^Highlight^^ #[[foo]]\n**Learn Datalog Today** is an interactive tutorial designed to teach you the [Datomic](http://datomic.com/) dialect of [Datalog](http://en.wikipedia.org/wiki/Datalog). Datalog is a declarative **database query language** with roots in logic programming. Datalog has similar expressive power as [SQL](http://en.wikipedia.org/wiki/Sql)."
              (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
           "Imports full quote with various ast types"))
+
+    (testing "embeds"
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "page embed")
+                 first
+                 (select-keys [:block/title])))
+          "Page embed linked correctly")
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "test block embed")
+                 first
+                 (select-keys [:block/title])))
+          "Block embed linked correctly"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
