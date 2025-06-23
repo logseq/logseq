@@ -139,6 +139,10 @@ ion-buttons {
   }
 }
 
+.block-content-or-editor-inner {
+  @apply min-h-[25px];
+}
+
 ion-tab-bar {
   box-shadow: 0 0 1px #999999;
   padding-top: 4px;
@@ -174,13 +178,13 @@ ion-content {
 
     &[data-has-heading="1"], &:has(textarea.h1) {
       > .block-control-wrap, > .block-control-wrap > .block-control {
-        @apply mt-4;
+        @apply mt-4.5;
       }
     }
 
     &[data-has-heading="2"], &:has(textarea.h2) {
       > .block-control-wrap, > .block-control-wrap > .block-control {
-        @apply mt-2.5;
+        @apply mt-3;
       }
     }
   }
