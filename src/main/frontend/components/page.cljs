@@ -641,6 +641,9 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
+            (when (and block? (util/capacitor-new?))
+              (component-block/breadcrumb {} repo (:block/uuid page) {}))
+
             (when (and db-based? (ldb/library? page))
               (library/add-pages page))
 
@@ -654,7 +657,7 @@
             (when (not tag-dialog?)
               [:div.ls-page-blocks
                {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}
-                :class (when-not sidebar?
+                :class (when-not (or sidebar? (util/capacitor-new?))
                          "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)
