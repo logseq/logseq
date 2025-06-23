@@ -11,11 +11,14 @@
   []
   (let [login? (and (fstate/sub :auth/id-token) (user-handler/logged-in?))]
     (if-not login?
-      [:h1.text-3xl.font-bold.underline
-       [:a {:on-click #(shui/dialog-open! login/page-impl
-                                          {:close-btn? false
-                                           :align :top
-                                           :content-props {:class "app-login-modal"}})} "login"]]
+      (shui/button
+       {:variant :default
+        :class "text-1xl flex flex-1 w-full"
+        :on-click #(shui/dialog-open! login/page-impl
+                                      {:close-btn? false
+                                       :align :top
+                                       :content-props {:class "app-login-modal"}})}
+       "Login")
       [:div.py-2
        [:h2.py-3.flex.justify-between.items-center
         [:strong.text-4xl.font-semibold (user-handler/username)]
