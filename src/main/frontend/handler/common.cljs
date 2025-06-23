@@ -7,7 +7,6 @@
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]))
 
