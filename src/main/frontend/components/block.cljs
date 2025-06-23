@@ -1898,7 +1898,7 @@
 
       (= name "namespace")
       (if (config/db-based-graph? (state/get-current-repo))
-        [:div.warning "Namespace is deprecated, use tags instead"]
+        [:div.warning (str "{{namespace}} is deprecated. Use the " common-config/library-page-name " feature instead.")]
         (let [namespace (first arguments)]
           (when-not (string/blank? namespace)
             (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
