@@ -59,9 +59,14 @@ html {
       }
 
       ion-toolbar::part(background), ion-tab-bar,
-      ion-tab-button, .block-modal-page, .block-modal-page > ion-header,
-      ion-content {
+      ion-tab-button, ion-header
+      {
         background-color: var(--lx-gray-01);
+      }
+
+      ion-modal {
+          --background: var(--lx-gray-01);
+          --backdrop-color: var(--ls-secondary-background-color);
       }
 
       #mobile-editor-toolbar {
