@@ -117,8 +117,7 @@
   }
 }
 
-.breadcrumb div, .breadcrumb span {
-  display: inline;
+.breadcrumb {
   .property-value-inner[data-type], .property-value-inner .select-item {
     display: inline;
   }
