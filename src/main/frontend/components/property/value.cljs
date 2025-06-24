@@ -393,7 +393,7 @@
 
 (rum/defc overdue
   [date content]
-  (let [[current-time set-current-time!] (rum/use-state (t/now))]
+  (let [[current-time set-current-time!] (hooks/use-state (t/now))]
     (hooks/use-effect!
      (fn []
        (let [timer (js/setInterval (fn [] (set-current-time! (t/now))) (* 1000 60 3))]
@@ -455,7 +455,7 @@
 
 (rum/defc date-picker
   [value {:keys [block property datetime? on-change on-delete del-btn? editing? multiple-values? other-position?]}]
-  (let [*el (rum/use-ref nil)
+  (let [*el (hooks/use-ref nil)
         content-fn (fn [{:keys [id]}] (calendar-inner id
                                                       {:block block
                                                        :property property
@@ -836,8 +836,8 @@
 (rum/defc property-value-select-node < rum/static
   [block property opts
    {:keys [*show-new-property-config?]}]
-  (let [[initial-choices set-initial-choices!] (rum/use-state nil)
-        [result set-result!] (rum/use-state nil)
+  (let [[initial-choices set-initial-choices!] (hooks/use-state nil)
+        [result set-result!] (hooks/use-state nil)
         set-result-and-initial-choices! (fn [value]
                                           (set-initial-choices! value)
                                           (set-result! value))
@@ -1144,7 +1144,7 @@
 
 (rum/defc single-value-select
   [block property value select-opts {:keys [value-render] :as opts}]
-  (let [*el (rum/use-ref nil)
+  (let [*el (hooks/use-ref nil)
         editing? (:editing? opts)
         type (:logseq.property/type property)
         select-opts' (assoc select-opts :multiple-choices? false)
@@ -1227,11 +1227,12 @@
 
 (rum/defc single-number-input
   [block property value-block table-view?]
-  (let [[editing? set-editing!] (rum/use-state false)
-        *ref (rum/use-ref nil)
-        *input-ref (rum/use-ref nil)
+  (let [[editing? set-editing!] (hooks/use-state false)
+        *ref (hooks/use-ref nil)
+        *input-ref (hooks/use-ref nil)
         number-value (db-property/property-value-content value-block)
-        [value set-value!] (rum/use-state number-value)
+        [value set-value!] (hooks/use-state number-value)
+        [*value _] (hooks/use-state (atom value))
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
                               (p/do!
@@ -1244,6 +1245,10 @@
 
                                (when exit-editing?
                                  (set-editing! false))))]
+    (hooks/use-effect!
+     (fn []
+       #(set-property-value! @*value))
+     [])
     [:div.ls-number.flex.flex-1.jtrigger
      {:ref *ref
       :on-click #(do
@@ -1256,8 +1261,11 @@
          :class (str "ls-number-input h-6 px-0 py-0 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                      (when table-view? " text-sm"))
          :value value
-         :on-change (fn [e] (set-value! (util/evalue e)))
-         :on-blur (fn [_e] (set-property-value! value))
+         :on-change (fn [e]
+                      (set-value! (util/evalue e))
+                      (reset! *value (util/evalue e)))
+         :on-blur (fn [_e]
+                    (set-property-value! value))
          :on-key-down (fn [e]
                         (let [input (rum/deref *input-ref)
                               pos (cursor/pos input)
@@ -1369,7 +1377,7 @@
   [block property v {:keys [on-chosen editing?] :as opts}]
   (let [type (:logseq.property/type property)
         date? (= type :date)
-        *el (rum/use-ref nil)
+        *el (hooks/use-ref nil)
         items (cond->> (if (entity-map? v) #{v} v)
                 (= (:db/ident property) :block/tags)
                 (remove (fn [v] (contains? ldb/hidden-tags (:db/ident v)))))
