@@ -757,6 +757,9 @@
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
 
+      (state/editor-in-composition?)
+      nil
+
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
              :property-search :property-value-search :datepicker}
