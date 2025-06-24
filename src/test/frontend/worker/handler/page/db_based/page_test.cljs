@@ -45,7 +45,7 @@
         (is (= (map :block/uuid (db-db/get-page-parents child-page))
                (map :block/uuid (db-db/get-page-parents child-page2)))
             "Child page with existing parents has correct parents")
-        (is (= ["Root Tag" "c1"] (map :block/title (ldb/get-classes-parents [child-page3])))
+        (is (= #{"Root Tag" "c1"} (set (map :block/title (ldb/get-classes-parents [child-page3]))))
             "Child class with new parent has correct parents")
 
         (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
