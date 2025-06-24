@@ -117,6 +117,10 @@
   }
 }
 
+.breadcrumb div, .breadcrumb span {
+  display: !inline;
+}
+
 .open-block-ref-link {
   background-color: var(--ls-page-properties-background-color);
   padding: 1px 4px;
