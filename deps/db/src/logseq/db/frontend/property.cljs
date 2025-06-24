@@ -158,9 +158,9 @@
                                                      :public? false
                                                      :hide? true
                                                      :view-context :property}}
-     ;; TODO: support cardinality many for extends
      :logseq.property.class/extends {:title "Extends"
                                      :schema {:type :class
+                                              :cardinality :many
                                               :public? true
                                               :view-context :class}
                                      :queryable? true
