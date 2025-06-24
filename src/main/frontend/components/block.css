@@ -1122,7 +1122,7 @@ html.is-mac {
 }
 
 .ls-resize-image {
-  @apply flex relative w-fit;
+  @apply flex relative w-fit cursor-pointer;
 
   .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70

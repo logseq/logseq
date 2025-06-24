@@ -252,7 +252,7 @@
           [:p.text-error.text-xs [:small.opacity-80
                                   (util/format "%s not found!" (string/capitalize type))]])))))
 
-(defn open-lightbox
+(defn open-lightbox!
   [e]
   (let [images (js/document.querySelectorAll ".asset-container img")
         images (to-array images)
@@ -303,9 +303,15 @@
 (defonce *resizing-image? (atom false))
 (rum/defc asset-container
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
-  (let [*el-ref (rum/use-ref nil)]
+  (let [*el-ref (rum/use-ref nil)
+        image-src (fs/asset-path-normalize src)
+        get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
     [:div.asset-container
      {:key "resize-asset-container"
+      :on-pointer-down util/stop
+      :on-click (fn [e]
+                  (when (= "IMG" (some-> (.-target e) (.-nodeName)))
+                    (open-lightbox! e)))
       :ref *el-ref}
      [:img.rounded-sm.relative
       (merge
@@ -317,14 +323,13 @@
      (when (and (not breadcrumb?)
              (not positioned?))
        [:<>
-        (let [image-src (fs/asset-path-normalize src)
-              handle-copy!
+        (let [handle-copy!
               (fn [_e]
                 (-> (util/copy-image-to-clipboard image-src)
                   (p/then #(notification/show! "Copied!" :success))))
               handle-delete!
               (fn [_e]
-                (when-let [block-id (some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
+                (when-let [block-id (get-blockid)]
                   (let [*local-selected? (atom local?)]
                     (-> (shui/dialog-confirm!
                           [:div.text-xs.opacity-60.-my-2
@@ -360,14 +365,13 @@
                                 [:div
                                  {:on-click #(shui/popup-hide!)}
                                  (shui/dropdown-menu-item
+                                   {:on-click #(some-> (db/entity [:block/uuid (get-blockid)]) (editor-handler/edit-block! :max))}
+                                   [:span.flex.items-center.gap-1
+                                    (ui/icon "edit") (t :asset/edit-block)])
+                                 (shui/dropdown-menu-item
                                    {:on-click handle-copy!}
                                    [:span.flex.items-center.gap-1
                                     (ui/icon "copy") (t :asset/copy)])
-                                 (shui/dropdown-menu-item
-                                   {:on-click open-lightbox}
-                                   [:span.flex.items-center.gap-1
-                                    (ui/icon "maximize") (t :asset/maximize)])
-
                                  (when (util/electron?)
                                    (shui/dropdown-menu-item
                                      {:on-click (fn [e]
