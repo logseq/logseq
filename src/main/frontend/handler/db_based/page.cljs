@@ -23,7 +23,7 @@
    When returning false, this fn also displays appropriate notifications to the user"
   [repo block tag-entity]
   (try
-    (outliner-validate/validate-unique-by-name-tag-and-block-type
+    (outliner-validate/validate-unique-by-name-and-tags
      (db/get-db repo)
      (:block/title block)
      (update block :block/tags (fnil conj #{}) tag-entity))
