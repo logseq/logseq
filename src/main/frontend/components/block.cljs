@@ -684,10 +684,9 @@
 
    All page-names are sanitized except page-name-in-block"
   [state
-   {:keys [contents-page? whiteboard-page? other-position? show-unique-title? stop-click-event?
+   {:keys [contents-page? whiteboard-page? other-position? show-unique-title?
            on-context-menu with-parent?]
-    :or {stop-click-event? true
-         with-parent? true}
+    :or {with-parent? true}
     :as config}
    page-entity children label]
   (let [*hover? (::hover? state)
@@ -713,9 +712,6 @@
                         (editor-handler/block->data-transfer! page-name e true))
        :on-mouse-over #(reset! *hover? true)
        :on-mouse-leave #(reset! *hover? false)
-       :on-click (fn [e]
-                   (when (and stop-click-event? (not (util/link? (.-target e))))
-                     (util/stop e)))
        :on-pointer-down (fn [^js e]
                           (cond
                             (util/link? (.-target e))
@@ -736,7 +732,6 @@
                               (reset! *mouse-down? true))))
        :on-pointer-up (fn [e]
                         (when @*mouse-down?
-                          (util/stop e)
                           (state/clear-edit!)
                           (when-not (:disable-click? config)
                             (<open-page-ref config page-entity e page-name contents-page?))
@@ -2836,8 +2831,7 @@
                                                          (ui/icon "X" {:size 14})))
                                                       (page-cp (assoc config
                                                                       :tag? true
-                                                                      :disable-preview? true
-                                                                      :stop-click-event? false) tag)]))
+                                                                      :disable-preview? true) tag)]))
                                                  popup-opts))}
            (for [tag (take 2 block-tags)]
              [:div.block-tag.pl-2
@@ -3251,8 +3245,7 @@
                   rest)
         config (assoc config
                       :breadcrumb? true
-                      :disable-preview? true
-                      :stop-click-event? false)]
+                      :disable-preview? true)]
     (when (seq parents)
       (let [parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
