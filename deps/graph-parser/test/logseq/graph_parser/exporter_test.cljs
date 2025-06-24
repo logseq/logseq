@@ -763,9 +763,9 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:logseq.property.class/extends :block/title]))
+    (is (= ["CreativeWork"] (map :block/title (:logseq.property.class/extends (d/entity @conn :user.class/Movie))))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:logseq.property.class/extends :block/title]))
+    (is (= ["Thing"] (map :block/title (:logseq.property.class/extends (d/entity @conn :user.class/CreativeWork))))
         "New page correctly set as class parent")))
 
 (deftest-async export-files-with-property-pages-disabled
