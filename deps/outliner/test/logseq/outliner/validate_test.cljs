@@ -26,7 +26,7 @@
           (d/entity @conn :user.property/color2)))
         "Disallow duplicate user property")))
 
-(deftest ^:focus validate-block-title-unique-for-tags
+(deftest validate-block-title-unique-for-tags
   (let [conn (db-test/create-conn-with-blocks
               {:classes {:Class1 {}
                          :Class2 {:logseq.property.class/extends :logseq.class/Task}}})]
