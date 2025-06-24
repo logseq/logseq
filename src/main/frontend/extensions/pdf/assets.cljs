@@ -380,7 +380,7 @@
        (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
          (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))))
 
-(defn open-lightbox
+(defn open-lightbox!
   [e]
   (let [images (js/document.querySelectorAll ".hl-area img")
         images (to-array images)
@@ -443,7 +443,7 @@
               {:title (t :asset/maximize)
                :tabIndex "-1"
                :on-pointer-down util/stop
-               :on-click open-lightbox}
+               :on-click open-lightbox!}
 
               (ui/icon "maximize")]]
             [:img.w-full {:src @*src}]]])))))
