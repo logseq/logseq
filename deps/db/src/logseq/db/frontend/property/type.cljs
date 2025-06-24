@@ -76,12 +76,12 @@
 ;; Validate && list fixes for non-validated values when updating property schema
 
 (defn url?
-  "Test if it is a `protocol://`-style URL.
+  "Test if it is a `protocol://`-style URL. Allows custom protocol such as `zotero`.
    Originally from common-util/url? but does not need to be the same"
   [s]
   (and (string? s)
        (try
-         (not (contains? #{nil "null"} (.-origin (js/URL. s))))
+         (not (contains? #{nil} (.-origin (js/URL. s))))
          (catch :default _e
            false))))
 
