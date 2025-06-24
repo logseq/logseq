@@ -3,12 +3,14 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
@@ -46,14 +48,19 @@
 (defn get-class-extends
   "Returns all parents of a class"
   [node]
-  (when-let [parent (:logseq.property.class/extends node)]
-    (loop [current-parent parent
-           parents' []]
-      (if (and current-parent
-               (not (contains? parents' current-parent)))
-        (recur (:logseq.property.class/extends current-parent)
-               (conj parents' current-parent))
-        (vec (reverse parents'))))))
+  (assert (de/entity? node) "get-class-extends `node` should be an entity")
+  (let [db (.-db node)
+        eid (:db/id node)]
+    (->>
+     (d/q '[:find [?p ...]
+            :in $ ?c %
+            :where
+            (class-extends ?p ?c)]
+          db
+          eid
+          (:class-extends rules/rules))
+     (remove #{eid})
+     (map (fn [id] (d/entity db id))))))
 
 (defn get-page-parents
   [node]
