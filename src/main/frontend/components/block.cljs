@@ -1540,9 +1540,10 @@
       (->elem
        :a
        (cond->
-        {:href (path/path-join "file://" path)
-         :data-href path
-         :target    "_blank"}
+        {:on-click (fn [e]
+                     (util/stop e)
+                     (js/window.apis.openPath path))
+         :data-href path}
          title
          (assoc :title title))
        (map-inline config label)))
@@ -1622,9 +1623,14 @@
                               href)]
                   (->elem
                    :a
-                   (cond-> {:href      (path/path-join "file://" href*)
-                            :data-href href*
-                            :target    "_blank"}
+                   (cond-> (if (util/electron?)
+                             {:on-click (fn [e]
+                                          (util/stop e)
+                                          (js/window.apis.openPath path))
+                              :data-href href*}
+                             {:href      (path/path-join "file://" href*)
+                              :data-href href*
+                              :target    "_blank"})
                      title (assoc :title title))
                    (map-inline config label))))))
 
