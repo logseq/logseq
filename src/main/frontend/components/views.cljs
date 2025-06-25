@@ -1738,7 +1738,7 @@
                            :property-objects
                            "All"
                            :all-pages
-                           "All pages"
+                           "All"
                            ""))
             view-block-id (common-uuid/gen-uuid :view-block-uuid (str (:block/uuid view-parent) view-feature-type))
             result (editor-handler/api-insert-new-block! view-title
