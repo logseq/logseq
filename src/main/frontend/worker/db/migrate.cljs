@@ -119,12 +119,12 @@
 
 (defn rename-properties
   [props-to-rename & {:keys [replace-fn]}]
-  (fn [conn]
-    (when (ldb/db-based-graph? @conn)
-      (let [props-tx (rename-properties-aux @conn props-to-rename)
+  (fn [db]
+    (when (ldb/db-based-graph? db)
+      (let [props-tx (rename-properties-aux db props-to-rename)
             fix-tx (mapcat (fn [[old new]]
                              ;; can't use datoms b/c user properties aren't indexed
-                             (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
+                             (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] db old)
                                   (mapcat (fn [[id prop-value]]
                                             (if (fn? replace-fn)
                                               (replace-fn id prop-value)
@@ -136,10 +136,10 @@
 (comment
   (defn- rename-classes
     [classes-to-rename]
-    (fn [conn _search-db]
-      (when (ldb/db-based-graph? @conn)
+    (fn [db]
+      (when (ldb/db-based-graph? db)
         (mapv (fn [[old new]]
-                (merge {:db/id (:db/id (d/entity @conn old))
+                (merge {:db/id (:db/id (d/entity db old))
                         :db/ident new}
                        (when-let [new-title (get-in db-class/built-in-classes [new :title])]
                          {:block/title new-title
@@ -147,9 +147,8 @@
               classes-to-rename)))))
 
 (defn fix-rename-parent-to-extends
-  [conn _search-db]
-  (let [db @conn
-        parent-entity (d/entity db :logseq.property/parent)]
+  [db]
+  (let [parent-entity (d/entity db :logseq.property/parent)]
     (when parent-entity
       (let [old-p :logseq.property/parent
             new-p :logseq.property.class/extends
@@ -160,7 +159,7 @@
                                     new-p' (if (ldb/class? page) new-p :block/parent)]
                                 [[:db/retract id old-p]
                                  [:db/add id new-p' prop-value]]))})
-            rename-property-tx (f conn)
+            rename-property-tx (f db)
             library-page (if-let [page (ldb/get-built-in-page db common-config/library-page-name)]
                            page
                            (-> (sqlite-util/build-new-page common-config/library-page-name)
@@ -210,11 +209,10 @@
    [:db/retract id :logseq.property/enable-history?]])
 
 (defn separate-classes-and-properties
-  [conn _sqlite-db]
+  [db]
   ;; find all properties that're classes, create new properties to separate them
   ;; from classes.
-  (let [db @conn
-        class-ids (d/q
+  (let [class-ids (d/q
                    '[:find [?b ...]
                      :where
                      [?b :block/tags :logseq.class/Property]
@@ -253,10 +251,9 @@
      class-ids)))
 
 (defn fix-tag-properties
-  [conn _sqlite-db]
+  [db]
   ;; find all classes that're still used as properties
-  (let [db @conn
-        class-ids (d/q
+  (let [class-ids (d/q
                    '[:find [?b ...]
                      :where
                      [?b :block/tags :logseq.class/Tag]
@@ -275,9 +272,8 @@
      class-ids)))
 
 (defn add-missing-db-ident-for-tags
-  [conn _sqlite-db]
-  (let [db @conn
-        class-ids (d/q
+  [db _sqlite-db]
+  (let [class-ids (d/q
                    '[:find [?b ...]
                      :where
                      [?b :block/tags :logseq.class/Tag]
@@ -294,10 +290,9 @@
      class-ids)))
 
 (defn fix-using-properties-as-tags
-  [conn _sqlite-db]
+  [db]
   ;; find all properties that're tags
-  (let [db @conn
-        property-ids (->>
+  (let [property-ids (->>
                       (d/q
                        '[:find ?b ?i
                          :where
@@ -308,7 +303,7 @@
                       (map first))]
     (mapcat
      (fn [id]
-       (let [property (d/entity @conn id)
+       (let [property (d/entity db id)
              title (:block/title property)]
          (into (retract-property-attributes id)
                [[:db/retract id :logseq.property/parent]
@@ -316,10 +311,9 @@
      property-ids)))
 
 (defn remove-block-order-for-tags
-  [conn _sqlite-db]
+  [db]
   ;; find all properties that're tags
-  (let [db @conn
-        tag-ids (d/q
+  (let [tag-ids (d/q
                  '[:find [?b ...]
                    :where
                    [?b :block/tags :logseq.class/Tag]
@@ -408,7 +402,7 @@
                              :db-migrate? true})))
 
 (defn- upgrade-version!
-  [conn search-db db-based? version {:keys [properties classes fix]}]
+  [conn db-based? version {:keys [properties classes fix]}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -431,7 +425,7 @@
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
         fixes (when (fn? fix)
-                (fix conn search-db))
+                (fix db))
         tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
@@ -442,7 +436,7 @@
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
-  [conn search-db]
+  [conn]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
@@ -465,7 +459,7 @@
                               schema-version->updates)]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
-              (upgrade-version! conn search-db db-based? v m))
+              (upgrade-version! conn db-based? v m))
             (ensure-built-in-data-exists! conn))
           (catch :default e
             (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))

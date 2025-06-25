@@ -48,26 +48,8 @@
                      :payload {:message (or message "Built-in pages can't be edited")
                                :type :warning}}))))
 
-(defn- validate-unique-by-extends-and-name [db entity new-title]
-  (when-let [_res (seq (d/q '[:find [?b ...]
-                              :in $ ?eid ?type ?title
-                              :where
-                              [?b :block/title ?title]
-                              [?b :logseq.property.class/extends ?type]
-                              [(not= ?b ?eid)]]
-                            db
-                            (:db/id entity)
-                            (:db/id (:logseq.property.class/extends entity))
-                            new-title))]
-    (throw (ex-info "Duplicate page by parent"
-                    {:type :notification
-                     :payload {:message (str "Another page named " (pr-str new-title) " already exists for parents "
-                                             (pr-str (->> (ldb/get-class-extends entity)
-                                                          (map :block/title)
-                                                          (string/join ns-util/parent-char))))
-                               :type :warning}}))))
-
-(defn- another-id-q
+(defn- find-other-ids-with-title-and-tags
+  "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
   (cond
     (ldb/property? entity)
@@ -80,17 +62,6 @@
       [?b :block/tags ?tag-id]
       [(missing? $ ?b :logseq.property/built-in?)]
       [(not= ?b ?eid)]]
-    (:logseq.property.class/extends entity)
-    '[:find [?b ...]
-      :in $ ?eid ?title [?tag-id ...]
-      :where
-      [?b :block/title ?title]
-      [?b :block/tags ?tag-id]
-      [(not= ?b ?eid)]
-      ;; same extends
-      [?b :logseq.property.class/extends ?bp]
-      [?eid :logseq.property.class/extends ?ep]
-      [(= ?bp ?ep)]]
     (:block/parent entity)
     '[:find [?b ...]
       :in $ ?eid ?title [?tag-id ...]
@@ -112,10 +83,9 @@
 
 (defn- validate-unique-for-page
   [db new-title {:block/keys [tags] :as entity}]
-  (cond
-    (seq tags)
+  (when (seq tags)
     (when-let [another-id (first
-                           (d/q (another-id-q entity)
+                           (d/q (find-other-ids-with-title-and-tags entity)
                                 db
                                 (:db/id entity)
                                 new-title
@@ -127,20 +97,30 @@
         (when-not (and (= common-tag-ids #{:logseq.class/Page})
                        (> (count this-tags) 1)
                        (> (count another-tags) 1))
-          (throw (ex-info "Duplicate page"
-                          {:type :notification
-                           :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
-                                                   (string/join ", "
-                                                                (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
-                                     :type :warning}})))))
+          (cond
+            (ldb/property? entity)
+            (throw (ex-info "Duplicate property"
+                            {:type :notification
+                             :payload {:message (str "Another property named " (pr-str new-title) " already exists.")
+                                       :type :warning}}))
+            (ldb/class? entity)
+            (throw (ex-info "Duplicate class"
+                            {:type :notification
+                             :payload {:message (str "Another tag named " (pr-str new-title) " already exists.")
+                                       :type :warning}}))
+            :else
+            (throw (ex-info "Duplicate page"
+                            {:type :notification
+                             :payload {:message (str "Another page named " (pr-str new-title) " already exists for tags: "
+                                                     (string/join ", "
+                                                                  (map (fn [id] (str "#" (:block/title (d/entity db id)))) common-tag-ids)))
+                                       :type :warning}}))))))))
 
-    (:logseq.property.class/extends entity)
-    (validate-unique-by-extends-and-name db entity new-title)))
-
-(defn ^:api validate-unique-by-name-tag-and-block-type
+(defn ^:api validate-unique-by-name-and-tags
   "Validates uniqueness of nodes for the following cases:
    - Page names are unique for a tag e.g. their can be Apple #Company and Apple #Fruit
-   - Page names are unique for a :logseq.property.class/extends"
+   - Property names are unique with user properties being allowed to have the same name as built-in ones
+   - Class names are unique regardless of their extends or if they're built-in"
   [db new-title entity]
   (when (entity-util/page? entity)
     (validate-unique-for-page db new-title entity)))
@@ -159,7 +139,7 @@
   "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
   (validate-built-in-pages existing-block-entity)
-  (validate-unique-by-name-tag-and-block-type db new-title existing-block-entity)
+  (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
 (defn validate-property-title

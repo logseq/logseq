@@ -2706,7 +2706,10 @@
       (let [repo (state/get-current-repo)
             editor-state (assoc (get-state)
                                 :block-id (:block/uuid next-block)
-                                :value (:block/title next-block))]
+                                :value (:block/title next-block)
+                                :block-container (util/get-next-block-non-collapsed
+                                                  (util/rec-get-node (state/get-input) "ls-block")
+                                                  {:exclude-property? true}))]
         (delete-block-inner! repo editor-state)))))
 
 (defn keydown-delete-handler
