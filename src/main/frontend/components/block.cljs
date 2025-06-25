@@ -314,6 +314,7 @@
      {:key "resize-asset-container"
       :on-pointer-down util/stop
       :on-click (fn [e]
+                  (util/stop e)
                   (when (= "IMG" (some-> (.-target e) (.-nodeName)))
                     (open-lightbox! e)))
       :ref *el-ref}
@@ -394,7 +395,8 @@
                                       [:span.flex.items-center.gap-1.text-red-700
                                        (ui/icon "trash") (t :asset/delete)])])
                                  ])
-                              {:align :start}))}
+                              {:align :start
+                               :dropdown-menu? true}))}
                (shui/tabler-icon "dots-vertical")))])])]))
 
 ;; TODO: store image height and width for better ux
