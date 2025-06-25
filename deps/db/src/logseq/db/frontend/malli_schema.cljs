@@ -223,9 +223,15 @@
    [:multi {:dispatch #(-> % first :logseq.property/type)}]
    (map (fn [[prop-type value-schema]]
           [prop-type
-           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (fn [tuple]
-                    (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
+           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)
+                 error-message (when (vector? value-schema)
+                                 (and (map? (second value-schema))
+                                      (:error/message (second value-schema))))]
+             [:fn
+              (when error-message
+                {:error/message error-message})
+              (fn [tuple]
+                (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties

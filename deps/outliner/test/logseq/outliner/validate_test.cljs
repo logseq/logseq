@@ -11,7 +11,7 @@
                             :color2 {:logseq.property/type :default}}})]
 
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           (:block/title (d/entity @conn :logseq.property/background-color))
           (d/entity @conn :user.property/color)))
@@ -19,12 +19,34 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         #"Duplicate property"
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "color"
           (d/entity @conn :user.property/color2)))
         "Disallow duplicate user property")))
+
+(deftest validate-block-title-unique-for-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Class1 {}
+                         :Class2 {:logseq.property.class/extends :logseq.class/Task}}})]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate class"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "Class1"
+          (d/entity @conn :user.class/Class2)))
+        "Disallow duplicate class names, regardless of extends")
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate class"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "Card"
+          (d/entity @conn :user.class/Class1)))
+        "Disallow duplicate class names even if it's built-in")))
 
 (deftest validate-block-title-unique-for-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -37,13 +59,13 @@
     (is (thrown-with-msg?
          js/Error
          #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Another Company")))
         "Disallow duplicate page with tag")
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Banana")))
@@ -52,14 +74,14 @@
     (is (thrown-with-msg?
          js/Error
          #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "page1"
           (db-test/find-page-by-title @conn "another page")))
         "Disallow duplicate page without tag")
 
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Fruit")))
@@ -151,7 +173,7 @@
             page-errors (atom {})]
         (doseq [page pages]
           (try
-            (outliner-validate/validate-unique-by-name-tag-and-block-type @conn (:block/title page) page)
+            (outliner-validate/validate-unique-by-name-and-tags @conn (:block/title page) page)
             (outliner-validate/validate-page-title (:block/title page) {:node page})
             (outliner-validate/validate-page-title-characters (:block/title page) {:node page})
 

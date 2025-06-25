@@ -206,7 +206,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 26 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 27 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
@@ -253,7 +253,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 19
+      (is (= 20
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/tags :logseq.class/Property]])
@@ -396,10 +396,10 @@
               :logseq.property/query "{:query (task todo doing)}"
               :block/tags [:logseq.class/Query]
               :logseq.property.table/ordered-columns [:block/title]}
-             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with")))
+             (db-test/readable-properties (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has correct query properties")
       (is (= "tasks with todo and doing"
-             (:block/title (db-test/find-block-by-content @conn #"tasks with")))
+             (:block/title (db-test/find-block-by-content @conn #"tasks with todo")))
           "Advanced query has custom title migrated")
 
       ;; Cards
@@ -428,6 +428,26 @@
       (is (= "*Italic* ~~Strikethrough~~ ^^Highlight^^ #[[foo]]\n**Learn Datalog Today** is an interactive tutorial designed to teach you the [Datomic](http://datomic.com/) dialect of [Datalog](http://en.wikipedia.org/wiki/Datalog). Datalog is a declarative **database query language** with roots in logic programming. Datalog has similar expressive power as [SQL](http://en.wikipedia.org/wiki/Sql)."
              (:block/title (db-test/find-block-by-content @conn #"Learn Datalog")))
           "Imports full quote with various ast types"))
+
+    (testing "embeds"
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "page embed")
+                 first
+                 (select-keys [:block/title])))
+          "Page embed linked correctly")
+      (is (= {:block/title ""}
+             (-> (d/q '[:find [(pull ?b [*]) ...]
+                        :in $ ?title
+                        :where [?b :block/link ?l] [?b :block/page ?bp] [?bp :block/journal-day 20250612] [?l :block/title ?title]]
+                      @conn
+                      "test block embed")
+                 first
+                 (select-keys [:block/title])))
+          "Block embed linked correctly"))
 
     (testing "tags convert to classes"
       (is (= :user.class/Quotes___life
@@ -503,7 +523,11 @@
         (is (= "20"
                (:user.property/duration (db-test/readable-properties (db-test/find-block-by-content @conn "existing :number to :default"))))
             "existing :number property value correctly saved as :default")
+        (is (= :default
+               (:logseq.property/type (d/entity @conn :user.property/people2)))
+            ":node property changes to :default when :node is defined in same file")
 
+        ;; tests :node :many to :default transition after :node is defined in separate file
         (is (= {:logseq.property/type :default :db/cardinality :db.cardinality/many}
                (select-keys (d/entity @conn :user.property/people) [:logseq.property/type :db/cardinality]))
             ":node property to :default value changes to :default and keeps existing cardinality")
