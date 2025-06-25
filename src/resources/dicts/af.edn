@@ -43,7 +43,6 @@
  :re-index "Herindekseer"
  :export-json "Uitvoer as JSON"
  :graph "Grafiek"
- :all-pages "Alle blaaie"
  :all-files "Alle lêers"
  :settings "Verstellings"
  :import "Invoer"

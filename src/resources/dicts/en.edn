@@ -111,7 +111,7 @@
  :right-side-bar/page-graph "Page graph"
  :right-side-bar/block-ref "Block references"
  :right-side-bar/graph-view "Graph view"
- :right-side-bar/all-pages "All pages"
+ :right-side-bar/all-pages "Pages"
  :right-side-bar/whiteboards "Whiteboards"
  :right-side-bar/flashcards "Flashcards"
  :right-side-bar/show-journals "Show Journals"
@@ -456,7 +456,7 @@
  :export-copied-to-clipboard "Copied to clipboard!"
  :export-save-to-file "Save to file"
  :all-graphs "All graphs"
- :all-pages "All pages"
+ :all-pages "Pages"
   ;; E.g. 1 Page or 2 Pages
  :all-pages/table-title (fn [total] (str total (if (= total 1) " Page" " Pages")))
  :all-pages/failed-to-delete-pages "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
