@@ -8,6 +8,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -26,6 +27,30 @@
   (when (db-property/read-only-properties property-ident)
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
+
+(defonce built-in-class-property->properties
+  (->>
+   (mapcat
+    (fn [[class-ident {:keys [properties]}]]
+      (map
+       (fn [property] [class-ident property])
+       (cons :block/tags (keys properties))))
+    db-class/built-in-classes)
+   (concat
+    (mapcat
+     (fn [[property-ident {:keys [properties]}]]
+       (map
+        (fn [property] [property-ident property])
+        (cons :block/tags (keys properties))))
+     db-property/built-in-properties))
+   set))
+
+(defn- throw-error-if-protected-property
+  [entity-idents property-ident]
+  (when (some #(built-in-class-property->properties [% property-ident]) entity-idents)
+    (throw (ex-info "Protected property shouldn't deleted"
+                    {:entity-idents entity-idents
+                     :property property-ident}))))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
@@ -274,6 +299,7 @@
   (let [block-eids (map ->eid block-ids)
         blocks (keep (fn [id] (d/entity @conn id)) block-eids)
         block-id-set (set (map :db/id blocks))]
+    (throw-error-if-protected-property (map :db/ident blocks) property-id)
     (when (seq blocks)
       (when-let [property (d/entity @conn property-id)]
         (let [txs (mapcat
@@ -349,6 +375,7 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
+    (throw-error-if-protected-property [(:db/ident block)] property-id)
     (cond
       (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
       nil
