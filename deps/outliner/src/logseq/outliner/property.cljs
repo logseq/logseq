@@ -28,7 +28,7 @@
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
 
-(defonce built-in-class-property->properties
+(defonce ^:private built-in-class-property->properties
   (->>
    (mapcat
     (fn [[class-ident {:keys [properties]}]]
