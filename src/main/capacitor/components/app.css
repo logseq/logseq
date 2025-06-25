@@ -91,6 +91,10 @@ ul {
   }
 }
 
+.bg-background {
+  @apply bg-gray-01;
+}
+
 ion-textarea {
   textarea {
     @apply !p-1 min-h-[120px];
@@ -101,6 +105,10 @@ ion-buttons {
   &:has(.app-graph-select) {
     @apply max-w-[60%] overflow-hidden;
   }
+}
+
+.pswp__top-bar {
+  @apply top-8;
 }
 
 .app-graph-select {
