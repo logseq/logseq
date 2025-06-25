@@ -681,7 +681,7 @@
                  [:div.property-key.text-sm
                   (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
                 [:div.text-muted-foreground {:style {:margin-left 26}}
-                 "Tag properties are inherited by all nodes using the tag — for example, each #Task node inherits 'Status' and 'Priority'."]]
+                 "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
                [:div.ml-4
                 (properties-section block properties opts')
                 (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]]))))

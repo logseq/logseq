@@ -112,8 +112,8 @@
              :class "delete-local-graph-menu-item"
              :on-click (fn []
                          (let [prompt-str (if db-based?
-                                            (str "Are you sure to permanently delete the graph \"" graph-name "\" from Logseq?")
-                                            (str "Are you sure to unlink the graph \"" url "\" from local folder?"))]
+                                            (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from Logseq?")
+                                            (str "Are you sure you want to unlink the graph \"" url "\" from local folder?"))]
                            (-> (shui/dialog-confirm!
                                 [:p.font-medium.-my-4 prompt-str
                                  [:span.my-2.flex.font-normal.opacity-75
@@ -129,7 +129,7 @@
               {:key "delete-remotely"
                :class "delete-remote-graph-menu-item"
                :on-click (fn []
-                           (let [prompt-str (str "Are you sure to permanently delete the graph \"" graph-name "\" from our server?")]
+                           (let [prompt-str (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from our server?")]
                              (-> (shui/dialog-confirm!
                                   [:p.font-medium.-my-4 prompt-str
                                    [:span.my-2.flex.font-normal.opacity-75
