@@ -65,6 +65,14 @@
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
+(defn delete-end []
+  (testing "Delete at end"
+    (b/new-blocks ["b1" "b2" "b3"])
+    (k/arrow-up)
+    (k/delete)
+    (is (= "b2b3" (util/get-edit-content)))
+    (is (= 2 (util/page-blocks-count)))))
+
 (defn delete-test-with-children []
   (testing "Delete block with its children"
     (b/new-blocks ["b1" "b2" "b3" "b4"])
@@ -87,6 +95,9 @@
 
 (deftest delete-test
   (delete))
+
+(deftest delete-end-test
+  (delete-end))
 
 (deftest delete-test-with-children-test
   (delete-test-with-children))

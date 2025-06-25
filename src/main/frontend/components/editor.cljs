@@ -136,18 +136,20 @@
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
   (if (or
-       (if db-tag?
-         (let [entity (db/get-page q)]
-           (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-         ;; Page existence here should be the same as entity-util/page?.
-         ;; Don't show 'New page' if a page has any of these tags
-         (db/page-exists? q db-class/page-classes))
-
+       (db/page-exists? q (if db-tag?
+                            #{:logseq.class/Tag}
+                            ;; Page existence here should be the same as entity-util/page?.
+                            ;; Don't show 'New page' if a page has any of these tags
+                            db-class/page-classes))
        (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
     partial-matched-pages
     (if db-tag?
-      (concat [{:block/title (str (t :new-tag) " " q)}]
-              partial-matched-pages)
+      (concat
+       ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
+       (when-not (let [entity (db/get-page q)]
+                   (and (ldb/internal-page? entity) (= (:block/title entity) q)))
+         [{:block/title (str (t :new-tag) " " q)}])
+       partial-matched-pages)
       (cons {:block/title (str (t :new-page) " " q)}
             partial-matched-pages))))
 
@@ -755,6 +757,9 @@
         [_id config] (:rum/args state)]
     (cond
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
+      nil
+
+      (state/editor-in-composition?)
       nil
 
       (or (contains?

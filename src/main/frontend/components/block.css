@@ -29,8 +29,11 @@
     @apply relative inline-block mt-2 w-full;
 
     .asset-action-bar {
-      @apply top-0.5 right-0.5 absolute flex items-center
-      border bg-gray-02 rounded opacity-0 transition-opacity;
+      @apply top-1 right-1 absolute flex items-center opacity-0 transition-opacity;
+
+      &[data-popup-active] {
+        @apply opacity-100;
+      }
     }
 
     .asset-action-btn {
@@ -114,6 +117,12 @@
         opacity: 1;
       }
     }
+  }
+}
+
+.breadcrumb {
+  .property-value-inner[data-type], .property-value-inner .select-item {
+    display: inline;
   }
 }
 
@@ -1118,7 +1127,7 @@ html.is-mac {
 }
 
 .ls-resize-image {
-  @apply flex relative;
+  @apply flex relative w-fit cursor-pointer;
 
   .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
