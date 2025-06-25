@@ -283,10 +283,10 @@
          vec
          rseq
          (keep (fn [d]
-                 (and (<= (:v d) today)
-                      (let [e (d/entity db (:e d))]
-                        (when (and (common-entity-util/journal? e) (:db/id e))
-                          e))))))))
+                 (when (<= (:v d) today)
+                   (let [e (d/entity db (:e d))]
+                     (when (and (common-entity-util/journal? e) (:db/id e))
+                       e))))))))
 
 (defn- get-structured-datoms
   [db]

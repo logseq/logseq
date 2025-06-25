@@ -1911,7 +1911,8 @@
         {pinned true unpinned false} (group-by (fn [item]
                                                  (contains? pinned-properties (:id item)))
                                                (remove (fn [column]
-                                                         (false? (get visible-columns (:id column))))
+                                                         (or (false? (get visible-columns (:id column)))
+                                                             (nil? (:name column))))
                                                        columns))
         group-by-property (or (:logseq.property.view/group-by-property view-entity)
                               (db/entity group-by-property-ident))

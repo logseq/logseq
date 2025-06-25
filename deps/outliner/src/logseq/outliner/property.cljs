@@ -684,13 +684,14 @@
 
 (defn class-add-property!
   [conn class-id property-id]
-  (when-let [class (d/entity @conn class-id)]
-    (if (ldb/class? class)
-      (ldb/transact! conn
-                     [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
-                     {:outliner-op :save-block})
-      (throw (ex-info "Can't add a property to a block that isn't a class"
-                      {:class-id class-id :property-id property-id})))))
+  (when-not (contains? #{:logseq.property/empty-placeholder} property-id)
+    (when-let [class (d/entity @conn class-id)]
+      (if (ldb/class? class)
+        (ldb/transact! conn
+                       [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
+                       {:outliner-op :save-block})
+        (throw (ex-info "Can't add a property to a block that isn't a class"
+                        {:class-id class-id :property-id property-id}))))))
 
 (defn class-remove-property!
   [conn class-id property-id]
