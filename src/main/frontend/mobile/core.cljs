@@ -40,6 +40,10 @@
     (fn []
       (when (false?
               (cond
+                ;; lightbox
+                (and (js/document.querySelector ".pswp"))
+                (some-> js/window.photoLightbox (.destroy))
+
                 (not-empty (cc-ui/get-modal))
                 (cc-ui/close-modal!)
 
