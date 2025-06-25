@@ -55,7 +55,8 @@
       :input-default-placeholder "Add pages"
       :show-new-when-not-exact-match? false
       :on-input set-input!
-      :input-opts {:class "!p-1 !text-sm"}})))
+      :input-opts {:class "!p-1 !text-sm"}
+      :clear-input-on-chosen? false})))
 
 (rum/defc add-pages
   [library-page]
