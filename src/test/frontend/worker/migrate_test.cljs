@@ -11,8 +11,7 @@
   (testing "Rename parent to extends"
     (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
           db (ldb/read-transit-str db-transit)
-          conn (d/conn-from-db db)
-          tx-data (db-migrate/fix-rename-parent-to-extends conn nil)]
+          tx-data (db-migrate/fix-rename-parent-to-extends db)]
       (is (= (->> tx-data
                   (map (fn [data]
                          (cond
@@ -110,8 +109,7 @@
   (testing "Separate properties from classes"
     (let [db-transit (str (fs-node/readFileSync "src/test/migration/65.0.transit"))
           db (ldb/read-transit-str db-transit)
-          conn (d/conn-from-db db)
-          tx-data (db-migrate/separate-classes-and-properties conn nil)
+          tx-data (db-migrate/separate-classes-and-properties db)
           new-property (first tx-data)]
       (is (= (dissoc new-property
                      :block/updated-at
