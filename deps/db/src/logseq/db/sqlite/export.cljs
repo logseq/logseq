@@ -447,7 +447,9 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
+(defn- build-page-blocks-export
+  "If :include-alias? option is set, the caller fn is responsible for defining alias pages"
+  [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
   (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
                    (:exclude-ontology? options)
                    (assoc :properties (get-in options [:graph-ontology :properties])))
@@ -493,10 +495,15 @@
   (let [page-blocks* (get-page-blocks db eid)
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         {:keys [pvalue-uuids] :as page-export*}
-        (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)})
+        (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)
+                                                 :include-alias? true})
         page-entity (d/entity db eid)
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
-        page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
+        alias-export (when (:block/alias page-entity)
+                       {:pages-and-blocks (mapv #(hash-map :page (merge (shallow-copy-page %)
+                                                                        {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
+                                                (:block/alias page-entity))})
+        page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export alias-export)]
     page-export))
 
 (defn- build-nodes-export
