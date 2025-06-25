@@ -81,6 +81,9 @@
     @apply cursor-pointer transition-colors hover:bg-muted/50 text-left align-middle font-medium text-muted-foreground border-r;
   }
 
+  .ls-table-cell {
+    @apply overflow-hidden;
+  }
   .ls-table-footer {
     @apply absolute left-0 bottom-[8px] w-full;
   }
