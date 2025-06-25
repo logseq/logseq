@@ -421,6 +421,7 @@
                                              :local? local?
                                              :full-text full-text})]
     (if (or (:disable-resize? config)
+            (:table-view? config)
             (not resizable?))
       asset-container-cp
       [:div.ls-resize-image.rounded-md
