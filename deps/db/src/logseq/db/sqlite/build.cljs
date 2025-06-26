@@ -259,7 +259,8 @@
         classes-tx (vec
                     (mapcat
                      (fn [[class-name {:build/keys [class-parent class-properties] :as class-m}]]
-                       (let [db-ident (get-ident all-idents class-name)
+                       (let [class-parent (if (coll? class-parent) class-parent [class-parent])
+                             db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
                               {:block/name (common-util/page-name-sanity-lc (name class-name))
@@ -283,7 +284,7 @@
                                                    uuid-maps all-idents options))
                              (when class-parent
                                {:logseq.property.class/extends
-                                (or (class-db-ids class-parent)
+                                (or (map class-db-ids class-parent)
                                     (if (db-malli-schema/class? class-parent)
                                       class-parent
                                       (throw (ex-info (str "No :db/id for " class-parent) {}))))})
@@ -343,7 +344,7 @@
    Class
    [:map
     [:build/properties {:optional true} User-properties]
-    [:build/class-parent {:optional true} Class]
+    [:build/class-parent {:optional true} [:vector Class]]
     [:build/class-properties {:optional true} [:vector Property]]
     [:build/keep-uuid? {:optional true} :boolean]]])
 
