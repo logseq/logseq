@@ -13,6 +13,7 @@
   (:require ["fs" :as fs]
             [babashka.cli :as cli]
             [clojure.edn :as edn]
+            [clojure.pprint :as pprint]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
@@ -20,6 +21,7 @@
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
             [nbb.core :as nbb]))
@@ -352,51 +354,17 @@
    :config {:alias :c
             :coerce edn/read-string
             :desc "EDN map to add to config.edn"}
-   :debug {:alias :d
-           :desc "Prints additional debug info and a schema.edn for debugging"}
+   :export {:alias :e
+            :desc "Exports graph to schema.edn"}
    :subset {:alias :s
             :desc "Only generate a subset of data for testing purposes"}
    :verbose {:alias :v
              :desc "Verbose mode"}})
 
-(defn- write-debug-file [db]
-  (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
-                     (d/q '[:find [(pull ?b [*
-                                             {:logseq.property.class/properties [:block/title]}
-                                             {:logseq.property/classes [:block/title]}
-                                             {:logseq.property.class/extends [:block/title]}
-                                             {:block/tags [:block/title]}
-                                             {:block/refs [:block/title]}]) ...]
-                            :in $
-                            :where [?b :db/ident ?ident]]
-                          db))
-        top-level-properties [:logseq.property/type :logseq.property.class/properties :logseq.property/classes
-                              :logseq.property.class/extends :block/tags]
-        debug-attributes (into [:block/name :block/title :db/cardinality :db/ident :block/refs]
-                               top-level-properties)]
-    (fs/writeFileSync "schema-org.edn"
-                      (pr-str
-                       (->> ents
-                            (map (fn [m]
-                                   (let [props (apply dissoc (db-property/properties m) top-level-properties)]
-                                     (cond-> (select-keys m debug-attributes)
-                                       (seq props)
-                                       (assoc :block/properties (-> (update-keys props name)
-                                                                    (update-vals (fn [v]
-                                                                                   (if (:db/id v)
-                                                                                     (db-property/property-value-content (d/entity db (:db/id v)))
-                                                                                     v)))))
-                                       (seq (:logseq.property.class/properties m))
-                                       (update :logseq.property.class/properties #(set (map :block/title %)))
-                                       (some? (:logseq.property.class/extends m))
-                                       (update :logseq.property.class/extends :block/title)
-                                       (seq (:logseq.property/classes m))
-                                       (update :logseq.property/classes #(set (map :block/title %)))
-                                       (seq (:block/tags m))
-                                       (update :block/tags #(set (map :block/title %)))
-                                       (seq (:block/refs m))
-                                       (update :block/refs #(set (map :block/title %)))))))
-                            set)))))
+(defn- write-export-file [db]
+  (let [export-map (sqlite-export/build-export db {:export-type :graph-ontology})]
+    (fs/writeFileSync "schema.edn"
+                      (with-out-str (pprint/pprint export-map)))))
 
 (defn -main [args]
   (let [[graph-dir] args
@@ -419,7 +387,7 @@
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)
     (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-    (when (:debug options) (write-debug-file @conn))
+    (when (:export options) (write-export-file @conn))
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (nbb/invoked-file))
