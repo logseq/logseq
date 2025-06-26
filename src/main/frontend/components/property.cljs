@@ -489,11 +489,12 @@
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
-           [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-center
+           [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
 
             (when-not (or block? (and property-desc (:class-schema? opts)))
-              [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
-               [:span.bullet-container [:span.bullet]]])
+              [:div.flex.h-6.items-center
+               [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
+                [:span.bullet-container [:span.bullet]]]])
             [:div.flex.flex-1
              [:div.property-value.flex.flex-1
               (if (:class-schema? opts)
@@ -680,7 +681,7 @@
                  [:div.property-key.text-sm
                   (property-key-cp block (db/entity :logseq.property.class/properties) {})]]
                 [:div.text-muted-foreground {:style {:margin-left 26}}
-                 "Tag properties are inherited by all nodes using the tag — for example, each #Task node inherits 'Status' and 'Priority'."]]
+                 "Tag properties are inherited by all nodes using the tag. For example, each #Task node inherits 'Status' and 'Priority'."]]
                [:div.ml-4
                 (properties-section block properties opts')
                 (rum/with-key (new-property block opts') (str id "-class-add-property"))]]))]]))))
