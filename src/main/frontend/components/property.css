@@ -30,7 +30,7 @@
 }
 
 .ls-block .property-pair, .ls-sidebar-page-properties .property-pair, .property-block .property-value, .block-property-value {
-  margin-left: 7px;
+  margin-left: 2px;
 }
 
 .grid-auto-fit {
@@ -331,8 +331,8 @@ a.control-link {
   .property-icon {
     @apply flex items-center;
     svg {
-        width: 15px;
-        height: 15px;
+        width: 16px;
+        height: 16px;
     }
   }
 

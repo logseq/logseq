@@ -212,8 +212,7 @@
                  :page "page"
                  :node "letter-n"
                  "letter-t"))]
-    (ui/icon icon {:class "opacity-50"
-                   :size 15})))
+    (ui/icon icon {:class "opacity-50" :size 16})))
 
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
@@ -321,7 +320,7 @@
                                                  :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
                (assoc :class "flex items-center"))
            (if icon
-             (icon-component/icon icon {:size 15 :color? true})
+             (icon-component/icon icon {:size 16 :color? true})
              (property-icon property nil)))]))
 
      (if config/publishing?
@@ -427,7 +426,7 @@
     (let [add-new-property! (fn [e]
                               (state/pub-event! [:editor/new-property (merge opts {:block block
                                                                                    :target (.-target e)})]))]
-      [:div.ls-new-property {:style {:margin-left 7 :margin-top 1 :font-size 15}}
+      [:div.ls-new-property {:style {:margin-left 2 :margin-top 1 :font-size 15}}
        [:a.flex.jtrigger
         {:tab-index 0
          :on-click add-new-property!
@@ -436,7 +435,7 @@
                            (.preventDefault e)
                            (add-new-property! e)))}
         [:div.flex.flex-row.items-center.shrink-0
-         (ui/icon "plus" {:size 15 :class "opacity-50"})
+         (ui/icon "plus" {:size 16 :class "opacity-50"})
          [:div.ml-1 {:style {:margin-top 1}}
           "Add property"]]]])))
 
