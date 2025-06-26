@@ -192,7 +192,7 @@
          (:logseq.property.class/extends class-ent)
          (not ((set (map :db/ident (:logseq.property.class/extends class-ent))) :logseq.class/Root)))
     (assoc :build/class-parent
-           (:db/ident (first (:logseq.property.class/extends class-ent))))))
+           (set (map :db/ident (:logseq.property.class/extends class-ent))))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
