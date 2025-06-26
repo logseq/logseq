@@ -199,8 +199,10 @@
          nil))
      [current-tab])
     (ion/tabs
-     {:onIonTabsDidChange (fn [^js e]
-                            (state/set-tab! (.-tab (.-detail e))))}
+     {:id "app-ion-tabs"
+      :onIonTabsDidChange (fn [^js e]
+                            (state/set-tab! (.-tab (.-detail e))
+                              (.-target e)))}
      (ion/tab
       {:tab "home"}
       (ion/content
