@@ -342,6 +342,7 @@
            property (d/entity @conn property-id)
            _ (when (= (:db/ident property) :logseq.property.class/extends)
                (outliner-validate/validate-extends-property
+                @conn
                 (if (number? v) (d/entity @conn v) v)
                 (map #(d/entity @conn %) block-eids)))
            _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -415,7 +416,7 @@
       (when (= property-id :block/tags)
         (outliner-validate/validate-tags-property @conn [block-eid] v))
       (when (= property-id :logseq.property.class/extends)
-        (outliner-validate/validate-extends-property v [block]))
+        (outliner-validate/validate-extends-property @conn v [block]))
       (cond
         db-attribute?
         (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
