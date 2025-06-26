@@ -372,7 +372,7 @@
         parents'))))
 
 (def get-block-children-ids common-initial-data/get-block-children-ids)
-(def get-block-children common-initial-data/get-block-children)
+(def get-block-full-children-ids common-initial-data/get-block-full-children-ids)
 
 (defn- get-sorted-page-block-ids
   [db page-id]
