@@ -3664,7 +3664,7 @@
      (when-not (:hide-title? config)
        [:div.block-main-container.flex.flex-row.gap-1
         {:style (when (and db-based? (:page-title? config))
-                  {:margin-left (if page-icon "-3.6em" "-0.6em")})
+                  {:margin-left (if page-icon "-4.8em" "-1.9em")})
          :data-has-heading (some-> block (pu/lookup :logseq.property/heading))
          :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]

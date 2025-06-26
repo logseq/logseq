@@ -507,7 +507,7 @@
 .ls-page-title-container .block-content-wrapper {
   .ls-page-title-actions {
     @apply absolute -top-5 opacity-0;
-    left: 1.375rem;
+    left: 0;
   }
 
   &:hover {
