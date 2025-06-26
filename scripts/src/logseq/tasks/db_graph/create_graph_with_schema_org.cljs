@@ -68,7 +68,7 @@
                                  (class-m "rdfs:comment")
                                  (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
-      (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
+      (assoc :build/class-parent [(keyword (strip-schema-prefix parent-class'))])
       (seq properties)
       (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
