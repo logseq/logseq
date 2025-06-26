@@ -321,3 +321,21 @@
         block (db-test/find-block-by-content @conn "o1")]
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]
            (map :db/ident (:classes-properties (outliner-property/get-block-classes-properties @conn (:db/id block))))))))
+
+(deftest extends-cycle
+  (testing "Fail when creating a cycle of extends"
+    (let [conn (db-test/create-conn-with-blocks
+                {:classes {:Class1 {}
+                           :Class2 {}
+                           :Class3 {}}})
+          db @conn
+          class1 (d/entity db :user.class/Class1)
+          class2 (d/entity db :user.class/Class2)
+          class3 (d/entity db :user.class/Class3)]
+      (outliner-property/set-block-property! conn (:db/id class1) :logseq.property.class/extends (:db/id class2))
+      (outliner-property/set-block-property! conn (:db/id class2) :logseq.property.class/extends (:db/id class3))
+      (is (thrown-with-msg?
+           js/Error
+           #"Extends cycle"
+           (outliner-property/set-block-property! conn (:db/id class3) :logseq.property.class/extends (:db/id class1)))
+          "Extends cycle"))))
