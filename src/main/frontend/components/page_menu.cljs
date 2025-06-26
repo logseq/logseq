@@ -79,7 +79,7 @@
                            (page-handler/<unfavorite-page! page-title)
                            (page-handler/<favorite-page! page-title)))}})
 
-          (when (or (util/electron?) file-sync-graph-uuid)
+          (when (and (or (util/electron?) file-sync-graph-uuid) (not db-based?))
             {:title   (t :page/version-history)
              :options {:on-click
                        (fn []

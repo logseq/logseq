@@ -25,29 +25,6 @@
     }
   }
 
-  .asset-container {
-    @apply relative inline-block mt-2 w-full;
-
-    .asset-action-bar {
-      @apply top-1 right-1 absolute flex items-center opacity-0 transition-opacity;
-
-      &[data-popup-active] {
-        @apply opacity-100;
-      }
-    }
-
-    .asset-action-btn {
-      @apply m-1 p-0.5 truncate flex items-center opacity-70 select-none
-      hover:opacity-90 active:opacity-60;
-    }
-
-    &:hover, &:active {
-      .asset-action-bar {
-        @apply opacity-100;
-      }
-    }
-  }
-
   .draw [aria-labelledby="shapes-title"] {
     position: absolute;
     left: 50%;
@@ -1168,4 +1145,27 @@ html.is-mac {
 
 .ls-dialog-block {
   @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
+}
+
+.asset-container {
+    @apply relative inline-block mt-2 w-full;
+
+    .asset-action-bar {
+        @apply top-1 right-1 absolute flex items-center opacity-0 transition-opacity;
+
+        &[data-popup-active] {
+            @apply opacity-100;
+        }
+    }
+
+    .asset-action-btn {
+        @apply m-1 p-0.5 truncate flex items-center opacity-70 select-none
+        hover:opacity-90 active:opacity-60;
+    }
+
+    &:hover, &:active {
+        .asset-action-bar {
+            @apply opacity-100;
+        }
+    }
 }

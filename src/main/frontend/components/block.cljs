@@ -320,72 +320,72 @@
       :ref *el-ref}
      [:img.rounded-sm.relative
       (merge
-        {:loading "lazy"
-         :referrerPolicy "no-referrer"
-         :src src
-         :title title}
-        metadata)]
+       {:loading "lazy"
+        :referrerPolicy "no-referrer"
+        :src src
+        :title title}
+       metadata)]
      (when (and (not breadcrumb?)
-             (not positioned?))
+                (not positioned?))
        [:<>
         (let [handle-copy!
               (fn [_e]
                 (-> (util/copy-image-to-clipboard image-src)
-                  (p/then #(notification/show! "Copied!" :success))))
+                    (p/then #(notification/show! "Copied!" :success))))
               handle-delete!
               (fn [_e]
                 (when-let [block-id (get-blockid)]
                   (let [*local-selected? (atom local?)]
                     (-> (shui/dialog-confirm!
-                          [:div.text-xs.opacity-60.-my-2
-                           (when (and local? (not= (:block/uuid asset-block) block-id))
-                             [:label.flex.gap-1.items-center
-                              (shui/checkbox
-                                {:default-checked @*local-selected?
-                                 :on-checked-change #(reset! *local-selected? %)})
-                              (t :asset/physical-delete)])]
-                          {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                           :outside-cancel? true})
-                      (p/then (fn []
-                                (shui/dialog-close!)
-                                (editor-handler/delete-asset-of-block!
-                                  {:block-id block-id
-                                   :asset-block asset-block
-                                   :local? local?
-                                   :delete-local? @*local-selected?
-                                   :repo (state/get-current-repo)
-                                   :href src
-                                   :title title
-                                   :full-text full-text})))))))]
+                         [:div.text-xs.opacity-60.-my-2
+                          (when (and local? (not= (:block/uuid asset-block) block-id))
+                            [:label.flex.gap-1.items-center
+                             (shui/checkbox
+                              {:default-checked @*local-selected?
+                               :on-checked-change #(reset! *local-selected? %)})
+                             (t :asset/physical-delete)])]
+                         {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                          :outside-cancel? true})
+                        (p/then (fn []
+                                  (shui/dialog-close!)
+                                  (editor-handler/delete-asset-of-block!
+                                   {:block-id block-id
+                                    :asset-block asset-block
+                                    :local? local?
+                                    :delete-local? @*local-selected?
+                                    :repo (state/get-current-repo)
+                                    :href src
+                                    :title title
+                                    :full-text full-text})))))))]
           [:.asset-action-bar {:aria-hidden "true"}
            (shui/button-group
-             (shui/button
-               {:variant :outline
-                :size :icon
-                :class "h-7 w-7"
-                :on-pointer-down util/stop
-                :on-click (fn [e]
-                            (shui/popup-show! (.closest (.-target e) ".asset-action-bar")
-                              (fn []
-                                [:div
-                                 {:on-click #(shui/popup-hide!)}
-                                 (shui/dropdown-menu-item
-                                   {:on-click #(some-> (db/entity [:block/uuid (get-blockid)]) (editor-handler/edit-block! :max))}
-                                   [:span.flex.items-center.gap-1
-                                    (ui/icon "edit") (t :asset/edit-block)])
-                                 (shui/dropdown-menu-item
-                                   {:on-click handle-copy!}
-                                   [:span.flex.items-center.gap-1
-                                    (ui/icon "copy") (t :asset/copy)])
-                                 (when (util/electron?)
-                                   (shui/dropdown-menu-item
-                                     {:on-click (fn [e]
-                                                  (util/stop e)
-                                                  (if local?
-                                                    (ipc/ipc "openFileInFolder" image-src)
-                                                    (js/window.apis.openExternal image-src)))}
-                                     [:span.flex.items-center.gap-1
-                                      (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
+            (shui/button
+             {:variant :outline
+              :size :icon
+              :class "h-7 w-7"
+              :on-pointer-down util/stop
+              :on-click (fn [e]
+                          (shui/popup-show! (.closest (.-target e) ".asset-action-bar")
+                                            (fn []
+                                              [:div
+                                               {:on-click #(shui/popup-hide!)}
+                                               (shui/dropdown-menu-item
+                                                {:on-click #(some-> (db/entity [:block/uuid (get-blockid)]) (editor-handler/edit-block! :max))}
+                                                [:span.flex.items-center.gap-1
+                                                 (ui/icon "edit") (t :asset/edit-block)])
+                                               (shui/dropdown-menu-item
+                                                {:on-click handle-copy!}
+                                                [:span.flex.items-center.gap-1
+                                                 (ui/icon "copy") (t :asset/copy)])
+                                               (when (util/electron?)
+                                                 (shui/dropdown-menu-item
+                                                  {:on-click (fn [e]
+                                                               (util/stop e)
+                                                               (if local?
+                                                                 (ipc/ipc "openFileInFolder" image-src)
+                                                                 (js/window.apis.openExternal image-src)))}
+                                                  [:span.flex.items-center.gap-1
+                                                   (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
 
                                  (when-not config/publishing?
                                    [:<>
@@ -410,32 +410,33 @@
         positioned? (:property-position config)
         asset-block (:asset-block config)
         width (or (get-in asset-block [:logseq.property.asset/resize-metadata :width])
-                (:width metadata))
+                  (:width metadata))
         *width (get state ::size)
         width (or @*width width 250)
         metadata' (merge
-                    (cond->
-                      {:height 125}
-                      width
-                      (assoc :width width))
-                    metadata)
+                   (cond->
+                    {:height 125}
+                     width
+                     (assoc :width width))
+                   metadata)
         resizable? (and (not (mobile-util/native-platform?))
-                     (not breadcrumb?)
-                     (not positioned?))
+                        (not breadcrumb?)
+                        (not positioned?))
         asset-container-cp (asset-container asset-block src title metadata'
-                             {:breadcrumb? breadcrumb?
-                              :positioned? positioned?
-                              :local? local?
-                              :full-text full-text})]
+                                            {:breadcrumb? breadcrumb?
+                                             :positioned? positioned?
+                                             :local? local?
+                                             :full-text full-text})]
     (if (or (:disable-resize? config)
-          (not resizable?))
+            (:table-view? config)
+            (not resizable?))
       asset-container-cp
       [:div.ls-resize-image.rounded-md
        asset-container-cp
        (resize-image-handles
-         (fn [k ^js event]
-           (let [dx (.-dx event)
-                 ^js target (.-target event)]
+        (fn [k ^js event]
+          (let [dx (.-dx event)
+                ^js target (.-target event)]
 
             (case k
               :start
@@ -1961,11 +1962,13 @@
       (contains? #{"tweet" "twitter"} name)
       (when-let [url (first arguments)]
         (let [id-regex #"/status/(\d+)"]
-          (when-let [id (cond
-                          (<= (count url) 15) url
-                          :else
-                          (last (util/safe-re-find id-regex url)))]
-            (ui/tweet-embed id))))
+          (if (:table? config)
+            (util/format "{{twitter %s}}" url)
+            (when-let [id (cond
+                            (<= (count url) 15) url
+                            :else
+                            (last (util/safe-re-find id-regex url)))]
+              (ui/tweet-embed id)))))
 
       (= name "embed")
       (if (config/db-based-graph? (state/get-current-repo))
@@ -4076,8 +4079,8 @@
   (map #(inline config %) col))
 
 (rum/defc inline-title
-  [title]
-  (map-inline {}
+  [config title]
+  (map-inline config
               (gp-mldoc/inline->edn title
                                     (mldoc/get-default-config :markdown))))
 
