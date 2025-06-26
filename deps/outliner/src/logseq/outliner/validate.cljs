@@ -190,9 +190,14 @@
   [db block-eids v & {:keys [delete?]}]
   (when (and (ldb/private-tags (:db/ident (d/entity db v)))
              ;; Allow assets to be tagged
-             (not (and
-                   (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
-                   (= :logseq.class/Asset (:db/ident (d/entity db v))))))
+             (not
+              (or
+               (and
+                (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
+                (= :logseq.class/Asset (:db/ident (d/entity db v))))
+               (and
+                (every? (fn [id] (nil? (:block/name (d/entity db id)))) block-eids)
+                (= :logseq.class/Page (:db/ident (d/entity db v)))))))
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
                          " with built-in #" (:block/title (d/entity db v)))
                     {:type :notification
@@ -213,6 +218,18 @@
                                              " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
+(defn- disallow-removing-page-tag-if-no-parent
+  [db eids v]
+  (let [property-value (when (integer? v) (d/entity db v))]
+    (when (= (:db/ident property-value) :logseq.class/Page)
+      (doseq [eid eids]
+        (let [entity (d/entity db eid)]
+          (when (and (ldb/internal-page? entity)
+                     (not (:block/parent entity)))
+            (throw (ex-info "#Page shouldn't be removed"
+                            {:entity entity
+                             :property :block/tags}))))))))
+
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
@@ -224,4 +241,5 @@
   "Validates deleting a property value from :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
-  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true}))
+  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
+  (disallow-removing-page-tag-if-no-parent db block-eids v))
