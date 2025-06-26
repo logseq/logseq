@@ -779,7 +779,7 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or (and extends-property? (contains? (set children-pages) (:db/id block)))
+                 :show-new-when-not-exact-match? (if (or extends-property?
                                                          ;; Don't allow creating private tags
                                                          (and (= :block/tags (:db/ident property))
                                                               (seq (set/intersection (set (map :db/ident classes'))
@@ -875,13 +875,6 @@
     (hooks/use-effect!
      (fn []
        (cond
-         (and extends-property? (not (ldb/class? block))
-              (ldb/internal-page? block))
-         (p/let [result (db-async/<get-tag-pages repo (:db/id (db/entity :logseq.class/Page)))
-                 result' (->> result
-                              (remove ldb/built-in?))]
-           (set-result-and-initial-choices! result'))
-
          extends-property?
          nil
 
@@ -1507,30 +1500,11 @@
                          (multiple-values block property opts)
 
                          :else
-                         (let [extends? (= property-ident :logseq.property.class/extends)
-                               value-cp (property-scalar-value block property v
-                                                               (merge
-                                                                opts
-                                                                {:editor-id editor-id
-                                                                 :dom-id dom-id}))
-                               page-ancestors (when extends?
-                                                (let [ancestor-pages (loop [parents [block]]
-                                                                       (if-let [parent (:logseq.property.class/extends (last parents))]
-                                                                         (when-not (contains? (set parents) parent)
-                                                                           (recur (conj parents parent)))
-                                                                         parents))]
-                                                  (->> (reverse ancestor-pages)
-                                                       (remove (fn [e] (= (:db/id block) (:db/id e))))
-                                                       butlast)))]
-                           (if (seq page-ancestors)
-                             [:div.flex.flex-1.items-center.gap-1
-                              (interpose [:span.opacity-50.text-sm " > "]
-                                         (concat
-                                          (map (fn [{title :block/title :as ancestor}]
-                                                 [:a.whitespace-nowrap {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} title])
-                                               page-ancestors)
-                                          [value-cp]))]
-                             value-cp)))]]
+                         (property-scalar-value block property v
+                                                (merge
+                                                 opts
+                                                 {:editor-id editor-id
+                                                  :dom-id dom-id})))]]
          (if show-tooltip?
            (shui/tooltip-provider
             (shui/tooltip
