@@ -1487,7 +1487,6 @@
                      "Fix it!")]
        (let [empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
              closed-values? (seq (:property/closed-values property))
-             property-ident (:db/ident property)
              value-cp [:div.property-value-inner
                        {:data-type type
                         :class (str (when empty-value? "empty-value")
