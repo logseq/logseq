@@ -259,7 +259,7 @@
         classes-tx (vec
                     (mapcat
                      (fn [[class-name {:build/keys [class-parent class-properties] :as class-m}]]
-                       (let [class-parent (if (coll? class-parent) class-parent [class-parent])
+                       (let [class-parent (when class-parent (if (coll? class-parent) class-parent [class-parent]))
                              db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
@@ -285,7 +285,7 @@
                              (when class-parent
                                {:logseq.property.class/extends
                                 (or (map class-db-ids class-parent)
-                                    (if (db-malli-schema/class? class-parent)
+                                    (if (every? db-malli-schema/class? class-parent)
                                       class-parent
                                       (throw (ex-info (str "No :db/id for " class-parent) {}))))})
                              (when class-properties
