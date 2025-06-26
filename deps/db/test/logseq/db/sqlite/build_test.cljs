@@ -5,7 +5,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (deftest build-tags
   (let [conn (db-test/create-conn)
@@ -245,3 +246,14 @@
            (-> (db-test/find-block-by-content @conn "u1")
                db-test/readable-properties
                (dissoc :logseq.property/created-from-property))))))
+
+(deftest build-ontology-with-multiple-namespaces
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}
+                            :other.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {}
+                         :other.class/C1 {}}})]
+    (is (entity-util/property? (d/entity @conn :user.property/p1)))
+    (is (entity-util/property? (d/entity @conn :other.property/p1)))
+    (is (entity-util/class? (d/entity @conn :user.class/C1)))
+    (is (entity-util/class? (d/entity @conn :other.class/C1)))))
