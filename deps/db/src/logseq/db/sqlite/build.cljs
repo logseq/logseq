@@ -394,20 +394,36 @@
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
   [properties classes {:keys [graph-namespace]}]
-  (let [property-idents (->> (keys properties)
-                             (map #(vector %
-                                           (if graph-namespace
-                                             (db-ident/create-db-ident-from-name (str (name graph-namespace) ".property")
-                                                                                 (name %))
-                                             (db-property/create-user-property-ident-from-name (name %)))))
+  (let [create-property-ident (if graph-namespace
+                                (fn create-property-ident [kw]
+                                  (db-ident/create-db-ident-from-name (str (name graph-namespace) ".property")
+                                                                      (name kw)))
+                                (fn create-property-ident [kw]
+                                  (if (qualified-keyword? kw)
+                                    (do
+                                      (assert (db-property/user-property-namespace? (namespace kw))
+                                              "Property ident must have valid namespace")
+                                      (db-ident/create-db-ident-from-name (namespace kw) (name kw)))
+                                    (db-property/create-user-property-ident-from-name (name kw)))))
+        property-idents (->> (keys properties)
+                             (map #(vector % (create-property-ident %)))
                              (into {}))
-        _ (assert (= (count (set (vals property-idents))) (count properties)) "All property db-idents must be unique")
+        _ (assert (= (count (set (vals property-idents))) (count properties))
+                  (str "All property db-idents must be unique but the following are duplicates: "
+                       (->> property-idents vals frequencies (keep (fn [[k v]] (when (> v 1) k))))))
+        create-class-ident (if graph-namespace
+                             (fn create-class-ident [kw]
+                               (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
+                                                                   (name kw)))
+                             (fn create-class-ident [kw]
+                               (if (qualified-keyword? kw)
+                                 (do
+                                   (assert (db-class/user-class-namespace? (namespace kw))
+                                           "Class ident must have valid namespace")
+                                   (db-ident/create-db-ident-from-name (namespace kw) (name kw)))
+                                 (db-class/create-user-class-ident-from-name nil (name kw)))))
         class-idents (->> (keys classes)
-                          (map #(vector %
-                                        (if graph-namespace
-                                          (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
-                                                                              (name %))
-                                          (db-class/create-user-class-ident-from-name nil (name %)))))
+                          (map #(vector % (create-class-ident %)))
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
