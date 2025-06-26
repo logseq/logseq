@@ -86,48 +86,8 @@
       (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
       block)))
 
-(comment
-  (defn- property-without-db-attrs
-    [property]
-    (dissoc property :db/index :db/valueType :db/cardinality))
-
-  (defn- property-with-values
-    [db block properties]
-    (when (entity-plus/db-based-graph? db)
-      (let [block (d/entity db (:db/id block))
-            property-vals (if properties
-                            (map block properties)
-                            (vals (:block/properties block)))]
-        (->> property-vals
-             (mapcat
-              (fn [property-values]
-                (let [values (->>
-                              (if (and (coll? property-values)
-                                       (map? (first property-values)))
-                                property-values
-                                #{property-values}))
-                      value-ids (when (every? map? values)
-                                  (->> (map :db/id values)
-                                       (filter (fn [id] (or (int? id) (keyword? id))))))
-                      value-blocks (->>
-                                    (when (seq value-ids)
-                                      (map
-                                       (fn [id] (d/pull db '[:db/id :block/uuid
-                                                             :block/name :block/title
-                                                             :logseq.property/value
-                                                             :block/tags :block/page
-                                                             :logseq.property/created-from-property] id))
-                                       value-ids))
-                                  ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
-                                    (keep (fn [block]
-                                            (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
-                                              (if (keyword? from-property-id)
-                                                (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
-                                                block)))))]
-                  value-blocks))))))))
-
 (defn get-block-children-ids
-  "Returns children UUIDs"
+  "Returns children UUIDs, notice the result doesn't include property value children ids."
   [db block-uuid & {:keys [include-collapsed-children?]
                     :or {include-collapsed-children? true}}]
   (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
@@ -140,7 +100,6 @@
                             (when (or include-collapsed-children?
                                       (not (:block/collapsed? e))
                                       (common-entity-util/page? e))
-
                               (:block/_parent e)))) eids-to-expand)
                 uuids-to-add (keep :block/uuid children)]
             (vswap! seen (partial apply conj) uuids-to-add)
@@ -148,12 +107,26 @@
       @seen)))
 
 (defn get-block-children
-  "Including nested children."
+  "Including nested children, notice the result doesn't include property values."
   {:arglists '([db block-uuid & {:keys [include-collapsed-children?]}])}
   [db block-uuid & {:as opts}]
   (let [ids (get-block-children-ids db block-uuid opts)]
     (when (seq ids)
       (map (fn [id] (d/entity db [:block/uuid id])) ids))))
+
+(defn get-block-full-children-ids
+  "Including nested, collapsed and property value children."
+  {:arglists '([db block-uuid])}
+  [db block-uuid]
+  (d/q
+   '[:find [?c ...]
+     :in $ ?id %
+     :where
+     [?p :block/uuid ?id]
+     (parent ?p ?c)]
+   db
+   block-uuid
+   (:parent rules/rules)))
 
 (defn- with-raw-title
   [m entity]
