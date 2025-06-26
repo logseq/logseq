@@ -178,7 +178,7 @@ jobs:
         run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/properties-graph ../../scripts/schema-graph --closed-maps --group-errors
 
       - name: Export a created DB graph
-        run: cd deps/db && yarn nbb-logseq script/export_graph.cljs ../../scripts/properties-graph -f properties.edn -t
+        run: cd deps/db && yarn nbb-logseq script/export_graph.cljs ../../scripts/properties-graph -f properties.edn -T
 
       - name: Create graph from the export and diff the two graphs
         run: cd deps/db && yarn nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs ./properties-graph2 properties.edn -iv && yarn nbb-logseq script/diff_graphs.cljs ../../scripts/properties-graph ./properties-graph2 -t
