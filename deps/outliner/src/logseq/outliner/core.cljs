@@ -866,12 +866,12 @@
                    :block/order block-order}
                    (not (ldb/page? block))
                    (assoc :block/page target-page))]
-        children-page-tx (when not-same-page?
+        children-page-tx (when (and not-same-page? (not (ldb/page? block)))
                            (let [children-ids (ldb/get-block-full-children-ids db (:block/uuid block))]
                              (keep (fn [id]
                                      (let [child (d/entity db id)]
                                        (when-not (ldb/page? child)
-                                         {:block/uuid id
+                                         {:block/uuid (:block/uuid child)
                                           :block/page target-page}))) children-ids)))
         target-from-property (:logseq.property/created-from-property target-block)
         block-from-property (:logseq.property/created-from-property block)
