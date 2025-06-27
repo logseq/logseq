@@ -34,6 +34,53 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+;; Property bullet rendering functions
+(defn property-icon
+  [property property-type]
+  (let [type (or (:logseq.property/type property) property-type :default)
+        ident (:db/ident property)
+        icon (cond
+               (= ident :block/tags)
+               "hash"
+               (string/starts-with? (str ident) ":plugin.")
+               "puzzle"
+               :else
+               (case type
+                 :number "number"
+                 :date "calendar"
+                 :datetime "calendar"
+                 :checkbox "checkbox"
+                 :url "link"
+                 :property "letter-p"
+                 :page "page"
+                 :node "letter-n"
+                 ;; "letter-t"))]
+                 :default nil  ; Return nil for text properties
+                 nil))]        ; Also return nil for unknown types
+    (when icon (ui/icon icon {:class "opacity-50" :size 16}))))
+
+(defn property-key-bullet
+  "Renders the property key bullet: filled square if no icon, otherwise property icon/emoji/image, all wrapped in bullet-link-wrap."
+  [property property-type]
+  (let [icon (:logseq.property/icon property)
+        default-icon (property-icon property property-type)]
+    [:a.bullet-link-wrap
+      [:span.bullet-container
+        (if icon
+          [:span.property-icon (icon-component/icon icon {:size 16 :color? true})]
+          (if (and default-icon (not= (:logseq.property/type property) :default))
+              default-icon
+              [:span.property-bullet.property-bullet-filled-square]))]]))
+
+(defn property-value-bullet
+  "Renders the property value bullet: bordered square or regular bullet for text."
+  [{:keys [type]}]
+  [:a.bullet-link-wrap
+    [:span.bullet-container
+      (cond
+        (= type :default) [:span.bullet]
+        :else             [:span.property-bullet.property-bullet-bordered-square])]])
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -192,28 +239,6 @@
                          :on-input set-q!}
                         select-opts))]])))
 
-(rum/defc property-icon
-  [property property-type]
-  (let [type (or (:logseq.property/type property) property-type :default)
-        ident (:db/ident property)
-        icon (cond
-               (= ident :block/tags)
-               "hash"
-               (string/starts-with? (str ident) ":plugin.")
-               "puzzle"
-               :else
-               (case type
-                 :number "number"
-                 :date "calendar"
-                 :datetime "calendar"
-                 :checkbox "checkbox"
-                 :url "link"
-                 :property "letter-p"
-                 :page "page"
-                 :node "letter-n"
-                 "letter-t"))]
-    (ui/icon icon {:class "opacity-50" :size 16})))
-
 (defn- property-input-on-chosen
   [block *property *property-key *show-new-property-config? {:keys [class-schema? remove-property?]}]
   (fn [{:keys [value label convert-page-to-property?]}]
@@ -293,9 +318,11 @@
 
 (rum/defc property-key-cp < rum/static
   [block property {:keys [other-position? class-schema?]}]
-  (let [icon (:logseq.property/icon property)]
+  (let [icon (:logseq.property/icon property)
+        emoji (:logseq.property/emoji property)
+        image (:logseq.property/image property)]
     [:div.property-key-inner.jtrigger-view
-     ;; icon picker
+     ;; bullet/icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
                           (icon-component/icon-search
@@ -319,9 +346,7 @@
                                                 {:as-dropdown? true :auto-focus? true
                                                  :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
                (assoc :class "flex items-center"))
-           (if icon
-             (icon-component/icon icon {:size 16 :color? true})
-             (property-icon property nil)))]))
+           (property-key-bullet property (:logseq.property/type property)))]))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
@@ -379,7 +404,8 @@
        [:div.ls-property-add.gap-1.flex.flex-1.flex-row.items-center
         (when-not hide-property-key?
           [:div.flex.flex-row.items-center.property-key.gap-1
-           (when-not (:db/id property) (property-icon property (:logseq.property/type @*property-schema)))
+           (when-not (:db/id property) 
+             (property-key-bullet nil :default))
            (if (:db/id property)                              ; property exists already
              (property-key-cp block property opts)
              [:div property-key])])
@@ -493,7 +519,7 @@
             (when-not (or block? (and property-desc (:class-schema? opts)))
               [:div.flex.h-6.items-center
                [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
-                [:span.bullet-container [:span.bullet]]]])
+                (property-value-bullet {:type type})]])
             [:div.flex.flex-1
              [:div.property-value.flex.flex-1
               (if (:class-schema? opts)
