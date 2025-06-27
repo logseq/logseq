@@ -189,16 +189,18 @@
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v & {:keys [delete?]}]
   (when (and (ldb/private-tags (:db/ident (d/entity db v)))
-             ;; Allow assets to be tagged
              (not
               (or
+               ;; Allow assets to be tagged
                (and
                 (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
                 (= :logseq.class/Asset (:db/ident (d/entity db v))))
+               ;; Allow non-page blocks to be tagged with #Page
                (and
                 (not delete?)
                 (every? (fn [id] (not (entity-util/page? (d/entity db id)))) block-eids)
                 (= :logseq.class/Page (:db/ident (d/entity db v))))
+               ;; Allow pages to drop #Page
                (and
                 delete?
                 (every? (fn [id] (ldb/internal-page? (d/entity db id))) block-eids)

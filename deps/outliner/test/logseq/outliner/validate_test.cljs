@@ -127,6 +127,7 @@
                :pages-and-blocks
                [{:page {:block/title "page1"}
                  :blocks [{:block/title "block"}]}]})
+        class (d/entity @conn :user.class/SomeTag)
         block (db-test/find-block-by-content @conn "block")]
 
     (is (thrown-with-msg?
@@ -150,7 +151,7 @@
     (is (thrown-with-msg?
          js/Error
          #"Can't set tag.*Page"
-         (outliner-validate/validate-tags-property @conn [(:db/id block)] :logseq.class/Page))
+         (outliner-validate/validate-tags-property @conn [(:db/id class)] :logseq.class/Page))
         "Nodes can't be tagged with built-in private tags")
 
     (is (thrown-with-msg?
