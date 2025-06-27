@@ -105,8 +105,7 @@
 
 (def internal-tags
   "Built-in classes that are hidden on a node and all pages view"
-  #{;; :logseq.class/Page
-    :logseq.class/Property :logseq.class/Tag :logseq.class/Root
+  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Asset})
 
 (def private-tags

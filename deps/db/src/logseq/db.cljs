@@ -575,3 +575,17 @@
   (if (sqlite-util/db-based-graph? repo)
     db-schema/schema
     file-schema/schema))
+
+(defn page-in-library?
+  "Check whether a `page` exists on the Library page"
+  [db page]
+  (when (page? page)
+    (when-let [library-page (get-built-in-page db common-config/library-page-name)]
+      (loop [parent (:block/parent page)]
+        (cond
+          (nil? parent)
+          false
+          (= (:db/id parent) (:db/id library-page))
+          true
+          :else
+          (recur (:block/parent parent)))))))

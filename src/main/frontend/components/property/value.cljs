@@ -689,10 +689,13 @@
                   excluded-options)
 
                 (contains? #{:class :property} property-type)
-                (let [classes (model/get-all-classes
-                               repo
-                               {:except-root-class? true
-                                :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})]
+                (let [classes (cond->
+                               (model/get-all-classes
+                                repo
+                                {:except-root-class? true
+                                 :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                                (not (or (ldb/page? block) (:logseq.property/created-from-property block)))
+                                (conj (db/entity :logseq.class/Page)))]
                   (if (= property-type :class)
                     classes
                     (property-handler/get-class-property-choices)))

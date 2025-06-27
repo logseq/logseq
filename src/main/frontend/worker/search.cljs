@@ -316,7 +316,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                     block-id (uuid id)]
                                 (when-let [block (d/entity @conn [:block/uuid block-id])]
                                   (when-not (and library-page-search?
-                                                 (or (:block/parent block)
+                                                 (or (ldb/page-in-library? @conn block)
                                                      (not (ldb/internal-page? block)))) ; remove pages that already have parents
                                     (when (if dev?
                                             true

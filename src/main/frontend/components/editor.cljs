@@ -180,12 +180,15 @@
 
     (let [matched-pages' (if (string/blank? q)
                            (when db-based?
-                             (if db-tag?
-                               (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                               (->> (map (fn [title] {:block/title title
-                                                      :nlp-date? true})
-                                         date/nlp-pages)
-                                    (take 10))))
+                             (let [editing-block (state/get-edit-block)]
+                               (if db-tag?
+                                 (cond->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                                   (not (or (ldb/page? editing-block) (:logseq.property/created-from-property editing-block)))
+                                   (conj (db/entity :logseq.class/Page)))
+                                 (->> (map (fn [title] {:block/title title
+                                                        :nlp-date? true})
+                                           date/nlp-pages)
+                                      (take 10)))))
                            ;; reorder, shortest and starts-with first.
                            (if (and (seq matched-pages)
                                     (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
