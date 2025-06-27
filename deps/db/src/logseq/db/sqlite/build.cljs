@@ -247,6 +247,18 @@
                                    properties'))]
     new-properties-tx))
 
+(defn- build-class-extends [{:build/keys [class-parent class-extends]} class-db-ids]
+  (when-let [class-extends' (if class-parent
+                              (do (println "Warning: :build/class-parent is deprecated and will be removed soon.")
+                                  [class-parent])
+                              class-extends)]
+    (mapv (fn [c]
+            (or (class-db-ids c)
+                (if (db-malli-schema/class? c)
+                  c
+                  (throw (ex-info (str "No :db/id for " c) {})))))
+          class-extends')))
+
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?] :as options}]
   (let [classes' (if build-existing-tx?
                    (->> classes
@@ -258,12 +270,8 @@
                           (into {}))
         classes-tx (vec
                     (mapcat
-                     (fn [[class-name {:build/keys [class-parent class-extends class-properties] :as class-m}]]
-                       (let [class-extends' (if class-parent
-                                              (do (println "Warning: :build/class-parent is deprecated and will be removed soon.")
-                                                  [class-parent])
-                                              class-extends)
-                             db-ident (get-ident all-idents class-name)
+                     (fn [[class-name {:build/keys [class-properties] :as class-m}]]
+                       (let [db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
                               {:block/name (common-util/page-name-sanity-lc (name class-name))
@@ -285,14 +293,8 @@
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
-                             (when class-extends'
-                               {:logseq.property.class/extends
-                                (mapv (fn [c]
-                                        (or (class-db-ids c)
-                                            (if (db-malli-schema/class? c)
-                                              c
-                                              (throw (ex-info (str "No :db/id for " c) {})))))
-                                      class-extends')})
+                             (when-let [class-extends (build-class-extends class-m class-db-ids)]
+                               {:logseq.property.class/extends class-extends})
                              (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
