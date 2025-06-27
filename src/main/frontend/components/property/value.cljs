@@ -694,7 +694,7 @@
                                 repo
                                 {:except-root-class? true
                                  :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
-                                (not (or (ldb/page? block) (:logseq.property/created-from-property block)))
+                                (not (or (and (ldb/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
                                 (conj (db/entity :logseq.class/Page)))]
                   (if (= property-type :class)
                     classes
@@ -765,7 +765,8 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                                  (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->

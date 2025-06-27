@@ -196,7 +196,12 @@
                 (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
                 (= :logseq.class/Asset (:db/ident (d/entity db v))))
                (and
+                (not delete?)
                 (every? (fn [id] (nil? (:block/name (d/entity db id)))) block-eids)
+                (= :logseq.class/Page (:db/ident (d/entity db v))))
+               (and
+                delete?
+                (every? (fn [id] (ldb/internal-page? (d/entity db id))) block-eids)
                 (= :logseq.class/Page (:db/ident (d/entity db v)))))))
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
                          " with built-in #" (:block/title (d/entity db v)))
