@@ -3,14 +3,12 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
@@ -45,23 +43,6 @@
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map (fn [d] (d/entity db (:e d))))))
 
-(defn get-class-extends
-  "Returns all parents of a class"
-  [node]
-  (assert (de/entity? node) "get-class-extends `node` should be an entity")
-  (let [db (.-db node)
-        eid (:db/id node)]
-    (->>
-     (d/q '[:find [?p ...]
-            :in $ ?c %
-            :where
-            (class-extends ?p ?c)]
-          db
-          eid
-          (:class-extends rules/rules))
-     (remove #{eid})
-     (map (fn [id] (d/entity db id))))))
-
 (defn get-page-parents
   [node]
   (when-let [parent (:block/parent node)]
@@ -75,7 +56,7 @@
 
 (defn- get-class-title-with-extends
   [entity]
-  (let [parents' (->> (get-class-extends entity)
+  (let [parents' (->> (db-class/get-class-extends entity)
                       (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                       vec)]
     (string/join
@@ -103,7 +84,7 @@
   "Returns all parents of all classes. Like get-class-extends but for multiple classes"
   [tags]
   (let [tags' (filter entity-util/class? tags)
-        result (mapcat get-class-extends tags')]
+        result (mapcat db-class/get-class-extends tags')]
     (set result)))
 
 (defn class-instance?
