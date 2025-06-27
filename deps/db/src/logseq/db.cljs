@@ -41,15 +41,23 @@
   (let [remove-block-temp-f (fn [m]
                               (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
                                    (into {})))]
-    (map (fn [m]
-           (if (map? m)
-             (cond->
-              (remove-block-temp-f m)
-               (and (seq (:block/refs m))
-                    (every? map? (:block/refs m)))
-               (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
-             m))
-         tx-data)))
+    (keep (fn [data]
+            (cond
+              (map? data)
+              (cond->
+               (remove-block-temp-f data)
+                (and (seq (:block/refs data))
+                     (every? map? (:block/refs data)))
+                (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+              (and (vector? data)
+                   (contains? #{:db/add :db/retract} (first data))
+                   (> (count data) 2)
+                   (keyword? (nth data 2))
+                   (= "block.temp" (namespace (nth data 2))))
+              nil
+              :else
+              data))
+          tx-data)))
 
 (defn assert-no-entities
   [tx-data]
