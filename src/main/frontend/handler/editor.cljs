@@ -1614,7 +1614,12 @@
 (defn get-matched-classes
   "Return matched classes except the root tag"
   [q]
-  (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+  (let [editing-block (state/get-edit-block)
+        non-page-block? (and editing-block (not (ldb/page? editing-block)))
+        all-classes (cond-> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                      non-page-block?
+                      (conj (db/entity :logseq.class/Page)))
+        classes (->> all-classes
                      (mapcat (fn [class]
                                (conj (:block/alias class) class)))
                      (common-util/distinct-by :db/id)
