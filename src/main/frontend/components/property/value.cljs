@@ -783,13 +783,12 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or (and extends-property? (contains? (set children-pages) (:db/id block)))
-                                                         ;; Don't allow creating private tags
-                                                         (and (= :block/tags (:db/ident property))
-                                                              (seq (set/intersection (set (map :db/ident classes'))
-                                                                                     ldb/private-tags))))
-                                                   false
-                                                   true)
+                 :show-new-when-not-exact-match? (not
+                                                  (or (and extends-property? (contains? (set children-pages) (:db/id block)))
+                                                      ;; Don't allow creating private tags
+                                                      (and (= :block/tags (:db/ident property))
+                                                           (seq (set/intersection (set (map :db/ident classes'))
+                                                                                  ldb/private-tags)))))
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
@@ -819,6 +818,10 @@
                                          :label (:block/title e)}))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
+
+                (= :block/tags (:db/ident property))
+                (assoc :exact-match-exclude-items
+                       (set (map (fn [ident] (:block/title (db/entity ident))) ldb/private-tags)))
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
