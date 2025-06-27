@@ -687,6 +687,7 @@
   :editor/zoom-out                "Zoom out editing block / Backwards otherwise"
   :editor/toggle-number-list      "Toggle number list"
   :editor/add-property            "Add property"
+  :editor/set-tags                "Set tags for selected block(s)"
   :editor/add-property-deadline   "Add task deadline to selected block"
   :editor/add-property-status     "Add task status to selected block"
   :editor/add-property-priority   "Add task priority to selected block"

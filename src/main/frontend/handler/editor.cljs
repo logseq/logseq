@@ -1614,7 +1614,7 @@
 (defn get-matched-classes
   "Return matched classes except the root tag"
   [q]
-  (let [editing-block (state/get-edit-block)
+  (let [editing-block (some-> (state/get-edit-block) :db/id db/entity)
         non-page-block? (and editing-block (not (ldb/page? editing-block)))
         all-classes (cond-> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                       non-page-block?

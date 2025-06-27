@@ -365,6 +365,11 @@
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
+   :editor/set-tags                         {:binding "p t"
+                                             :db-graph? true
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Tags"}]))}
 
    :editor/add-property-deadline            {:binding "p d"
                                              :db-graph? true
@@ -390,7 +395,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
-   :editor/toggle-display-all-properties    {:binding "p t"
+   :editor/toggle-display-all-properties    {:binding "p a"
                                              :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
@@ -855,6 +860,7 @@
           :editor/copy-current-file
           :editor/copy-page-url
           :editor/new-whiteboard
+          :editor/set-tags
           :editor/add-property-deadline
           :editor/add-property-status
           :editor/add-property-priority
@@ -988,6 +994,7 @@
      :editor/select-block-down
      :editor/delete-selection
      :editor/add-property
+     :editor/set-tags
      :editor/add-property-deadline
      :editor/add-property-status
      :editor/add-property-priority
