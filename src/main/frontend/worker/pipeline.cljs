@@ -127,26 +127,33 @@
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
 (defn- toggle-page-and-block
-  [conn {:keys [db-before tx-data]}]
-  (let [page-tag (d/entity @conn :logseq.class/Page)]
-    (mapcat
-     (fn [datom]
-       (when (and (= :block/tags (:a datom))
-                  (= (:db/id page-tag) (:v datom)))
-         (when-let [block (d/entity db-before (:e datom))]
-           (let [id (:db/id block)]
-             (cond
-               (and (:added datom) (not (ldb/page? block))) ; block->page
-               [{:db/id id
-                 :block/name (common-util/page-name-sanity-lc (:block/title block))}
-                [:db/retract id :block/page]]
+  [conn {:keys [db-before tx-data tx-meta]}]
+  (when-not (:rtc-op? tx-meta)
+    (let [page-tag (d/entity @conn :logseq.class/Page)]
+      (mapcat
+       (fn [datom]
+         (when (and (= :block/tags (:a datom))
+                    (= (:db/id page-tag) (:v datom)))
+           (when-let [block (d/entity db-before (:e datom))]
+             (let [id (:db/id block)]
+               (cond
+                 (and (:added datom) (not (ldb/page? block))) ; block->page
+                 [{:db/id id
+                   :block/name (common-util/page-name-sanity-lc (:block/title block))}
+                  [:db/retract id :block/page]]
 
-               ;; page->block
-               (and (not (:added datom)) (ldb/internal-page? block))
-               (let [parent (:block/parent block)]
-                 [[:db/retract id :block/name]
-                  [:db/add id :block/page (or (:db/id (:block/page parent)) (:db/id parent))]]))))))
-     tx-data)))
+                 ;; page->block
+                 (and (not (:added datom)) (ldb/internal-page? block))
+                 (let [parent (:block/parent block)
+                       parent-page (when parent
+                                     (loop [parent parent]
+                                       (if (ldb/page? parent)
+                                         parent
+                                         (recur (:block/parent parent)))))]
+                   (when parent-page
+                     [[:db/retract id :block/name]
+                      [:db/add id :block/page (:db/id parent-page)]])))))))
+       tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
   "Add missing properties for these cases:

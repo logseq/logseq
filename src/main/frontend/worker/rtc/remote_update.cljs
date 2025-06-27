@@ -82,7 +82,8 @@ so need to pull earlier remote-data from websocket."})
                   nil sorted-order+block-uuid-coll)]
           (index/generate-key-between start-order end-order)
           block-order)]
-    (ldb/transact! conn [{:block/uuid block-uuid :block/order block-order*}])
+    (ldb/transact! conn [{:block/uuid block-uuid :block/order block-order*}]
+                   {:rtc-op? true})
     ;; TODO: add ops when block-order* != block-order
     ))
 
@@ -113,7 +114,8 @@ so need to pull earlier remote-data from websocket."})
                            block-parent (assoc :block/parent [:block/uuid block-parent])))
                        block-uuid+parent-coll)
                  {:persist-op? false
-                  :gen-undo-ops? false}))
+                  :gen-undo-ops? false
+                  :rtc-op? true}))
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
@@ -128,11 +130,13 @@ so need to pull earlier remote-data from websocket."})
   (ldb/transact! conn
                  (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
                  {:persist-op? false
-                  :gen-undo-ops? false}))
+                  :gen-undo-ops? false
+                  :rtc-op? true}))
 
 (defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
   (ldb/transact! conn blocks {:persist-op? false
-                              :gen-undo-ops? false}))
+                              :gen-undo-ops? false
+                              :rtc-op? true}))
 
 (defn- group-remote-remove-ops-by-whiteboard-block
   "return {true [<whiteboard-block-ops>], false [<other-ops>]}"
@@ -494,15 +498,15 @@ so need to pull earlier remote-data from websocket."})
       (let [{update-block-order-tx-data :tx-data op-value :op-value} (update-block-order (:db/id ent) op-value)
             first-remote-parent (first parents)
             local-parent (d/entity @conn [:block/uuid first-remote-parent])
-            whiteboard-page-block? (ldb/whiteboard? local-parent)]
+            whiteboard-page-block? (ldb/whiteboard? local-parent)
+            tx-meta {:persist-op? false :gen-undo-ops? false :rtc-op? true}]
         (if whiteboard-page-block?
           (upsert-whiteboard-block repo conn op-value)
           (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
-                (ldb/transact! conn schema-tx-data {:persist-op? false :gen-undo-ops? false}))
+                (ldb/transact! conn schema-tx-data tx-meta))
               (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)
                                                                 rtc-const/ignore-attrs-when-syncing))]
-                (ldb/transact! conn (concat tx-data update-block-order-tx-data)
-                               {:persist-op? false :gen-undo-ops? false}))))))))
+                (ldb/transact! conn (concat tx-data update-block-order-tx-data) tx-meta))))))))
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]
