@@ -190,7 +190,7 @@
     ;; It's caller's responsibility to ensure parent is included in final export
     (and (not shallow-copy?)
          (:logseq.property.class/extends class-ent)
-         (not ((set (map :db/ident (:logseq.property.class/extends class-ent))) :logseq.class/Root)))
+         (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
     (assoc :build/class-extends
            (mapv :db/ident (:logseq.property.class/extends class-ent)))))
 

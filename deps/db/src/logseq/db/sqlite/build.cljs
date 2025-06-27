@@ -287,10 +287,12 @@
                                                    uuid-maps all-idents options))
                              (when class-extends'
                                {:logseq.property.class/extends
-                                (or (map class-db-ids class-extends')
-                                    (if (every? db-malli-schema/class? class-extends')
-                                      class-extends'
-                                      (throw (ex-info (str "No :db/id for " class-extends') {}))))})
+                                (mapv (fn [c]
+                                        (or (class-db-ids c)
+                                            (if (db-malli-schema/class? c)
+                                              c
+                                              (throw (ex-info (str "No :db/id for " c) {})))))
+                                      class-extends')})
                              (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
