@@ -993,7 +993,7 @@
   (reduce (fn [acc [asset-name asset-uuid]]
             (let [new-title (string/replace acc
                                             (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
-                                                             asset-name
+                                                             (common-util/escape-regex-chars asset-name)
                                                              "\\)(\\{[^}]*\\})?"))
                                             (page-ref/->page-ref asset-uuid))]
               (when (string/includes? new-title asset-name)
