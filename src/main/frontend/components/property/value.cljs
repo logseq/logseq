@@ -694,7 +694,7 @@
                                 repo
                                 {:except-root-class? true
                                  :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
-                                (not (or (and (ldb/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
+                                (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
                                 (conj (db/entity :logseq.class/Page)))]
                   (if (= property-type :class)
                     classes

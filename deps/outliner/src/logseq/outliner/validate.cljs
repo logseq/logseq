@@ -197,7 +197,7 @@
                 (= :logseq.class/Asset (:db/ident (d/entity db v))))
                (and
                 (not delete?)
-                (every? (fn [id] (not (ldb/page? (d/entity db id)))) block-eids)
+                (every? (fn [id] (not (entity-util/page? (d/entity db id)))) block-eids)
                 (= :logseq.class/Page (:db/ident (d/entity db v))))
                (and
                 delete?
