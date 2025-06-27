@@ -258,8 +258,11 @@
                           (into {}))
         classes-tx (vec
                     (mapcat
-                     (fn [[class-name {:build/keys [class-parent class-properties] :as class-m}]]
-                       (let [class-parent (when class-parent (if (coll? class-parent) class-parent [class-parent]))
+                     (fn [[class-name {:build/keys [class-parent class-extends class-properties] :as class-m}]]
+                       (let [class-extends' (if class-parent
+                                              (do (println "Warning: :build/class-parent is deprecated and will be removed soon.")
+                                                  [class-parent])
+                                              class-extends)
                              db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
@@ -278,16 +281,16 @@
                            (conj
                             (merge
                              new-block
-                             (dissoc class-m :build/properties :build/class-parent :build/class-properties :build/keep-uuid?)
+                             (dissoc class-m :build/properties :build/class-extends :build/class-parent :build/class-properties :build/keep-uuid?)
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
-                             (when class-parent
+                             (when class-extends'
                                {:logseq.property.class/extends
-                                (or (map class-db-ids class-parent)
-                                    (if (every? db-malli-schema/class? class-parent)
-                                      class-parent
-                                      (throw (ex-info (str "No :db/id for " class-parent) {}))))})
+                                (or (map class-db-ids class-extends')
+                                    (if (every? db-malli-schema/class? class-extends')
+                                      class-extends'
+                                      (throw (ex-info (str "No :db/id for " class-extends') {}))))})
                              (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
@@ -344,7 +347,7 @@
    Class
    [:map
     [:build/properties {:optional true} User-properties]
-    [:build/class-parent {:optional true} [:vector Class]]
+    [:build/class-extends {:optional true} [:vector Class]]
     [:build/class-properties {:optional true} [:vector Property]]
     [:build/keep-uuid? {:optional true} :boolean]]])
 
@@ -789,7 +792,7 @@
      and the values are maps of datascript attributes e.g. `{:block/title \"Foo\"}`.
      Additional keys available:
      * :build/properties - Define properties on a class page
-     * :build/class-parent - Add a class parent by its keyword name
+     * :build/class-extends - Vec of class name keywords which extend a class.
      * :build/class-properties - Vec of property name keywords. Defines properties that a class gives to its objects
      * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology

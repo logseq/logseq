@@ -191,7 +191,7 @@
     (and (not shallow-copy?)
          (:logseq.property.class/extends class-ent)
          (not ((set (map :db/ident (:logseq.property.class/extends class-ent))) :logseq.class/Root)))
-    (assoc :build/class-parent
+    (assoc :build/class-extends
            (mapv :db/ident (:logseq.property.class/extends class-ent)))))
 
 (defn- build-node-classes
@@ -341,7 +341,7 @@
 
 (defn- build-class-parents-export [db classes-config]
   (let [class-parent-ents (->> classes-config
-                               (filter #(:build/class-parent (val %)))
+                               (filter #(:build/class-extends (val %)))
                                (map #(d/entity db (key %)))
                                db-db/get-classes-parents)
         classes
