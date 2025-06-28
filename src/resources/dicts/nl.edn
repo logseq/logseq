@@ -1,7 +1,6 @@
 {:all-files "Alle bestanden"
  :all-graphs "Alle grafieken"
  :all-journals "Alle Journalen"
- :all-pages "Alle pagina's"
  :bold "Vet"
  :cancel "Annuleren"
  :close "Sluiten"
@@ -136,7 +135,6 @@
  :plugin/update-available "Update beschikbaar"
  :plugin/updating "Bijwerken"
 
- :right-side-bar/all-pages "Alle pagina's"
  :right-side-bar/block-ref "Blok verwijzingen"
  :right-side-bar/contents "Inhoud"
  :right-side-bar/graph-view "Grafiekweergave"

@@ -348,12 +348,8 @@
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [block-id (:block/uuid this)
-          ids (->>
-               (let [children (ldb/get-block-children db block-id)
-                     children-ids (map :block/uuid children)]
-                 (conj children-ids block-id))
-               (remove nil?))
-          txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
+          ids (cons (:db/id this) (ldb/get-block-full-children-ids db block-id))
+          txs (map (fn [id] [:db.fn/retractEntity id]) ids)
           page-tx (let [block (d/entity db [:block/uuid block-id])]
                     (when (:block/pre-block? block)
                       (when-let [id (:db/id (:block/page block))]
@@ -870,12 +866,12 @@
                    :block/order block-order}
                    (not (ldb/page? block))
                    (assoc :block/page target-page))]
-        children-page-tx (when not-same-page?
-                           (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
+        children-page-tx (when (and not-same-page? (not (ldb/page? block)))
+                           (let [children-ids (ldb/get-block-full-children-ids db (:block/uuid block))]
                              (keep (fn [id]
-                                     (let [child (d/entity db [:block/uuid id])]
+                                     (let [child (d/entity db id)]
                                        (when-not (ldb/page? child)
-                                         {:block/uuid id
+                                         {:block/uuid (:block/uuid child)
                                           :block/page target-page}))) children-ids)))
         target-from-property (:logseq.property/created-from-property target-block)
         block-from-property (:logseq.property/created-from-property block)

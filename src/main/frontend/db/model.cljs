@@ -314,15 +314,6 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (ldb/get-children db block-uuid)))
 
-(defn get-block-children
-  "Including nested children."
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (let [ids (ldb/get-block-children-ids db block-uuid)]
-      (when (seq ids)
-        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-          (db-utils/pull-many repo '[*] ids'))))))
-
 (defn get-block-and-children
   [repo block-uuid & {:as opts}]
   (let [db (conn/get-db repo)]
