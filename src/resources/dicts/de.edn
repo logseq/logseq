@@ -1,7 +1,6 @@
 {:all-files "Alle Dateien"
  :all-graphs "Alle Graphen"
  :all-journals "Alle Journale"
- :all-pages "Alle Seiten"
  :all-whiteboards "Alle Whiteboards"
  :auto-heading "Automatische Überschrift"
  :bold "Fett"
@@ -309,7 +308,6 @@
 
  :query/config-property-settings "Einstellungen für diese Query:"
 
- :right-side-bar/all-pages "Alle Seiten"
  :right-side-bar/block-ref "Blockreferenz"
  :right-side-bar/contents "Inhalt"
  :right-side-bar/flashcards "Karteikarten"

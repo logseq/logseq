@@ -191,14 +191,14 @@ export interface BlockEntity {
   parent: IEntityID
   title: string
   content?: string // @deprecated. Use :title instead!
-  page: IEntityID
+  page: IEntityID // owner page
   createdAt: number
   updatedAt: number
+  ident?: string // ident for property block
   properties?: Record<string, any>
   'collapsed?': boolean
 
   // optional fields in dummy page
-  left?: IEntityID
   anchor?: string
   body?: any
   children?: Array<BlockEntity | BlockUUIDTuple>
@@ -812,7 +812,7 @@ export interface IEditorProxy extends Record<string, any> {
   upsertProperty: (
     key: string,
     schema?: Partial<{
-      type: 'default' | 'map' | 'number' | 'keyword' | 'node' | 'date' | 'checkbox' | string,
+      type: 'default' | 'number' | 'node' | 'date' | 'checkbox' | 'url' | string,
       cardinality: 'many' | 'one',
       hide: boolean
       public: boolean
@@ -831,7 +831,7 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
 
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | string | null>
+  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | unknown>
 
   getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
 

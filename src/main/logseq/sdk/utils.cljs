@@ -38,6 +38,7 @@
                 camel-case?
                 (csk/->camelCase)))
 
+            (de/entity? a) (:db/id a)
             (uuid? a) (str a)
 
             ;; @FIXME compatible layer for classic APIs

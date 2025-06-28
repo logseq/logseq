@@ -239,9 +239,17 @@
              tag-properties (->> (d/datoms db :avet :logseq.property.class/properties id)
                                  (mapcat (fn [d]
                                            [[:db/retract (:e d) (:a d) (:v d)]
-                                            [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]])))]
+                                            [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]])))
+             other-properties-tx (mapcat
+                                  (fn [ident]
+                                    (->> (d/datoms db :avet ident id)
+                                         (mapcat (fn [d]
+                                                   [[:db/retract (:e d) (:a d) (:v d)]
+                                                    [:db/add (:e d) (:a d) [:block/uuid (:block/uuid new-property)]]]))))
+                                  [:logseq.property.view/group-by-property :logseq.property.table/pinned-columns])]
          (concat [new-property]
                  tag-properties
+                 other-properties-tx
                  retract-property-attrs
                  (mapcat
                   (fn [d]
