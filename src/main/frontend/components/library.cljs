@@ -43,8 +43,8 @@
                                            ldb/sort-by-order
                                            last)
                            target (or last-child library-page)
-                           sibling? (some? last-child)]
-                       (editor-handler/move-blocks! [{:db/id chosen}] target sibling?)
+                           chosen-block (db/entity chosen)]
+                       (editor-handler/move-blocks! [chosen-block] target (if last-child true false))
                        (set-selected-choices! (conj selected-choices chosen)))
                      (do
                        (db/transact! (state/get-current-repo)

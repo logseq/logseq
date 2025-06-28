@@ -781,7 +781,7 @@
     ;; (prn :rproperties referenced-properties)
     undefined))
 
-(defn- find-undefined-uuids [{:keys [classes properties pages-and-blocks]}]
+(defn- find-undefined-uuids [db {:keys [classes properties pages-and-blocks]}]
   (let [pvalue-known-uuids (atom #{})
         _ (walk/postwalk (fn [f]
                            (if (and (map? f) (:build/property-value f) (:block/uuid f))
@@ -806,6 +806,11 @@
                      (mapcat get-pvalue-uuids (vals properties))
                      (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
+             (remove (fn [id]
+                       (let [eid (when id [:block/uuid id])]
+                         (some->> eid
+                                  (d/entity db)
+                                  :logseq.property/created-from-property))))
              set)]
     (set/difference ref-uuids known-uuids)))
 
@@ -842,10 +847,10 @@
   "Checks that export map is usable by sqlite.build including checking that
    all referenced properties and classes are defined. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
-  [export-map* {:keys [graph-options]}]
+  [db export-map* {:keys [graph-options]}]
   (let [export-map (remove-namespaced-keys export-map*)]
     (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-    (let [undefined-uuids (find-undefined-uuids export-map)
+    (let [undefined-uuids (find-undefined-uuids db export-map)
           undefined (cond-> {}
                       (empty? (:exclude-namespaces graph-options))
                       (merge (find-undefined-classes-and-properties export-map))
@@ -875,10 +880,10 @@
         export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid export-map options)
+        (ensure-export-is-valid db export-map options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid export-map options))
+      (ensure-export-is-valid db export-map options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns
