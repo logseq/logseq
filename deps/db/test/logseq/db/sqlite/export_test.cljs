@@ -371,9 +371,9 @@
                       :user.property/node-p1 {:logseq.property/type :default}}
          :classes {:user.class/MyClass {:build/class-properties [:user.property/p1 :user.property/p2]}
                    :user.class/MyClass2 {:build/class-properties [:user.property/p2]}
-                   :user.class/ChildClass {:build/class-parent :user.class/MyClass
+                   :user.class/ChildClass {:build/class-extends [:user.class/MyClass]
                                            :build/class-properties [:user.property/p3]}
-                   :user.class/ChildClass2 {:build/class-parent :user.class/MyClass2}
+                   :user.class/ChildClass2 {:build/class-extends [:user.class/MyClass2]}
                    ;; shallow class b/c it's a property's class property
                    :user.class/NodeClass {:build/class-properties [:user.property/node-p1]}
                    :user.class/NodeClass2 {}}
@@ -486,7 +486,7 @@
                                :build/property-classes [:user.class/MyClass]}}
          :classes
          {:user.class/MyClass {:build/properties {:user.property/url "https://example.com/MyClass"}}
-          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+          :user.class/MyClass2 {:build/class-extends [:user.class/MyClass]
                                 :build/properties {:logseq.property/description "tests child class"}}}}
         conn (db-test/create-conn-with-blocks original-data)
         conn2 (db-test/create-conn)
@@ -619,7 +619,7 @@
                                 (assoc :block/alias #{[:block/uuid class-alias-uuid]}))
           :user.class/MyClassAlias {:block/uuid class-alias-uuid
                                     :build/keep-uuid? true}
-          :user.class/MyClass2 {:build/class-parent :user.class/MyClass
+          :user.class/MyClass2 {:build/class-extends [:user.class/MyClass]
                                 :block/collapsed? true
                                 :block/uuid class2-uuid
                                 :build/keep-uuid? true

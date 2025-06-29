@@ -522,7 +522,7 @@
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
 (def get-all-properties db-db/get-all-properties)
-(def get-class-extends db-db/get-class-extends)
+(def get-class-extends db-class/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
 (def get-title-with-parents db-db/get-title-with-parents)
 (def class-instance? db-db/class-instance?)
