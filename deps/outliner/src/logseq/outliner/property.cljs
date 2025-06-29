@@ -77,7 +77,9 @@
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
         extends?
-        (conj [:db/retract (:db/id update-block-tx) property-id :logseq.class/Root])
+        (concat
+         (let [extends (ldb/get-class-extends (d/entity @conn value))]
+           (map (fn [extend] [:db/retract (:db/id block) property-id (:db/id extend)]) extends)))
         true
         (conj update-block-tx)))))
 
