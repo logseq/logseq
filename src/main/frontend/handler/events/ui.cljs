@@ -34,6 +34,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.state :as state]
+            [capacitor.state :as cc-state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -86,7 +87,9 @@
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 (defmethod events/handle :redirect-to-home [_]
-  (page-handler/create-today-journal!))
+  (page-handler/create-today-journal!)
+  (when (util/capacitor-new?)
+    (cc-state/redirect-to-tab! "home")))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
@@ -275,7 +278,8 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar))
+  (shui/popup-hide! :selection-action-bar)
+  (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)

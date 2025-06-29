@@ -23,10 +23,23 @@ const css = {
     })
   },
 
+  watchCapacitorNewCSS () {
+    return cp.spawn(`yarn css:capacitor-new-watch`, {
+      shell: true,
+      stdio: 'inherit',
+    })
+  },
+
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
       css._optimizeCSSForRelease,
+    )(...params)
+  },
+
+  buildCapacitorCSS (...params) {
+    return gulp.series(
+      () => exec(`yarn css:capacitor-new-build`, {}),
     )(...params)
   },
 
@@ -64,7 +77,7 @@ const common = {
         'node_modules/@highlightjs/cdn-assets/highlight.min.js',
         'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
         'packages/amplify/dist/amplify.js',
-        'packages/ui/dist/ui.js',
+        'packages/ui/dist/ui/ui.js',
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
         'node_modules/react/umd/react.production.min.js',
         'node_modules/react/umd/react.development.js',
@@ -101,6 +114,26 @@ const common = {
         'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2',
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
+      () => gulp.src([
+        'node_modules/katex/dist/katex.min.js',
+        'node_modules/katex/dist/contrib/mhchem.min.js',
+        'node_modules/marked/marked.min.js',
+        'node_modules/@highlightjs/cdn-assets/highlight.min.js',
+        'node_modules/@isomorphic-git/lightning-fs/dist/lightning-fs.min.js',
+        'node_modules/react/umd/react.production.min.js',
+        'node_modules/react/umd/react.development.js',
+        'node_modules/react-dom/umd/react-dom.production.min.js',
+        'node_modules/react-dom/umd/react-dom.development.js',
+        'node_modules/prop-types/prop-types.min.js',
+        'node_modules/interactjs/dist/interact.min.js',
+        'node_modules/photoswipe/dist/umd/*.js',
+        'packages/amplify/dist/amplify.js',
+        'packages/ui/dist/ui/ui.js',
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
+      () => gulp.src([
+        'packages/ui/dist/ionic/*.js',
+        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor'))),
     )(...params)
   },
 
@@ -133,8 +166,7 @@ const common = {
   async runCapWithLocalDevServerEntry (cb) {
     const mode = process.env.PLATFORM || 'ios'
 
-    const IP = ip.address()
-    const LOGSEQ_APP_SERVER_URL = `http://${IP}:3001`
+    const LOGSEQ_APP_SERVER_URL = `http://localhost:3002`
 
     if (typeof global.fetch === 'function') {
       try {
@@ -240,5 +272,10 @@ exports.watch = gulp.series(common.syncResourceFile,
   common.syncAssetFiles, common.syncAllStatic,
   common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
+exports.watchCapacitorNew = gulp.series(common.syncResourceFile,
+  common.syncAssetFiles, common.syncAllStatic,
+  gulp.parallel(common.keepSyncResourceFile, css.watchCapacitorNewCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
+exports.buildCapacitorNew = gulp.series(common.clean, common.syncResourceFile,
+  common.syncAssetFiles, css.buildCapacitorCSS)

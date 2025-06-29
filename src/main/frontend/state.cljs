@@ -35,6 +35,12 @@
 (defonce *db-worker (atom nil))
 (defonce *editor-info (atom nil))
 
+(def db-worker-ready-flow
+  "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
+  Use this flow to wait till db-worker ready."
+  (->> (m/watch *db-worker)
+       (m/eduction (map some?))))
+
 (defn- <invoke-db-worker*
   [qkw direct-pass? args-list]
   (let [worker @*db-worker]
@@ -150,7 +156,7 @@
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              (atom {})
-      :editor/editing?                       (atom {})
+      :editor/editing?                       (atom nil)
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
@@ -179,6 +185,7 @@
       :editor/next-edit-block                (atom nil)
       :editor/raw-mode-block                 (atom nil)
       :editor/virtualized-scroll-fn          nil
+      :editor/edit-block-fn                  (atom nil)
 
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
@@ -214,10 +221,7 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/actioned-block                 nil
-      :mobile/show-toolbar?                  false
       :mobile/show-recording-bar?            false
-      :mobile/show-tabbar?                   false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?
@@ -1214,7 +1218,9 @@ Similar to re-frame subscriptions"
       (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
         (dom/remove-class! node "selected")
         (when (dom/has-class? node "ls-table-row")
-          (.blur node))))))
+          (.blur node))))
+    (doseq [node (dom/sel ".block-content[contenteditable=true]")]
+      (dom/set-attr! node "contenteditable" "false"))))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1238,7 +1244,9 @@ Similar to re-frame subscriptions"
 (defn clear-selection!
   []
   (dom-clear-selection!)
-  (state-clear-selection!))
+  (state-clear-selection!)
+  (doseq [node (dom/sel ".block-content[contenteditable=false]")]
+    (dom/set-attr! node "contenteditable" "true")))
 
 (defn get-selection-start-block-or-first
   []
@@ -1252,16 +1260,18 @@ Similar to re-frame subscriptions"
   (seq (get-selection-blocks)))
 
 (defn conj-selection-block!
-  [block-or-blocks direction]
-  (let [selection-blocks (get-unsorted-selection-blocks)
-        block-or-blocks (if (sequential? block-or-blocks) block-or-blocks [block-or-blocks])
-        blocks (-> (concat selection-blocks block-or-blocks)
-                   distinct)]
-    (set-selection-blocks! blocks direction)))
+  ([block-or-blocks]
+   (conj-selection-block! block-or-blocks (get-selection-direction)))
+  ([block-or-blocks direction]
+   (let [selection-blocks (get-unsorted-selection-blocks)
+         block-or-blocks (if (sequential? block-or-blocks) block-or-blocks [block-or-blocks])
+         blocks (-> (concat selection-blocks block-or-blocks)
+                    distinct)]
+     (set-selection-blocks! blocks direction))))
 
 (defn drop-selection-block!
   [block]
-  (set-selection-blocks-aux! (-> (remove #(= block %) (get-unsorted-selection-blocks))
+  (set-selection-blocks-aux! (-> (remove #(= (.-id block) (.-id %)) (get-unsorted-selection-blocks))
                                  vec)))
 
 (defn drop-selection-blocks-starts-with!
@@ -1381,7 +1391,7 @@ Similar to re-frame subscriptions"
       :or {clear-editing-block? true}}]
   (clear-editor-action!)
   (when clear-editing-block?
-    (set-state! :editor/editing? {})
+    (set-state! :editor/editing? nil)
     (set-state! :editor/block nil))
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
@@ -2286,8 +2296,7 @@ Similar to re-frame subscriptions"
 
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)
-  (storage/set :ui/radix-color color)
-  (util/set-android-theme))
+  (storage/set :ui/radix-color color))
 
 (defn set-editor-font! [font]
   (let [font (if (keyword? font) (name font) (str font))]

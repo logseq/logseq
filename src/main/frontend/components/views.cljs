@@ -52,7 +52,7 @@
   [config]
   (if (:sidebar? config)
     (dom/sel1 ".sidebar-item-list")
-    (gdom/getElement "main-content-container")))
+    (util/app-scroll-container-node)))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
@@ -182,6 +182,7 @@
                                           {:id popup-id
                                            :align "start"
                                            :as-dropdown? true
+                                           :dropdown-menu? true
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
@@ -1693,7 +1694,8 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
-                                  {:align :end}))}
+                                  {:align :end
+                                   :dropdown-menu? true}))}
    (ui/icon "arrows-up-down")))
 
 (defn- view-cp
@@ -1783,6 +1785,7 @@
                                             (shui/popup-hide!))))}
                             "Delete")])
                         {:as-dropdown? true
+                         :dropdown-menu? true
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
                        (do
