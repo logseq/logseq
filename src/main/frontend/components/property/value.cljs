@@ -679,13 +679,19 @@
         property-type (:logseq.property/type property)
         nodes (cond
                 extends-property?
-                (let [;; Disallows cyclic hierarchies
+                (let [extends (->> (mapcat (fn [e] (ldb/get-class-extends e)) (:logseq.property.class/extends block))
+                                   distinct)
+                      ;; Disallows cyclic hierarchies
                       exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
-                                      (conj (:block/uuid block))) ; break cycle
+                                      (conj (:block/uuid block)) ; break cycle
+                                      ;; hide parent extends for existing values
+                                      (set/union (set (map :block/uuid extends))))
                       options (if (ldb/class? block)
                                 (model/get-all-classes repo)
                                 result)
-                      excluded-options (remove (fn [e] (contains? exclude-ids (:block/uuid e))) options)]
+
+                      excluded-options (->> options
+                                            (remove (fn [e] (contains? exclude-ids (:block/uuid e)))))]
                   excluded-options)
 
                 (contains? #{:class :property} property-type)
