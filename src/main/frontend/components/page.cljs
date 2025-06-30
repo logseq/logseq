@@ -110,7 +110,7 @@
     (when page?
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
-        :blockid (:db/id block)
+        :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
                     (util/stop e)

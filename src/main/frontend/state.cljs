@@ -1205,16 +1205,22 @@ Similar to re-frame subscriptions"
 (defn- set-selection-blocks-aux!
   [blocks]
   (set-state! :view/selected-blocks nil)
-  (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
+  (let [selected-blocks @(:selection/blocks @state)
+        selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
         removed (set/difference selected-ids new-ids)]
     (mark-dom-blocks-as-selected blocks)
-    (doseq [id removed]
-      (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
+    (if (= (count blocks) 1)
+      (doseq [node selected-blocks]
         (dom/remove-class! node "selected")
         (when (dom/has-class? node "ls-table-row")
-          (.blur node))))))
+          (.blur node)))
+      (doseq [id removed]
+        (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
+          (dom/remove-class! node "selected")
+          (when (dom/has-class? node "ls-table-row")
+            (.blur node)))))))
 
 (defn set-selection-blocks!
   ([blocks]
