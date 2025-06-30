@@ -90,14 +90,16 @@
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker* (Comlink/wrap worker)
-          wrapped-worker (fn [qkw direct-pass-args? & args]
-                           (-> (.remoteInvoke ^js wrapped-worker*
-                                              (str (namespace qkw) "/" (name qkw))
-                                              direct-pass-args?
-                                              (if direct-pass-args?
-                                                (into-array args)
-                                                (ldb/write-transit-str args)))
-                               (p/chain ldb/read-transit-str)))
+          wrapped-worker (fn [qkw direct-pass? & args]
+                           (p/let [result (.remoteInvoke ^js wrapped-worker*
+                                                         (str (namespace qkw) "/" (name qkw))
+                                                         direct-pass?
+                                                         (if direct-pass?
+                                                           (into-array args)
+                                                           (ldb/write-transit-str args)))]
+                             (if direct-pass?
+                               result
+                               (ldb/read-transit-str result))))
           t1 (util/time-ms)]
       (Comlink/expose #js{"remoteInvoke" thread-api/remote-function} worker)
       (worker-handler/handle-message! worker wrapped-worker)
@@ -148,13 +150,13 @@
     (-> (p/let [db-exists? (state/<invoke-db-worker :thread-api/db-exists repo)
                 disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                 _ (when disk-db-data
-                    (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo disk-db-data))
+                    (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
           (state/<invoke-db-worker :thread-api/get-initial-data repo))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
-    (-> (p/let [data (state/<invoke-db-worker :thread-api/export-db repo)]
+    (-> (p/let [data (state/<invoke-db-worker-direct-pass :thread-api/export-db repo)]
           (when data
             (if (:return-data? opts)
               data
@@ -165,7 +167,7 @@
                    (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))
 
   (<import-db [_this repo data]
-    (-> (state/<invoke-db-worker-direct-pass-args :thread-api/import-db repo data)
+    (-> (state/<invoke-db-worker-direct-pass :thread-api/import-db repo data)
         (p/catch (fn [error]
                    (prn :debug :import-db-error repo)
                    (js/console.error error)

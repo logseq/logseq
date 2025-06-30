@@ -77,14 +77,13 @@
                             (= type order-list-type)))
         prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
-    (letfn [(page-fn? [b] (some-> b :block/name some?))
-            (order-sibling-list [b]
+    (letfn [(order-sibling-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
@@ -178,8 +177,7 @@
     (util/mobile-keep-keyboard-open)
     (let [repo (state/get-current-repo)]
       (p/do!
-       (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-         (db-async/<get-block repo (:db/id block) {:children? false}))
+       (db-async/<get-block repo (:db/id block) {:children? false})
        (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
        (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
          (state/clear-edit! {:clear-editing-block? false}))
@@ -265,18 +263,30 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
-(defn indent-outdent-blocks!
-  [blocks indent? save-current-block]
-  (when (seq blocks)
-    (let [blocks (get-top-level-blocks blocks)]
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (when save-current-block (save-current-block))
-       (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks)
-                                           indent?
-                                           {:parent-original (get-first-block-original)
-                                            :logical-outdenting? (state/logical-outdenting?)})))))
+(let [*timeout (atom nil)]
+  (defn indent-outdent-blocks!
+    [blocks indent? save-current-block]
+    (when-let [timeout *timeout]
+      (js/clearTimeout timeout))
+    (when (seq blocks)
+      (let [blocks-container (when-let [first-selected-node (first (state/get-selection-blocks))]
+                               (util/rec-get-blocks-container first-selected-node))
+            blocks' (get-top-level-blocks blocks)]
+        (p/do!
+         (ui-outliner-tx/transact!
+          {:outliner-op :move-blocks
+           :real-outliner-op :indent-outdent}
+          (when save-current-block (save-current-block))
+          (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                              indent?
+                                              {:parent-original (get-first-block-original)
+                                               :logical-outdenting? (state/logical-outdenting?)}))
+         (when blocks-container
+           ;; Update selection nodes to be the new ones
+           (reset! *timeout
+                   (js/setTimeout
+                    #(state/set-selection-blocks! (dom/sel blocks-container ".ls-block.selected") :down)
+                    100))))))))
 
 (def *swipe (atom nil))
 

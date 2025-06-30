@@ -166,7 +166,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -179,7 +179,7 @@
         :block/order "a2"
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
                           :t 1        ;; not used
@@ -236,7 +236,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-not-exist] (repeatedly random-uuid)]
-    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -249,7 +249,7 @@
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
+      {:sibling? false :keep-uuid? true}))
     (testing "apply-remote-remove-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -301,7 +301,7 @@ result:
           page-name "apply-remote-remove-ops-test2"
           [page-uuid
            uuid1 uuid2 uuid3] (repeatedly random-uuid)]
-      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+      (test-helper/create-page! page-name {:redirect? false})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
@@ -391,7 +391,7 @@ result:
           [page1-uuid page2-uuid
            uuid1-client uuid2-client
            uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
+      (test-helper/create-page! page-name {:redirect? false})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
@@ -406,7 +406,7 @@ result:
           :block/left [:block/uuid uuid1-client]
           :block/parent [:block/uuid page1-uuid]}]
         (ldb/get-page @conn page-name)
-        {:sibling? true :keep-uuid? true}))
+        {:sibling? false :keep-uuid? true}))
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
                           {page2-uuid {:op :update-page

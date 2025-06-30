@@ -22,7 +22,7 @@
     :block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker
 
     :block.temp/ast-title
-    :block.temp/fully-loaded? :block.temp/ast-body
+    :block.temp/load-status :block.temp/has-children? :block.temp/ast-body
 
     :db/valueType :db/cardinality :db/ident :db/index
 
@@ -63,7 +63,7 @@
 
 (defn entity-memoized
   [db eid]
-  (if (qualified-keyword? eid)
+  (if (and (qualified-keyword? eid) (not (exists? js/process))) ; don't memoize on node
     (when-not (contains? nil-db-ident-entities eid) ;fast return nil
       (if (and @*reset-cache-background-task-running?
                (contains? immutable-db-ident-entities eid)) ;return cache entity if possible which isn't nil

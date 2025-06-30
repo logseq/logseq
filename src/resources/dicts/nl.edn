@@ -1,7 +1,6 @@
 {:all-files "Alle bestanden"
  :all-graphs "Alle grafieken"
  :all-journals "Alle Journalen"
- :all-pages "Alle pagina's"
  :bold "Vet"
  :cancel "Annuleren"
  :close "Sluiten"
@@ -97,7 +96,6 @@
  :page/copy-page-url "Kopieer pagina URL"
  :page/created-at "Aangemaakt op"
  :page/delete "Verwijder pagina"
- :page/delete-confirmation "Weet u zeker dat u deze pagina wilt verwijderen..."
  :page/make-private "Maak prive"
  :page/make-public "Maak publiek"
  :page/open-backup-directory "Open backups map pagina"
@@ -137,7 +135,6 @@
  :plugin/update-available "Update beschikbaar"
  :plugin/updating "Bijwerken"
 
- :right-side-bar/all-pages "Alle pagina's"
  :right-side-bar/block-ref "Blok verwijzingen"
  :right-side-bar/contents "Inhoud"
  :right-side-bar/graph-view "Grafiekweergave"

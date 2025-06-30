@@ -32,7 +32,9 @@
    :header views/header-cp
    :cell (fn [_table row _column]
            (when-let [asset-cp (state/get-component :block/asset-cp)]
-             [:div.block-content (asset-cp (assoc config :disable-resize? true) row)]))
+             [:div.block-content.overflow-hidden
+              {:style {:max-height 30}}
+              (asset-cp (assoc config :disable-resize? true) row)]))
    :disable-hide? true})
 
 (comment
@@ -100,12 +102,10 @@
                                                                             :target (.-target e)}]))})]))
 
 (rum/defcs class-objects < rum/reactive db-mixins/query mixins/container-id
-  [state class {:keys [current-page? sidebar?]}]
+  [state class config]
   (when class
     (let [class (db/sub-block (:db/id class))
-          config {:container-id (:container-id state)
-                  :current-page? current-page?
-                  :sidebar? sidebar?}
+          config (assoc config :container-id (:container-id state))
           properties (outliner-property/get-class-properties class)]
       [:div.ml-1
        (class-objects-inner config class properties)])))
@@ -126,7 +126,9 @@
 
 (rum/defc property-related-objects-inner < rum/static
   [config property properties]
-  (let [columns (views/build-columns config properties)]
+  (let [tags? (= :block/tags (:db/ident property))
+        columns (views/build-columns config properties
+                                     (when tags? {:add-tags-column? false}))]
     (views/view {:config config
                  :view-parent property
                  :view-feature-type :property-objects
@@ -143,12 +145,13 @@
 
 ;; Show all nodes containing the given property
 (rum/defcs property-related-objects < rum/reactive db-mixins/query mixins/container-id
-  [state property current-page?]
+  [state property config]
   (when property
     (let [property' (db/sub-block (:db/id property))
-          config {:container-id (:container-id state)
-                  :current-page? current-page?}
+          config (assoc config :container-id (:container-id state))
           ;; Show tags to help differentiate property rows
-          properties [property' (db/entity :block/tags)]]
+          properties (if (= (:db/ident property) :block/tags)
+                       [property']
+                       [property' (db/entity :block/tags)])]
       [:div.ml-1
        (property-related-objects-inner config property' properties)])))

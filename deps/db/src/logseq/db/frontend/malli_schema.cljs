@@ -40,6 +40,11 @@
                             {:error/message "should be a valid user property namespace"}
                             user-property?]])
 
+(def plugin-property-ident
+  [:and :qualified-keyword [:fn
+                            {:error/message "should be a valid plugin property namespace"}
+                            db-property/plugin-property?]])
+
 (def logseq-ident-namespaces
   "Set of all namespaces Logseq uses for :db/ident except for
   db-attribute-ident. It's important to grow this list purposefully and have it
@@ -113,7 +118,8 @@
    (set (get-in db-class/built-in-classes [:logseq.class/Asset :schema :required-properties]))
    #{:logseq.property/created-from-property :logseq.property/value
      :logseq.property.history/scalar-value :logseq.property.history/block
-     :logseq.property.history/property :logseq.property.history/ref-value}))
+     :logseq.property.history/property :logseq.property.history/ref-value
+     :logseq.property.class/extends}))
 
 (defn- property-entity->map
   "Provide the minimal number of property attributes to validate the property
@@ -217,9 +223,15 @@
    [:multi {:dispatch #(-> % first :logseq.property/type)}]
    (map (fn [[prop-type value-schema]]
           [prop-type
-           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (fn [tuple]
-                    (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
+           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)
+                 error-message (when (vector? value-schema)
+                                 (and (map? (second value-schema))
+                                      (:error/message (second value-schema))))]
+             [:fn
+              (when error-message
+                {:error/message error-message})
+              (fn [tuple]
+                (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
@@ -277,17 +289,27 @@
    (concat
     [:map
      ;; journal-day is only set for journal pages
-     [:block/journal-day {:optional true} :int]]
+     [:block/journal-day {:optional true} :int]
+     [:block/parent {:optional true} :int]
+     [:block/order {:optional true} block-order]]
     page-attrs
     page-or-block-attrs)))
 
 (def class-page
-  (vec
-   (concat
-    [:map
-     [:db/ident class-ident]]
-    page-attrs
-    page-or-block-attrs)))
+  [:or
+   (vec
+    (concat
+     [:map
+      [:db/ident class-ident]
+      [:logseq.property.class/extends [:set :int]]]
+     page-attrs
+     page-or-block-attrs))
+   (vec
+    (concat
+     [:map
+      [:db/ident [:= :logseq.class/Root]]]
+     page-attrs
+     page-or-block-attrs))])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
@@ -312,9 +334,19 @@
   (vec
    (concat
     [:map
-     ;; class-ident allows for a class to be used as a property
-     [:db/ident [:or user-property-ident class-ident]]
+     [:db/ident user-property-ident]
      [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+    property-common-schema-attrs
+    property-attrs
+    page-attrs
+    page-or-block-attrs)))
+
+(def plugin-property
+  (vec
+   (concat
+    [:map
+     [:db/ident plugin-property-ident]
+     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -322,9 +354,20 @@
 
 (def property-page
   [:multi {:dispatch (fn [m]
-                       (or (some->> (:db/ident m) db-property/logseq-property?)
-                           (contains? db-property/db-attribute-properties (:db/ident m))))}
-   [true internal-property]
+                       (let [ident (:db/ident m)]
+
+                         (cond
+                           (or (some->> ident db-property/logseq-property?)
+                               (contains? db-property/db-attribute-properties (:db/ident m)))
+                           :internal
+
+                           (some->> ident db-property/plugin-property?)
+                           :plugin
+
+                           :else
+                           :user)))}
+   [:internal internal-property]
+   [:plugin plugin-property]
    [:malli.core/default user-property]])
 
 (def hidden-page
@@ -463,8 +506,7 @@
    [:block/uuid :uuid]
    [:block/tx-id {:optional true} :int]
    [:block/created-at {:optional true} :int]
-   [:block/updated-at {:optional true} :int]
-   [:block/properties {:optional true} block-properties]])
+   [:block/updated-at {:optional true} :int]])
 
 (defn entity-dispatch-key [db ent]
   (let [d (if (:block/uuid ent) (d/entity db [:block/uuid (:block/uuid ent)]) ent)

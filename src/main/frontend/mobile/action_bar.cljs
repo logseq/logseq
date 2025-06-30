@@ -7,13 +7,14 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.db :as ldb]
             [rum.core :as rum]))
 
 (defn- action-command
@@ -41,10 +42,9 @@
   (when-let [block (state/sub :mobile/actioned-block)]
     (let [{:block/keys [uuid children]} block
           last-child-block-id (when-not (empty? children)
-                                (->> (db/get-block-children (state/get-current-repo) uuid)
-                                     (filter #(not (db/parents-collapsed? (state/get-current-repo) (:block/uuid %1)))) ;; DOM nodes of blocks the have collapsed parents have no bounding client rect
-                                     last
-                                     :block/uuid))]
+                                (->> (ldb/get-block-children-ids (db/get-db) uuid
+                                                                 {:include-collapsed-children? false})
+                                     last))]
 
       ;; scroll to the most bottom element of the selected block
       (let [tag-id (or last-child-block-id uuid)

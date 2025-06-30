@@ -4,9 +4,9 @@
   (:require [babashka.cli :as cli]
             [cljs.pprint :as pprint]
             [datascript.core :as d]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [malli.core :as m]
             [malli.error :as me]
             [nbb.core :as nbb]))

@@ -36,21 +36,21 @@
 (defonce *editor-info (atom nil))
 
 (defn- <invoke-db-worker*
-  [qkw direct-pass-args? args-list]
+  [qkw direct-pass? args-list]
   (let [worker @*db-worker]
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
-    (apply worker qkw direct-pass-args? args-list)))
+    (apply worker qkw direct-pass? args-list)))
 
 (defn <invoke-db-worker
   "invoke db-worker thread api"
   [qkw & args]
   (<invoke-db-worker* qkw false args))
 
-(defn <invoke-db-worker-direct-pass-args
+(defn <invoke-db-worker-direct-pass
   "invoke db-worker thread api.
-  But directly pass args to db-worker(won't do transit-write on them)."
+  But directly pass args to db-worker, and result from db-worker as well."
   [qkw & args]
   (<invoke-db-worker* qkw true args))
 
@@ -154,7 +154,6 @@
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
-      :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
       :editor/document-mode?                 document-mode?
@@ -210,6 +209,7 @@
       ;; assets
       :assets/alias-enabled?                 (or (storage/get :assets/alias-enabled?) false)
       :assets/alias-dirs                     (or (storage/get :assets/alias-dirs) [])
+      :assets/asset-file-write-finish        (atom {})
 
       ;; mobile
       :mobile/container-urls                 nil
@@ -416,7 +416,7 @@
                       [(>= ?d ?start)]
                       [(<= ?d ?today)]]
              :inputs [:14d :today]
-             :collapsed? false}
+             :collapsed? true}
             {:title [:span (shui/tabler-icon "Todo" {:class "align-middle pr-1"}) [:span.align-middle "TODO"]]
              :query '[:find (pull ?b [*])
                       :in $ ?start ?next
@@ -428,7 +428,7 @@
                       [(< ?d ?next)]]
              :inputs [:today :7d-after]
              :group-by-page? false
-             :collapsed? false}]}
+             :collapsed? true}]}
           :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
@@ -615,24 +615,13 @@ should be done through this fn in order to get global config and config defaults
       (get-in @state [:me :settings :start-of-week])
       6))
 
-;; TODO: support this later
-(comment
-  (defn get-ref-open-blocks-level
-    []
-    (or
-     (when-let [value (:ref/default-open-blocks-level (get-config))]
-       (when (integer? value)
-         value))
-     2)))
-
-(comment
-  (defn get-linked-references-collapsed-threshold
-    []
-    (or
-     (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
-       (when (integer? value)
-         value))
-     100)))
+(defn get-ref-open-blocks-level
+  []
+  (or
+   (when-let [value (:ref/default-open-blocks-level (get-config))]
+     (when (pos-int? value)
+       (min value 9)))
+   2))
 
 (defn get-export-bullet-indentation
   []
@@ -1083,9 +1072,9 @@ Similar to re-frame subscriptions"
   []
   (or @(get @state :selection/start-block)
       (when-let [edit-block (get-edit-block)]
-        (let [id (str "ls-block-" (:block/uuid edit-block))]
-          (set-selection-start-block! id)
-          id))))
+        (let [node (util/rec-get-node edit-block "ls-block")]
+          (set-selection-start-block! node)
+          node))))
 
 (defn get-cursor-range
   []
@@ -1473,14 +1462,6 @@ Similar to re-frame subscriptions"
       (if (= mode "light")
         (util/set-theme-light)
         (util/set-theme-dark)))))
-
-(defn set-editing-block-dom-id!
-  [block-dom-id]
-  (set-state! :editor/block-dom-id block-dom-id))
-
-(defn get-editing-block-dom-id
-  []
-  @(:editor/block-dom-id @state))
 
 (defn set-root-component!
   [component]
@@ -1940,6 +1921,12 @@ Similar to re-frame subscriptions"
 (defn get-editor-args
   []
   @(:editor/args @state))
+
+(defn get-editor-block-container
+  []
+  (some-> (get-edit-input-id)
+          (gdom/getElement)
+          (util/rec-get-node "ls-block")))
 
 (defn set-page-blocks-cp!
   [value]

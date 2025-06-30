@@ -14,11 +14,11 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
-            [nbb.core :as nbb]
-            [logseq.db.common.sqlite-cli :as sqlite-cli]))
+            [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
   (date-time-util/int->journal-title (date-time-util/date->int date) "MMM do, yyyy"))

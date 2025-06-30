@@ -19,8 +19,12 @@
                              :desc "Exclude built-in pages"}
    :set-diff {:alias :s
               :desc "Use set to reduce noisy diff caused by ordering"}
-   :include-timestamps? {:alias :t
-                         :desc "Include timestamps in export"}})
+   :include-timestamps? {:alias :T
+                         :desc "Include timestamps in export"}
+   :export-type {:alias :t
+                 :coerce :keyword
+                 :desc "Export type"
+                 :default :graph}})
 
 (defn -main [args]
   (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
@@ -31,9 +35,11 @@
             (js/process.exit 1))
         conn (apply sqlite-cli/open-db! (sqlite-cli/->open-db-args graph-dir))
         conn2 (apply sqlite-cli/open-db! (sqlite-cli/->open-db-args graph-dir2))
-        export-options (select-keys options [:include-timestamps? :exclude-namespaces :exclude-built-in-pages?])
-        export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})
-        export-map2 (sqlite-export/build-export @conn2 {:export-type :graph :graph-options export-options})
+        export-args (cond-> {:export-type (:export-type options)}
+                      (= :graph (:export-type options))
+                      (assoc :graph-options (select-keys options [:include-timestamps? :exclude-namespaces :exclude-built-in-pages?])))
+        export-map (sqlite-export/build-export @conn export-args)
+        export-map2 (sqlite-export/build-export @conn2 export-args)
         prepare-export-to-diff
         (fn [m]
           (cond->

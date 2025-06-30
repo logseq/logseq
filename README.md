@@ -72,7 +72,7 @@ The Database version (DB version) of Logseq introduces DB graphs while maintaini
 
 The DB version of Logseq is alpha software. When using DB graphs, we recommend you create a dedicated test graph and choose one project/workflow that’s not crucial for you. **Data loss is possible**, which is why we recommend [automated backups](https://github.com/logseq/docs/blob/master/db-version.md#automated-backup) or making [regular SQLite DB backups](https://github.com/logseq/docs/blob/master/db-version.md#graph-export). When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using file graphs if you are making regular backups with git.
 
-To try the latest web version, go to https://test.logseq.com/. For DB version issues, please report them to https://github.com/logseq/db-test/issues.
+To try the latest web version, go to https://test.logseq.com/. For DB version issues, please report them to https://github.com/logseq/db-test/issues. To try the latest desktop version, go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
 
 ## 🤔 Why Logseq?
 

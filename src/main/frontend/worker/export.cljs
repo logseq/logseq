@@ -1,11 +1,9 @@
 (ns frontend.worker.export
   "Export data"
-  (:require [cljs-bean.core :as bean]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.common.file.core :as common-file]
             [logseq.db :as ldb]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
 
@@ -60,20 +58,20 @@
                  (common-file/block->content repo db (:block/uuid e) {} options)])))))
 
 (defn get-debug-datoms
-  [conn ^Object db]
-  (some->> (.exec db #js {:sql "select content from kvs"
-                          :rowMode "array"})
-           bean/->clj
-           (mapcat (fn [result]
-                     (let [result (sqlite-util/transit-read (first result))]
-                       (when (map? result)
-                         (:keys result)))))
-           (map (fn [[e a v t]]
-                  (if (and (contains? #{:block/title :block/name} a)
-                           (let [entity (d/entity @conn e)]
-                             (and (not (:db/ident entity))
-                                  (not (ldb/journal? entity))
-                                  (not (:logseq.property/built-in? entity))
-                                  (not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property entity)))))))
+  [conn]
+  (some->> (d/datoms @conn :eavt)
+           (map (fn [{:keys [e a v t]}]
+                  (cond
+                    (= :url (:logseq.property/type (d/entity @conn a)))
+                    (d/datom e a "https://logseq.com" t)
+
+                    (and (contains? #{:block/title :block/name} a)
+                         (let [entity (d/entity @conn e)]
+                           (and (not (:db/ident entity))
+                                (not (ldb/journal? entity))
+                                (not (:logseq.property/built-in? entity))
+                                (not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property entity)))))))
                     (d/datom e a (str "debug " e) t)
+
+                    :else
                     (d/datom e a v t))))))

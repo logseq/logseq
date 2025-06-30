@@ -197,6 +197,16 @@
       (finally
         (reset! *rtc-lock nil)))))
 
+(def ^:private *graph-uuid->*online-users (atom {}))
+(defn- get-or-create-*online-users
+  [graph-uuid]
+  (assert (uuid? graph-uuid) graph-uuid)
+  (if-let [*online-users (get @*graph-uuid->*online-users graph-uuid)]
+    *online-users
+    (let [*online-users (atom nil)]
+      (swap! *graph-uuid->*online-users assoc graph-uuid *online-users)
+      *online-users)))
+
 (declare new-task--inject-users-info)
 (defn- create-rtc-loop
   "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
@@ -208,7 +218,7 @@
         *auto-push?                (atom auto-push?)
         *remote-profile?           (atom false)
         *last-calibrate-t          (atom nil)
-        *online-users              (atom nil)
+        *online-users              (get-or-create-*online-users graph-uuid)
         *assets-sync-loop-canceler (atom nil)
         *server-schema-version     (atom nil)
         started-dfv                (m/dfv)

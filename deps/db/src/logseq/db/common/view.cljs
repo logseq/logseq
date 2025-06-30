@@ -1,15 +1,13 @@
 (ns logseq.db.common.view
   "Main namespace for view fns."
-  (:require [cljs.reader :as reader]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.log :as log]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
-            [logseq.db.common.initial-data :as common-initial-data]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -88,14 +86,11 @@
                              (not asc?)
                              reverse)
 
-                           (not (ldb/db-based-graph? db)) ; file graph properties don't support index
-                           (sort (common-util/by-sorting
-                                  [{:get-value get-value-fn
-                                    :asc? asc?}]) entities)
-
                            :else
                            (let [ref-type? (= :db.type/ref (:db/valueType property))]
-                             (if ref-type?
+                             (if (or ref-type? (not (contains?
+                                                     #{:block/updated-at :block/created-at :block/title}
+                                                     (:db/ident property))))
                                (sort-ref-entities-by-single-property entities sorting get-value-fn)
                                (let [datoms (cond->
                                              (->> (d/datoms db :avet id)
@@ -110,6 +105,7 @@
                                     (when (row-ids (:e d))
                                       (id->row (:e d))))
                                   datoms)))))
+
                          distinct)]
     (if partition?
       (partition-by get-value-fn sorted-entities)
@@ -263,96 +259,6 @@
             result)))
       (:filters filters)))))
 
-(defn filter-blocks
-  [filters ref-blocks]
-  (let [exclude-ids (set (map :db/id (:excluded filters)))
-        include-ids (set (map :db/id (:included filters)))
-        get-ids (fn [block]
-                  (set (map :db/id (:block/path-refs block))))]
-    (cond->> ref-blocks
-      (seq exclude-ids)
-      (remove (fn [block]
-                (let [ids (get-ids block)]
-                  (seq (set/intersection exclude-ids ids)))))
-
-      (seq include-ids)
-      (filter (fn [block]
-                (let [ids (get-ids block)]
-                  (set/subset? include-ids ids)))))))
-
-(defn get-filters
-  [db page]
-  (let [db-based? (entity-plus/db-based-graph? db)]
-    (if db-based?
-      (let [included-pages (:logseq.property.linked-references/includes page)
-            excluded-pages (:logseq.property.linked-references/excludes page)]
-        (when (or (seq included-pages) (seq excluded-pages))
-          {:included included-pages
-           :excluded excluded-pages}))
-      (let [k :filters
-            properties (:block/properties page)
-            properties-str (or (get properties k) "{}")]
-        (try (let [result (reader/read-string properties-str)]
-               (when (seq result)
-                 (let [excluded-pages (->> (filter #(false? (second %)) result)
-                                           (keep first)
-                                           (keep #(ldb/get-page db %)))
-                       included-pages (->> (filter #(true? (second %)) result)
-                                           (keep first)
-                                           (keep #(ldb/get-page db %)))]
-                   {:included included-pages
-                    :excluded excluded-pages})))
-             (catch :default e
-               (log/error :syntax/filters e)))))))
-
-(defn- get-linked-references
-  [db id]
-  (let [entity (d/entity db id)
-        ids (set (cons id (ldb/get-block-alias db id)))
-        refs (mapcat (fn [id] (:block/_refs (d/entity db id))) ids)
-        page-filters (get-filters db entity)
-        full-ref-blocks (->> refs
-                             (remove (fn [block] (common-initial-data/hidden-ref? db block id)))
-                             (common-util/distinct-by :db/id))
-        ref-blocks (cond->> full-ref-blocks
-                     (seq page-filters)
-                     (filter-blocks page-filters))
-        ref-pages-count (->> full-ref-blocks
-                             (mapcat (fn [block]
-                                       (->>
-                                        (cons
-                                         (:block/title (:block/page block))
-                                         (map (fn [b]
-                                                (when (and (ldb/page? b)
-                                                           (not= (:db/id b) id)
-                                                           (not (contains? #{:block/tags} (:db/ident b))))
-                                                  (:block/title b)))
-                                              (:block/path-refs block)))
-                                        distinct)))
-                             (remove nil?)
-                             (frequencies)
-                             (sort-by second #(> %1 %2)))]
-    {:ref-pages-count ref-pages-count
-     :ref-blocks ref-blocks}))
-
-(defn- get-unlinked-references
-  [db id]
-  (let [entity (d/entity db id)
-        title (string/lower-case (:block/title entity))]
-    (when-not (string/blank? title)
-      (let [ids (->> (d/datoms db :avet :block/title)
-                     (keep (fn [d]
-                             (when (and (not= id (:e d)) (string/includes? (string/lower-case (:v d)) title))
-                               (:e d)))))]
-        (keep
-         (fn [eid]
-           (let [e (d/entity db eid)]
-             (when-not (or (some #(= id %) (map :db/id (:block/refs e)))
-                           (:block/link e)
-                           (ldb/built-in? e))
-               e)))
-         ids)))))
-
 (defn- get-exclude-page-ids
   [db]
   (->>
@@ -411,10 +317,10 @@
        (keep (fn [id] (non-hidden-e id))))
 
       :linked-references
-      (get-linked-references db view-for-id)
+      (db-reference/get-linked-references db view-for-id)
 
       :unlinked-references
-      (get-unlinked-references db view-for-id)
+      (db-reference/get-unlinked-references db view-for-id)
 
       :query-result
       nil
@@ -496,6 +402,10 @@
              values)
        values)
      (common-util/distinct-by :label))))
+
+(defn- get-query-properties
+  [entities]
+  (distinct (mapcat keys entities)))
 
 (defn ^:api ^:large-vars/cleanup-todo get-view-data
   [db view-id {:keys [journals? _view-for-id view-feature-type group-by-property-ident input query-entity-ids filters sorting]
@@ -583,4 +493,6 @@
        {:count (count filtered-entities)
         :data (distinct data')}
         (= feat-type :linked-references)
-        (assoc :ref-pages-count (:ref-pages-count entities-result))))))
+        (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
+        query?
+        (assoc :properties (get-query-properties entities-result))))))

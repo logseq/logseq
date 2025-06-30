@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.common.missionary :as c.m]
+            [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
@@ -29,6 +30,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -66,7 +68,7 @@
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users @(::online-users state)]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-1.text-sm.py-2.bg-gray-01.items-center
+      [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
                                {:on-click #(shui/dialog-open!
                                             (fn []
@@ -333,6 +335,18 @@
   (when (state/sub :ui/toggle-highlight-recent-blocks?)
     (recent-slider-inner)))
 
+(rum/defc block-breadcrumb
+  [page-name]
+  [:div.ls-block-breadcrumb
+   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                     (db/entity [:block/uuid (uuid page-name)]))]
+     (when (:block/parent page)
+       [:div.text-sm
+        (component-block/breadcrumb {}
+                                    (state/get-current-repo)
+                                    (:block/uuid page)
+                                    {:header? true})]))])
+
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
   (let [electron-mac? (and util/mac? (util/electron?))
@@ -358,7 +372,7 @@
      [:div.l.flex.items-center.drag-region
       [left-menu
        (if (mobile-util/native-platform?)
-                 ;; back button for mobile
+         ;; back button for mobile
          (when-not (or (state/home?) custom-home-page? (state/whiteboard-dashboard?))
            (ui/with-shortcut :go/backward "bottom"
              [:button.it.navigation.nav-left.button.icon.opacity-70
@@ -375,58 +389,61 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region
-      (when (and current-repo
-                 (ldb/get-graph-rtc-uuid (db/get-db))
-                 (user-handler/logged-in?)
-                 (config/db-based-graph? current-repo)
-                 (user-handler/team-member?))
-        [:<>
-         (recent-slider)
-         (rum/with-key (rtc-collaborators)
-           (str "collab-" current-repo))
-         (rtc-indicator/indicator)])
+     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
+      [:div.flex.flex-1
+       (block-breadcrumb (state/get-current-page))]
+      [:div.flex
+       (when (and current-repo
+                  (ldb/get-graph-rtc-uuid (db/get-db))
+                  (user-handler/logged-in?)
+                  (config/db-based-graph? current-repo)
+                  (user-handler/team-member?))
+         [:<>
+          (recent-slider)
+          (rum/with-key (rtc-collaborators)
+            (str "collab-" current-repo))
+          (rtc-indicator/indicator)])
 
-      (when (user-handler/logged-in?)
-        (rtc-indicator/downloading-detail))
-      (when (user-handler/logged-in?)
-        (rtc-indicator/uploading-detail))
+       (when (user-handler/logged-in?)
+         (rtc-indicator/downloading-detail))
+       (when (user-handler/logged-in?)
+         (rtc-indicator/uploading-detail))
 
-      (when (and current-repo
-                 (not (config/demo-graph? current-repo))
-                 (not (config/db-based-graph? current-repo))
-                 (user-handler/alpha-or-beta-user?))
-        (fs-sync/indicator))
+       (when (and current-repo
+                  (not (config/demo-graph? current-repo))
+                  (not (config/db-based-graph? current-repo))
+                  (user-handler/alpha-or-beta-user?))
+         (fs-sync/indicator))
 
-      (when (and (not= (state/get-current-route) :home)
-                 (not custom-home-page?))
-        (home-button))
+       (when (and (not= (state/get-current-route) :home)
+                  (not custom-home-page?))
+         (home-button))
 
-      (when config/lsp-enabled?
-        [:<>
-         (plugins/hook-ui-items :toolbar)
-         (plugins/updates-notifications)])
+       (when config/lsp-enabled?
+         [:<>
+          (plugins/hook-ui-items :toolbar)
+          (plugins/updates-notifications)])
 
-      (when (state/feature-http-server-enabled?)
-        (server/server-indicator (state/sub :electron/server)))
+       (when (state/feature-http-server-enabled?)
+         (server/server-indicator (state/sub :electron/server)))
 
-      (when (util/electron?)
-        (back-and-forward))
+       (when (util/electron?)
+         (back-and-forward))
 
-      (when-not (mobile-util/native-platform?)
-        (new-block-mode))
+       (when-not (mobile-util/native-platform?)
+         (new-block-mode))
 
-      (when config/publishing?
-        [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-         (t :graph)])
+       (when config/publishing?
+         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
+          (t :graph)])
 
-      (toolbar-dots-menu {:t            t
-                          :current-repo current-repo
-                          :default-home default-home})
+       (toolbar-dots-menu {:t            t
+                           :current-repo current-repo
+                           :default-home default-home})
 
-      (sidebar/toggle)
+       (sidebar/toggle)
 
-      (updater-tips-new-version t)]]))
+       (updater-tips-new-version t)]]]))
 
 (def ^:private header-related-flow
   (m/latest

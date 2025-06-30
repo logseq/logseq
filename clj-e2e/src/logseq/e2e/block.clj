@@ -8,10 +8,16 @@
             [wally.main :as w]))
 
 (defn open-last-block
+  "Open the last existing block or pressing add button to create a new block"
   []
   (util/double-esc)
   (assert/assert-in-normal-mode?)
-  (w/click (last (w/query ".ls-page-blocks .ls-block .block-content"))))
+  (let [blocks-count (util/page-blocks-count)
+        last-block (-> (if (zero? blocks-count)
+                         (w/query ".ls-page-blocks .block-add-button")
+                         (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
+                       (last))]
+    (w/click last-block)))
 
 (defn save-block
   [text]
@@ -27,6 +33,7 @@
     (assert/assert-editor-mode)
     (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
       (is (some? last-id))
+      (k/press "Control+e")
       (k/enter)
       (assert/assert-is-visible
        (loc/filter ".editor-wrapper"

@@ -11,6 +11,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.asset :as db-asset]
             [medley.core :as medley]
             [missionary.core :as m]
             [promesa.core :as p])
@@ -49,15 +50,6 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
-(defn- convert-platform-protocol
-  [full-path]
-
-  (cond-> full-path
-    (and (string? full-path)
-         (mobile-util/native-platform?))
-    (string/replace-first
-     #"^(file://|assets://)" common-config/capacitor-protocol-with-prefix)))
-
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -86,7 +78,7 @@
                     (if has-schema?
                       (path/path-join graph-root rpath)
                       (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
-        (convert-platform-protocol ret)))))
+        ret))))
 
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"
@@ -186,18 +178,10 @@
                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
           (when blob (js/URL.createObjectURL blob)))))))
 
-(defn- decode-digest
-  [^js/Uint8Array digest]
-  (.. (js/Array.from digest)
-      (map (fn [s] (.. s (toString 16) (padStart 2 "0"))))
-      (join "")))
-
 (defn get-file-checksum
   [^js/Blob file]
   (-> (.arrayBuffer file)
-      (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
-      (.then (fn [dig] (js/Uint8Array. dig)))
-      (.then decode-digest)))
+      (.then db-asset/<get-file-array-buffer-checksum)))
 
 (defn <get-all-assets
   []
@@ -249,7 +233,11 @@
         repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
-    (fs/write-plain-text-file! repo repo-dir file-path data {})))
+    (p/do!
+     (fs/write-plain-text-file! repo repo-dir file-path data {})
+     (state/update-state!
+      :assets/asset-file-write-finish
+      (fn [m] (assoc-in m [repo asset-block-id-str] (common-util/time-ms)))))))
 
 (defn <unlink-asset
   [repo asset-block-id asset-type]

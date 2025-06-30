@@ -28,21 +28,22 @@
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
-  (when graph
-    [:span.flex.items-center
-     (if (or (config/local-file-based-graph? url)
-             (config/db-based-graph? url))
-       (let [local-dir (config/get-local-dir url)
-             graph-name (text-util/get-graph-name-from-path url)]
-         [:a.flex.items-center {:title    local-dir
-                                :on-click #(on-click graph)}
-          [:span graph-name (when GraphName [:strong.px-1 "(" GraphName ")"])]
-          (when remote? [:strong.pr-1.flex.items-center (ui/icon "cloud")])])
+  (let [db-based? (config/db-based-graph? url)]
+    (when graph
+      [:span.flex.items-center
+       (if (or (config/local-file-based-graph? url)
+               db-based?)
+         (let [local-dir (config/get-local-dir url)
+               graph-name (text-util/get-graph-name-from-path url)]
+           [:a.flex.items-center {:title    local-dir
+                                  :on-click #(on-click graph)}
+            [:span graph-name (when (and GraphName (not db-based?)) [:strong.pl-1 "(" GraphName ")"])]
+            (when remote? [:strong.px-1.flex.items-center (ui/icon "cloud")])])
 
-       [:a.flex.items-center {:title    GraphUUID
-                              :on-click #(on-click graph)}
-        (db/get-repo-path (or url GraphName))
-        (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])]))
+         [:a.flex.items-center {:title    GraphUUID
+                                :on-click #(on-click graph)}
+          (db/get-repo-path (or url GraphName))
+          (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])])))
 
 (defn sort-repos-with-metadata-local
   [repos]
@@ -66,10 +67,10 @@
   [repos]
   (for [{:keys [root url remote? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}
         (sort-repos-with-metadata-local repos)
-        :let [only-cloud? (and remote? (nil? root))
-              db-based? (config/db-based-graph? url)]]
+        :let [db-based? (config/db-based-graph? url)
+              graph-name (if db-based? (config/db-graph-name url) GraphName)]]
     [:div.flex.justify-between.mb-4.items-center.group {:key (or url GraphUUID)
-                                                        :data-testid url}
+                                                        "data-testid" url}
      [:div
       [:span.flex.items-center.gap-1
        (normalized-graph-label repo
@@ -85,7 +86,7 @@
                                      :else
                                      (state/pub-event! [:graph/pull-down-remote-graph repo])))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
-        [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
+        [:small.text-muted-foreground (str "Last opened at: " time)])]
 
      [:div.controls
       [:div.flex.flex-row.items-center
@@ -95,57 +96,56 @@
           (shui/tabler-icon "folder-pin") [:span.pl-1 root]])
 
        (let [db-graph? (config/db-based-graph? url)
-             manager? (and db-graph? (user-handler/manager? url))
-             title (cond
-                     only-cloud?
-                     "Deletes this remote graph. Note this can't be recovered."
-
-                     db-based?
-                     "Unsafe delete this DB-based graph. Note this can't be recovered."
-
-                     :else
-                     "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-         (when-not (and db-graph? only-cloud? (not manager?))
-           [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
-            {:title title
+             manager? (and db-graph? (user-handler/manager? url))]
+         (shui/dropdown-menu
+          (shui/dropdown-menu-trigger
+           {:asChild true}
+           (shui/button
+            {:variant "ghost"
+             :class "graph-action-btn !px-1"
+             :size :sm}
+            (ui/icon "dots" {:size 15})))
+          (shui/dropdown-menu-content
+           {:align "end"}
+           (shui/dropdown-menu-item
+            {:key "delete-locally"
+             :class "delete-local-graph-menu-item"
              :on-click (fn []
-                         (let [has-prompt? true
-                               prompt-str (cond only-cloud?
-                                                (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
-                                                db-based?
-                                                (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
-                                                :else
-                                                (str "Are you sure to unlink the graph \"" url "\" from local folder?"))
-                               unlink-or-remote-fn! (fn []
-                                                      (repo-handler/remove-repo! repo)
-                                                      (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
-                               action-confirm-fn! (if only-cloud?
-                                                    (fn []
-                                                      (when (or manager? (not db-graph?))
-                                                        (let [<delete-graph (if db-graph?
-                                                                              rtc-handler/<rtc-delete-graph!
-                                                                              (fn [graph-uuid _graph-schema-version]
-                                                                                (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
-                                                          (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                          (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
-                                                                 (state/delete-repo! repo)
-                                                                 (state/delete-remote-graph! repo)
-                                                                 (state/set-state! [:file-sync/remote-graphs :loading] false)))))
-                                                    unlink-or-remote-fn!)
-                               confirm-fn!
-                               (fn []
-                                 (-> (shui/dialog-confirm!
-                                      [:p.font-medium.-my-4 prompt-str
-                                       [:span.mt-1.flex.font-normal.opacity-70
-                                        (if (or db-based? only-cloud?)
-                                          [:small.text-red-rx-11 "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                          [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
-                                     (p/then #(action-confirm-fn!))))]
-
-                           (if has-prompt?
-                             (confirm-fn!)
-                             (unlink-or-remote-fn!))))}
-            (if only-cloud? "Remove (server)" "Unlink (local)")]))]]]))
+                         (let [prompt-str (if db-based?
+                                            (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from Logseq?")
+                                            (str "Are you sure you want to unlink the graph \"" url "\" from local folder?"))]
+                           (-> (shui/dialog-confirm!
+                                [:p.font-medium.-my-4 prompt-str
+                                 [:span.my-2.flex.font-normal.opacity-75
+                                  (if db-based?
+                                    [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                    [:small "⚠️ It won't remove your local files!"])]])
+                               (p/then (fn []
+                                         (repo-handler/remove-repo! repo)
+                                         (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
+            "Delete local graph")
+           (when (and remote? (or (and db-based? manager?) (not db-based?)))
+             (shui/dropdown-menu-item
+              {:key "delete-remotely"
+               :class "delete-remote-graph-menu-item"
+               :on-click (fn []
+                           (let [prompt-str (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from our server?")]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str
+                                   [:span.my-2.flex.font-normal.opacity-75
+                                    [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
+                                 (p/then
+                                  (fn []
+                                    (when (or manager? (not db-graph?))
+                                      (let [<delete-graph (if db-graph?
+                                                            rtc-handler/<rtc-delete-graph!
+                                                            (fn [graph-uuid _graph-schema-version]
+                                                              (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
+                                        (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                        (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
+                                               (state/delete-remote-graph! repo)
+                                               (state/set-state! [:file-sync/remote-graphs :loading] false)))))))))}
+              "Delete from server")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
   []

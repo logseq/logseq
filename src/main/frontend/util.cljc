@@ -354,6 +354,9 @@
                           (gobj/get range "endContainer")
                           (gobj/get range "endOffset"))
                  (let [contents (.cloneContents pre-caret-range)
+                       ;; Remove all `.select-none` nodes
+                       _  (doseq [el (.querySelectorAll contents ".select-none")]
+                            (.remove el))
                        html (some-> (first (.-childNodes contents))
                                     (gobj/get "innerHTML")
                                     str)
@@ -365,7 +368,7 @@
                                        (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
                                        ;; multiple lines with a new line
                                        (string/ends-with? html "<br></div></div></span></div></div></div>")))
-                       value (.toString pre-caret-range)]
+                       value (.-textContent contents)]
                    (if br-ended?
                      (str value "\n")
                      value)))))
@@ -736,11 +739,9 @@
 
 #?(:cljs
    (defn get-nodes-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)
              start (min idx-1 idx-2)
              end (inc (max idx-1 idx-2))]
@@ -748,11 +749,9 @@
 
 #?(:cljs
    (defn get-direction-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)]
          (if (>= idx-1 idx-2)
            :up
@@ -818,7 +817,7 @@
                              (pr-str
                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
+                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))

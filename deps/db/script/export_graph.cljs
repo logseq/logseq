@@ -19,7 +19,7 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
-   :include-timestamps? {:alias :t
+   :include-timestamps? {:alias :T
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "Saves edn to file"}
@@ -31,7 +31,11 @@
    :exclude-built-in-pages? {:alias :b
                              :desc "Exclude built-in pages"}
    :exclude-files? {:alias :F
-                    :desc "Exclude :file/path files"}})
+                    :desc "Exclude :file/path files"}
+   :export-type {:alias :t
+                 :coerce :keyword
+                 :desc "Export type"
+                 :default :graph}})
 
 (defn -main [args]
   (let [{options :opts args' :args} (cli/parse-args args {:spec spec})
@@ -41,8 +45,10 @@
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
         conn (apply sqlite-cli/open-db! (sqlite-cli/->open-db-args graph-dir))
-        export-options (dissoc options :file)
-        export-map (sqlite-export/build-export @conn {:export-type :graph :graph-options export-options})]
+        export-map (sqlite-export/build-export @conn
+                                               (cond-> {:export-type (:export-type options)}
+                                                 (= :graph (:export-type options))
+                                                 (assoc :graph-options (dissoc options :file :export-type))))]
     (if (:file options)
       (do
         (println "Exported" (count (:properties export-map)) "properties,"

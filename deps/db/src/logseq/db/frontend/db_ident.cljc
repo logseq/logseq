@@ -63,25 +63,29 @@
 
    NOTE: Only use this when creating a db-ident for a new class/property. Using
    this in read-only contexts like querying can result in db-ident conflicts"
-  [user-namespace name-string]
-  {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string)]}
-  (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
-          "New ident is not allowed to use an internal namespace")
-  (if #?(:org.babashka/nbb true
-         :cljs (and (exists? js/process) (or js/process.env.REPEATABLE_IDENTS js/process.env.DB_GRAPH))
-         :default false)
-    ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
-    (keyword user-namespace
-             (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
-                  ;; '-' must go last in char class
-                  (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
-                  (apply str)))
-    (keyword user-namespace
-             (str
-              (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
-                   ;; '-' must go last in char class
-                   (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
-                   (apply str))
-              "-"
-              (rand-nth non-int-char-range)
-              (nano-id 7)))))
+  ([user-namespace name-string]
+   (create-db-ident-from-name user-namespace name-string true))
+  ([user-namespace name-string random-suffix?]
+   {:pre [(or (keyword? user-namespace) (string? user-namespace)) (string? name-string) (boolean? random-suffix?)]}
+   (assert (not (re-find #"^(logseq|block)(\.|$)" (name user-namespace)))
+     "New ident is not allowed to use an internal namespace")
+   (if #?(:org.babashka/nbb true
+          :cljs             (or (false? random-suffix?)
+                              (and (exists? js/process)
+                                (or js/process.env.REPEATABLE_IDENTS js/process.env.DB_GRAPH)))
+          :default          false)
+     ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
+     (keyword user-namespace
+       (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
+         ;; '-' must go last in char class
+         (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
+         (apply str)))
+     (keyword user-namespace
+       (str
+         (->> (string/replace-first name-string #"^(\d)" "NUM-$1")
+           ;; '-' must go last in char class
+           (filter #(re-find #"[0-9a-zA-Z*+!_'?<>=-]{1}" %))
+           (apply str))
+         "-"
+         (rand-nth non-int-char-range)
+         (nano-id 7))))))

@@ -8,6 +8,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
@@ -27,6 +28,30 @@
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
 
+(defonce ^:private built-in-class-property->properties
+  (->>
+   (mapcat
+    (fn [[class-ident {:keys [properties]}]]
+      (map
+       (fn [property] [class-ident property])
+       (cons :block/tags (keys properties))))
+    db-class/built-in-classes)
+   (concat
+    (mapcat
+     (fn [[property-ident {:keys [properties]}]]
+       (map
+        (fn [property] [property-ident property])
+        (cons :block/tags (keys properties))))
+     db-property/built-in-properties))
+   set))
+
+(defn- throw-error-if-protected-property
+  [entity-idents property-ident]
+  (when (some #(built-in-class-property->properties [% property-ident]) entity-idents)
+    (throw (ex-info "Protected property shouldn't deleted"
+                    {:entity-idents entity-idents
+                     :property property-ident}))))
+
 (defn- build-property-value-tx-data
   [conn block property-id value]
   (when (some? value)
@@ -36,17 +61,25 @@
           retract-multiple-values? (and multiple-values? (sequential? value))
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
+          extends? (= property-id :logseq.property.class/extends)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id value)
                             (and (contains? #{:logseq.property/status :logseq.property/scheduled :logseq.property/deadline} property-id)
-                                 (or (empty? (:block/tags block)) (ldb/internal-page? block)))
-                            (assoc :block/tags :logseq.class/Task))]
+                                 (or (empty? (:block/tags block)) (ldb/internal-page? block))
+                                 (not (get (d/pull @conn [property-id] (:db/id block)) property-id)))
+                            (assoc :block/tags :logseq.class/Task)
+                            (= :logseq.property/template-applied-to property-id)
+                            (assoc :block/tags :logseq.class/Template))]
       (cond-> []
         multiple-values-empty?
         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
+        extends?
+        (concat
+         (let [extends (ldb/get-class-extends (d/entity @conn value))]
+           (map (fn [extend] [:db/retract (:db/id block) property-id (:db/id extend)]) extends)))
         true
         (conj update-block-tx)))))
 
@@ -108,7 +141,8 @@
   (when (and (some? property-name) (not= property-name (:block/title property)))
     (outliner-validate/validate-page-title property-name {:node property})
     (outliner-validate/validate-page-title-characters property-name {:node property})
-    (outliner-validate/validate-block-title @conn property-name property))
+    (outliner-validate/validate-block-title @conn property-name property)
+    (outliner-validate/validate-property-title property-name))
 
   (let [changed-property-attrs
         ;; Only update property if something has changed as we are updating a timestamp
@@ -270,6 +304,7 @@
   (let [block-eids (map ->eid block-ids)
         blocks (keep (fn [id] (d/entity @conn id)) block-eids)
         block-id-set (set (map :db/id blocks))]
+    (throw-error-if-protected-property (map :db/ident blocks) property-id)
     (when (seq blocks)
       (when-let [property (d/entity @conn property-id)]
         (let [txs (mapcat
@@ -310,8 +345,9 @@
            _ (when (= property-id :block/tags)
                (outliner-validate/validate-tags-property @conn block-eids v))
            property (d/entity @conn property-id)
-           _ (when (= (:db/ident property) :logseq.property/parent)
-               (outliner-validate/validate-parent-property
+           _ (when (= (:db/ident property) :logseq.property.class/extends)
+               (outliner-validate/validate-extends-property
+                @conn
                 (if (number? v) (d/entity @conn v) v)
                 (map #(d/entity @conn %) block-eids)))
            _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -345,6 +381,7 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
+    (throw-error-if-protected-property [(:db/ident block)] property-id)
     (cond
       (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
       nil
@@ -355,9 +392,10 @@
                        property-id :logseq.property/empty-placeholder}]
                      {:outliner-op :save-block})
 
-      (and (ldb/class? block) (= property-id :logseq.property/parent))
+      (and (ldb/class? block) (= property-id :logseq.property.class/extends))
       (ldb/transact! conn
-                     [[:db/add (:db/id block) :logseq.property/parent :logseq.class/Root]]
+                     [[:db/retract (:db/id block) :logseq.property.class/extends]
+                      [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
                      {:outliner-op :save-block})
 
       (contains? db-property/db-attribute-properties property-id)
@@ -383,13 +421,17 @@
           db-attribute? (some? (db-schema/schema property-id))]
       (when (= property-id :block/tags)
         (outliner-validate/validate-tags-property @conn [block-eid] v))
-      (when (= property-id :logseq.property/parent)
-        (outliner-validate/validate-parent-property v [block]))
+      (when (= property-id :logseq.property.class/extends)
+        (outliner-validate/validate-extends-property @conn v [block]))
       (cond
         db-attribute?
         (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
-          (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
-                         {:outliner-op :save-block}))
+          (let [tx-data (cond->
+                         [{:db/id (:db/id block) property-id v}]
+                          (= property-id :logseq.property.class/extends)
+                          (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+            (ldb/transact! conn tx-data
+                           {:outliner-op :save-block})))
         :else
         (let [property (d/entity @conn property-id)
               _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -407,7 +449,7 @@
   "Updates property if property-id is given. Otherwise creates a property
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name] :as opts}]
+  [conn property-id schema {:keys [property-name properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
                      (try (db-property/create-user-property-ident-from-name property-name)
@@ -426,9 +468,18 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
         (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (ldb/transact! conn
-                       [(sqlite-util/build-new-property db-ident' schema {:title k-name})]
-                       {:outliner-op :new-property})
+        (let [db-id (:db/id properties)
+              opts (cond-> {:title k-name
+                            :properties properties}
+                     (integer? db-id)
+                     (assoc :block-uuid (:block/uuid (d/entity db db-id))))]
+          (ldb/transact! conn
+                         (concat
+                          [(sqlite-util/build-new-property db-ident' schema opts)]
+                          ;; Convert page to property
+                          (when db-id
+                            [[:db/retract db-id :block/tags :logseq.class/Page]]))
+                         {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
 (defn delete-property-value!
@@ -644,13 +695,14 @@
 
 (defn class-add-property!
   [conn class-id property-id]
-  (when-let [class (d/entity @conn class-id)]
-    (if (ldb/class? class)
-      (ldb/transact! conn
-                     [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
-                     {:outliner-op :save-block})
-      (throw (ex-info "Can't add a property to a block that isn't a class"
-                      {:class-id class-id :property-id property-id})))))
+  (when-not (contains? #{:logseq.property/empty-placeholder} property-id)
+    (when-let [class (d/entity @conn class-id)]
+      (if (ldb/class? class)
+        (ldb/transact! conn
+                       [[:db/add (:db/id class) :logseq.property.class/properties property-id]]
+                       {:outliner-op :save-block})
+        (throw (ex-info "Can't add a property to a block that isn't a class"
+                        {:class-id class-id :property-id property-id}))))))
 
 (defn class-remove-property!
   [conn class-id property-id]

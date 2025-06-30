@@ -11,7 +11,7 @@
                             :color2 {:logseq.property/type :default}}})]
 
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           (:block/title (d/entity @conn :logseq.property/background-color))
           (d/entity @conn :user.property/color)))
@@ -19,12 +19,34 @@
 
     (is (thrown-with-msg?
          js/Error
-         #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         #"Duplicate property"
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "color"
           (d/entity @conn :user.property/color2)))
         "Disallow duplicate user property")))
+
+(deftest validate-block-title-unique-for-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:Class1 {}
+                         :Class2 {:logseq.property.class/extends :logseq.class/Task}}})]
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate class"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "Class1"
+          (d/entity @conn :user.class/Class2)))
+        "Disallow duplicate class names, regardless of extends")
+    (is (thrown-with-msg?
+         js/Error
+         #"Duplicate class"
+         (outliner-validate/validate-unique-by-name-and-tags
+          @conn
+          "Card"
+          (d/entity @conn :user.class/Class1)))
+        "Disallow duplicate class names even if it's built-in")))
 
 (deftest validate-block-title-unique-for-pages
   (let [conn (db-test/create-conn-with-blocks
@@ -37,13 +59,13 @@
     (is (thrown-with-msg?
          js/Error
          #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Another Company")))
         "Disallow duplicate page with tag")
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Banana")))
@@ -52,20 +74,20 @@
     (is (thrown-with-msg?
          js/Error
          #"Duplicate page"
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "page1"
           (db-test/find-page-by-title @conn "another page")))
         "Disallow duplicate page without tag")
 
     (is (nil?
-         (outliner-validate/validate-unique-by-name-tag-and-block-type
+         (outliner-validate/validate-unique-by-name-and-tags
           @conn
           "Apple"
           (db-test/find-page-by-title @conn "Fruit")))
         "Allow class to have same name as a page")))
 
-(deftest validate-parent-property
+(deftest validate-extends-property
   (let [conn (db-test/create-conn-with-blocks
               {:properties {:prop1 {:logseq.property/type :default}}
                :classes {:Class1 {} :Class2 {}}
@@ -73,35 +95,33 @@
                [{:page {:block/title "page1"}}
                 {:page {:block/title "page2"}}]})
         page1 (db-test/find-page-by-title @conn "page1")
-        page2 (db-test/find-page-by-title @conn "page2")
         class1 (db-test/find-page-by-title @conn "Class1")
         class2 (db-test/find-page-by-title @conn "Class2")
-        property (db-test/find-page-by-title @conn "prop1")]
+        property (db-test/find-page-by-title @conn "prop1")
+        db @conn]
 
     (testing "valid parent and child combinations"
-      (is (nil? (outliner-validate/validate-parent-property page1 [page2]))
-          "parent page to child page is valid")
-      (is (nil? (outliner-validate/validate-parent-property class1 [class2]))
+      (is (nil? (outliner-validate/validate-extends-property db class1 [class2]))
           "parent class to child class is valid"))
 
     (testing "invalid parent and child combinations"
       (are [parent child]
            (thrown-with-msg?
             js/Error
-            #"Can't set"
-            (outliner-validate/validate-parent-property parent [child]))
+            #"Can't extend"
+            (outliner-validate/validate-extends-property db parent [child]))
 
         class1 page1
         page1 class1
-        property page1
         property class1))
 
     (testing "built-in tag can't have parent changed"
       (is (thrown-with-msg?
            js/Error
            #"Can't change.*built-in"
-           (outliner-validate/validate-parent-property (entity-plus/entity-memoized @conn :logseq.class/Task)
-                                                       [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
+           (outliner-validate/validate-extends-property db
+                                                        (entity-plus/entity-memoized @conn :logseq.class/Task)
+                                                        [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
   (let [conn (db-test/create-conn-with-blocks
@@ -155,7 +175,7 @@
             page-errors (atom {})]
         (doseq [page pages]
           (try
-            (outliner-validate/validate-unique-by-name-tag-and-block-type @conn (:block/title page) page)
+            (outliner-validate/validate-unique-by-name-and-tags @conn (:block/title page) page)
             (outliner-validate/validate-page-title (:block/title page) {:node page})
             (outliner-validate/validate-page-title-characters (:block/title page) {:node page})
 
@@ -168,9 +188,9 @@
 
     (testing "Validate property relationships"
       (let [parent-child-pairs (d/q '[:find ?parent ?child
-                                      :where [?child :logseq.property/parent ?parent]] @conn)]
+                                      :where [?child :logseq.property.class/extends ?parent]] @conn)]
         (doseq [[parent-id child-id] parent-child-pairs]
           (let [parent (d/entity @conn parent-id)
                 child (d/entity @conn child-id)]
-            (is (nil? (#'outliner-validate/validate-parent-property-have-same-type parent [child]))
+            (is (nil? (#'outliner-validate/validate-extends-property-have-correct-type parent [child]))
                 (str "Parent and child page is valid: " (pr-str (:block/title parent)) " " (pr-str (:block/title child))))))))))

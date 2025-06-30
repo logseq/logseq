@@ -26,6 +26,7 @@
             [frontend.util.fs :as util-fs]
             [frontend.util.text :as text-util]
             [logseq.common.config :as common-config]
+            [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
 ;; Project settings should be checked in two situations:
@@ -136,10 +137,18 @@
                                       local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
-    (let [repos' (group-by :GraphUUID repos')
+    (let [app-major-schema-version (str (:major (db-schema/parse-schema-version db-schema/version)))
+          repos' (group-by :GraphUUID repos')
           repos'' (mapcat (fn [[k vs]]
-                            (if-not (nil? k)
-                              [(merge (first vs) (second vs))] vs))
+                            (if (some? k)
+                              (let [remote-repos (filter :remote? vs)
+                                    version-matched-remote-repo
+                                    (first
+                                     (filter
+                                      #(= app-major-schema-version (:GraphSchemaVersion %))
+                                      remote-repos))]
+                                [(merge (first vs) (second vs) version-matched-remote-repo)])
+                              vs))
                           repos')]
       (sort-by (fn [repo]
                  (let [graph-name (or (:GraphName repo)
@@ -216,3 +225,11 @@
 (defn fix-broken-graph!
   [graph]
   (state/<invoke-db-worker :thread-api/fix-broken-graph graph))
+
+(defn gc-graph!
+  [graph]
+  (p/do!
+   (state/<invoke-db-worker :thread-api/gc-graph graph)
+   (state/pub-event! [:notification/show
+                      {:content "Graph gc successfully!"
+                       :status :success}])))

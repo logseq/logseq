@@ -1,7 +1,6 @@
 {:all-files "Alle Dateien"
  :all-graphs "Alle Graphen"
  :all-journals "Alle Journale"
- :all-pages "Alle Seiten"
  :all-whiteboards "Alle Whiteboards"
  :auto-heading "Automatische Überschrift"
  :bold "Fett"
@@ -235,7 +234,6 @@
  :page/copy-page-url "Seiten-URL kopieren"
  :page/created-at "Erstellt am"
  :page/delete "Seite löschen"
- :page/delete-confirmation "Diese Seite und die zugehörige Datei löschen?"
  :page/illegal-page-name "Seitenname nicht zulässig!"
  :page/logseq-is-having-a-problem "Logseq hat ein Problem festgestellt. Versuche zurückzukehren ..."
  :page/make-private "Privat machen"
@@ -310,7 +308,6 @@
 
  :query/config-property-settings "Einstellungen für diese Query:"
 
- :right-side-bar/all-pages "Alle Seiten"
  :right-side-bar/block-ref "Blockreferenz"
  :right-side-bar/contents "Inhalt"
  :right-side-bar/flashcards "Karteikarten"

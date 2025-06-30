@@ -14,6 +14,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as react]
             [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
@@ -83,6 +84,7 @@
 
 (defn- graph-switch
   [graph]
+  (react/clear-query-state!)
   (let [db-based? (config/db-based-graph? graph)]
     (state/set-current-repo! graph)
     (page-handler/init-commands!)
@@ -393,6 +395,10 @@
   (state/set-state! :rtc/log data))
 
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
+  (assert (= (:major (db-schema/parse-schema-version db-schema/version))
+             (:major (db-schema/parse-schema-version graph-schema-version)))
+          {:app db-schema/version
+           :remote-graph graph-schema-version})
   (->
    (p/do!
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000))
@@ -422,8 +428,7 @@
     ;; load all nested children here for copy/export
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
-                                       {:nested-children? true
-                                        :skip-refresh? false})) ids))))
+                                       {:skip-refresh? false})) ids))))
 
 (defn run!
   []
@@ -438,6 +443,7 @@
          (p/then (fn [result]
                    (p/resolve! d result)))
          (p/catch (fn [error]
+                    (log/error :event-error error :event (first payload))
                     (let [type :handle-system-events/failed]
                       (state/pub-event! [:capture-error {:error error
                                                          :payload {:type type

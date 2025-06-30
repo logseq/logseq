@@ -111,7 +111,7 @@
  :right-side-bar/page-graph "Page graph"
  :right-side-bar/block-ref "Block references"
  :right-side-bar/graph-view "Graph view"
- :right-side-bar/all-pages "All pages"
+ :right-side-bar/all-pages "Pages"
  :right-side-bar/whiteboards "Whiteboards"
  :right-side-bar/flashcards "Flashcards"
  :right-side-bar/show-journals "Show Journals"
@@ -137,7 +137,7 @@
  :page/logseq-is-having-a-problem "Logseq is having a problem. To try to get it back to a working state, please try the following safe steps in order:"
  :page/step "Step {1}"
  :page/try "Try"
- :page/delete-confirmation "Are you sure you want to delete this page and its file?"
+ :page/delete-confirmation "Are you sure you want to delete this page?"
  :page/db-delete-confirmation "Are you sure you want to delete this page?"
  :page/open-in-finder "Open in directory"
  :page/open-with-default-app "Open with default app"
@@ -176,6 +176,7 @@
  :asset/copy "Copy image"
  :asset/maximize "Maximize image"
  :asset/ref-block "Asset ref block"
+ :asset/edit-block "Edit block"
  :asset/confirm-delete "Are you sure you want to delete this {1}?"
  :asset/physical-delete "Remove the file too (notice it can't be restored)"
  :color/gray "Gray"
@@ -455,7 +456,7 @@
  :export-copied-to-clipboard "Copied to clipboard!"
  :export-save-to-file "Save to file"
  :all-graphs "All graphs"
- :all-pages "All pages"
+ :all-pages "Pages"
   ;; E.g. 1 Page or 2 Pages
  :all-pages/table-title (fn [total] (str total (if (= total 1) " Page" " Pages")))
  :all-pages/failed-to-delete-pages "These pages had their content deleted but were unable to be deleted: {1}. See javascript console for more details."
@@ -788,6 +789,7 @@
   :dev/replace-graph-with-db-file "(Dev) Replace graph with its db.sqlite file"
   :dev/validate-db "(Dev) Validate current graph"
   :dev/fix-broken-graph "Fix current broken graph"
+  :dev/gc-graph "(Dev) Garbage collect graph (remove unused data in SQLite)"
   :dev/rtc-stop "(Dev) RTC Stop"
   :dev/rtc-start "(Dev) RTC Start"
   :window/close "Close window"}}

@@ -6,8 +6,8 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.db-ident :as db-ident]))
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 ;; Main property vars
 ;; ==================
@@ -148,13 +148,6 @@
                                           :hide? true
                                           :view-context :block}
                                  :queryable? true}
-     :logseq.property/parent {:title "Parent"
-                              :schema {:type :node
-                                       :public? true
-                                       :view-context :page}
-                              :queryable? true
-                              :properties
-                              {:logseq.property/description "Provides parent-child relationships between nodes. For tags this enables inheritance and for pages this enables namespaces."}}
      :logseq.property/default-value {:title "Default value"
                                      :schema {:type :entity
                                               :public? false
@@ -165,6 +158,14 @@
                                                      :public? false
                                                      :hide? true
                                                      :view-context :property}}
+     :logseq.property.class/extends {:title "Extends"
+                                     :schema {:type :class
+                                              :cardinality :many
+                                              :public? true
+                                              :view-context :class}
+                                     :queryable? true
+                                     :properties
+                                     {:logseq.property/description "This enables tags to inherit properties from other tags"}}
      :logseq.property.class/properties {:title "Tag Properties"
                                         :schema {:type :property
                                                  :cardinality :many
@@ -622,10 +623,10 @@
   [s]
   (string/includes? s ".property"))
 
-(defn user-class-namespace?
-  "Determines if namespace string is a user class"
-  [s]
-  (string/includes? s ".class"))
+(defn plugin-property?
+  "Determines if keyword is a plugin property"
+  [kw]
+  (string/starts-with? (namespace kw) "plugin.property."))
 
 (defn internal-property?
   "Determines if ident kw is an internal property. This includes db-attribute properties
@@ -643,7 +644,6 @@
     (and k-name
          (or (contains? logseq-property-namespaces k-name)
              (user-property-namespace? k-name)
-             (user-class-namespace? k-name)
              ;; disallow private db-attribute-properties as they cause unwanted refs
              ;; and appear noisily in debugging contexts
              (and (keyword? k) (contains? public-db-attribute-properties k))))))
@@ -667,8 +667,9 @@
 
 (defn get-closed-property-values
   [db property-id]
-  (when-let [property (d/entity db property-id)]
-    (:property/closed-values property)))
+  (when db
+    (when-let [property (d/entity db property-id)]
+      (:property/closed-values property))))
 
 (defn closed-value-content
   "Gets content/value of a given closed value ent/map. Works for all closed value types"

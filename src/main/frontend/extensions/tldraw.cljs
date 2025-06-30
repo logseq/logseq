@@ -14,7 +14,6 @@
             [frontend.db.model :as model]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.assets :as assets-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.editor :as file-editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.notification :as notification]
@@ -54,8 +53,7 @@
   (block/breadcrumb {:preview? true}
                     (state/get-current-repo)
                     (uuid (gobj/get props "blockId"))
-                    {:end-separator? (gobj/get props "endSeparator")
-                     :level-limit (gobj/get props "levelLimit" 3)}))
+                    {:end-separator? (gobj/get props "endSeparator")})) -
 
 (rum/defc tweet
   [props]
@@ -142,8 +140,6 @@
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
-   :insertFirstPageBlock (fn [page-name]
-                           (editor-handler/insert-first-page-block-if-not-exists! page-name))
    :addNewPage (fn [page-name]
                  (p/let [result (page-handler/<create! page-name {:redirect? false})]
                    (str (:block/uuid result))))

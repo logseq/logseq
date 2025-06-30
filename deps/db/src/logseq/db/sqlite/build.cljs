@@ -66,7 +66,8 @@
 (defn- get-ident [all-idents kw]
   (if (and (qualified-keyword? kw)
            ;; Loosen checks to any property or class for build-existing-tx?
-           (db-property/property? kw))
+           (or (db-property/property? kw)
+               (db-class/user-class-namespace? (namespace kw))))
     kw
     (or (get all-idents kw)
         (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
@@ -246,6 +247,18 @@
                                    properties'))]
     new-properties-tx))
 
+(defn- build-class-extends [{:build/keys [class-parent class-extends]} class-db-ids]
+  (when-let [class-extends' (if class-parent
+                              (do (println "Warning: :build/class-parent is deprecated and will be removed soon.")
+                                  [class-parent])
+                              class-extends)]
+    (mapv (fn [c]
+            (or (class-db-ids c)
+                (if (db-malli-schema/class? c)
+                  c
+                  (throw (ex-info (str "No :db/id for " c) {})))))
+          class-extends')))
+
 (defn- build-classes-tx [classes properties-config uuid-maps all-idents {:keys [build-existing-tx?] :as options}]
   (let [classes' (if build-existing-tx?
                    (->> classes
@@ -257,7 +270,7 @@
                           (into {}))
         classes-tx (vec
                     (mapcat
-                     (fn [[class-name {:build/keys [class-parent class-properties] :as class-m}]]
+                     (fn [[class-name {:build/keys [class-properties] :as class-m}]]
                        (let [db-ident (get-ident all-idents class-name)
                              new-block
                              (sqlite-util/build-new-class
@@ -276,16 +289,12 @@
                            (conj
                             (merge
                              new-block
-                             (dissoc class-m :build/properties :build/class-parent :build/class-properties :build/keep-uuid?)
+                             (dissoc class-m :build/properties :build/class-extends :build/class-parent :build/class-properties :build/keep-uuid?)
                              (when-let [props (not-empty (:build/properties class-m))]
                                (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                                    uuid-maps all-idents options))
-                             (when class-parent
-                               {:logseq.property/parent
-                                (or (class-db-ids class-parent)
-                                    (if (db-malli-schema/class? class-parent)
-                                      class-parent
-                                      (throw (ex-info (str "No :db/id for " class-parent) {}))))})
+                             (when-let [class-extends (build-class-extends class-m class-db-ids)]
+                               {:logseq.property.class/extends class-extends})
                              (when class-properties
                                {:logseq.property.class/properties
                                 (mapv #(hash-map :db/ident (get-ident all-idents %))
@@ -342,7 +351,7 @@
    Class
    [:map
     [:build/properties {:optional true} User-properties]
-    [:build/class-parent {:optional true} Class]
+    [:build/class-extends {:optional true} [:vector Class]]
     [:build/class-properties {:optional true} [:vector Property]]
     [:build/keep-uuid? {:optional true} :boolean]]])
 
@@ -392,27 +401,42 @@
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
-  [properties classes {:keys [graph-namespace build-existing-tx?]}]
-  (let [property-idents (->> (keys properties)
-                             (map #(vector %
-                                           (if graph-namespace
-                                             (db-ident/create-db-ident-from-name (str (name graph-namespace) ".property")
-                                                                                 (name %))
-                                             (db-property/create-user-property-ident-from-name (name %)))))
+  [properties classes {:keys [graph-namespace]}]
+  (let [create-property-ident (if graph-namespace
+                                (fn create-property-ident [kw]
+                                  (db-ident/create-db-ident-from-name (str (name graph-namespace) ".property")
+                                                                      (name kw)))
+                                (fn create-property-ident [kw]
+                                  (if (qualified-keyword? kw)
+                                    (do
+                                      (assert (db-property/user-property-namespace? (namespace kw))
+                                              "Property ident must have valid namespace")
+                                      (db-ident/create-db-ident-from-name (namespace kw) (name kw)))
+                                    (db-property/create-user-property-ident-from-name (name kw)))))
+        property-idents (->> (keys properties)
+                             (map #(vector % (create-property-ident %)))
                              (into {}))
-        _ (assert (= (count (set (vals property-idents))) (count properties)) "All property db-idents must be unique")
+        _ (assert (= (count (set (vals property-idents))) (count properties))
+                  (str "All property db-idents must be unique but the following are duplicates: "
+                       (->> property-idents vals frequencies (keep (fn [[k v]] (when (> v 1) k))))))
+        create-class-ident (if graph-namespace
+                             (fn create-class-ident [kw]
+                               (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
+                                                                   (name kw)))
+                             (fn create-class-ident [kw]
+                               (if (qualified-keyword? kw)
+                                 (do
+                                   (assert (db-class/user-class-namespace? (namespace kw))
+                                           "Class ident must have valid namespace")
+                                   (db-ident/create-db-ident-from-name (namespace kw) (name kw)))
+                                 (db-class/create-user-class-ident-from-name nil (name kw)))))
         class-idents (->> (keys classes)
-                          (map #(vector %
-                                        (if graph-namespace
-                                          (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
-                                                                              (name %))
-                                          (db-class/create-user-class-ident-from-name (name %)))))
+                          (map #(vector % (create-class-ident %)))
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]
-    (when-not build-existing-tx?
-      (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
-              "Class and property db-idents are unique and do not overlap"))
+    (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
+            "Class and property db-idents are unique and do not overlap")
     all-idents))
 
 (defn- build-page-tx [page all-idents page-uuids properties options]
@@ -772,7 +796,7 @@
      and the values are maps of datascript attributes e.g. `{:block/title \"Foo\"}`.
      Additional keys available:
      * :build/properties - Define properties on a class page
-     * :build/class-parent - Add a class parent by its keyword name
+     * :build/class-extends - Vec of class name keywords which extend a class.
      * :build/class-properties - Vec of property name keywords. Defines properties that a class gives to its objects
      * :build/keep-uuid? - Keeps :block/uuid because another block depends on it
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology

@@ -313,15 +313,6 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (ldb/get-children db block-uuid)))
 
-(defn get-block-children
-  "Including nested children."
-  [repo block-uuid]
-  (when-let [db (conn/get-db repo)]
-    (let [ids (ldb/get-block-children-ids db block-uuid)]
-      (when (seq ids)
-        (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-          (db-utils/pull-many repo '[*] ids'))))))
-
 (defn get-block-and-children
   [repo block-uuid & {:as opts}]
   (let [db (conn/get-db repo)]
@@ -336,20 +327,6 @@ independent of format as format specific heading characters are stripped"
   [page-name-or-uuid]
   (when page-name-or-uuid
     (ldb/get-case-page (conn/get-db) page-name-or-uuid)))
-
-(defn get-journal-page
-  [page-title]
-  (when-let [journal-day (date/journal-title->int page-title)]
-    (when-let [db (conn/get-db)]
-      (->
-       (d/q
-        '[:find [?page ...]
-          :in $ ?day
-          :where
-          [?page :block/journal-day ?day]]
-        db
-        journal-day)
-       first))))
 
 (defn get-redirect-page-name
   "Given any readable page-name, return the exact page-name in db. If page
@@ -543,10 +520,10 @@ independent of format as format specific heading characters are stripped"
           view-context (get m :logseq.property/view-context :all)]
       (or (contains? #{:logseq.property/query} (:db/ident m))
           (and (not block-page?) (contains? #{:block/alias} (:db/ident m)))
-        ;; Filters out properties from being in wrong :view-context and :never view-contexts
+          ;; Filters out properties from being in wrong :view-context and :never view-contexts
           (and (not= view-context :all) (not (contains? block-types view-context)))
-          (and (ldb/built-in? block) (contains? #{:logseq.property/parent} (:db/ident m)))
-        ;; Filters out adding buggy class properties e.g. Alias and Parent
+          (and (ldb/built-in? block) (contains? #{:logseq.property.class/extends} (:db/ident m)))
+          ;; Filters out adding buggy class properties e.g. Alias and Parent
           (and class-schema? (ldb/public-built-in-property? m) (:logseq.property/view-context m))))))
 
 (defn get-all-properties
@@ -591,7 +568,7 @@ independent of format as format specific heading characters are stripped"
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
     (->>
-     (if (first (:logseq.property/_parent class))        ; has children classes
+     (if (first (:logseq.property.class/_extends class))        ; has children classes
        (let [all-classes (conj (->> (get-structured-children repo class-id)
                                     (map #(db-utils/entity repo %)))
                                class)]

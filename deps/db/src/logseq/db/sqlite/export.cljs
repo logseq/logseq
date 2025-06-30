@@ -7,16 +7,16 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]
-            [medley.core :as medley]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [medley.core :as medley]))
 
 ;; Export fns
 ;; ==========
@@ -165,8 +165,6 @@
       (->> properties-config-by-ent
            (map (fn [[ent build-property]]
                   (let [ent-properties (apply dissoc (db-property/properties ent)
-                                              ;; For overlapping class properties, these would be built in :classes
-                                              :logseq.property/parent :logseq.property.class/properties
                                               (into db-property/schema-properties db-property/public-db-attribute-properties))]
                     [(:db/ident ent)
                      (cond-> build-property
@@ -191,10 +189,10 @@
     (assoc :block/alias (set (map #(vector :block/uuid (:block/uuid %)) (:block/alias class-ent))))
     ;; It's caller's responsibility to ensure parent is included in final export
     (and (not shallow-copy?)
-         (:logseq.property/parent class-ent)
-         (not= :logseq.class/Root (:db/ident (:logseq.property/parent class-ent))))
-    (assoc :build/class-parent
-           (:db/ident (:logseq.property/parent class-ent)))))
+         (:logseq.property.class/extends class-ent)
+         (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
+    (assoc :build/class-extends
+           (mapv :db/ident (:logseq.property.class/extends class-ent)))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
@@ -343,7 +341,7 @@
 
 (defn- build-class-parents-export [db classes-config]
   (let [class-parent-ents (->> classes-config
-                               (filter #(:build/class-parent (val %)))
+                               (filter #(:build/class-extends (val %)))
                                (map #(d/entity db (key %)))
                                db-db/get-classes-parents)
         classes
@@ -449,7 +447,9 @@
     (merge {::block (:node node-export)}
            block-export)))
 
-(defn- build-page-blocks-export [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
+(defn- build-page-blocks-export
+  "If :include-alias? option is set, the caller fn is responsible for defining alias pages"
+  [db page-entity {:keys [properties classes blocks ontology-page? include-alias?] :as options}]
   (let [options' (cond-> (dissoc options :classes :blocks :graph-ontology)
                    (:exclude-ontology? options)
                    (assoc :properties (get-in options [:graph-ontology :properties])))
@@ -495,10 +495,15 @@
   (let [page-blocks* (get-page-blocks db eid)
         {:keys [content-ref-ents] :as content-ref-export} (build-content-ref-export db page-blocks*)
         {:keys [pvalue-uuids] :as page-export*}
-        (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)})
+        (build-page-export* db eid page-blocks* {:include-uuid-fn (:content-ref-uuids content-ref-export)
+                                                 :include-alias? true})
         page-entity (d/entity db eid)
         uuid-block-export (build-uuid-block-export db pvalue-uuids content-ref-ents {:page-entity page-entity})
-        page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export)]
+        alias-export (when (:block/alias page-entity)
+                       {:pages-and-blocks (mapv #(hash-map :page (merge (shallow-copy-page %)
+                                                                        {:block/uuid (:block/uuid %) :build/keep-uuid? true}))
+                                                (:block/alias page-entity))})
+        page-export (finalize-export-maps db page-export* uuid-block-export content-ref-export alias-export)]
     page-export))
 
 (defn- build-nodes-export
@@ -527,8 +532,9 @@
 
 (defn- build-view-nodes-export
   "Exports given nodes from a view. Nodes are a random mix of blocks and pages"
-  [db eids]
-  (let [nodes (map #(d/entity db %) eids)
+  [db rows {:keys [group-by?]}]
+  (let [eids (if group-by? (mapcat second rows) rows)
+        nodes (map #(d/entity db %) eids)
         property-value-ents (mapcat #(->> (apply dissoc (db-property/properties %) db-property/public-db-attribute-properties)
                                           vals
                                           (filter de/entity?))
@@ -588,13 +594,13 @@
         classes
         (->> class-ents
              (map (fn [ent]
-                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property/parent db-property/public-db-attribute-properties)]
+                    (let [ent-properties (apply dissoc (db-property/properties ent) :logseq.property.class/extends db-property/public-db-attribute-properties)]
                       (vector (:db/ident ent)
                               (cond-> (build-export-class ent options)
                                 (seq ent-properties)
                                 (assoc :build/properties
                                        (-> (buildable-properties db ent-properties properties options)
-                                           (dissoc :logseq.property/classes :logseq.property.class/properties))))))))
+                                           (dissoc :logseq.property.class/properties))))))))
              (into {}))]
     (cond-> {}
       (seq properties)
@@ -775,7 +781,7 @@
     ;; (prn :rproperties referenced-properties)
     undefined))
 
-(defn- find-undefined-uuids [{:keys [classes properties pages-and-blocks]}]
+(defn- find-undefined-uuids [db {:keys [classes properties pages-and-blocks]}]
   (let [pvalue-known-uuids (atom #{})
         _ (walk/postwalk (fn [f]
                            (if (and (map? f) (:build/property-value f) (:block/uuid f))
@@ -800,6 +806,11 @@
                      (mapcat get-pvalue-uuids (vals properties))
                      (mapcat (comp get-pvalue-uuids :page) pages-and-blocks)
                      (mapcat #(sqlite-build/extract-from-blocks (:blocks %) get-pvalue-uuids) pages-and-blocks))
+             (remove (fn [id]
+                       (let [eid (when id [:block/uuid id])]
+                         (some->> eid
+                                  (d/entity db)
+                                  :logseq.property/created-from-property))))
              set)]
     (set/difference ref-uuids known-uuids)))
 
@@ -836,10 +847,10 @@
   "Checks that export map is usable by sqlite.build including checking that
    all referenced properties and classes are defined. Checks related to properties and
    classes are disabled when :exclude-namespaces is set because those checks can't be done"
-  [export-map* {:keys [graph-options]}]
+  [db export-map* {:keys [graph-options]}]
   (let [export-map (remove-namespaced-keys export-map*)]
     (when-not (seq (:exclude-namespaces graph-options)) (sqlite-build/validate-options export-map))
-    (let [undefined-uuids (find-undefined-uuids export-map)
+    (let [undefined-uuids (find-undefined-uuids db export-map)
           undefined (cond-> {}
                       (empty? (:exclude-namespaces graph-options))
                       (merge (find-undefined-classes-and-properties export-map))
@@ -859,7 +870,7 @@
           :page
           (build-page-export db (:page-id options))
           :view-nodes
-          (build-view-nodes-export db (:node-ids options))
+          (build-view-nodes-export db (:rows options) (select-keys options [:group-by?]))
           :selected-nodes
           (build-selected-nodes-export db (:node-ids options))
           :graph-ontology
@@ -869,10 +880,10 @@
         export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try
-        (ensure-export-is-valid export-map options)
+        (ensure-export-is-valid db export-map options)
         (catch ExceptionInfo e
           (println "Caught error:" e)))
-      (ensure-export-is-valid export-map options))
+      (ensure-export-is-valid db export-map options))
     (assoc export-map ::export-type export-type)))
 
 ;; Import fns

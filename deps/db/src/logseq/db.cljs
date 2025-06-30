@@ -7,6 +7,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
@@ -18,10 +19,17 @@
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
+
+(def built-in? entity-util/built-in?)
+(def built-in-class-property? db-db/built-in-class-property?)
+(def private-built-in-page? db-db/private-built-in-page?)
+
+(def write-transit-str sqlite-util/write-transit-str)
+(def read-transit-str sqlite-util/read-transit-str)
+(def build-favorite-tx db-db/build-favorite-tx)
 
 (defonce *transact-fn (atom nil))
 (defn register-transact-fn!
@@ -33,15 +41,23 @@
   (let [remove-block-temp-f (fn [m]
                               (->> (remove (fn [[k _v]] (= "block.temp" (namespace k))) m)
                                    (into {})))]
-    (map (fn [m]
-           (if (map? m)
-             (cond->
-              (remove-block-temp-f m)
-               (and (seq (:block/refs m))
-                    (every? map? (:block/refs m)))
-               (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
-             m))
-         tx-data)))
+    (keep (fn [data]
+            (cond
+              (map? data)
+              (cond->
+               (remove-block-temp-f data)
+                (and (seq (:block/refs data))
+                     (every? map? (:block/refs data)))
+                (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+              (and (vector? data)
+                   (contains? #{:db/add :db/retract} (first data))
+                   (> (count data) 2)
+                   (keyword? (nth data 2))
+                   (= "block.temp" (namespace (nth data 2))))
+              nil
+              :else
+              data))
+          tx-data)))
 
 (defn assert-no-entities
   [tx-data]
@@ -64,9 +80,12 @@
      (assert-no-entities tx-data))
    (let [tx-data (map (fn [m]
                         (if (map? m)
-                          (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block/level :block/container :db/other-tx
-                                  :block/unordered)
+                          (cond->
+                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                   :block/level :block/container :db/other-tx
+                                   :block/unordered)
+                            (not @*transact-fn)
+                            (dissoc :block.temp/load-status))
                           m)) tx-data)
          tx-data (->> (remove-temp-block-data tx-data)
                       (common-util/fast-remove-nils)
@@ -243,6 +262,17 @@
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
+(defn get-built-in-page
+  [db title]
+  (when db
+    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
+      (d/entity db [:block/uuid id]))))
+
+(defn library?
+  [page]
+  (and (built-in? page)
+       (= common-config/library-page-name (:block/title page))))
+
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
   [db page-name-or-uuid]
@@ -350,7 +380,7 @@
         parents'))))
 
 (def get-block-children-ids common-initial-data/get-block-children-ids)
-(def get-block-children common-initial-data/get-block-children)
+(def get-block-full-children-ids common-initial-data/get-block-full-children-ids)
 
 (defn- get-sorted-page-block-ids
   [db page-id]
@@ -422,18 +452,7 @@
       ;; only return the first result for idiot-proof
     (first (:block/_alias (d/entity db alias-id)))))
 
-(defn get-block-alias
-  [db eid]
-  (->>
-   (d/q
-    '[:find [?e ...]
-      :in $ ?eid %
-      :where
-      (alias ?eid ?e)]
-    db
-    eid
-    (:alias rules/rules))
-   distinct))
+(def get-block-alias common-initial-data/get-block-alias)
 
 (defn page-alias-set
   [db page-id]
@@ -482,14 +501,6 @@
              (when-not (hidden-or-internal-tag? e)
                e))))))
 
-(def built-in? entity-util/built-in?)
-(def built-in-class-property? db-db/built-in-class-property?)
-(def private-built-in-page? db-db/private-built-in-page?)
-
-(def write-transit-str sqlite-util/write-transit-str)
-(def read-transit-str sqlite-util/read-transit-str)
-(def build-favorite-tx db-db/build-favorite-tx)
-
 (defn get-key-value
   [db key-ident]
   (:kv/value (d/entity db key-ident)))
@@ -511,7 +522,7 @@
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
 (def get-all-properties db-db/get-all-properties)
-(def get-page-parents db-db/get-page-parents)
+(def get-class-extends db-class/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
 (def get-title-with-parents db-db/get-title-with-parents)
 (def class-instance? db-db/class-instance?)
