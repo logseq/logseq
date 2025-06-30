@@ -100,7 +100,7 @@
 
 (defn toggle-property
   [property-title property-value]
-  (k/press "ControlOrMeta+p")
+  (k/press (if util/mac? "ControlOrMeta+p" "Control+Alt+p"))
   (w/fill ".ls-property-dialog .ls-property-input input" property-title)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-title))
   (k/enter)
