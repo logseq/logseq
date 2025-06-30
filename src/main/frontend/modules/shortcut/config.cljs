@@ -290,6 +290,8 @@
 
    :editor/move-block-down                  {:binding (if mac? "mod+shift+down" "alt+shift+down")
                                              :fn      (editor-handler/move-up-down false)}
+   :editor/move-blocks                      {:binding "mod+shift+m"
+                                             :fn      editor-handler/move-selected-blocks}
 
    :editor/open-edit                        {:binding "enter"
                                              :fn      (fn [e]
@@ -791,6 +793,7 @@
           :editor/select-down
           :editor/move-block-up
           :editor/move-block-down
+          :editor/move-blocks
           :editor/open-edit
           :editor/open-selected-blocks-in-sidebar
           :editor/select-block-up
@@ -966,6 +969,7 @@
      :editor/open-link-in-sidebar
      :editor/move-block-up
      :editor/move-block-down
+     :editor/move-blocks
      :editor/escape-editing]
 
     :shortcut.category/block-command-editing
