@@ -30,6 +30,7 @@
     (b/select-blocks 3)
     (b/toggle-property "Tags" "Page")
     (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (w/wait-for (format "#ac-0.menu-link:has-text('%s')" "Page"))
     (k/enter)
     (w/wait-for-not-visible ".ls-page-blocks .ls-block .ls-icon-file")))
 
