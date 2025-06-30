@@ -74,6 +74,7 @@
     (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
     (k/esc)
     (k/press "ControlOrMeta+Shift+m")
+    (w/click "input[placeholder=\"Move blocks to\"]")
     (util/input "Library")
     (w/wait-for (w/get-by-test-id "Library"))
     (k/enter)

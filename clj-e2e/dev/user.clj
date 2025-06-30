@@ -81,15 +81,15 @@
 
 (defn run-all-basic-test
   []
-  (run-tests 'logseq.e2e.commands-basic-test
+  (run-tests 'logseq.e2e.editor-basic-test
+             'logseq.e2e.commands-basic-test
              'logseq.e2e.multi-tabs-basic-test
              'logseq.e2e.outliner-basic-test
              'logseq.e2e.rtc-basic-test
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.property-basic-test
-             'logseq.e2e.tag-basic-test
-             'run-editor-basic-test))
+             'logseq.e2e.tag-basic-test))
 
 (defn start
   []
