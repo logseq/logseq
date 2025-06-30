@@ -33,7 +33,7 @@
     (k/enter)
     (w/wait-for-not-visible ".ls-page-blocks .ls-block .ls-icon-file")))
 
-(deftest diallow-adding-page-tag-to-normal-pages
+(deftest disallow-adding-page-tag-to-normal-pages
   (testing "Disallow adding #Page to normal pages"
     (k/arrow-up)
     (util/move-cursor-to-end)
