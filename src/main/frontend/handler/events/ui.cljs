@@ -227,6 +227,7 @@
                         (some-> (state/get-edit-input-id)
                                 (gdom/getElement))
                         (first (state/get-selection-blocks)))]
+        (state/pub-event! [:editor/hide-action-bar])
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
