@@ -68,6 +68,7 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -1273,6 +1274,10 @@
   [id]
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
+
+(defn dialog-exists?
+  [id]
+  (shui-dialog/get-modal id))
 
 (defn show-action-bar!
   [& {:keys [delay]

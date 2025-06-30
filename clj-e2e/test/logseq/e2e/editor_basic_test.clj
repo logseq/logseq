@@ -5,6 +5,7 @@
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
    [wally.main :as w]
    [wally.repl :as repl]))
@@ -39,3 +40,42 @@
     (util/press-seq " #" {:delay 20})
     (util/press-seq "Page")
     (assert/assert-is-hidden (format "#ac-0.menu-link:has-text('%s')" "Page"))))
+
+(deftest move-blocks-mod+shift+m
+  (testing "move blocks using `mod+shift+m`"
+    (p/new-page "Target page")
+    (p/new-page "Source page")
+    (b/new-blocks ["b1" "b2" "b3"])
+    (b/select-blocks 3)
+    (k/press "ControlOrMeta+Shift+m")
+    (util/input "Target page")
+    (w/wait-for (w/get-by-test-id "Target page"))
+    (k/enter)
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+
+(deftest move-blocks-cmdk
+  (testing "move blocks using cmdk"
+    (p/new-page "Target page 2")
+    (p/new-page "Source page 2")
+    (b/new-blocks ["b1" "b2" "b3"])
+    (b/select-blocks 3)
+    (util/search-and-click "Move blocks to")
+    (w/click "input[placeholder=\"Move blocks to\"]")
+    (util/input "Target page 2")
+    (w/wait-for (.first (w/get-by-test-id "Target page 2")))
+    (k/enter)
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
+
+(deftest move-pages-to-library
+  (testing "move pages using `mod+shift+m`"
+    (b/new-blocks ["b1" "b2" "b3"])
+    (b/select-blocks 3)
+    (b/toggle-property "Tags" "Page")
+    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
+    (k/esc)
+    (k/press "ControlOrMeta+Shift+m")
+    (util/input "Library")
+    (w/wait-for (w/get-by-test-id "Library"))
+    (k/enter)
+    (p/goto-page "Library")
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 3)))

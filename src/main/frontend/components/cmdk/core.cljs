@@ -558,14 +558,19 @@
 (defmethod handle-action :trigger [_ state _event]
   (let [highlighted-item (some-> state state->highlighted-item)
         command (:source-command highlighted-item)
-        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data}
+        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data :editor/move-blocks}
+        search-args (:search/args @state/state)
         action (or (:action command)
-                   (when-let [trigger (:trigger (:search/args @state/state))]
-                     #(trigger highlighted-item)))]
+                   (when-let [trigger (:trigger search-args)]
+                     #(trigger highlighted-item)))
+        input-ref @(::input-ref state)]
     (when action
+      (when input-ref
+        (set! (.-value input-ref) "")
+        (.focus input-ref))
+      (action)
       (when-not (contains? dont-close-commands (:id command))
-        (shui/dialog-close! :ls-dialog-cmdk))
-      (util/schedule #(action) 32))))
+        (shui/dialog-close! :ls-dialog-cmdk)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
@@ -706,11 +711,13 @@
                              ;; for some reason, the highlight effect does not always trigger on a
                              ;; boolean value change so manually pass in the dep
                             :on-highlight-dep highlighted-item
-                            :on-click (fn [e]
-                                        (reset! (::highlighted-item state) item)
-                                        (handle-action :default state item)
-                                        (when-let [on-click (:on-click item)]
-                                          (on-click e)))
+                            :on-click
+                            (fn [e]
+                              (util/stop-propagation e)
+                              (reset! (::highlighted-item state) item)
+                              (handle-action :default state item)
+                              (when-let [on-click (:on-click item)]
+                                (on-click e)))
                              ;; :on-mouse-enter (fn [e]
                              ;;                   (when (not highlighted?)
                              ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
@@ -1017,8 +1024,10 @@
        (shortcut/listen-all!))
      state)}
   {:init (fn [state]
-           (let [search-mode (:search/mode @state/state)
+           (let [search-mode (or (:search/mode @state/state) :global)
                  opts (last (:rum/args state))]
+             (when (nil? search-mode)
+               (state/set-state! :search/mode :global))
              (assoc state
                     ::ref (atom nil)
                     ::filter (if (and search-mode
@@ -1049,8 +1058,10 @@
   (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
-        search-mode (:search/mode @state/state)
-        group-filter (:group (rum/react (::filter state)))
+        search-mode (state/sub :search/mode)
+        group-filter (or (when (and (not (contains? #{:global :graph} search-mode)) (not (:sidebar? opts)))
+                           search-mode)
+                         (:group (rum/react (::filter state))))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
@@ -1089,7 +1100,8 @@
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"}
+  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"
+         :data-keep-selection true}
    (cmdk props)])
 
 (rum/defc cmdk-block [props]

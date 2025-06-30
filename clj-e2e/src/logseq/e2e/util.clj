@@ -74,7 +74,8 @@
   (when (w/visible? "div[data-radix-popper-content-wrapper]")
     (k/esc))
   (exit-edit)
-  (k/esc))
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc)))
 
 (defn search
   [text]
