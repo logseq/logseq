@@ -95,6 +95,7 @@
 
       ;; ui
       :ui/viewport                           {}
+      :ui/show-property-dialog?              (atom false)
 
       ;; left sidebar
       :ui/navigation-item-collapsed?         {}

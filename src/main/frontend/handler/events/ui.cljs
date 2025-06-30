@@ -227,16 +227,13 @@
                         (some-> (state/get-edit-input-id)
                                 (gdom/getElement))
                         (first (state/get-selection-blocks)))]
-        (p/do!
-         (state/pub-event! [:editor/hide-action-bar])
-         (if target'
-           (shui/popup-show! target'
-                             #(property-dialog/dialog blocks opts')
-                             {:align "start"
-                              :auto-focus? true})
-           (shui/dialog-open! #(property-dialog/dialog blocks opts')
-                              {:id :property-dialog
-                               :align "start"})))))))
+        (if target'
+          (shui/popup-show! target'
+                            #(property-dialog/dialog blocks opts')
+                            {:align "start"})
+          (shui/dialog-open! #(property-dialog/dialog blocks opts')
+                             {:id :property-dialog
+                              :align "start"}))))))
 
 (defmethod events/handle :editor/new-property [[_ {:keys [block target] :as opts}]]
   (when-not config/publishing?

@@ -104,7 +104,7 @@
   (w/fill ".ls-property-dialog .ls-property-input input" property-title)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-title))
   (k/enter)
-  (.focus (w/-query ".ls-property-dialog .ls-property-input input"))
+  (w/click (w/-query ".ls-property-dialog .ls-property-input input"))
   (util/input property-value)
   (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-value))
   (k/enter))

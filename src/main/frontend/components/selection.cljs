@@ -12,7 +12,8 @@
 (rum/defc action-bar < rum/reactive
   [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
-  (when-not (state/sub :search/mode)
+  (when-not (or (state/sub :search/mode)
+                (state/sub :ui/show-property-dialog?))
     (let [selected-blocks (map (fn [block] (if (number? block) (db/entity block) block)) selected-blocks)
           on-copy (if (and selected-blocks (nil? on-copy))
                     #(editor-handler/copy-selection-blocks true {:selected-blocks selected-blocks})
