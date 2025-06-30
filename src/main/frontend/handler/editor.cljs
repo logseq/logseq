@@ -3380,13 +3380,15 @@
   (let [selected-blocks (state/get-selection-blocks)
         f (case direction :left first :right last)
         node (some-> selected-blocks f)]
-    (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
-      (util/stop e)
-      (let [block {:block/uuid block-id}
-            left? (= direction :left)
-            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
-                  :event e}]
-        (edit-block! block (if left? 0 :max) opts)))))
+    (if (some-> node (dom/has-class? "block-add-button"))
+      (.click node)
+      (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
+        (util/stop e)
+        (let [block {:block/uuid block-id}
+              left? (= direction :left)
+              opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
+                    :event e}]
+          (edit-block! block (if left? 0 :max) opts))))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
