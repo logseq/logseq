@@ -4,7 +4,8 @@
             [logseq.e2e.assert :as assert]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]))
+            [wally.main :as w]
+            [wally.repl :as repl]))
 
 (defn- refresh-all-remote-graphs
   []
@@ -56,8 +57,8 @@
 (defn validate-graph
   []
   (util/search-and-click "(Dev) Validate current graph")
-  (assert/assert-is-visible (loc/and ".notifications div" (w/get-by-text "Your graph is valid")))
-  (let [content (.textContent (loc/and ".notifications div" (w/get-by-text "Your graph is valid")))
+  (assert/assert-is-visible (loc/and ".notifications div.notification-success div" (w/get-by-text "Your graph is valid")))
+  (let [content (.textContent (loc/and ".notifications div.notification-success div" (w/get-by-text "Your graph is valid")))
         summary (edn/read-string (subs content (string/index-of content "{")))]
-    (w/click ".notifications .ls-icon-x")
+    (w/click ".notifications div.notification-success .ls-icon-x")
     summary))

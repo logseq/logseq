@@ -97,3 +97,17 @@
 (defn outdent
   []
   (indent-outdent false))
+
+(defn toggle-property
+  [property-title property-value]
+  (k/press "ControlOrMeta+p")
+  (w/fill ".ls-property-dialog .ls-property-input input" property-title)
+  (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-title))
+  (k/enter)
+  (util/input property-value)
+  (w/wait-for (format "#ac-0.menu-link:has-text('%s')" property-value))
+  (k/enter))
+
+(defn select-blocks
+  [n]
+  (util/repeat-keyboard n "Shift+ArrowUp"))

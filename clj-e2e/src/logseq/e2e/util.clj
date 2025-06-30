@@ -62,10 +62,18 @@
     (.pressSequentially input-node text
                         (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
+(defn exit-edit
+  []
+  (when (get-editor)
+    (k/esc))
+  (assert/assert-non-editor-mode))
+
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (k/esc)
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc))
+  (exit-edit)
   (k/esc))
 
 (defn search
@@ -103,11 +111,6 @@
 (defn page-blocks-count
   []
   (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
-
-(defn exit-edit
-  []
-  (k/esc)
-  (assert/assert-non-editor-mode))
 
 (defn get-text
   [locator]
@@ -160,11 +163,13 @@
 
 (defn move-cursor-to-end
   []
-  (k/press "ControlOrMeta+a" "ArrowRight"))
+  (k/press ["ControlOrMeta+a" "ArrowRight"]
+           {:delay 20}))
 
 (defn move-cursor-to-start
   []
-  (k/press "ControlOrMeta+a" "ArrowLeft"))
+  (k/press ["ControlOrMeta+a" "ArrowLeft"]
+           {:delay 20}))
 
 (defn input-command
   [command]
@@ -178,15 +183,18 @@
   (w/click "a.menu-link.chosen"))
 
 (defn set-tag
-  [tag]
+  "`hidden?`: some tags may be hidden from the UI, e.g. Page"
+  [tag & {:keys [hidden?]
+          :or {hidden? false}}]
   (press-seq " #" {:delay 20})
   (press-seq tag)
   (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
-  ;; wait tag added on ui
-  (assert/assert-is-visible
-   (-> ".ls-block:not(.block-add-button)"
-       (loc/filter :has ".editor-wrapper textarea")
-       (loc/filter :has (format ".block-tag :text('%s')" tag)))))
+  (when-not hidden?
+    ;; wait tag added on ui
+    (assert/assert-is-visible
+     (-> ".ls-block:not(.block-add-button)"
+         (loc/filter :has ".editor-wrapper textarea")
+         (loc/filter :has (format ".block-tag :text('%s')" tag))))))
 
 (defn -query-last
   [q]

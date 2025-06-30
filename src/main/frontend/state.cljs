@@ -1237,6 +1237,7 @@ Similar to re-frame subscriptions"
 
 (defn clear-selection!
   []
+  (js/console.trace)
   (dom-clear-selection!)
   (state-clear-selection!))
 
