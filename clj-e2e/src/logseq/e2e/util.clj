@@ -135,7 +135,7 @@
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (k/press shortcut)))
+    (k/press shortcut {:delay 20})))
 
 (defn get-page-blocks-contents
   []
