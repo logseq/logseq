@@ -79,11 +79,14 @@
 
 (defn search
   [text]
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click :#search-button)
-  (w/wait-for ".cp__cmdk-search-input")
-  (w/fill ".cp__cmdk-search-input" text))
+  (if (w/visible? ".cp__cmdk-search-input")
+    (w/fill ".cp__cmdk-search-input" text)
+    (do
+      (double-esc)
+      (assert/assert-in-normal-mode?)
+      (w/click :#search-button)
+      (w/wait-for ".cp__cmdk-search-input")
+      (w/fill ".cp__cmdk-search-input" text))))
 
 (defn search-and-click
   [search-text]

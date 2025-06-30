@@ -5,7 +5,8 @@
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
    [logseq.e2e.util :as util]
-   [wally.main :as w]))
+   [wally.main :as w]
+   [wally.repl :as repl]))
 
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each
@@ -81,6 +82,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
+    (util/wait-editor-visible)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
