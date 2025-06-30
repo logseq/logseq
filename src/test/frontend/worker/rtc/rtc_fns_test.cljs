@@ -333,7 +333,7 @@ result:
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)))]
           (is (= [uuid3 uuid1] (map :block/uuid (sort-by :block/order page-blocks)))))))))
 
-(deftest ^:focus apply-remote-update&remove-page-ops-test
+(deftest apply-remote-update&remove-page-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [page1-uuid ;; page2-uuid page3-uuid page4-uuid
