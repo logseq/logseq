@@ -2552,7 +2552,8 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected {:up-down? true
                                    :exclude-property? true})]
-    (when (and sibling-block (dom/attr sibling-block "blockid"))
+    (when (and sibling-block
+               (or (dom/attr sibling-block "blockid") (dom/attr sibling-block "parentblockid")))
       (util/scroll-to-block sibling-block)
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
