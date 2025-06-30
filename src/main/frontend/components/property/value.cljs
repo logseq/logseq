@@ -695,10 +695,13 @@
                   excluded-options)
 
                 (contains? #{:class :property} property-type)
-                (let [classes (model/get-all-classes
-                               repo
-                               {:except-root-class? true
-                                :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})]
+                (let [classes (cond->
+                               (model/get-all-classes
+                                repo
+                                {:except-root-class? true
+                                 :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                                (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
+                                (conj (db/entity :logseq.class/Page)))]
                   (if (= property-type :class)
                     classes
                     (property-handler/get-class-property-choices)))
@@ -768,7 +771,8 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                                  (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
@@ -785,13 +789,12 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or extends-property?
-                                                         ;; Don't allow creating private tags
-                                                         (and (= :block/tags (:db/ident property))
-                                                              (seq (set/intersection (set (map :db/ident classes'))
-                                                                                     ldb/private-tags))))
-                                                   false
-                                                   true)
+                 :show-new-when-not-exact-match? (not
+                                                  (or (and extends-property? (contains? (set children-pages) (:db/id block)))
+                                                      ;; Don't allow creating private tags
+                                                      (and (= :block/tags (:db/ident property))
+                                                           (seq (set/intersection (set (map :db/ident classes'))
+                                                                                  ldb/private-tags)))))
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
@@ -821,6 +824,10 @@
                                          :label (:block/title e)}))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
+
+                (= :block/tags (:db/ident property))
+                (assoc :exact-match-exclude-items
+                       (set (map (fn [ident] (:block/title (db/entity ident))) ldb/private-tags)))
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc

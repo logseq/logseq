@@ -151,7 +151,6 @@
      (remove #{eid})
      (map (fn [id] (d/entity db id))))))
 
-
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."

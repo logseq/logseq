@@ -40,6 +40,10 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(defn- get-action
+  []
+  (:action (:search/args @state/state)))
+
 (defn translate [t {:keys [id desc]}]
   (when id
     (let [desc-i18n (t (shortcut-utils/decorate-namespace id))]
@@ -197,8 +201,10 @@
                (first))))
 
 (defn state->action [state]
-  (let [highlighted-item (state->highlighted-item state)]
-    (cond (:source-page highlighted-item) :open
+  (let [highlighted-item (state->highlighted-item state)
+        action (get-action)]
+    (cond (and (:source-page highlighted-item) (= action :move-blocks)) :trigger
+          (:source-page highlighted-item) :open
           (:source-block highlighted-item) :open
           (:file-path highlighted-item) :open
           (:source-search highlighted-item) :search
@@ -327,7 +333,9 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts {:limit 100 :dev? config/dev? :built-in? true}]
+        opts (cond-> {:limit 100 :dev? config/dev? :built-in? true}
+               (contains? #{:move-blocks} (get-action))
+               (assoc :page-only? true))]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
@@ -548,9 +556,13 @@
       (reset! (::input state) search-query))))
 
 (defmethod handle-action :trigger [_ state _event]
-  (let [command (some-> state state->highlighted-item :source-command)
-        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data}]
-    (when-let [action (:action command)]
+  (let [highlighted-item (some-> state state->highlighted-item)
+        command (:source-command highlighted-item)
+        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data}
+        action (or (:action command)
+                   (when-let [trigger (:trigger (:search/args @state/state))]
+                     #(trigger highlighted-item)))]
+    (when action
       (when-not (contains? dont-close-commands (:id command))
         (shui/dialog-close! :ls-dialog-cmdk))
       (util/schedule #(action) 32))))
@@ -833,12 +845,15 @@
 (defn- input-placeholder
   [sidebar?]
   (let [search-mode (:search/mode @state/state)
-        search-args (:search/args @state/state)]
+        action (get-action)]
     (cond
+      (= action :move-blocks)
+      "Move blocks to"
+
       (and (= search-mode :graph) (not sidebar?))
       "Add graph filter"
 
-      (= search-args :new-page)
+      (= action :new-page)
       "Type a page name to create"
 
       :else

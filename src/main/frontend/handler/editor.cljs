@@ -851,6 +851,23 @@
      {:outliner-op :move-blocks}
      (outliner-op/move-blocks! blocks target sibling?))))
 
+(defn move-selected-blocks
+  [e]
+  (util/stop e)
+  (let [block-ids (or (state/get-selection-block-ids)
+                      (when-let [id (:block/uuid (state/get-edit-block))]
+                        [id]))]
+    (when (seq block-ids)
+      (let [blocks (->> (map (fn [id] (db/entity [:block/uuid id])) block-ids)
+                        block-handler/get-top-level-blocks)]
+        (route-handler/go-to-search! :nodes
+                                     {:action :move-blocks
+                                      :blocks blocks
+                                      :trigger (fn [chosen]
+                                                 (state/pub-event! [:editor/hide-action-bar])
+                                                 (state/clear-selection!)
+                                                 (move-blocks! blocks (:source-page chosen) false))})))))
+
 (defn delete-block!
   [repo]
   (delete-block-inner! repo (get-state)))
@@ -1614,7 +1631,12 @@
 (defn get-matched-classes
   "Return matched classes except the root tag"
   [q]
-  (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+  (let [editing-block (some-> (state/get-edit-block) :db/id db/entity)
+        non-page-block? (and editing-block (not (ldb/page? editing-block)))
+        all-classes (cond-> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                      non-page-block?
+                      (conj (db/entity :logseq.class/Page)))
+        classes (->> all-classes
                      (mapcat (fn [class]
                                (conj (:block/alias class) class)))
                      (common-util/distinct-by :db/id)
