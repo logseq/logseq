@@ -4,6 +4,7 @@
    [logseq.e2e.block :as b]
    [logseq.e2e.fixtures :as fixtures]
    [logseq.e2e.keyboard :as k]
+   [logseq.e2e.page :as p]
    [logseq.e2e.util :as util]
    [wally.main :as w]
    [wally.repl :as repl]))
@@ -44,6 +45,23 @@
     (util/exit-edit)
     (let [[x2 x3 x4 x5] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4" "b5"])]
       (is (and (= x2 x4) (= x3 x5) (< x2 x3))))))
+
+(defn indent-outdent-embed-page []
+  (p/new-page "Page embed")
+  (b/new-blocks ["b1" "b2"])
+  (p/new-page "Page testing")
+  (b/new-blocks ["b3" ""])
+  (util/input-command "Node embed")
+  (util/press-seq "Page embed" {:delay 60})
+  (k/press "Enter" {:delay 60})
+  (util/exit-edit)
+  (b/new-blocks ["b4"])
+  (b/outdent)
+  (b/indent)
+  (util/exit-edit)
+  (let [[x2 x3 x4] (map (comp first util/bounding-xy #(w/find-one-by-text "span" %)) ["b2" "b3" "b4"])]
+    (is (= x2 x4))
+    (is (< x3 x2))))
 
 (defn move-up-down []
   (b/new-blocks ["b1" "b2" "b3" "b4"])
@@ -91,6 +109,9 @@
 
 (deftest indent-and-outdent-test
   (indent-and-outdent))
+
+(deftest indent-outdent-embed-page-test
+  (indent-outdent-embed-page))
 
 (deftest move-up-down-test
   (move-up-down))
