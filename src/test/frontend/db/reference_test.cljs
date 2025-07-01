@@ -76,7 +76,7 @@
 
     (testing "Linked references without filters"
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references db (:db/id foo))]
-        (is (= [["baz" 4] ["Journal" 3] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
+        (is (= [["baz" 4] ["Journal" 2] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
             "ref-pages-count check failed")
         (is (empty? ref-matched-children-ids)
             "ref-matched-children-ids check failed")
@@ -88,9 +88,9 @@
                    [{:db/id (:db/id foo)
                      :logseq.property.linked-references/includes (:db/id bar)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 3] ["baz" 3] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
+        (is (= [["baz" 3] ["Journal" 2] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 8 (count ref-matched-children-ids))
+        (is (= 7 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
@@ -100,9 +100,9 @@
                    [{:db/id (:db/id foo)
                      :logseq.property.linked-references/includes (:db/id baz)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 3] ["baz" 3] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
+        (is (= [["baz" 3] ["Journal" 2] ["Jun 11th, 2025" 2] ["bar" 2]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 8 (count ref-matched-children-ids))
+        (is (= 7 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
@@ -113,9 +113,9 @@
                    [{:db/id (:db/id foo)
                      :logseq.property.linked-references/excludes (:db/id bar)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 3] ["Jun 11th, 2025" 2] ["baz" 2]] (vec ref-pages-count))
+        (is (= [["Journal" 2] ["Jun 11th, 2025" 2] ["baz" 2]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 3 (count ref-matched-children-ids))
+        (is (= 2 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
@@ -126,9 +126,9 @@
                    [{:db/id (:db/id foo)
                      :logseq.property.linked-references/excludes (:db/id baz)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 3] ["Jun 11th, 2025" 2] ["bar" 1]] (vec ref-pages-count))
+        (is (= [["Journal" 2] ["Jun 11th, 2025" 2] ["bar" 1]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 4 (count ref-matched-children-ids))
+        (is (= 3 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
@@ -153,9 +153,9 @@
                      :logseq.property.linked-references/includes (:db/id bar)
                      :logseq.property.linked-references/excludes (:db/id baz)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 2] ["Jun 11th, 2025" 1] ["bar" 1]] (vec ref-pages-count))
+        (is (= [["Journal" 1] ["Jun 11th, 2025" 1] ["bar" 1]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 4 (count ref-matched-children-ids))
+        (is (= 3 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))
@@ -167,9 +167,9 @@
                      :logseq.property.linked-references/includes (:db/id baz)
                      :logseq.property.linked-references/excludes (:db/id bar)}])
       (let [{:keys [ref-pages-count ref-blocks ref-matched-children-ids]} (db-reference/get-linked-references @conn (:db/id foo))]
-        (is (= [["Journal" 3] ["Jun 11th, 2025" 2] ["baz" 2]] (vec ref-pages-count))
+        (is (= [["Journal" 2] ["Jun 11th, 2025" 2] ["baz" 2]] (vec ref-pages-count))
             "ref-pages-count check failed")
-        (is (= 3 (count ref-matched-children-ids))
+        (is (= 2 (count ref-matched-children-ids))
             "ref-matched-children-ids check failed")
         (is (= #{"[[foo]] 1" "[[foo]] 2"} (set (map :block/title ref-blocks)))
             "ref-blocks check failed")))))
