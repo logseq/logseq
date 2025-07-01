@@ -58,7 +58,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.haptics :as haptics]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.mobile.util :as mobile-util]
@@ -2968,7 +2967,6 @@
         deadline (when-not db-based? (:block/deadline block))
         format (if db-based? :markdown (or (:block/format block) :markdown))
         pre-block? (when-not db-based? (:block/pre-block? block))
-        page-title? (:page-title? config)
         collapsed? (:collapsed? config)
         content (if db-based?
                   (:block/raw-title block)
@@ -3030,12 +3028,6 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :key (str "block-content-" uuid)}
-       (and (mobile-util/native-ios?) (not page-title?))
-       (assoc :content-editable true
-              :data-readonly true
-              :on-key-down util/stop
-              :on-before-input util/stop
-              :on-input util/stop)
        true
        (merge attrs))
 
