@@ -15,7 +15,8 @@
   [:div.journal-item.content
    (when last?
      {:class "journal-last-item"})
-   (page/page-cp {:db/id id})])
+   (page/page-cp {:db/id id
+                  :journals? true})])
 
 (defn- sub-journals
   []
