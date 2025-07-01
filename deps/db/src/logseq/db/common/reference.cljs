@@ -74,18 +74,18 @@
 (defn- get-block-parents-until-top-ref
   [db id ref-id ref-block-ids *result]
   (loop [eid ref-id
-         parents []]
+         parents' []]
     (when eid
       (cond
         (contains? @*result eid)
-        (swap! *result into parents)
+        (swap! *result into parents')
 
         (contains? ref-block-ids eid)
         (when-not (common-initial-data/hidden-ref? db (d/entity db eid) id)
-          (swap! *result into (conj parents eid)))
+          (swap! *result into (conj parents' eid)))
         :else
         (let [e (d/entity db eid)]
-          (recur (:db/id (:block/parent e)) (conj parents eid)))))))
+          (recur (:db/id (:block/parent e)) (conj parents' eid)))))))
 
 (defn get-linked-references
   [db id]
