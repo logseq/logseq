@@ -2655,10 +2655,12 @@
         starting-block (state/get-selection-start-block-or-first)
         mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
         block-dom-element (util/rec-get-node target "ls-block")
-        cursor-range (some-> block-dom-element
-                             (dom/by-class "block-content-inner")
-                             first
-                             util/caret-range)]
+        cursor-range (if (util/ios?)
+                       (:block/title block)
+                       (some-> block-dom-element
+                               (dom/by-class "block-content-inner")
+                               first
+                               util/caret-range))]
 
     (if mobile-selection?
       (let [ids (set (state/get-selection-block-ids))]
