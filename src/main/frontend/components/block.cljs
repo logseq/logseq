@@ -3636,14 +3636,17 @@
                                                                       (:db/id block)
                                                                       (pu/get-pid :logseq.property/icon)
                                                                       (select-keys icon [:id :type :color]))
-                                                             ;; del
+                                                                     ;; del
                                                                      (db-property-handler/remove-block-property!
                                                                       (:db/id block)
                                                                       (pu/get-pid :logseq.property/icon))))
                                                       :del-btn? (boolean icon')
                                                       :icon-props {:style {:width "1lh"
                                                                            :height "1lh"
-                                                                           :font-size (if (:page-title? config) 38 18)}}})])))]
+                                                                           :font-size (cond
+                                                                                        (and (util/mobile?) (:page-title? config)) 24
+                                                                                        (:page-title? config) 38
+                                                                                        :else 18)}}})])))]
     [:div.ls-block.swipe-item
      (cond->
       {:id (str "ls-block-"

@@ -284,3 +284,16 @@ div.block-content[contenteditable][data-readonly] {
 .property-block-container {
     margin-left: 0px;
 }
+
+.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
+    width: 26px;
+    height: 26px;
+}
+
+.ls-page-title .ls-page-icon button {
+    margin-top: 6px;
+}
+
+.ls-page-title {
+    margin-left: -8px;
+}
