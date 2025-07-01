@@ -43,18 +43,6 @@
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map (fn [d] (d/entity db (:e d))))))
 
-(defn get-class-extends
-  "Returns all parents of a class"
-  [node]
-  (when-let [parent (:logseq.property.class/extends node)]
-    (loop [current-parent parent
-           parents' []]
-      (if (and current-parent
-               (not (contains? parents' current-parent)))
-        (recur (:logseq.property.class/extends current-parent)
-               (conj parents' current-parent))
-        (vec (reverse parents'))))))
-
 (defn get-page-parents
   [node]
   (when-let [parent (:block/parent node)]
@@ -68,7 +56,7 @@
 
 (defn- get-class-title-with-extends
   [entity]
-  (let [parents' (->> (get-class-extends entity)
+  (let [parents' (->> (db-class/get-class-extends entity)
                       (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                       vec)]
     (string/join
@@ -96,7 +84,7 @@
   "Returns all parents of all classes. Like get-class-extends but for multiple classes"
   [tags]
   (let [tags' (filter entity-util/class? tags)
-        result (mapcat get-class-extends tags')]
+        result (mapcat db-class/get-class-extends tags')]
     (set result)))
 
 (defn class-instance?

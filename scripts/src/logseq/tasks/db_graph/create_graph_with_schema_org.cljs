@@ -19,8 +19,6 @@
             [clojure.walk :as w]
             [datascript.core :as d]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
@@ -68,7 +66,7 @@
                                  (class-m "rdfs:comment")
                                  (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
-      (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
+      (assoc :build/class-extends [(keyword (strip-schema-prefix parent-class'))])
       (seq properties)
       (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
@@ -241,7 +239,7 @@
                      (map #(vector (keyword (strip-schema-prefix (get % "@id")))
                                    (->class-page % class-to-properties options)))
                      (into {}))]
-    (assert (= ["Thing"] (keep #(when-not (:build/class-parent %)
+    (assert (= ["Thing"] (keep #(when-not (:build/class-extends %)
                                   (:block/title %))
                                (vals classes)))
             "Thing is the only class that doesn't have a schema.org parent class")

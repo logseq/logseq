@@ -468,9 +468,13 @@
           block (d/entity db id)]
       (if unlinked?
         (p/let [title (string/lower-case (:block/title block))
-                result (search-blocks repo title {:limit 3})]
-          (boolean (some (fn [b] (not= id (:db/id b))) result)))
-        (some? (first (:block/_refs block)))))))
+                result (search-blocks repo title {:limit 100})]
+          (boolean (some (fn [b]
+                           (let [block (d/entity db (:db/id b))]
+                             (and (not= id (:db/id block))
+                                  (not ((set (map :db/id (:block/refs block))) id))
+                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
