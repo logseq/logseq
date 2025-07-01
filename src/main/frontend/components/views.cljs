@@ -704,6 +704,7 @@
                          (mapv build-item unpinned))
         selection-rows-count (count selected-rows)]
     (shui/table-header
+     {:main-container (util/app-scroll-container-node)}
      (when (seq pinned-items)
        [:div.sticky-columns.flex.flex-row
         (dnd/items pinned-items {:vertical? false
