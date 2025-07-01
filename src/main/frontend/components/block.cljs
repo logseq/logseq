@@ -4353,7 +4353,8 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (and (not (:block-children? config)) (>= (count blocks) 50)))
+  (let [[virtualized? _] (rum/use-state (not (or (and (:journals? config) (< (count blocks) 50))
+                                                 (:block-children? config))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
