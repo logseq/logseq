@@ -136,21 +136,15 @@
    (remove #{eid})))
 
 (defn get-class-extends
-  "Returns all parents of a class"
+  "Returns all extends of a class"
   [node]
   (assert (de/entity? node) "get-class-extends `node` should be an entity")
-  (let [db (.-db node)
-        eid (:db/id node)]
-    (->>
-     (d/q '[:find [?p ...]
-            :in $ ?c %
-            :where
-            (class-extends ?p ?c)]
-          db
-          eid
-          (:class-extends rules/rules))
-     (remove #{eid})
-     (map (fn [id] (d/entity db id))))))
+  (loop [extends (:logseq.property.class/extends node)
+         result #{}]
+    (if (seq extends)
+      (recur (set (mapcat :logseq.property.class/extends extends))
+             (into result extends))
+      result)))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
