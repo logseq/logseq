@@ -1226,9 +1226,7 @@ Similar to re-frame subscriptions"
         (unselect-node node))
       (doseq [id removed]
         (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-          (unselect-node node))))
-    (doseq [node (dom/sel ".block-content[contenteditable=true]")]
-      (dom/set-attr! node "contenteditable" "false"))))
+          (unselect-node node))))))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1252,9 +1250,7 @@ Similar to re-frame subscriptions"
 (defn clear-selection!
   []
   (dom-clear-selection!)
-  (state-clear-selection!)
-  (doseq [node (dom/sel ".block-content[contenteditable=false]")]
-    (dom/set-attr! node "contenteditable" "true")))
+  (state-clear-selection!))
 
 (defn get-selection-start-block-or-first
   []
