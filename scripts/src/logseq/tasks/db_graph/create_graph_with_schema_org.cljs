@@ -76,11 +76,12 @@
    "schema:Text" :default
    "schema:URL" :url
    "schema:Boolean" :checkbox
-   "schema:Date" :date})
+   "schema:Date" :date
+   "schema:DateTime" :datetime})
 
 (def unsupported-data-types
   "Schema datatypes, https://schema.org/DataType, that don't have Logseq equivalents"
-  #{"schema:Time" "schema:DateTime"})
+  #{"schema:Time"})
 
 (defn- get-range-includes [property-m]
   (let [range-includes (as-> (property-m "schema:rangeIncludes") range-includes*
@@ -97,8 +98,9 @@
 (defn- ->property-page [property-m class-map {:keys [verbose renamed-pages]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
-        ;; Pick first range to determine type as only one range is supported currently
-        _ (when (and verbose (> (count range-includes) 1))
+        ;; Notify when a property is only using one of the available property types (rangeIncludes)
+        ;; Doesn't apply to :node since they do include all rangeIncludes
+        _ (when (and verbose (> (count range-includes) 1) (not= schema-type :node))
             (println "Picked property type:"
                      {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
@@ -332,7 +334,22 @@
              :desc "Verbose mode"}})
 
 (defn- write-export-file [db]
-  (let [export-map (sqlite-export/build-export db {:export-type :graph-ontology})]
+  (let [export-map* (sqlite-export/build-export db {:export-type :graph-ontology})
+        ;; Modify export to provide stable diff like diff-graphs.
+        ;; Remove this when export has stable sort order for these keys
+        export-map (-> export-map*
+                       (update :classes update-vals
+                               (fn [m]
+                                 (cond-> m
+                                   (:build/class-extends m)
+                                   (update :build/class-extends (comp vec sort))
+                                   (:build/class-properties m)
+                                   (update :build/class-properties (comp vec sort)))))
+                       (update :properties update-vals
+                               (fn [m]
+                                 (cond-> m
+                                   (:build/property-classes m)
+                                   (update :build/property-classes (comp vec sort))))))]
     (fs/writeFileSync "schema.edn"
                       (with-out-str (pprint/pprint export-map)))))
 
