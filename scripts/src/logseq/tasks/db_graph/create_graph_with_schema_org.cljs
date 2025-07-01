@@ -38,25 +38,23 @@
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))
 
-(defn- ->class-page [class-m class-properties {:keys [verbose renamed-classes renamed-pages]}]
-  (let [parent-class* (class-m "rdfs:subClassOf")
-        parent-class (cond
-                       (map? parent-class*)
-                       (parent-class* "@id")
-                       (vector? parent-class*)
-                       (do (when verbose
-                             (println "Picked first class for multi-parent class" (pr-str (class-m "@id"))))
-                           (get (first parent-class*) "@id"))
-                       ;; DataTypes are weird in that they are subclassed from
-                       ;; rdfs:class but that info is omitted. It seems schema
-                       ;; does this on purpose to display it as a separate tree but
-                       ;; we want all classes under one tree
-                       (contains? (set (as-> (class-m "@type") type'
-                                         (if (string? type') [type'] type')))
-                                  "schema:DataType")
-                       "schema:DataType")
+(defn- ->class-page [class-m class-properties {:keys [renamed-classes renamed-pages]}]
+  (let [parent-classes* (class-m "rdfs:subClassOf")
+        parent-classes (cond
+                         (map? parent-classes*)
+                         [(parent-classes* "@id")]
+                         (vector? parent-classes*)
+                         (mapv #(get % "@id") parent-classes*)
+                         ;; DataTypes are weird in that they are subclassed from
+                         ;; rdfs:class but that info is omitted. It seems schema
+                         ;; does this on purpose to display it as a separate tree but
+                         ;; we want all classes under one tree
+                         (contains? (set (as-> (class-m "@type") type'
+                                           (if (string? type') [type'] type')))
+                                    "schema:DataType")
+                         ["schema:DataType"])
         ;; Map of owl:equivalentClass exceptions
-        parent-class' (get {"rdfs:Class" "Class"} parent-class parent-class)
+        parent-classes' (mapv #(get {"rdfs:Class" "Class"} % %) parent-classes)
         properties (class-properties (class-m "@id"))
         inverted-renamed-classes (set/map-invert renamed-classes)
         class-name (strip-schema-prefix (class-m "@id"))
@@ -65,8 +63,8 @@
              :build/properties (cond-> {:url url}
                                  (class-m "rdfs:comment")
                                  (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
-      parent-class'
-      (assoc :build/class-extends [(keyword (strip-schema-prefix parent-class'))])
+      (seq parent-classes')
+      (assoc :build/class-extends (mapv #(keyword (strip-schema-prefix %)) parent-classes'))
       (seq properties)
       (assoc :build/class-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
@@ -148,10 +146,10 @@
   (let [range-includes
         (as-> (prop "schema:rangeIncludes") range-includes*
           (set (map (fn [m] (m "@id")) (if (map? range-includes*) [range-includes*] range-includes*))))
-        unsupported-data-types
+        unsupported-data-types'
         (set/intersection range-includes unsupported-data-types)]
     (and (seq range-includes)
-         (every? (fn [x] (contains? unsupported-data-types x)) range-includes))))
+         (every? (fn [x] (contains? unsupported-data-types' x)) range-includes))))
 
 (defn- get-vector-conflicts
   "Given a seq of tuples returns a seq of tuples that conflict i.e. their first element
@@ -315,6 +313,7 @@
         select-class-ids
         (if (:subset options)
           ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
+           "schema:Intangible" "schema:Series" "schema:TVSeries" ; Test class multiple inheritance
            "schema:Movie" "schema:CreativeWork" "schema:Thing" "schema:Comment"]
           (keys class-map))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
