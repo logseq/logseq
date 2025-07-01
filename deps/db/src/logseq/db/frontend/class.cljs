@@ -37,7 +37,8 @@
 
      :logseq.class/Task
      {:title "Task"
-      :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline :logseq.property/scheduled]}}
+      :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline :logseq.property/scheduled]}
+      :properties {:logseq.property.class/hide-from-node true}}
 
      :logseq.class/Query
      {:title "Query"
