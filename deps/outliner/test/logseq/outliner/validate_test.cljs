@@ -97,10 +97,11 @@
         page1 (db-test/find-page-by-title @conn "page1")
         class1 (db-test/find-page-by-title @conn "Class1")
         class2 (db-test/find-page-by-title @conn "Class2")
-        property (db-test/find-page-by-title @conn "prop1")]
+        property (db-test/find-page-by-title @conn "prop1")
+        db @conn]
 
     (testing "valid parent and child combinations"
-      (is (nil? (outliner-validate/validate-extends-property class1 [class2]))
+      (is (nil? (outliner-validate/validate-extends-property db class1 [class2]))
           "parent class to child class is valid"))
 
     (testing "invalid parent and child combinations"
@@ -108,7 +109,7 @@
            (thrown-with-msg?
             js/Error
             #"Can't extend"
-            (outliner-validate/validate-extends-property parent [child]))
+            (outliner-validate/validate-extends-property db parent [child]))
 
         class1 page1
         page1 class1
@@ -118,7 +119,8 @@
       (is (thrown-with-msg?
            js/Error
            #"Can't change.*built-in"
-           (outliner-validate/validate-extends-property (entity-plus/entity-memoized @conn :logseq.class/Task)
+           (outliner-validate/validate-extends-property db
+                                                        (entity-plus/entity-memoized @conn :logseq.class/Task)
                                                         [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property

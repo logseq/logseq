@@ -190,9 +190,9 @@
     ;; It's caller's responsibility to ensure parent is included in final export
     (and (not shallow-copy?)
          (:logseq.property.class/extends class-ent)
-         (not= :logseq.class/Root (:db/ident (:logseq.property.class/extends class-ent))))
-    (assoc :build/class-parent
-           (:db/ident (:logseq.property.class/extends class-ent)))))
+         (not= [:logseq.class/Root] (mapv :db/ident (:logseq.property.class/extends class-ent))))
+    (assoc :build/class-extends
+           (mapv :db/ident (:logseq.property.class/extends class-ent)))))
 
 (defn- build-node-classes
   [db build-block block-tags properties]
@@ -341,7 +341,7 @@
 
 (defn- build-class-parents-export [db classes-config]
   (let [class-parent-ents (->> classes-config
-                               (filter #(:build/class-parent (val %)))
+                               (filter #(:build/class-extends (val %)))
                                (map #(d/entity db (key %)))
                                db-db/get-classes-parents)
         classes

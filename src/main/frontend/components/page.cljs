@@ -110,7 +110,7 @@
     (when page?
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
-        :data-block-id (:db/id block)
+        :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
                     (util/stop e)
@@ -130,11 +130,10 @@
         :on-mouse-leave #(do
                            (dom/remove-class! (rum/deref *ref) "opacity-50")
                            (dom/remove-class! (rum/deref *ref) "opacity-100"))
-        :on-key-down (fn [e]
+        :on-key-down (fn [^js e]
                        (util/stop e)
                        (when (= "Enter" (util/ekey e))
-                         (state/set-state! :editor/container-id container-id)
-                         (editor-handler/api-insert-new-block! "" (merge config block))))
+                         (-> e (.-target) (.click))))
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28

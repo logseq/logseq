@@ -280,7 +280,7 @@ prop-d:: [[nada]]"}])
                 {:logseq.property/default-value "Todo"}
                 :build/properties-ref-types {:entity :number}}}
       :classes {:Mytask {:build/class-properties [:status]}
-                :Bug {:build/class-parent :Mytask}}
+                :Bug {:build/class-extends [:Mytask]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "task1"

@@ -170,10 +170,26 @@
                      :payload {:message "Can't change the parent of a built-in tag"
                                :type :error}}))))
 
+(defn- disallow-extends-cycle
+  [db parent-ent child-ents]
+  (doseq [child child-ents]
+    (let [children-ids (set (cons (:db/id child)
+                                  (db-class/get-structured-children db (:db/id child))))]
+      (when (contains? children-ids (:db/id parent-ent))
+        (throw (ex-info "Extends cycle"
+                        {:type :notification
+                         :payload {:message "Tag extends cycle"
+                                   :type :error
+                                   :blocks (map #(select-keys % [:db/id :block/title]) [child])}}))))))
+
 (defn validate-extends-property
-  [parent-ent child-ents]
-  (disallow-built-in-class-extends-change parent-ent child-ents)
-  (validate-extends-property-have-correct-type parent-ent child-ents))
+  [db parent-ent* child-ents]
+  (let [parent-ent (if (integer? parent-ent*)
+                     (d/entity db parent-ent*)
+                     parent-ent*)]
+    (disallow-extends-cycle db parent-ent child-ents)
+    (disallow-built-in-class-extends-change parent-ent child-ents)
+    (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
   [db _block-eids v]
