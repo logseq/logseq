@@ -10,7 +10,7 @@ const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
 const resourcesPath = path.join(__dirname, 'resources')
-const publicStaticPath = path.join(__dirname, 'public/static')
+const publicRootPath = path.join(__dirname, 'public')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
@@ -146,14 +146,17 @@ const common = {
     return gulp.src([
       outputFilePath,
       '!' + path.join(outputPath, 'node_modules/**'),
-    ]).pipe(gulp.dest(publicStaticPath))
+      '!' + path.join(outputPath, 'capacitor/**'),
+      '!' + path.join(outputPath, 'android/**'),
+      '!' + path.join(outputPath, 'ios/**'),
+    ]).pipe(gulp.dest(publicRootPath))
   },
 
   syncJS_CSSinRt () {
     return gulp.src([
       path.join(outputPath, 'js/**'),
       path.join(outputPath, 'css/**'),
-    ], { base: outputPath }).pipe(gulp.dest(publicStaticPath))
+    ], { base: outputPath }).pipe(gulp.dest(publicRootPath))
   },
 
   keepSyncStaticInRt () {
