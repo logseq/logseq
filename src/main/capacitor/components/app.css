@@ -188,10 +188,6 @@ ion-modal {
 }
 
 ion-content {
-  .ls-page-blocks {
-    @apply px-1;
-  }
-
   .block-main-container {
     &[data-has-heading] {
       > .block-control-wrap {
