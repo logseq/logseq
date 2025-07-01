@@ -387,17 +387,16 @@
                                                   [:span.flex.items-center.gap-1
                                                    (ui/icon "folder-pin") (t (if local? :asset/show-in-folder :asset/open-in-browser))]))
 
-                                 (when-not config/publishing?
-                                   [:<>
-                                    (shui/dropdown-menu-separator)
-                                    (shui/dropdown-menu-item
-                                      {:on-click handle-delete!}
-                                      [:span.flex.items-center.gap-1.text-red-700
-                                       (ui/icon "trash") (t :asset/delete)])])
-                                 ])
-                              {:align :start
-                               :dropdown-menu? true}))}
-               (shui/tabler-icon "dots-vertical")))])])]))
+                                               (when-not config/publishing?
+                                                 [:<>
+                                                  (shui/dropdown-menu-separator)
+                                                  (shui/dropdown-menu-item
+                                                   {:on-click handle-delete!}
+                                                   [:span.flex.items-center.gap-1.text-red-700
+                                                    (ui/icon "trash") (t :asset/delete)])])])
+                                            {:align :start
+                                             :dropdown-menu? true}))}
+             (shui/tabler-icon "dots-vertical")))])])]))
 
 ;; TODO: store image height and width for better ux
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
@@ -3768,7 +3767,7 @@
                     (and
                      (not collapsed?)
                      (not (or table? property?)))))
-       [:div (when-not (:page-title? config) {:style {:padding-left 45}})
+       [:div (when-not (:page-title? config) {:style {:padding-left (if (util/mobile?) 12 45)}})
         (db-properties-cp config block {:in-block-container? true})])
 
      (when (and db-based? show-query? (not (:table? config)))
