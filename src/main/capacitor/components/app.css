@@ -270,3 +270,17 @@ div.block-content[contenteditable][data-readonly] {
     caret-color: transparent;   /* hide caret */
     outline: none;              /* remove focus outline */
 }
+
+@container ls-block (max-width: 430px) {
+    .block-modal-page .ls-properties-area {
+        display: initial;
+    }
+}
+
+.property-key {
+    min-width: 0px;
+}
+
+.property-block-container {
+    margin-left: 0px;
+}
