@@ -83,7 +83,7 @@
                  (js/setTimeout
                   (fn []
                     (when-let [block-add-button (->> (dom/sel ".block-add-button")
-                                                     (filter #(= (str (:db/id page)) (dom/attr % "data-block-id")))
+                                                     (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
                                                      first)]
                       (.click block-add-button)))
                   200)))

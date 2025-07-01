@@ -1206,19 +1206,27 @@ Similar to re-frame subscriptions"
     (async/put! chan [payload d])
     d))
 
+(defn- unselect-node
+  [node]
+  (dom/remove-class! node "selected")
+  (when (dom/has-class? node "ls-table-row")
+    (.blur node)))
+
 (defn- set-selection-blocks-aux!
   [blocks]
   (set-state! :view/selected-blocks nil)
-  (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
+  (let [selected-blocks @(:selection/blocks @state)
+        selected-ids (set (get-selected-block-ids selected-blocks))
         _ (set-state! :selection/blocks blocks)
         new-ids (set (get-selection-block-ids))
         removed (set/difference selected-ids new-ids)]
     (mark-dom-blocks-as-selected blocks)
-    (doseq [id removed]
-      (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-        (dom/remove-class! node "selected")
-        (when (dom/has-class? node "ls-table-row")
-          (.blur node))))
+    (if (= (count blocks) 1)
+      (doseq [node selected-blocks]
+        (unselect-node node))
+      (doseq [id removed]
+        (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
+          (unselect-node node))))
     (doseq [node (dom/sel ".block-content[contenteditable=true]")]
       (dom/set-attr! node "contenteditable" "false"))))
 

@@ -186,18 +186,19 @@
        (= (:db/id ref-block) id)
        (= id (:db/id (:block/page ref-block)))))))
 
+(defn get-block-refs
+  [db id]
+  (let [with-alias (->> (get-block-alias db id)
+                        (cons id)
+                        distinct)]
+    (some->> with-alias
+             (map #(d/entity db %))
+             (mapcat :block/_refs)
+             (remove (fn [ref-block] (hidden-ref? db ref-block id))))))
+
 (defn get-block-refs-count
   [db id]
-  (or
-   (let [with-alias (->> (get-block-alias db id)
-                         (cons id)
-                         distinct)]
-     (some->> with-alias
-              (map #(d/entity db %))
-              (mapcat :block/_refs)
-              (remove (fn [ref-block] (hidden-ref? db ref-block id)))
-              count))
-   0))
+  (count (get-block-refs db id)))
 
 (defn ^:large-vars/cleanup-todo get-block-and-children
   [db id-or-page-name {:keys [children? properties include-collapsed-children?]

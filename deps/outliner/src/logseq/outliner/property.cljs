@@ -61,6 +61,7 @@
           retract-multiple-values? (and multiple-values? (sequential? value))
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
+          extends? (= property-id :logseq.property.class/extends)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
                             (assoc property-id value)
@@ -75,6 +76,10 @@
         (conj [:db/retract (:db/id update-block-tx) property-id :logseq.property/empty-placeholder])
         retract-multiple-values?
         (conj [:db/retract (:db/id update-block-tx) property-id])
+        extends?
+        (concat
+         (let [extends (ldb/get-class-extends (d/entity @conn value))]
+           (map (fn [extend] [:db/retract (:db/id block) property-id (:db/id extend)]) extends)))
         true
         (conj update-block-tx)))))
 
@@ -342,6 +347,7 @@
            property (d/entity @conn property-id)
            _ (when (= (:db/ident property) :logseq.property.class/extends)
                (outliner-validate/validate-extends-property
+                @conn
                 (if (number? v) (d/entity @conn v) v)
                 (map #(d/entity @conn %) block-eids)))
            _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
@@ -388,7 +394,8 @@
 
       (and (ldb/class? block) (= property-id :logseq.property.class/extends))
       (ldb/transact! conn
-                     [[:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
+                     [[:db/retract (:db/id block) :logseq.property.class/extends]
+                      [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
                      {:outliner-op :save-block})
 
       (contains? db-property/db-attribute-properties property-id)
@@ -415,12 +422,16 @@
       (when (= property-id :block/tags)
         (outliner-validate/validate-tags-property @conn [block-eid] v))
       (when (= property-id :logseq.property.class/extends)
-        (outliner-validate/validate-extends-property v [block]))
+        (outliner-validate/validate-extends-property @conn v [block]))
       (cond
         db-attribute?
         (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
-          (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
-                         {:outliner-op :save-block}))
+          (let [tx-data (cond->
+                         [{:db/id (:db/id block) property-id v}]
+                          (= property-id :logseq.property.class/extends)
+                          (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+            (ldb/transact! conn tx-data
+                           {:outliner-op :save-block})))
         :else
         (let [property (d/entity @conn property-id)
               _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))

@@ -628,7 +628,9 @@
                                    (get-last-child-or-self db target)
                                    [target false])))
 
-                             (and (= outliner-op :indent-outdent-blocks) (not indent?))
+                             (and (= outliner-op :indent-outdent-blocks)
+                                  (or (not indent?)
+                                      (and indent? sibling?)))
                              [block sibling?]
 
                              (contains? #{:insert-blocks :move-blocks} outliner-op)
