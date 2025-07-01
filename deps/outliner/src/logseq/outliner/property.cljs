@@ -526,8 +526,7 @@
   [db eid]
   (let [block (d/entity db eid)
         classes (->> (:block/tags block)
-                     (sort-by :block/name)
-                     (filter ldb/class?))
+                     (sort-by :block/name))
         class-parents (get-classes-parents classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
@@ -573,11 +572,10 @@
     (->> (:classes-properties (get-block-classes-properties db eid))
          (map :db/ident)
          (concat own-properties)
-         (filter (fn [id] (property-with-position? db id block position)))
          (distinct)
+         (filter (fn [id] (property-with-position? db id block position)))
          (map #(d/entity db %))
-         (ldb/sort-by-order)
-         (map :db/ident))))
+         (ldb/sort-by-order))))
 
 (defn- build-closed-value-tx
   [db property resolved-value {:keys [id icon]}]
