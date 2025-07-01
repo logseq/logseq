@@ -13,11 +13,6 @@
     (sel1 "ion-header")
     (sel1 "#head")))
 
-;; Notice this doesn't work on mobile
-(defn- get-main-scroll-container
-  []
-  (sel1 "#main-content-container"))
-
 (defn- row-selected?
   [row row-selection]
   (let [id (:db/id row)]
@@ -151,14 +146,14 @@
 
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
-  [^js/HTMLDivElement target-ref]
+  [^js/HTMLDivElement target-ref container]
   (hooks/use-effect!
    (fn []
      (let [^js target (rum/deref target-ref)
-           ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
+           ^js container (or (.closest target ".sidebar-item-list") container)
            ^js table (.closest target ".ls-table-rows")
            refs-table? (.closest table ".references")]
-       (when (not refs-table?)
+       (when (and (not refs-table?) container table)
          (let [^js target-cls (.-classList target)
                ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
                ^js page-el (.closest target ".page-inner")
@@ -227,12 +222,12 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)
-        _ (when-not (mobile?) (use-sticky-element2! el-ref))]
+        _ (when-not (mobile?) (use-sticky-element2! el-ref (:main-container prop)))]
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref
              :style {:z-index 9}}
-            prop)
+            (dissoc prop :main-container))
      children]))
 
 (rum/defc table-footer
