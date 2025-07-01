@@ -129,10 +129,10 @@ const common = {
         'node_modules/photoswipe/dist/umd/*.js',
         'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui/ui.js',
+        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
       () => gulp.src([
         'packages/ui/dist/ionic/*.js',
-        'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'capacitor'))),
     )(...params)
   },

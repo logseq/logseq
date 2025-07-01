@@ -89,8 +89,8 @@
                                    :depends-on #{:shared}
                                    :web-worker true}}
 
-                  :output-dir       "./static/capacitor"
-                  :asset-path       "./"
+                  :output-dir       "./static/capacitor/js"
+                  :asset-path       "./js"
                   :release          {:asset-path "http://localhost"}
                   :compiler-options {:infer-externs      :auto
                                      :output-feature-set :es-next-in
