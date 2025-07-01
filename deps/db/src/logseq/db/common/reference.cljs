@@ -87,6 +87,7 @@
         (let [e (d/entity db eid)]
           (recur (:db/id (:block/parent e)) (conj parents' eid)))))))
 
+
 (defn get-linked-references
   [db id]
   (let [entity (d/entity db id)
