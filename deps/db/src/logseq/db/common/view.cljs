@@ -281,7 +281,7 @@
                               (entity-util/built-in? e)))
                 (cond-> e
                   refs-count?
-                  (assoc :block.temp/refs-count (ldb/get-block-refs-count db (:db/id e)))))))
+                  (assoc :block.temp/refs-count (count (:block/_refs e)))))))
           (d/datoms db :avet property-ident))))
 
 (defn- get-entities
