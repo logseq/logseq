@@ -21,5 +21,6 @@
                                       (property-config/property-dropdown page nil {:debug? (.-altKey e)}))
                                     {:content-props {:class "ls-property-dropdown as-root"}
                                      :align "start"
-                                     :as-dropdown? true}))}
+                                     :as-dropdown? true
+                                     :dropdown-menu? true}))}
      "Configure property")))
