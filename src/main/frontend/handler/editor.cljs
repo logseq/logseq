@@ -3856,6 +3856,7 @@
   (let [block (or (db/entity (:db/id block)) block)]
     (or
      (util/collapsed? block)
+     (and (util/mobile?) (ldb/class-instance? (entity-plus/entity-memoized (db/get-db) :logseq.class/Query) block))
      (and (or (:list-view? config) (:ref? config))
           (or (:block/_parent block) (:block.temp/has-children? block))
           (integer? (:block-level config))
