@@ -223,20 +223,27 @@
 
 (deftest batch-remove-property!
   (let [conn (db-test/create-conn-with-blocks
-              [{:page {:block/title "page1"}
-                :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
-                         {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
+              {:classes {:C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
+                          {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}]})
         block-ids (map #(-> (db-test/find-block-by-content @conn %) :block/uuid) ["item 1" "item 2"])
         _ (outliner-property/batch-remove-property! conn block-ids :logseq.property/order-list-type)
         updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
     (is (= [nil nil]
            (map :logseq.property/order-list-type updated-blocks))
         "Property values are batch removed")
-    
+
     (is (thrown-with-msg?
          js/Error
          #"Can't remove private"
-         (outliner-property/batch-remove-property! conn [(:db/id (db-test/find-page-by-title @conn "page1"))] :block/tags)))))
+         (outliner-property/batch-remove-property! conn [(:db/id (db-test/find-page-by-title @conn "page1"))] :block/tags)))
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove required"
+         (outliner-property/batch-remove-property! conn [(:db/id (d/entity @conn :user.class/C1))] :logseq.property.class/extends)))))
 
 (deftest add-existing-values-to-closed-values!
   (let [conn (db-test/create-conn-with-blocks
