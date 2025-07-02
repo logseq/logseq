@@ -66,11 +66,21 @@
                                :type :error}
                      :property-id :block/tags}))))
 
+(defn- throw-error-if-deleting-required-property
+  [property-ident]
+  (when (contains? db-malli-schema/required-properties property-ident)
+    (throw (ex-info "Can't remove required property"
+                    {:type :notification
+                     :payload {:message "Can't remove required property"
+                               :type :error}
+                     :property-id property-ident}))))
+
 (defn- validate-batch-deletion-of-property
   "Validates that the given property can be batch deleted from multiple nodes"
   [entities property-ident]
   (throw-error-if-deleting-protected-property (map :db/ident entities) property-ident)
-  (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities)))
+  (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities))
+  (throw-error-if-deleting-required-property property-ident))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
