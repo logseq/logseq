@@ -62,7 +62,7 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Sync static build files
-        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
+        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/
 
       - name: Prepare iOS build
         run: npx cap sync ios

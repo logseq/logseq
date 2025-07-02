@@ -191,7 +191,7 @@ const common = {
       }),
     })
 
-    cp.execSync(`rm -rf ios/App/App/public/static/out`, {
+    cp.execSync(`rm -rf ios/App/App/public/out`, {
       stdio: 'inherit',
     })
 
