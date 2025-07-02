@@ -1,5 +1,5 @@
-(ns frontend.mobile.action-bar
-  "Block Action bar, activated when swipe on a block"
+(ns capacitor.components.selection-toolbar
+  "Selection action bar, activated when swipe on a block"
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
