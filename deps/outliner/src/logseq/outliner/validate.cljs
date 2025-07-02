@@ -249,9 +249,13 @@
         (let [entity (d/entity db eid)]
           (when (and (ldb/internal-page? entity)
                      (not (:block/parent entity)))
-            (throw (ex-info "#Page shouldn't be removed"
-                            {:entity entity
-                             :property :block/tags}))))))))
+            (throw (ex-info "This page cannot be converted to a block"
+                            {:type :notification
+                             :payload
+                             {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
+                              :type :error
+                              :entity entity
+                              :property :block/tags}}))))))))
 
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"
