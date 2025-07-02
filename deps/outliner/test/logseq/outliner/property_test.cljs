@@ -231,7 +231,12 @@
         updated-blocks (map #(db-test/find-block-by-content @conn %) ["item 1" "item 2"])]
     (is (= [nil nil]
            (map :logseq.property/order-list-type updated-blocks))
-        "Property values are batch removed")))
+        "Property values are batch removed")
+    
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't remove private"
+         (outliner-property/batch-remove-property! conn [(:db/id (db-test/find-page-by-title @conn "page1"))] :block/tags)))))
 
 (deftest add-existing-values-to-closed-values!
   (let [conn (db-test/create-conn-with-blocks
