@@ -55,18 +55,17 @@ html {
       --ion-item-border-color: var(--ls-border-color);
 
       input, textarea {
-          caret-color: var(--ls-primary-text-color);
+        caret-color: var(--ls-primary-text-color);
       }
 
       ion-toolbar::part(background), ion-tab-bar,
-      ion-tab-button, ion-header
-      {
+      ion-tab-button, ion-header {
         background-color: var(--lx-gray-01);
       }
 
       ion-modal {
-          --background: var(--lx-gray-01);
-          --backdrop-color: var(--ls-secondary-background-color);
+        --background: var(--lx-gray-01);
+        --backdrop-color: var(--ls-secondary-background-color);
       }
 
       #mobile-editor-toolbar {
@@ -262,28 +261,34 @@ html[data-color=logseq] {
 }
 
 @container ls-block (max-width: 430px) {
-    .block-modal-page .ls-properties-area {
-        display: initial;
-    }
+  .block-modal-page .ls-properties-area {
+    display: initial;
+  }
 }
 
 .property-key {
-    min-width: 0px;
+  min-width: 0px;
 }
 
 .property-block-container {
-    margin-left: 0px;
+  margin-left: 0px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
-    width: 26px;
-    height: 26px;
+  width: 26px;
+  height: 26px;
 }
 
 .ls-page-title .ls-page-icon button {
-    margin-top: 6px;
+  margin-top: 6px;
 }
 
 .ls-page-title {
-    margin-left: -8px;
+  margin-left: -8px;
+}
+
+.ls-block[draggable="true"] {
+  &.dragging {
+    @apply bg-gray-02;
+  }
 }

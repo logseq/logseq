@@ -3477,6 +3477,7 @@
      :on-drop (fn [event]
                 (block-drop event uuid block original-block *move-to'))
      :on-drag-end (fn [event]
+                    (dom/remove-class! (.-target event) "dragging")
                     (block-drag-end event *move-to'))}))
 
 (defn- root-block?
@@ -3673,6 +3674,7 @@
         (fn [event]
           (when-not (state/editing?)
             (util/stop-propagation event)
+            (dom/add-class! (.-target event) "dragging")
             (on-drag-start event block block-id))))
 
        (:property-default-value? config)
