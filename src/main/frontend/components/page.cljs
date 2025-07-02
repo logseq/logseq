@@ -393,7 +393,9 @@
                      (fn []
                        [:div.ls-property-dropdown
                         (property-config/property-dropdown page nil {})])
-                     {:align :center})
+                     {:align :center
+                      :as-dropdown? true
+                      :dropdown-menu? true})
                     (let [opts (cond-> {:block page :target (.-target e)}
                                  (ldb/class? page)
                                  (assoc :class-schema? true))]
