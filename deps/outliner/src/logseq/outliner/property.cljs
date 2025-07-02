@@ -45,12 +45,32 @@
      db-property/built-in-properties))
    set))
 
-(defn- throw-error-if-protected-property
+(defn- throw-error-if-deleting-protected-property
   [entity-idents property-ident]
   (when (some #(built-in-class-property->properties [% property-ident]) entity-idents)
-    (throw (ex-info "Protected property shouldn't deleted"
-                    {:entity-idents entity-idents
-                     :property property-ident}))))
+    (throw (ex-info "Property is protected and can't be deleted"
+                    {:type :notification
+                     :payload {:type :error
+                               :message "Property is protected and can't be deleted"
+                               :entity-idents entity-idents
+                               :property property-ident}}))))
+
+(defn- throw-error-if-removing-private-tag
+  [entities]
+  (when-let [private-tags
+             (seq (set/intersection (set (mapcat #(map :db/ident (:block/tags %)) entities))
+                                    ldb/private-tags))]
+    (throw (ex-info "Can't remove private tags"
+                    {:type :notification
+                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags))
+                               :type :error}
+                     :property-id :block/tags}))))
+
+(defn- validate-batch-deletion-of-property
+  "Validates that the given property can be batch deleted from multiple nodes"
+  [entities property-ident]
+  (throw-error-if-deleting-protected-property (map :db/ident entities) property-ident)
+  (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities)))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
@@ -304,7 +324,7 @@
   (let [block-eids (map ->eid block-ids)
         blocks (keep (fn [id] (d/entity @conn id)) block-eids)
         block-id-set (set (map :db/id blocks))]
-    (throw-error-if-protected-property (map :db/ident blocks) property-id)
+    (validate-batch-deletion-of-property blocks property-id)
     (when (seq blocks)
       (when-let [property (d/entity @conn property-id)]
         (let [txs (mapcat
@@ -381,7 +401,8 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
-    (throw-error-if-protected-property [(:db/ident block)] property-id)
+    (validate-batch-deletion-of-property [block] property-id)
+
     (cond
       (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
       nil
