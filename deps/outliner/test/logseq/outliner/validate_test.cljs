@@ -124,14 +124,21 @@
                                                         [(entity-plus/entity-memoized @conn :logseq.class/Cards)]))))))
 
 (deftest validate-tags-property
-  (let [conn (db-test/create-conn-with-blocks
-              {:classes {:SomeTag {}}
+  (let [class-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:SomeTag {:block/uuid class-uuid :build/keep-uuid? true}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
-                 :blocks [{:block/title "block"}
-                          {:block/title "block / invalid as page title"}]}]})
+                 :blocks [{:block/title "block"
+                           :build/children [{:block/title "block - invalid location"}]}
+                          {:block/title "block / invalid title"}]}
+                {:page {:block/uuid class-uuid}
+                 :blocks [{:block/title "class block"}]}]
+               :build-existing-tx? true})
         block (db-test/find-block-by-content @conn "block")
-        block-invalid-as-page (db-test/find-block-by-content @conn #"invalid as page")]
+        block-invalid-title (db-test/find-block-by-content @conn #"invalid title")
+        block-invalid-location (db-test/find-block-by-content @conn #"invalid location")
+        block-invalid-in-class (db-test/find-block-by-content @conn "class block")]
 
     (is (thrown-with-msg?
          js/Error
@@ -169,8 +176,20 @@
     (is (thrown-with-msg?
          js/Error
          #"Page name can't.*/"
-         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-as-page)] :logseq.class/Page))
-        "Block with invalid title can't be tagged with #Page")))
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-title)] :logseq.class/Page))
+        "Block with invalid title can't be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't convert this block to page"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-location)] :logseq.class/Page))
+        "Block with invalid location can't be tagged with #Page")
+
+    (is (thrown-with-msg?
+         js/Error
+         #"Can't convert this block to page"
+         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-in-class)] :logseq.class/Page))
+        "Block in class or property can't be tagged with #Page")))
 
 (deftest validate-tags-property-deletion
   (let [conn (db-test/create-conn-with-blocks

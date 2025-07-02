@@ -243,23 +243,41 @@
                            :payload
                            {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
                             :type :error
-                            :entity entity
+                            :entity (into {} entity)
                             :property :block/tags}})))))))
 
-(defn- disallow-block-cant-tag-with-page-tag-and-invalid-title [db eids v]
+(defn- validate-block-can-tag-with-page-tag
+  "Validates block can convert to page by adding #Page for allowed scenarios"
+  [db eids v]
   (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
     (doseq [eid eids]
-      (let [entity (d/entity db eid)]
-        (when (:block/parent entity)
-          (validate-page-title (:block/title entity) {:node entity})
-          (validate-page-title-characters (:block/title entity) {:node entity}))))))
+      (let [block (d/entity db eid)]
+        (when (:block/parent block)
+          (validate-page-title (:block/title block) {:node block})
+          (validate-page-title-characters (:block/title block) {:node block})
+
+          ;; Only allow top-level blocks to be pages to guard against invalid pages
+          ;; in property values or pages being created with blocks as namespace parents
+          (when (not= (:block/page block) (:block/parent block))
+            (throw (ex-info "Can't convert this block to page since it is not a top-level block."
+                            {:type :notification
+                             :payload {:message "Can't convert this block to page since it is not a top-level block."
+                                       :type :error
+                                       :block (into {} block)}})))
+          ;; Guard against classes and properties becoming namespace parents
+          (when (or (entity-util/class? (:block/page block)) (entity-util/property? (:block/page block)))
+            (throw (ex-info "Can't convert this block to page when block is in a property or tag."
+                            {:type :notification
+                             :payload {:message "Can't convert this block to page when block is in a property or tag."
+                                       :type :error
+                                       :block (into {} block)}}))))))))
 
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids)
   (disallow-node-cant-tag-with-private-tags db block-eids v)
-  (disallow-block-cant-tag-with-page-tag-and-invalid-title db block-eids v)
+  (validate-block-can-tag-with-page-tag db block-eids v)
   (disallow-node-cant-tag-with-built-in-non-tags db block-eids v))
 
 (defn validate-tags-property-deletion
