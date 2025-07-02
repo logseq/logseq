@@ -1,15 +1,15 @@
 (ns capacitor.components.modal
   (:require ["../externals.js"]
+            [capacitor.components.editor-toolbar :as mobile-bar]
+            [capacitor.components.selection-toolbar :as selection-toolbar]
             [capacitor.components.ui :as ui]
+            [capacitor.init :as init]
             [capacitor.ionic :as ion]
             [capacitor.state :as state]
             [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.mobile.action-bar :as action-bar]
-            [frontend.mobile.core :as mobile]
-            [frontend.mobile.mobile-bar :as mobile-bar]
             [frontend.state :as fstate]
             [frontend.ui :as frontend-ui]
             [rum.core :as rum]))
@@ -21,7 +21,7 @@
         close! #(swap! state/*modal-data assoc :open? false)]
     (when open?
       (fstate/clear-edit!)
-      (mobile/keyboard-hide))
+      (init/keyboard-hide))
     (ion/modal
      {:isOpen (boolean open?)
       :presenting-element presenting-element
@@ -77,4 +77,4 @@
                     (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
                    (mobile-bar/mobile-bar)
                    (when show-action-bar?
-                     (action-bar/action-bar)))))))
+                     (selection-toolbar/action-bar)))))))

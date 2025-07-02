@@ -33,7 +33,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
-            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
@@ -611,7 +610,7 @@
                    (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -628,9 +627,6 @@
 
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
-
-      (when show-action-bar?
-        (action-bar/action-bar))
 
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?

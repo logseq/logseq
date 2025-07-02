@@ -1,4 +1,4 @@
-(ns frontend.mobile.core
+(ns capacitor.init
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
@@ -20,7 +20,7 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
-(defn mobile-postinit
+(defn mobile-post-init
   "postinit logic of mobile platforms: handle deeplink and intent"
   []
   (when (mobile-util/native-ios?)
@@ -44,6 +44,7 @@
                 (and (js/document.querySelector ".pswp"))
                 (some-> js/window.photoLightbox (.destroy))
 
+                ;; TODO: move ui-related code to mobile events
                 (not-empty (cc-ui/get-modal))
                 (cc-ui/close-modal!)
 

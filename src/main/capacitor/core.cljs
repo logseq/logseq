@@ -1,13 +1,13 @@
 (ns capacitor.core
   (:require ["react-dom/client" :as rdc]
             [capacitor.components.app :as app]
+            [capacitor.init :as init]
             [capacitor.state :as state]
             [frontend.background-tasks]
             [frontend.components.page :as page]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.route :as route-handler]
-            [frontend.mobile.core :as mobile]
             [frontend.util :as util]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
@@ -51,7 +51,7 @@
   ;; so it is available even in :advanced release builds
   (prn "[capacitor-new] init!")
   (set-router!)
-  (mobile/init!)
+  (init/init!)
   (fhandler/start! render!))
 
 (defn ^:export stop! []
