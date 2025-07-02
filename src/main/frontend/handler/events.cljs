@@ -38,7 +38,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -185,9 +184,8 @@
     (p/do!
      (state/pub-event! [:graph/sync-context])
     ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (mobile-util/native-ios?)
-       (js/setTimeout #(mobile/mobile-postinit) 1000))
-    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+     (state/pub-event! [:mobile/post-init])
+     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
      (if db-based?
        (export/auto-db-backup! repo {:backup-now? true})

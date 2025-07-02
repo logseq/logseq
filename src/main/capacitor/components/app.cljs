@@ -1,8 +1,10 @@
 (ns capacitor.components.app
   (:require ["../externals.js"]
+            [capacitor.components.editor-toolbar :as editor-toolbar]
             [capacitor.components.modal :as modal]
             [capacitor.components.popup :as popup]
             [capacitor.components.search :as search]
+            [capacitor.components.selection-toolbar :as selection-toolbar]
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui-component]
             [capacitor.ionic :as ion]
@@ -17,8 +19,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.mobile.action-bar :as action-bar]
-            [frontend.mobile.mobile-bar :as mobile-bar]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as fstate]
@@ -202,7 +202,7 @@
      {:id "app-ion-tabs"
       :onIonTabsDidChange (fn [^js e]
                             (state/set-tab! (.-tab (.-detail e))
-                              (.-target e)))}
+                                            (.-target e)))}
      (ion/tab
       {:tab "home"}
       (ion/content
@@ -237,6 +237,6 @@
      (tabs current-repo)
      (when-not open?
        [:<>
-        (mobile-bar/mobile-bar)
+        (editor-toolbar/mobile-bar)
         (when show-action-bar?
-          (action-bar/action-bar))]))))
+          (selection-toolbar/action-bar))]))))
