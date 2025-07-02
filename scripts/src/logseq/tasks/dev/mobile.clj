@@ -1,7 +1,7 @@
 (ns logseq.tasks.dev.mobile
   "Tasks for mobile development"
-  (:require [babashka.tasks :refer [shell]]
-            [babashka.fs :as fs]
+  (:require [babashka.fs :as fs]
+            [babashka.tasks :refer [shell]]
             [clojure.string :as string]
             [logseq.tasks.util :as task-util]))
 
@@ -15,10 +15,10 @@
         (shell cmd)
         (println "Waiting for app to build..."))
       (Thread/sleep 1000)
-      (when-not (or (and (fs/exists? "ios/App/App/public/static/js/main.js")
-                      (task-util/file-modified-later-than? "ios/App/App/public/static/js/main.js" start-time))
-                    (and (fs/exists? "android/App/src/main/assets/public/static/js/main.js")
-                      (task-util/file-modified-later-than? "android/App/src/main/assets/public/static/js/main.js" start-time)))
+      (when-not (or (and (fs/exists? "ios/App/App/public/js/main.js")
+                         (task-util/file-modified-later-than? "ios/App/App/public/js/main.js" start-time))
+                    (and (fs/exists? "android/App/src/main/assets/public/js/main.js")
+                         (task-util/file-modified-later-than? "android/App/src/main/assets/public/js/main.js" start-time)))
         (recur (dec n))))))
 
 (defn- set-system-env
@@ -37,7 +37,6 @@
                        (string/replace "//    cleartext:" "    cleartext:")
                        (string/replace "// }" " }"))]
       (spit "capacitor.config.ts" new-body))))
-
 
 (defn app-watch
   "Watches environment to reload cljs, css and other assets for mobile"
