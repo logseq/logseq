@@ -1024,7 +1024,8 @@
        :on-pointer-up (fn []
                         (when-let [container (gdom/getElement "app-container-wrapper")]
                           (d/remove-class! container "blocks-selection-mode")
-                          (when (> (count (state/get-selection-blocks)) 1)
+                          (when (and (> (count (state/get-selection-blocks)) 1)
+                                     (not (util/input? js/document.activeElement)))
                             (util/clear-selection!))))}
 
       [:button#skip-to-main

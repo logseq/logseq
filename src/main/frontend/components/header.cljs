@@ -382,7 +382,8 @@
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
-              {:title (t :header/search)
+              {:data-keep-selection true
+               :title (t :header/search)
                :on-click #(do (when (or (mobile-util/native-android?)
                                         (mobile-util/native-iphone?))
                                 (state/set-left-sidebar-open! false))

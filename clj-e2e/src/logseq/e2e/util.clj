@@ -62,19 +62,31 @@
     (.pressSequentially input-node text
                         (.setDelay (Locator$PressSequentiallyOptions.) delay))))
 
+(defn exit-edit
+  []
+  (when (get-editor)
+    (k/esc))
+  (assert/assert-non-editor-mode))
+
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (k/esc)
-  (k/esc))
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc))
+  (exit-edit)
+  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+    (k/esc)))
 
 (defn search
   [text]
-  (double-esc)
-  (assert/assert-in-normal-mode?)
-  (w/click :#search-button)
-  (w/wait-for ".cp__cmdk-search-input")
-  (w/fill ".cp__cmdk-search-input" text))
+  (if (w/visible? ".cp__cmdk-search-input")
+    (w/fill ".cp__cmdk-search-input" text)
+    (do
+      (double-esc)
+      (assert/assert-in-normal-mode?)
+      (w/click :#search-button)
+      (w/wait-for ".cp__cmdk-search-input")
+      (w/fill ".cp__cmdk-search-input" text))))
 
 (defn search-and-click
   [search-text]
@@ -104,11 +116,6 @@
   []
   (count-elements ".ls-page-blocks .page-blocks-inner .ls-block"))
 
-(defn exit-edit
-  []
-  (k/esc)
-  (assert/assert-non-editor-mode))
-
 (defn get-text
   [locator]
   (if (string? locator)
@@ -128,7 +135,7 @@
 (defn repeat-keyboard
   [n shortcut]
   (dotimes [_i n]
-    (k/press shortcut)))
+    (k/press shortcut {:delay 20})))
 
 (defn get-page-blocks-contents
   []
@@ -160,11 +167,13 @@
 
 (defn move-cursor-to-end
   []
-  (k/press "ControlOrMeta+a" "ArrowRight"))
+  (k/press ["ControlOrMeta+a" "ArrowRight"]
+           {:delay 20}))
 
 (defn move-cursor-to-start
   []
-  (k/press "ControlOrMeta+a" "ArrowLeft"))
+  (k/press ["ControlOrMeta+a" "ArrowLeft"]
+           {:delay 20}))
 
 (defn input-command
   [command]
@@ -178,15 +187,18 @@
   (w/click "a.menu-link.chosen"))
 
 (defn set-tag
-  [tag]
+  "`hidden?`: some tags may be hidden from the UI, e.g. Page"
+  [tag & {:keys [hidden?]
+          :or {hidden? false}}]
   (press-seq " #" {:delay 20})
   (press-seq tag)
   (w/click (first (w/query (format "a.menu-link:has-text(\"%s\")" tag))))
-  ;; wait tag added on ui
-  (assert/assert-is-visible
-   (-> ".ls-block:not(.block-add-button)"
-       (loc/filter :has ".editor-wrapper textarea")
-       (loc/filter :has (format ".block-tag :text('%s')" tag)))))
+  (when-not hidden?
+    ;; wait tag added on ui
+    (assert/assert-is-visible
+     (-> ".ls-block:not(.block-add-button)"
+         (loc/filter :has ".editor-wrapper textarea")
+         (loc/filter :has (format ".block-tag :text('%s')" tag))))))
 
 (defn -query-last
   [q]

@@ -205,10 +205,22 @@
 (defn- disallow-node-cant-tag-with-private-tags
   [db block-eids v & {:keys [delete?]}]
   (when (and (ldb/private-tags (:db/ident (d/entity db v)))
-             ;; Allow assets to be tagged
-             (not (and
-                   (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
-                   (= :logseq.class/Asset (:db/ident (d/entity db v))))))
+             (not
+              (or
+               ;; Allow assets to be tagged
+               (and
+                (every? (fn [id] (ldb/asset? (d/entity db id))) block-eids)
+                (= :logseq.class/Asset (:db/ident (d/entity db v))))
+               ;; Allow non-page blocks to be tagged with #Page
+               (and
+                (not delete?)
+                (every? (fn [id] (not (entity-util/page? (d/entity db id)))) block-eids)
+                (= :logseq.class/Page (:db/ident (d/entity db v))))
+               ;; Allow pages to drop #Page
+               (and
+                delete?
+                (every? (fn [id] (ldb/internal-page? (d/entity db id))) block-eids)
+                (= :logseq.class/Page (:db/ident (d/entity db v)))))))
     (throw (ex-info (str (if delete? "Can't remove tag" "Can't set tag")
                          " with built-in #" (:block/title (d/entity db v)))
                     {:type :notification
@@ -229,6 +241,22 @@
                                              " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
+(defn- disallow-removing-page-tag-if-no-parent
+  [db eids v]
+  (let [property-value (when (integer? v) (d/entity db v))]
+    (when (= (:db/ident property-value) :logseq.class/Page)
+      (doseq [eid eids]
+        (let [entity (d/entity db eid)]
+          (when (and (ldb/internal-page? entity)
+                     (not (:block/parent entity)))
+            (throw (ex-info "This page cannot be converted to a block"
+                            {:type :notification
+                             :payload
+                             {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
+                              :type :error
+                              :entity entity
+                              :property :block/tags}}))))))))
+
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"
   [db block-eids v]
@@ -240,4 +268,5 @@
   "Validates deleting a property value from :block/tags for given blocks"
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
-  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true}))
+  (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
+  (disallow-removing-page-tag-if-no-parent db block-eids v))

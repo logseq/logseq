@@ -68,6 +68,7 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -851,6 +852,23 @@
      {:outliner-op :move-blocks}
      (outliner-op/move-blocks! blocks target sibling?))))
 
+(defn move-selected-blocks
+  [e]
+  (util/stop e)
+  (let [block-ids (or (state/get-selection-block-ids)
+                      (when-let [id (:block/uuid (state/get-edit-block))]
+                        [id]))]
+    (when (seq block-ids)
+      (let [blocks (->> (map (fn [id] (db/entity [:block/uuid id])) block-ids)
+                        block-handler/get-top-level-blocks)]
+        (route-handler/go-to-search! :nodes
+                                     {:action :move-blocks
+                                      :blocks blocks
+                                      :trigger (fn [chosen]
+                                                 (state/pub-event! [:editor/hide-action-bar])
+                                                 (state/clear-selection!)
+                                                 (move-blocks! blocks (:source-page chosen) false))})))))
+
 (defn delete-block!
   [repo]
   (delete-block-inner! repo (get-state)))
@@ -1257,6 +1275,10 @@
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
+(defn dialog-exists?
+  [id]
+  (shui-dialog/get-modal id))
+
 (defn show-action-bar!
   [& {:keys [delay]
       :or {delay 200}}]
@@ -1614,7 +1636,12 @@
 (defn get-matched-classes
   "Return matched classes except the root tag"
   [q]
-  (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+  (let [editing-block (some-> (state/get-edit-block) :db/id db/entity)
+        non-page-block? (and editing-block (not (ldb/page? editing-block)))
+        all-classes (cond-> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                      non-page-block?
+                      (conj (db/entity :logseq.class/Page)))
+        classes (->> all-classes
                      (mapcat (fn [class]
                                (conj (:block/alias class) class)))
                      (common-util/distinct-by :db/id)
@@ -3378,18 +3405,19 @@
 
 (defn open-selected-block!
   [direction e]
-  (let [selected-blocks (state/get-selection-blocks)
-        f (case direction :left first :right last)
-        node (some-> selected-blocks f)]
-    (if (some-> node (dom/has-class? "block-add-button"))
-      (.click node)
-      (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
-        (util/stop e)
-        (let [block {:block/uuid block-id}
-              left? (= direction :left)
-              opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
-                    :event e}]
-          (edit-block! block (if left? 0 :max) opts))))))
+  (when-not (auto-complete?)
+    (let [selected-blocks (state/get-selection-blocks)
+          f (case direction :left first :right last)
+          node (some-> selected-blocks f)]
+      (if (some-> node (dom/has-class? "block-add-button"))
+        (.click node)
+        (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
+          (util/stop e)
+          (let [block {:block/uuid block-id}
+                left? (= direction :left)
+                opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
+                      :event e}]
+            (edit-block! block (if left? 0 :max) opts)))))))
 
 (defn shortcut-left-right [direction]
   (fn [e]

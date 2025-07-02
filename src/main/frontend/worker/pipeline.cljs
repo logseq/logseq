@@ -126,6 +126,35 @@
               (assert (= (count (distinct (map :block/order children))) (count children))
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
+(defn- toggle-page-and-block
+  [conn {:keys [db-before tx-data tx-meta]}]
+  (when-not (:rtc-op? tx-meta)
+    (let [page-tag (d/entity @conn :logseq.class/Page)]
+      (mapcat
+       (fn [datom]
+         (when (and (= :block/tags (:a datom))
+                    (= (:db/id page-tag) (:v datom)))
+           (when-let [block (d/entity db-before (:e datom))]
+             (let [id (:db/id block)]
+               (cond
+                 (and (:added datom) (not (ldb/page? block))) ; block->page
+                 [{:db/id id
+                   :block/name (common-util/page-name-sanity-lc (:block/title block))}
+                  [:db/retract id :block/page]]
+
+                 ;; page->block
+                 (and (not (:added datom)) (ldb/internal-page? block))
+                 (let [parent (:block/parent block)
+                       parent-page (when parent
+                                     (loop [parent parent]
+                                       (if (ldb/page? parent)
+                                         parent
+                                         (recur (:block/parent parent)))))]
+                   (when parent-page
+                     [[:db/retract id :block/name]
+                      [:db/add id :block/page (:db/id parent-page)]])))))))
+       tx-data))))
+
 (defn- add-missing-properties-to-typed-display-blocks
   "Add missing properties for these cases:
   1. Add corresponding tag when invoking commands like /code block.
@@ -220,12 +249,13 @@
 (defn- compute-extra-tx-data
   [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
+        toggle-page-and-block-tx-data (toggle-page-and-block conn tx-report)
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands conn tx-report))
         insert-templates-tx (insert-tag-templates repo tx-report)
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
-    (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+    (concat toggle-page-and-block-tx-data display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
