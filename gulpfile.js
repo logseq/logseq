@@ -23,8 +23,8 @@ const css = {
     })
   },
 
-  watchCapacitorNewCSS () {
-    return cp.spawn(`yarn css:capacitor-new-watch`, {
+  watchMobileCSS () {
+    return cp.spawn(`yarn css:mobile-watch`, {
       shell: true,
       stdio: 'inherit',
     })
@@ -37,9 +37,9 @@ const css = {
     )(...params)
   },
 
-  buildCapacitorCSS (...params) {
+  buildMobileCSS (...params) {
     return gulp.series(
-      () => exec(`yarn css:capacitor-new-build`, {}),
+      () => exec(`yarn css:mobile-build`, {}),
     )(...params)
   },
 
@@ -130,10 +130,10 @@ const common = {
         'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui/ui.js',
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
-      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor', 'js'))),
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
         'packages/ui/dist/ionic/*.js',
-      ]).pipe(gulp.dest(path.join(outputPath, 'capacitor'))),
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile'))),
     )(...params)
   },
 
@@ -146,7 +146,7 @@ const common = {
     return gulp.src([
       outputFilePath,
       '!' + path.join(outputPath, 'node_modules/**'),
-      '!' + path.join(outputPath, 'capacitor/**'),
+      '!' + path.join(outputPath, 'mobile/**'),
       '!' + path.join(outputPath, 'android/**'),
       '!' + path.join(outputPath, 'ios/**'),
     ]).pipe(gulp.dest(publicRootPath))
@@ -275,10 +275,10 @@ exports.watch = gulp.series(
   common.syncResourceFile,
   common.syncAssetFiles, common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
-exports.watchCapacitorNew = gulp.series(
+exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,
-  gulp.parallel(common.keepSyncResourceFile, css.watchCapacitorNewCSS))
+  gulp.parallel(common.keepSyncResourceFile, css.watchMobileCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
-exports.buildCapacitorNew = gulp.series(common.clean, common.syncResourceFile,
-  common.syncAssetFiles, css.buildCapacitorCSS)
+exports.buildMobile = gulp.series(common.clean, common.syncResourceFile,
+  common.syncAssetFiles, css.buildMobileCSS)

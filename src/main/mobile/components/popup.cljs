@@ -1,7 +1,7 @@
-(ns capacitor.components.popup
+(ns mobile.components.popup
   "Mobile popup"
-  (:require [capacitor.ionic :as ion]
-            [capacitor.state :as mobile-state]
+  (:require [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [dommy.core :as dom]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]

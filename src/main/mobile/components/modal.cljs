@@ -1,12 +1,12 @@
-(ns capacitor.components.modal
+(ns mobile.components.modal
   "Mobile modal"
   (:require ["../externals.js"]
-            [capacitor.components.editor-toolbar :as mobile-bar]
-            [capacitor.components.selection-toolbar :as selection-toolbar]
-            [capacitor.components.ui :as mobile-ui]
-            [capacitor.init :as init]
-            [capacitor.ionic :as ion]
-            [capacitor.state :as mobile-state]
+            [mobile.components.editor-toolbar :as mobile-bar]
+            [mobile.components.selection-toolbar :as selection-toolbar]
+            [mobile.components.ui :as mobile-ui]
+            [mobile.init :as init]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]

@@ -1,6 +1,6 @@
-(ns capacitor.components.settings
+(ns mobile.components.settings
   "Mobile settings"
-  (:require [capacitor.ionic :as ion]
+  (:require [mobile.ionic :as ion]
             [frontend.components.repo :as repo]
             [frontend.components.user.login :as login]
             [frontend.handler.user :as user-handler]

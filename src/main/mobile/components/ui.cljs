@@ -1,7 +1,7 @@
-(ns capacitor.components.ui
+(ns mobile.components.ui
   "Mobile ui"
-  (:require [capacitor.ionic :as ion]
-            [capacitor.state :as mobile-state]
+  (:require [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]

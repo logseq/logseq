@@ -1,9 +1,9 @@
-(ns capacitor.core
+(ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
-            [capacitor.components.app :as app]
-            [capacitor.init :as init]
-            [capacitor.state :as state]
+            [mobile.components.app :as app]
+            [mobile.init :as init]
+            [mobile.state :as state]
             [frontend.background-tasks]
             [frontend.components.page :as page]
             [frontend.handler :as fhandler]
