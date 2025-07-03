@@ -1,6 +1,6 @@
-(ns capacitor.components.editor-toolbar
+(ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
-  (:require [capacitor.init :as init]
+  (:require [mobile.init :as init]
             [frontend.commands :as commands]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.camera :as mobile-camera]

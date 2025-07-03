@@ -1,4 +1,4 @@
-(ns capacitor.ionic
+(ns mobile.ionic
   "Ionic ui"
   (:refer-clojure :exclude [list])
   (:require [logseq.shui.icon.v2 :as shui-icon]

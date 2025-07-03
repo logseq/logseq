@@ -1,6 +1,6 @@
-(ns capacitor.events
+(ns mobile.events
   "Mobile events"
-  (:require [capacitor.init :as init]
+  (:require [mobile.init :as init]
             [frontend.handler.events :as events]
             [promesa.core :as p]))
 

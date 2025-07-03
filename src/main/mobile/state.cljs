@@ -1,4 +1,4 @@
-(ns capacitor.state
+(ns mobile.state
   "Mobile state"
   (:require [frontend.rum :as r]))
 

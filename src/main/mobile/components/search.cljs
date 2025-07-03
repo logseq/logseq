@@ -1,7 +1,7 @@
-(ns capacitor.components.search
+(ns mobile.components.search
   "Mobile search"
-  (:require [capacitor.ionic :as ion]
-            [capacitor.state :as mobile-state]
+  (:require [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db :as db]
