@@ -6,7 +6,7 @@ const version = fs.readFileSync('static/package.json', 'utf8').match(/"version":
 const config: CapacitorConfig = {
   appId: 'com.logseq.app',
   appName: 'Logseq',
-  webDir: 'static/capacitor',
+  webDir: 'static/mobile',
   loggingBehavior: 'debug',
   server: {
       androidScheme: 'http',

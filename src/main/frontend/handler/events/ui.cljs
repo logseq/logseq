@@ -1,7 +1,6 @@
 (ns frontend.handler.events.ui
   "UI events"
-  (:require [capacitor.state :as mobile-state]
-            [clojure.core.async :as async]
+  (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.file-sync :as file-sync]
@@ -40,6 +39,7 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]

@@ -1,10 +1,10 @@
-(ns capacitor.init
+(ns mobile.init
   "Main ns for handling mobile start"
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
-            [capacitor.components.ui :as cc-ui]
-            [capacitor.state :as mobile-state]
+            [mobile.components.ui :as cc-ui]
+            [mobile.state :as mobile-state]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
