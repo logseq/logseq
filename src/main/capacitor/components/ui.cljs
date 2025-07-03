@@ -1,27 +1,18 @@
 (ns capacitor.components.ui
+  "Mobile ui"
   (:require [capacitor.ionic :as ion]
+            [capacitor.state :as mobile-state]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
-            [frontend.state :as fstate]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [capacitor.components.popup :as popup]
-            [capacitor.state :as state]
             [medley.core :as medley]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
-
-(rum/defc safe-page-container
-  [content {:keys [header-content page-props content-props]}]
-  (ion/page
-   (merge {:class "app-safe-page"} page-props)
-   (some-> header-content (ion/header))
-   (ion/content
-    (merge {:class "ion-padding"} content-props)
-    content)))
 
 (rum/defc classic-app-container-wrap
   [content]
@@ -91,7 +82,7 @@
 
 (rum/defc install-notifications < rum/reactive
   []
-  (let [contents (fstate/sub :notification/contents)]
+  (let [contents (state/sub :notification/contents)]
     (transition-group
      {:class-name "notifications ui__notifications"}
      (let [notifications
@@ -189,14 +180,14 @@
 
 (defn open-popup!
   [content-fn opts]
-  (state/set-popup!
-    {:open? true
-     :content-fn content-fn
-     :opts opts}))
+  (mobile-state/set-popup!
+   {:open? true
+    :content-fn content-fn
+    :opts opts}))
 
 (defn close-popup! []
-  (some-> state/*popup-data
-    (swap! assoc :open? false)))
+  (some-> mobile-state/*popup-data
+          (swap! assoc :open? false)))
 
 (rum/defc install-modals []
   (let [_ (r/use-atom *modals)]

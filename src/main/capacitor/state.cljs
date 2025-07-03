@@ -1,4 +1,5 @@
 (ns capacitor.state
+  "Mobile state"
   (:require [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))

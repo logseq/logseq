@@ -216,30 +216,6 @@
      []
      (gobj/get js/window "innerWidth")))
 
-;; Keep the following colors in sync with common.css
-#?(:cljs
-   (defn- get-computed-bg-color
-     []
-     ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
-     (let [styles (js/window.getComputedStyle js/document.body)
-           bg-color (gobj/get styles "background-color")
-           ;; convert rgb(r,g,b) to #rrggbb
-           rgb2hex (fn [rgb]
-                     (->> rgb
-                          (map (comp #(.toString % 16) parse-long string/trim))
-                          (map #(if (< (count %) 2)
-                                  (str "0" %)
-                                  %))
-                          (string/join)
-                          (str "#")))]
-       (when (string/starts-with? bg-color "rgb")
-         (let [rgb (-> bg-color
-                       (string/replace #"^rgb[^\d]+" "")
-                       (string/replace #"\)$" "")
-                       (string/split #","))
-               rgb (take 3 rgb)]
-           (rgb2hex rgb))))))
-
 #?(:cljs
    (defn set-theme-light
      []

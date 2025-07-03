@@ -1,6 +1,7 @@
 (ns frontend.handler.events.ui
   "UI events"
-  (:require [clojure.core.async :as async]
+  (:require [capacitor.state :as mobile-state]
+            [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.components.file-sync :as file-sync]
@@ -34,7 +35,6 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.sentry :as sentry-event]
             [frontend.state :as state]
-            [capacitor.state :as cc-state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -89,7 +89,7 @@
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
   (when (util/capacitor-new?)
-    (cc-state/redirect-to-tab! "home")))
+    (mobile-state/redirect-to-tab! "home")))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!

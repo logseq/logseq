@@ -1,14 +1,10 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
-            ["@capacitor/filesystem" :refer [Filesystem]]
-            [clojure.string :as string]
-            [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.assets :as assets-handler]
-            [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
-            [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -34,7 +30,7 @@
                             _image-path (assets-handler/get-asset-path filename)
                             base64string (.-base64String photo)
                             file (js/File. #js [(util/base64string-to-unit8array base64string)]
-                                   filename #js {:type "image/jpeg"})]
+                                           filename #js {:type "image/jpeg"})]
                       file)))))
       (p/catch (fn [error]
                  (log/error :file/write-failed {:error error})))))
