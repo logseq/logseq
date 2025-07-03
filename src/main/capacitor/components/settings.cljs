@@ -1,15 +1,16 @@
 (ns capacitor.components.settings
+  "Mobile settings"
   (:require [capacitor.ionic :as ion]
             [frontend.components.repo :as repo]
             [frontend.components.user.login :as login]
             [frontend.handler.user :as user-handler]
-            [frontend.state :as fstate]
+            [frontend.state :as state]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
 (rum/defc user-profile < rum/reactive
   []
-  (let [login? (and (fstate/sub :auth/id-token) (user-handler/logged-in?))]
+  (let [login? (and (state/sub :auth/id-token) (user-handler/logged-in?))]
     (if-not login?
       (shui/button
        {:variant :default

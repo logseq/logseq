@@ -1,14 +1,14 @@
 (ns capacitor.components.search
-  (:require [capacitor.components.modal :as modal]
-            [capacitor.ionic :as ion]
-            [capacitor.state :as state]
+  "Mobile search"
+  (:require [capacitor.ionic :as ion]
+            [capacitor.state :as mobile-state]
             [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
             [frontend.handler.search :as search-handler]
             [frontend.search :as search]
-            [frontend.state :as fstate]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -18,7 +18,7 @@
 
 (defn- search-blocks
   [input]
-  (p/let [repo (fstate/get-current-repo)
+  (p/let [repo (state/get-current-repo)
           blocks (search/block-search repo input
                                       {:limit 100 :built-in? true})
           blocks (remove nil? blocks)
@@ -117,7 +117,7 @@
          (let [block (or source-page source-block)]
            (ion/item
             {:on-click (fn []
-                         (state/open-block-modal! block))}
+                         (mobile-state/open-block-modal! block))}
             [:div.flex.flex-col.gap-1.py-1
              (when header
                [:div.opacity-50.text-sm

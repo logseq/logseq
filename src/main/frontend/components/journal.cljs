@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]))
 

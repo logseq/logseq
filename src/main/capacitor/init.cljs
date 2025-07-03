@@ -4,7 +4,7 @@
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
             [capacitor.components.ui :as cc-ui]
-            [capacitor.state :as cc-state]
+            [capacitor.state :as mobile-state]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
@@ -40,15 +40,15 @@
                 (fn []
                   (when (false?
                          (cond
-                ;; lightbox
-                           (and (js/document.querySelector ".pswp"))
+                           ;; lightbox
+                           (js/document.querySelector ".pswp")
                            (some-> js/window.photoLightbox (.destroy))
 
                 ;; TODO: move ui-related code to mobile events
                            (not-empty (cc-ui/get-modal))
                            (cc-ui/close-modal!)
 
-                           (not-empty @cc-state/*modal-data)
+                           (not-empty @mobile-state/*modal-data)
                            :skip
 
                            (not-empty (state/get-selection-blocks))
@@ -117,6 +117,7 @@
   []
   (.hide Keyboard))
 
-(defn keyboard-show
-  []
-  (.show Keyboard))
+(comment
+  (defn keyboard-show
+    []
+    (.show Keyboard)))

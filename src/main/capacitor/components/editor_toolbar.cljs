@@ -1,11 +1,9 @@
 (ns capacitor.components.editor-toolbar
-  (:require [dommy.core :as dom]
+  "Mobile editor toolbar"
+  (:require [capacitor.init :as init]
             [frontend.commands :as commands]
-            [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.mobile.camera :as mobile-camera]
-            [capacitor.init :as init]
             [frontend.mobile.haptics :as haptics]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -44,34 +42,6 @@
                           (command-handler e)
                           (command-handler)))}
     (ui/icon icon {:size ui/icon-size :class class})]])
-
-(rum/defc timestamp-submenu
-  [parent-id]
-  (let [callback (fn [event]
-                   (util/stop event)
-                   (let [target (gdom/getElement "mobile-toolbar-timestamp-submenu")]
-                     (dom/remove-class! target "show-submenu")))
-        command-cp (fn [action description]
-                     [:button
-                      {:on-pointer-down (fn [e]
-                                          (action)
-                                          (callback e))}
-                      description])]
-    [:div
-     [:div#mobile-toolbar-timestamp-submenu.submenu
-      {:style {:bottom @util/keyboard-height}}
-      (command-cp #(let [today (page-handler/get-page-ref-text (date/today))]
-                     (commands/simple-insert! parent-id today {}))
-                  "Today")
-      (command-cp #(let [tomorrow (page-handler/get-page-ref-text (date/tomorrow))]
-                     (commands/simple-insert! parent-id tomorrow {}))
-                  "Tomorrow")
-      (command-cp #(let [yesterday (page-handler/get-page-ref-text (date/yesterday))]
-                     (commands/simple-insert! parent-id yesterday {}))
-                  "Yesterday")
-      (command-cp #(let [timestamp (date/get-current-time)]
-                     (commands/simple-insert! parent-id timestamp {}))
-                  "Time")]]))
 
 (defn- insert-text
   [text opts]

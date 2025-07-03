@@ -5,7 +5,6 @@
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]

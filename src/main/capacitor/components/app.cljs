@@ -1,4 +1,5 @@
 (ns capacitor.components.app
+  "App root"
   (:require ["../externals.js"]
             [capacitor.components.editor-toolbar :as editor-toolbar]
             [capacitor.components.modal :as modal]
@@ -8,7 +9,7 @@
             [capacitor.components.settings :as settings]
             [capacitor.components.ui :as ui-component]
             [capacitor.ionic :as ion]
-            [capacitor.state :as state]
+            [capacitor.state :as mobile-state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
             [frontend.components.rtc.indicator :as rtc-indicator]
@@ -21,7 +22,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
-            [frontend.state :as fstate]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [goog.date :as gdate]
             [logseq.db :as ldb]
@@ -34,8 +35,8 @@
 
 (rum/defc app-graphs-select
   []
-  (let [current-repo (fstate/get-current-repo)
-        graphs (fstate/get-repos)
+  (let [current-repo (state/get-current-repo)
+        graphs (state/get-repos)
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
@@ -62,7 +63,7 @@
                                                                    (when-not (string/blank? db-name)
                                                                      (repo-handler/new-db! db-name)))
                                                                  (when (string/starts-with? role "logseq_db_")
-                                                                   (fstate/pub-event! [:graph/switch role])))))
+                                                                   (state/pub-event! [:graph/switch role])))))
                                                 :modal-props {:class "graph-switcher"}})))}
       [:span.flex.items-center.gap-2.opacity-80.pt-1
        [:strong.overflow-hidden.text-ellipsis.block.font-normal
@@ -114,15 +115,15 @@
                                 (let [apply-date! (fn [date]
                                                     (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
                                                       (if-let [journal (db/get-page page-name)]
-                                                        (state/open-block-modal! journal)
+                                                        (mobile-state/open-block-modal! journal)
                                                         (-> (page-handler/<create! page-name {:redirect? false})
-                                                            (p/then #(state/open-block-modal! (db/get-page page-name)))))))]
+                                                            (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
                                   (-> (.showDatePicker mobile-util/ui-local)
                                       (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
                    [:span.text-muted-foreground {:slot "icon-only"}
                     (ion/tabler-icon "calendar-month" {:size 24})])
 
-                  (let [repo (fstate/get-current-repo)]
+                  (let [repo (state/get-current-repo)]
                     [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
                      (when (and repo
                                 (ldb/get-graph-rtc-uuid (db/get-db))
@@ -154,15 +155,15 @@
                 (ui/inject-document-devices-envs!)
                 state)}
   [*page current-tab]
-  (let [db-restoring? (fstate/sub :db/restoring?)]
+  (let [db-restoring? (state/sub :db/restoring?)]
     (home-inner *page db-restoring? current-tab)))
 
 (defn use-theme-effects!
   [current-repo]
-  (let [[theme] (frum/use-atom-in fstate/state :ui/theme)]
+  (let [[theme] (frum/use-atom-in state/state :ui/theme)]
     (hooks/use-effect!
      (fn []
-       (fstate/sync-system-theme!)
+       (state/sync-system-theme!)
        (ui/setup-system-theme-effect!))
      [])
     (hooks/use-effect!
@@ -184,7 +185,7 @@
 
 (rum/defc tabs
   [current-repo]
-  (let [[current-tab _] (state/use-tab)
+  (let [[current-tab _] (mobile-state/use-tab)
         *home-page (hooks/use-ref nil)
         *search-page (hooks/use-ref nil)
         [presenting-element set-presenting-element!] (hooks/use-state nil)]
@@ -201,8 +202,8 @@
     (ion/tabs
      {:id "app-ion-tabs"
       :onIonTabsDidChange (fn [^js e]
-                            (state/set-tab! (.-tab (.-detail e))
-                                            (.-target e)))}
+                            (mobile-state/set-tab! (.-tab (.-detail e))
+                                                   (.-target e)))}
      (ion/tab
       {:tab "home"}
       (ion/content
@@ -230,9 +231,9 @@
 
 (rum/defc main < rum/reactive
   []
-  (let [current-repo (fstate/sub :git/current-repo)
-        show-action-bar? (fstate/sub :mobile/show-action-bar?)
-        {:keys [open?]} (rum/react state/*modal-data)]
+  (let [current-repo (state/sub :git/current-repo)
+        show-action-bar? (state/sub :mobile/show-action-bar?)
+        {:keys [open?]} (rum/react mobile-state/*modal-data)]
     (ion/app
      (tabs current-repo)
      (when-not open?

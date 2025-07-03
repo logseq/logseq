@@ -1,6 +1,7 @@
 (ns capacitor.components.popup
+  "Mobile popup"
   (:require [capacitor.ionic :as ion]
-            [capacitor.state :as state]
+            [capacitor.state :as mobile-state]
             [dommy.core :as dom]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
@@ -40,9 +41,9 @@
 
     :else
     (when (fn? content-fn)
-      (state/set-popup! {:open? true
-                         :content-fn content-fn
-                         :opts opts})
+      (mobile-state/set-popup! {:open? true
+                                :content-fn content-fn
+                                :opts opts})
       (reset! *last-popup-modal? true))))
 
 (defn popup-hide!
@@ -50,7 +51,7 @@
   (cond
     (= :download-rtc-graph (first args))
     (do
-      (state/set-popup! nil)
+      (mobile-state/set-popup! nil)
       (js/setTimeout
        #(.select (dom/sel1 "ion-tabs") "home") 1000))
 
@@ -63,13 +64,13 @@
 
 (rum/defc popup < rum/reactive
   []
-  (let [{:keys [open? content-fn opts]} (rum/react state/*popup-data)]
+  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)]
     (ion/modal
      (merge
       {:isOpen (boolean open?)
        :initialBreakpoint 0.75
        :breakpoints #js [0 0.75 1]
-       :onDidDismiss (fn [] (state/set-popup! nil))
+       :onDidDismiss (fn [] (mobile-state/set-popup! nil))
        :expand "block"}
       (:modal-props opts))
      (ion/content

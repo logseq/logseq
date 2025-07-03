@@ -53,16 +53,6 @@
   [block]
   (get-timestamp block "Deadline"))
 
-(defn indentable?
-  [{:block/keys [parent] :as block}]
-  (when parent
-    (not= (:db/id (ldb/get-first-child (db/get-db) (:db/id parent)))
-          (:db/id block))))
-
-(defn outdentable?
-  [{:block/keys [level] :as _block}]
-  (not= level 1))
-
 (defn select-block!
   [block-uuid]
   (let [blocks (util/get-blocks-by-id block-uuid)]
