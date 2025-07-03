@@ -183,12 +183,12 @@
                                    :blocks (map #(select-keys % [:db/id :block/title]) [child])}}))))))
 
 (defn validate-extends-property
-  [db parent-ent* child-ents]
+  [db parent-ent* child-ents & {:keys [built-in?] :or {built-in? true}}]
   (let [parent-ent (if (integer? parent-ent*)
                      (d/entity db parent-ent*)
                      parent-ent*)]
     (disallow-extends-cycle db parent-ent child-ents)
-    (disallow-built-in-class-extends-change parent-ent child-ents)
+    (when built-in? (disallow-built-in-class-extends-change parent-ent child-ents))
     (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
