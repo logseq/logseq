@@ -1,9 +1,12 @@
 (ns frontend.mobile.flows
   "common flows for mobile"
-  (:require ["@capacitor/network" :refer [^js Network]]
-            [frontend.common.missionary :as c.m]
+  (:require [frontend.common.missionary :as c.m]
             [missionary.core :as m]
             [promesa.core :as p]))
+
+;; Can't require ["@capacitor/network" :refer [^js Network]] here
+;; because the node js environment doesn't have `Window`
+(defonce *network (atom nil))
 
 (def *mobile-network-status (atom nil))
 (def *mobile-app-state (atom nil))
@@ -11,7 +14,7 @@
 (def ^:private mobile-network-init-status-flow
   (m/observe
    (fn ctor [emit!]
-     (p/let [init-network-status (.getStatus Network)]
+     (p/let [init-network-status (.getStatus ^js @*network)]
        (emit! init-network-status))
      (fn dtor []))))
 

@@ -3,13 +3,13 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
+            [capacitor.components.ui :as cc-ui]
+            [capacitor.state :as cc-state]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
-            [capacitor.state :as cc-state]
-            [capacitor.components.ui :as cc-ui]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -37,28 +37,28 @@
   "Initialize Android-specified event listeners"
   []
   (.addListener App "backButton"
-    (fn []
-      (when (false?
-              (cond
+                (fn []
+                  (when (false?
+                         (cond
                 ;; lightbox
-                (and (js/document.querySelector ".pswp"))
-                (some-> js/window.photoLightbox (.destroy))
+                           (and (js/document.querySelector ".pswp"))
+                           (some-> js/window.photoLightbox (.destroy))
 
                 ;; TODO: move ui-related code to mobile events
-                (not-empty (cc-ui/get-modal))
-                (cc-ui/close-modal!)
+                           (not-empty (cc-ui/get-modal))
+                           (cc-ui/close-modal!)
 
-                (not-empty @cc-state/*modal-data)
-                :skip
+                           (not-empty @cc-state/*modal-data)
+                           :skip
 
-                (not-empty (state/get-selection-blocks))
-                (editor-handler/clear-selection!)
+                           (not-empty (state/get-selection-blocks))
+                           (editor-handler/clear-selection!)
 
-                (state/editing?)
-                (editor-handler/escape-editing)
+                           (state/editing?)
+                           (editor-handler/escape-editing)
 
-                :else false))
-        (prn "TODO: handle back button in Android"))))
+                           :else false))
+                    (prn "TODO: handle back button in Android"))))
 
   (.addEventListener js/window "sendIntentReceived"
                      #(intent/handle-received)))
@@ -103,6 +103,7 @@
   (.addListener Network "networkStatusChange" #(reset! mobile-flows/*mobile-network-status %)))
 
 (defn init! []
+  (reset! mobile-flows/*network Network)
   (when (mobile-util/native-android?)
     (android-init))
 
