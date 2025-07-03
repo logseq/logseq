@@ -1846,10 +1846,6 @@ Similar to re-frame subscriptions"
   []
   (toggle! :ui/settings-open?))
 
-(defn settings-open?
-  []
-  (:ui/settings-open? @state))
-
 (defn close-settings!
   []
   (set-state! :ui/settings-open? false))
@@ -2008,10 +2004,6 @@ Similar to re-frame subscriptions"
 
             (when (or (util/mobile?) (mobile-util/native-platform?))
               (set-state! :mobile/show-action-bar? false))))))))
-
-(defn action-bar-open?
-  []
-  (:mobile/show-action-bar? @state))
 
 (defn get-git-auto-commit-enabled?
   []

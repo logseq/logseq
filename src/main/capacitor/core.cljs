@@ -1,4 +1,5 @@
 (ns capacitor.core
+  "Mobile core"
   (:require ["react-dom/client" :as rdc]
             [capacitor.components.app :as app]
             [capacitor.init :as init]
