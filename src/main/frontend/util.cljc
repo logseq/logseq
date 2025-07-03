@@ -1393,10 +1393,7 @@
 #?(:cljs
    (def JS_ROOT
      (when-not node-test?
-       (if (or (= js/location.protocol "file:")
-               (string/starts-with? js/location.host "localhost"))
-         "./js"
-         "./static/js"))))
+       "./js")))
 
 #?(:cljs
    (defn js-load$
