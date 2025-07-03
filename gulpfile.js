@@ -271,12 +271,12 @@ exports.electronMaker = async () => {
 
 exports.cap = common.runCapWithLocalDevServerEntry
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile,
-  common.syncAssetFiles, common.syncAllStatic,
-  common.switchReactDevelopmentMode,
+exports.watch = gulp.series(
+  common.syncResourceFile,
+  common.syncAssetFiles, common.switchReactDevelopmentMode,
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
-exports.watchCapacitorNew = gulp.series(common.syncResourceFile,
-  common.syncAssetFiles, common.syncAllStatic,
+exports.watchCapacitorNew = gulp.series(
+  common.syncResourceFile, common.syncAssetFiles,
   gulp.parallel(common.keepSyncResourceFile, css.watchCapacitorNewCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
