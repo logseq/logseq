@@ -439,6 +439,22 @@
   (some-> (gobj/get node "parentNode")
           (util/rec-get-node "ls-block")))
 
+(defn- get-node-prev-sibling
+  [node]
+  (let [parent (gobj/get node "parentNode")]
+    (if (dom/attr parent "data-index")
+      (some-> (.-previousSibling parent)
+              (dom/sel1 ".ls-block"))
+      (.-previousSibling node))))
+
+(defn- get-node-next-sibling
+  [node]
+  (let [parent (gobj/get node "parentNode")]
+    (if (dom/attr parent "data-index")
+      (some-> (.-nextSibling parent)
+              (dom/sel1 ".ls-block"))
+      (.-nextSibling node))))
+
 (defn- get-new-container-id
   [op data]
   (let [{:keys [block block-container]} (get-state)]
@@ -453,19 +469,19 @@
 
           :indent
           ;; Get prev sibling's container id
-          (when-let [prev (.-previousSibling node)]
+          (when-let [prev (get-node-prev-sibling node)]
             (when (dom/attr prev "originalblockid")
               (get-node-container-id prev)))
 
           :move-up
           (let [parent (get-node-parent node)
-                prev (when parent (.-previousSibling parent))]
+                prev (when parent (get-node-prev-sibling parent))]
             (when (and prev (dom/attr prev "originalblockid"))
               (get-node-container-id prev)))
 
           :move-down
           (let [parent (get-node-parent node)
-                next (when parent (.-nextSibling parent))]
+                next (when parent (get-node-next-sibling parent))]
             (when (and next (dom/attr next "originalblockid"))
               (get-node-container-id next)))
 
