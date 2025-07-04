@@ -17,13 +17,15 @@ env:
 
 jobs:
   build-app:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Check out Git repository
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
         with:
           ref: ${{ github.event.inputs.git-ref }}
-
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 16.1
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v3
         with:
