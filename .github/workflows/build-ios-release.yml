@@ -56,13 +56,10 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && yarn release-app
+        run: yarn install && yarn release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
-
-      - name: Sync static build files
-        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/
 
       - name: Prepare iOS build
         run: npx cap sync ios
