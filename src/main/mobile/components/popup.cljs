@@ -1,10 +1,10 @@
 (ns mobile.components.popup
   "Mobile popup"
-  (:require [mobile.ionic :as ion]
-            [mobile.state :as mobile-state]
-            [dommy.core :as dom]
+  (:require [dommy.core :as dom]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
 (defonce *last-popup-modal? (atom nil))
@@ -56,7 +56,8 @@
        #(.select (dom/sel1 "ion-tabs") "home") 1000))
 
     :else
-    (when-not @*last-popup-modal?
+    (if @*last-popup-modal?
+      (mobile-state/set-popup! nil)
       (apply shui-popup/hide! args))))
 
 (set! shui/popup-show! popup-show!)
