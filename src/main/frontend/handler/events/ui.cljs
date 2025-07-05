@@ -260,11 +260,16 @@
 (defmethod events/handle :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
 
+(defn- hide-action-bar!
+  []
+  (when (editor-handler/popup-exists? :selection-action-bar)
+    (shui/popup-hide! :selection-action-bar)))
+
 (defmethod events/handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
     (when first-visible-block
-      (shui/popup-hide! :selection-action-bar)
+      (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
        (fn []
@@ -278,7 +283,7 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar)
+  (hide-action-bar!)
   (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]

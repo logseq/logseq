@@ -61,9 +61,11 @@
      (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
-  (while (and (shui-popups?)
-              (not (last-shui-preview-popup?)))
-    (shui/popup-hide!)))
+  (if (util/mobile?)
+    (shui/popup-hide!)
+    (while (and (shui-popups?)
+                (not (last-shui-preview-popup?)))
+      (shui/popup-hide!))))
 
 (def built-in-colors
   ["yellow"
