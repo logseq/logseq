@@ -27,9 +27,6 @@
 (defonce list (shui-util/react->rum (.-IonList ionic-react) false))
 (defonce item (shui-util/react->rum (.-IonItem ionic-react) false))
 
-(defonce refresher (shui-util/react->rum (.-IonRefresher ionic-react) false))
-(defonce refresher-content (shui-util/react->rum (.-IonRefresherContent ionic-react) false))
-
 (defonce action-sheet (shui-util/react->rum (.-IonActionSheet ionic-react) false))
 (defonce searchbar (shui-util/react->rum (.-IonSearchbar ionic-react) false))
 
@@ -52,4 +49,6 @@
   (defonce textarea (shui-util/react->rum (.-IonTextarea ionic-react) true))
   (defonce icon (shui-util/react->rum (.-IonIcon ionic-react) true))
   (defonce badge (shui-util/react->rum (.-IonBadge ionic-react) true))
-  (defonce loading (shui-util/react->rum (.-IonLoading ionic-react) true)))
+  (defonce loading (shui-util/react->rum (.-IonLoading ionic-react) true))
+  (defonce refresher (shui-util/react->rum (.-IonRefresher ionic-react) false))
+  (defonce refresher-content (shui-util/react->rum (.-IonRefresherContent ionic-react) false)))
