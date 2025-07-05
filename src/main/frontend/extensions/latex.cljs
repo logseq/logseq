@@ -1,12 +1,12 @@
 (ns frontend.extensions.latex
-  (:require [rum.core :as rum]
+  (:require [frontend.config :as config]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key] :as plugin-handler]
             [frontend.loader :as loader]
             [frontend.ui :as ui]
-            [frontend.config :as config]
             [frontend.util :as util]
-            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key] :as plugin-handler]
+            [goog.dom :as gdom]
             [promesa.core :as p]
-            [goog.dom :as gdom]))
+            [rum.core :as rum]))
 
 ;; TODO: extracted to a rum mixin
 (defn loaded? []
@@ -37,10 +37,10 @@
     (when-not @*loading?
       (reset! *loading? true)
       (loader/load
-       (config/asset-uri "/static/js/katex.min.js")
+       (config/asset-uri "/js/katex.min.js")
        (fn []
          (loader/load
-          (config/asset-uri "/static/js/mhchem.min.js")
+          (config/asset-uri "/js/mhchem.min.js")
           (fn []
             (-> (when-let [enhancers (and config/lsp-enabled?
                                           (seq (hook-extensions-enhancers-by-key :katex)))]

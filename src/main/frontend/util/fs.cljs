@@ -53,18 +53,6 @@
              (fn [^js e]
                (js/console.error "[fs read txid data error]" e))))))))
 
-(defn inflate-graphs-info
-  [graphs]
-  (if (seq graphs)
-    (p/all (for [{:keys [root] :as graph} graphs]
-             (p/let [sync-meta (read-graphs-txid-info root)]
-               (if sync-meta
-                 (assoc graph
-                        :sync-meta sync-meta
-                        :GraphUUID (second sync-meta))
-                 graph))))
-    []))
-
 (defn read-repo-file
   [repo-url file-rpath]
   (when-let [repo-dir (config/get-repo-dir repo-url)]

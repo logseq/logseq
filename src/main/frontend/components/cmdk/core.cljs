@@ -211,7 +211,7 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(defn- get-page-icon
+(defn get-page-icon
   [entity]
   (cond
     (ldb/class? entity)
@@ -289,7 +289,7 @@
                 (recur e-cut new-result)
                 new-result)))]))
 
-(defn- page-item
+(defn page-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (or (model/get-alias-source-page repo (:db/id entity))
@@ -306,14 +306,14 @@
               :alias (:alias page)
               :source-page (or source-page page))))
 
-(defn- block-item
-  [repo block current-page !input]
+(defn block-item
+  [repo block current-page input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block)
         icon "letter-n"]
     {:icon icon
      :icon-theme :gray
-     :text (highlight-content-query text @!input)
+     :text (highlight-content-query text input)
      :header (block/breadcrumb {:disable-preview? true
                                 :search? true} repo id {})
      :current-page? (when-let [page-id (:block/page block)]
@@ -335,7 +335,7 @@
             items (keep (fn [block]
                           (if (:page? block)
                             (page-item repo block)
-                            (block-item repo block current-page !input))) blocks)]
+                            (block-item repo block current-page @!input))) blocks)]
       (if (= group :current-page)
         (let [items-on-current-page (filter :current-page? items)]
           (swap! !results update group         merge {:status :success :items items-on-current-page}))

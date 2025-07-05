@@ -1,8 +1,0 @@
-{
-  "name": "e2e-plugin",
-  "description": "A plugin for e2e tests",
-  "main": "./index.html",
-  "logseq": {
-    "id": "a-logseq-plugin-for-e2e-tests"
-  }
-}

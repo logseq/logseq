@@ -1,0 +1,81 @@
+(ns mobile.components.modal
+  "Mobile modal"
+  (:require ["../externals.js"]
+            [mobile.components.editor-toolbar :as mobile-bar]
+            [mobile.components.selection-toolbar :as selection-toolbar]
+            [mobile.components.ui :as mobile-ui]
+            [mobile.init :as init]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
+            [frontend.components.page :as page]
+            [frontend.db :as db]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [rum.core :as rum]))
+
+(rum/defc block-modal < rum/reactive
+  [presenting-element]
+  (let [{:keys [open? block]} (rum/react mobile-state/*modal-data)
+        show-action-bar? (state/sub :mobile/show-action-bar?)
+        close! #(swap! mobile-state/*modal-data assoc :open? false)]
+    (when open?
+      (state/clear-edit!)
+      (init/keyboard-hide))
+    (ion/modal
+     {:isOpen (boolean open?)
+      :presenting-element presenting-element
+      :onDidDismiss (fn [] (mobile-state/set-modal! nil))
+      :mode "ios"                                          ;; force card modal for android
+      :expand "block"}
+
+     (ion/page
+      {:class "block-modal-page"}
+      (ion/header
+       [:span.opacity-40.active:opacity-60
+        {:on-click close!}
+        (ion/tabler-icon "chevron-down" {:size 16 :stroke 3})]
+       [:span.opacity-40.active:opacity-60
+        {:on-click (fn []
+                     (mobile-ui/open-popup!
+                      (fn []
+                        [:div.-mx-2
+                         (ui/menu-link
+                          {:on-click (fn []
+                                       (mobile-ui/open-modal!
+                                        "⚠️ Are you sure you want to delete this page(block)?"
+                                        {:type :alert
+                                         :on-action (fn [{:keys [role]}]
+                                                      (when (not= role "cancel")
+                                                        (mobile-ui/close-popup!)
+                                                        (some->
+                                                         (:block/uuid block)
+                                                         (page-handler/<delete!
+                                                          (fn [] (close!))
+                                                          {:error-handler
+                                                           (fn [{:keys [msg]}]
+                                                             (notification/show! msg :warning))}))))
+                                         :buttons [{:text "Cancel"
+                                                    :role "cancel"}
+                                                   {:text "Ok"
+                                                    :role "confirm"}]}))}
+                          [:span.text-lg.flex.gap-2.items-center
+                           (ion/tabler-icon "trash" {:class "opacity-80" :size 18})
+                           "Delete"])
+
+                         (ui/menu-link
+                          {:on-click #(mobile-ui/close-popup!)}
+                          [:span.text-lg.flex.gap-2.items-center
+                           (ion/tabler-icon "copy" {:class "opacity-80" :size 18})
+                           "Copy"])])
+                      {:title "Actions"
+                       :modal-props {:initialBreakpoint 0.3}}))}
+        (ion/tabler-icon "dots-vertical" {:size 18 :stroke 2})])
+
+      (ion/content {:class "ion-padding scrolling"}
+                   (mobile-ui/classic-app-container-wrap
+                    (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
+                   (mobile-bar/mobile-bar)
+                   (when show-action-bar?
+                     (selection-toolbar/action-bar)))))))

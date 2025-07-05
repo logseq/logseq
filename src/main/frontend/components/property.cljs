@@ -288,6 +288,7 @@
                                                          (when-let [input (state/get-input)]
                                                            (.focus input)))}
                                      :align "start"
+                                     :dropdown-menu? true
                                      :as-dropdown? true})))}
 
    (:block/title property)))

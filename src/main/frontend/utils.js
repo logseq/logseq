@@ -466,3 +466,19 @@ export function hsl2hex(h, s, l, alpha) {
 
   return `#${f(0)}${f(8)}${f(4)}${alpha}`
 }
+
+export function base64ToUint8Array (base64String) {
+  try {
+    const base64Data = base64String.replace(/^data:image\/\w+;base64,/, '')
+    const binaryString = atob(base64Data)
+    const len = binaryString.length
+    const uint8Array = new Uint8Array(len)
+    for (let i = 0; i < len; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i)
+    }
+    return uint8Array
+  } catch (e) {
+    console.error('Invalid Base64 string:', e)
+    return null
+  }
+}
