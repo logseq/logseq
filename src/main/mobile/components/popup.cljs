@@ -56,7 +56,7 @@
        #(.select (dom/sel1 "ion-tabs") "home") 1000))
 
     :else
-    (if @*last-popup-modal?
+    (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))
       (mobile-state/set-popup! nil)
       (apply shui-popup/hide! args))))
 

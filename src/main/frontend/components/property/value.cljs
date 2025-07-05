@@ -262,7 +262,7 @@
   [block property]
   (let [opts {:exit-edit? false}
         block (db/sub-block (:db/id block))]
-    [:div.p-4.flex.flex-col.gap-4.w-64
+    [:div.p-4.hidden.sm:flex.flex-col.gap-4.w-64
      [:div.mb-4
       [:div.flex.flex-row.items-center.gap-1
        [:div.w-4
@@ -376,7 +376,7 @@
                  (shui/popup-hide! id)
                  (ui/hide-popups-until-preview-popup!))))))]
     [:div.flex.flex-row.gap-2
-     [:div.flex.flex-col
+     [:div.flex.flex-1.items-center
       (ui/nlp-calendar
        (cond->
         {:initial-focus true
@@ -388,7 +388,8 @@
          :on-day-click select-handler!}
          initial-month
          (assoc :default-month initial-month)))]
-     (shui/separator {:orientation "vertical"})
+     [:div.hidden.sm:initial
+      (shui/separator {:orientation "vertical"})]
      (repeat-setting block property)]))
 
 (rum/defc overdue
