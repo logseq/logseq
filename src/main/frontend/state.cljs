@@ -1221,12 +1221,9 @@ Similar to re-frame subscriptions"
         new-ids (set (get-selection-block-ids))
         removed (set/difference selected-ids new-ids)]
     (mark-dom-blocks-as-selected blocks)
-    (if (= (count blocks) 1)
-      (doseq [node selected-blocks]
-        (unselect-node node))
-      (doseq [id removed]
-        (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
-          (unselect-node node))))))
+    (doseq [id removed]
+      (doseq [node (dom/sel (util/format "[blockid='%s']" id))]
+        (unselect-node node)))))
 
 (defn set-selection-blocks!
   ([blocks]
