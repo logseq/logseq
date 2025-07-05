@@ -33,21 +33,10 @@
 (rum/defc page
   []
   (ion/page
-   (ion/header
-    (ion/toolbar
-     (ion/title "Settings")))
-
-   (ion/content {:class "ion-padding"}
-                (ion/refresher
-                 {:slot "fixed"
-                  :pull-factor 0.5
-                  :pull-min 100
-                  :pull-max 200
-                  :on-ion-refresh (fn [^js e]
-                                    (js/setTimeout
-                                     #(.complete (.-detail e))
-                                     3000))}
-                 (ion/refresher-content))
-                (user-profile)
-                [:div.mt-8
-                 (repo/repos-cp)])))
+    (ion/header
+      (ion/toolbar
+        (ion/title "Settings")))
+    (ion/content {:class "ion-padding"}
+      (user-profile)
+      [:div.mt-8
+       (repo/repos-cp)])))

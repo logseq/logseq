@@ -78,6 +78,16 @@ html {
         --button-background: var(--ls-primary-background-color);
         --button-color: var(--ls-primary-text-color);
       }
+
+      .header-md {
+        box-shadow: 0 2px 8px var(--ls-secondary-background-color);
+      }
+
+      .sc-ion-buttons-ios, .sc-ion-buttons-md {
+        &.text-muted-foreground {
+          color: var(--lx-gray-02);
+        }
+      }
     }
   }
 }
@@ -212,7 +222,7 @@ ion-content {
   }
 
   .ion-page {
-    @apply bg-gray-01 -mb-3;
+    @apply bg-gray-01;
   }
 }
 
