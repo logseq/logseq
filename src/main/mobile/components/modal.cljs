@@ -1,25 +1,27 @@
 (ns mobile.components.modal
   "Mobile modal"
   (:require ["../externals.js"]
-            [mobile.components.editor-toolbar :as mobile-bar]
-            [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.ui :as mobile-ui]
-            [mobile.init :as init]
-            [mobile.ionic :as ion]
-            [mobile.state :as mobile-state]
             [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [mobile.components.editor-toolbar :as mobile-bar]
+            [mobile.components.selection-toolbar :as selection-toolbar]
+            [mobile.components.ui :as mobile-ui]
+            [mobile.init :as init]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
 (rum/defc block-modal < rum/reactive
   [presenting-element]
   (let [{:keys [open? block]} (rum/react mobile-state/*modal-data)
         show-action-bar? (state/sub :mobile/show-action-bar?)
-        close! #(swap! mobile-state/*modal-data assoc :open? false)]
+        close! #(swap! mobile-state/*modal-data assoc :open? false)
+        block (db/entity (:db/id block))
+        open? (and open? block)]
     (when open?
       (state/clear-edit!)
       (init/keyboard-hide))
