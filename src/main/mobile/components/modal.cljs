@@ -20,7 +20,8 @@
   (let [{:keys [open? block]} (rum/react mobile-state/*modal-data)
         show-action-bar? (state/sub :mobile/show-action-bar?)
         close! #(swap! mobile-state/*modal-data assoc :open? false)
-        block (db/entity (:db/id block))
+        block (when-let [id (:block/uuid block)]
+                (db/entity [:block/uuid id]))
         open? (and open? block)]
     (when open?
       (state/clear-edit!)
