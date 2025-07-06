@@ -1,15 +1,6 @@
 (ns mobile.components.app
   "App root"
   (:require ["../externals.js"]
-            [mobile.components.editor-toolbar :as editor-toolbar]
-            [mobile.components.modal :as modal]
-            [mobile.components.popup :as popup]
-            [mobile.components.search :as search]
-            [mobile.components.selection-toolbar :as selection-toolbar]
-            [mobile.components.settings :as settings]
-            [mobile.components.ui :as ui-component]
-            [mobile.ionic :as ion]
-            [mobile.state :as mobile-state]
             [clojure.string :as string]
             [frontend.components.journal :as journal]
             [frontend.components.rtc.indicator :as rtc-indicator]
@@ -30,6 +21,16 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
+            [logseq.shui.ui :as shui]
+            [mobile.components.editor-toolbar :as editor-toolbar]
+            [mobile.components.modal :as modal]
+            [mobile.components.popup :as popup]
+            [mobile.components.search :as search]
+            [mobile.components.selection-toolbar :as selection-toolbar]
+            [mobile.components.settings :as settings]
+            [mobile.components.ui :as ui-component]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -140,11 +141,13 @@
                   ;;   (rtc-indicator/uploading-detail))
                         ])]))))
 
-      ;; main content
+   ;; main content
    (if db-restoring?
      (ion/content
-      [:strong.flex.justify-center.items-center.py-24
-       (ui-component/loading)])
+      [:div.space-y-2.my-8.mx-2
+       (shui/skeleton {:class "h-10 w-full mb-8 bg-gray-200"})
+       (shui/skeleton {:class "h-6 w-full bg-gray-200"})
+       (shui/skeleton {:class "h-6 w-full bg-gray-200"})])
      (ion/content {:class "scrolling ion-padding"}
                   (if (= current-tab "search")
                     [:div]
