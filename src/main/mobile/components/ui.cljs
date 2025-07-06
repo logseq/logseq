@@ -1,13 +1,12 @@
 (ns mobile.components.ui
   "Mobile ui"
-  (:require [mobile.ionic :as ion]
-            [mobile.state :as mobile-state]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [medley.core :as medley]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
 
@@ -197,7 +196,3 @@
                  props' (assoc props :close! close!)]]
        (x-modal props'
                 (if (fn? content) (content props') content)))]))
-
-(rum/defc loading
-  ([] (loading ""))
-  ([content] [:span.opacity-50 (ui/loading content)]))
