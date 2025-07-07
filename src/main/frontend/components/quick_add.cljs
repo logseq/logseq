@@ -4,12 +4,20 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
+            [frontend.state :as state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
-(rum/defc quick-add
+(rum/defc quick-add <
+  {:will-mount (fn [state]
+                 (state/clear-selection!)
+                 state)
+   :will-unmount (fn [state]
+                   (state/clear-edit!)
+                   (state/clear-selection!)
+                   state)}
   []
   (when (db/get-page (date/today))
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]

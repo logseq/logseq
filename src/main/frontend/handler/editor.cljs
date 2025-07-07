@@ -3995,7 +3995,15 @@
 
 (defn show-quick-add
   []
-  (state/pub-event! [:dialog/quick-add]))
+  (let [graph (state/get-current-repo)]
+    (p/do!
+     (db-async/<get-block graph (date/today))
+     (p/let [add-page (db-async/<get-block graph (:db/id (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))]
+       (if (:block/_parent add-page)
+         (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
+           (edit-block! block :max))
+         (api-insert-new-block! "" {:page (:block/uuid add-page)})))
+     (state/pub-event! [:dialog/quick-add]))))
 
 (defn quick-add-blocks!
   []
