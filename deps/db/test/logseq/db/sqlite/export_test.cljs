@@ -697,6 +697,7 @@
           ;; built-in pages
           {:page {:block/title "Library" :build/properties {:logseq.property/built-in? true}}
            :blocks []}
+          {:page {:block/title "Quick add" :build/properties {:logseq.property/built-in? true}}, :blocks []}
           {:page {:block/title "Contents" :build/properties {:logseq.property/built-in? true}}
            :blocks [{:block/title "right sidebar"}]}
           {:page {:block/title common-config/favorites-page-name
