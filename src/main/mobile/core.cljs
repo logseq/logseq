@@ -1,15 +1,16 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
-            [mobile.components.app :as app]
-            [mobile.init :as init]
-            [mobile.state :as state]
             [frontend.background-tasks]
             [frontend.components.page :as page]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
+            [mobile.components.app :as app]
+            [mobile.events]
+            [mobile.init :as init]
+            [mobile.state :as state]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
