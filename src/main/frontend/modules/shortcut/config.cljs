@@ -539,7 +539,7 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
-   :editor/quick-add                        {:binding "mod+e"
+   :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
                                              :db-graph? true
                                              :fn      editor-handler/quick-add}
    :editor/jump                             {:binding "mod+j"
