@@ -136,9 +136,6 @@
   }
 
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -241,9 +238,6 @@ input.simple-input:focus {
 .page-add-tags, .page-tags, .property-select, .ls-property-add,
 .property-configure, .ui__dropdown-menu-content {
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
