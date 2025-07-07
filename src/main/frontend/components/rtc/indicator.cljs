@@ -152,7 +152,8 @@
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)
                                                             (details online?)
-                                                            {:align "end"})
+                                                            {:align "end"
+                                                             :dropdown-menu? true})
                                :class (util/classnames [{:cloud true
                                                          :on (and online? (= :open rtc-state))
                                                          :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
