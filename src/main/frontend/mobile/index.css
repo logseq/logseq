@@ -1,6 +1,6 @@
 .action-bar {
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
-  shadow-md bg-[var(--ls-secondary-background-color)] z-[100];
+  shadow-md bg-[var(--ls-secondary-background-color)] z-[99999];
 
   .action-bar-commands {
     @apply relative flex w-full;
@@ -26,7 +26,7 @@
 }
 
 #mobile-editor-toolbar {
-  @apply fixed -bottom-1 left-0 w-full z-[9999] flex justify-between bg-gray-100 border-t border-gray-200
+  @apply fixed -bottom-1 left-0 w-full z-[99999] flex justify-between bg-gray-100 border-t border-gray-200
   dark:border-gray-800 dark:bg-[#222];
 
   will-change: transform;

@@ -2,6 +2,7 @@
   "Mobile events"
   (:require [frontend.components.quick-add :as quick-add]
             [frontend.handler.events :as events]
+            [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
@@ -14,5 +15,7 @@
 
 (defmethod events/handle :dialog/mobile-quick-add [_]
   (mobile-state/set-popup! {:open? true
-                            :content-fn (fn [] (quick-add/quick-add))
+                            :content-fn (fn []
+                                          (mobile-ui/classic-app-container-wrap
+                                           (quick-add/quick-add)))
                             :opts {:id :ls-quick-add}}))

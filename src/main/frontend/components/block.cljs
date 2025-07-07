@@ -93,7 +93,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
-            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -3658,10 +3657,7 @@
                    (when original-block " embed-block"))
        :haschild (str (boolean has-child?))
        :on-touch-start (fn [event uuid]
-                         (when-not (or @*dragging?
-                                       (state/editing?)
-                                       (contains? #{:ls-quick-add}
-                                                  (get-in @mobile-state/*popup-data [:opts :id])))
+                         (when-not (or @*dragging? (state/editing?))
                            (block-handler/on-touch-start event uuid)))
        :on-touch-end (fn [event]
                        (when-not @*dragging?
@@ -4395,10 +4391,7 @@
 (rum/defc block-list
   [config blocks]
   (let [[virtualized? _] (rum/use-state (not (or (and (:journals? config) (< (count blocks) 50))
-                                                 (:block-children? config)
-                                                 (and (util/mobile?)
-                                                      (= common-config/quick-add-page-name
-                                                         (:block/title (:block/page (first blocks))))))))
+                                                 (:block-children? config))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)

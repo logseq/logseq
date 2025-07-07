@@ -243,12 +243,9 @@
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
-        show-action-bar? (state/sub :mobile/show-action-bar?)
-        {:keys [open?]} (rum/react mobile-state/*modal-data)]
+        show-action-bar? (state/sub :mobile/show-action-bar?)]
     (ion/app
      (tabs current-repo)
-     (when-not open?
-       [:<>
-        (editor-toolbar/mobile-bar)
-        (when show-action-bar?
-          (selection-toolbar/action-bar))]))))
+     (editor-toolbar/mobile-bar)
+     (when show-action-bar?
+       (selection-toolbar/action-bar)))))
