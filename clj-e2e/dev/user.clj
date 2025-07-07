@@ -73,6 +73,11 @@
   (->> (future (run-tests 'logseq.e2e.rtc-extra-test))
        (swap! *futures assoc :rtc-extra-test)))
 
+(defn run-tag-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.tag-basic-test))
+       (swap! *futures assoc :tag-basic-test)))
+
 (defn run-all-basic-test
   []
   (run-tests 'logseq.e2e.commands-basic-test
