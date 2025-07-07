@@ -22,21 +22,25 @@
   []
   (when (db/get-page (date/today))
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-      (let [mobile? (util/mobile?)]
-        [:div.ls-quick-capture.flex.flex-1.flex-col.w-full.gap-4
-         [:div.font-medium.border-b.pb-4
-          {:class (when-not mobile? "text-xs")}
-          "Quick add"]
+      (let [mobile? (util/mobile?)
+            add-button [:div
+                        (shui/button
+                         {:variant (if mobile? :default :outline)
+                          :size :sm
+                          :on-click (fn [_e]
+                                      (editor-handler/quick-add-blocks!))}
+                         (when-not mobile? (shui/shortcut ["mod" "e"]))
+                         "Add to today")]]
+        [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
+         [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
+          [:div.font-medium
+           {:class (when-not mobile? "text-xs")}
+           "Quick add"]
+          (when mobile? add-button)]
          [:div.content
           {:class (if mobile?
                     "flex flex-1 flex-col w-full"
                     "block -ml-6")}
-          (page/page-blocks-cp add-page {})]
-         [:div
-          (shui/button
-           {:variant (if mobile? :default :outline)
-            :size :sm
-            :on-click (fn [_e]
-                        (editor-handler/quick-add-blocks!))}
-           (when-not mobile? (shui/shortcut ["mod" "e"]))
-           "Add to today")]]))))
+          (page/page-blocks-cp add-page {})
+          (when-not mobile?
+            add-button)]]))))

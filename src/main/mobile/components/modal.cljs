@@ -7,8 +7,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [mobile.components.editor-toolbar :as mobile-bar]
-            [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
             [mobile.ionic :as ion]
@@ -18,7 +16,6 @@
 (rum/defc block-modal < rum/reactive
   [presenting-element]
   (let [{:keys [open? block]} (rum/react mobile-state/*modal-data)
-        show-action-bar? (state/sub :mobile/show-action-bar?)
         close! #(swap! mobile-state/*modal-data assoc :open? false)
         block (when-let [id (:block/uuid block)]
                 (db/entity [:block/uuid id]))
@@ -78,7 +75,4 @@
 
       (ion/content {:class "ion-padding scrolling"}
                    (mobile-ui/classic-app-container-wrap
-                    (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))
-                   (mobile-bar/mobile-bar)
-                   (when show-action-bar?
-                     (selection-toolbar/action-bar)))))))
+                    (page/page-cp (db/entity [:block/uuid (:block/uuid block)]))))))))

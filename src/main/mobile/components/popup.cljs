@@ -67,20 +67,21 @@
 
 (rum/defc popup < rum/reactive
   []
-  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)]
+  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
+        initial-breakpoint (if (= (:id opts) :ls-quick-add) 1 0.75)]
     (when open?
-      ;; (state/clear-edit!)
+      (state/clear-edit!)
       (init/keyboard-hide))
     (ion/modal
      (merge
       {:isOpen (boolean open?)
-       :initialBreakpoint 0.75
+       :initialBreakpoint initial-breakpoint
        :breakpoints #js [0 0.75 1]
        :onDidDismiss (fn [] (mobile-state/set-popup! nil))
        :expand "block"}
       (:modal-props opts))
      (ion/content
-      {:class "ion-padding"}
+      {:class "ion-padding scrolling"}
       [:<>
        (when-let [title (:title opts)]
          [:h2.py-2.opacity-40 title])
