@@ -52,6 +52,7 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
@@ -68,6 +69,7 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
+            [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -3990,3 +3992,26 @@
            (save-block-inner! block "" {})
            (when query-block
              (save-block-inner! query-block current-query {})))))))))
+
+(defn show-quick-add
+  []
+  (state/pub-event! [:dialog/quick-add]))
+
+(defn quick-add-blocks!
+  []
+  (let [today (db/get-page (date/today))
+        add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+    (when (and today add-page)
+      (let [children (:block/_parent (db/entity (:db/id add-page)))]
+        (p/do!
+         (when (seq children)
+           (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
+             (move-blocks! children today-last-child true)
+             (move-blocks! children today false)))
+         (state/close-modal!))))))
+
+(defn quick-add
+  []
+  (if (shui-dialog/get-modal :ls-dialog-quick-add)
+    (quick-add-blocks!)
+    (show-quick-add)))
