@@ -337,10 +337,6 @@ input[type='range'] {
 .ls-dialog-select {
   @apply w-auto !max-w-fit p-0;
 
-  .cp__select-main {
-    @apply m-0;
-  }
-
   .item-results-wrap {
     @apply px-2;
   }

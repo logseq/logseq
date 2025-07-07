@@ -6,6 +6,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
@@ -328,6 +329,12 @@
        (d/datoms db :eavt (:e d)))
      (d/datoms db :avet :logseq.property.user/email))))
 
+(defn get-built-in-page
+  [db title]
+  (when db
+    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
+      (d/entity db [:block/uuid id]))))
+
 (defn get-initial-data
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
@@ -355,9 +362,10 @@
         user-datoms (get-all-user-datoms db)
         pages-datoms (if db-graph?
                        (let [contents-id (get-first-page-by-title db "Contents")
+                             capture-page-id (:db/id (get-built-in-page db common-config/quick-add-page-name))
                              views-id (get-first-page-by-title db common-config/views-page-name)]
                          (mapcat #(d/datoms db :eavt %)
-                                 (remove nil? [contents-id views-id])))
+                                 (remove nil? [contents-id capture-page-id views-id])))
                        ;; load all pages for file graphs
                        (->> (d/datoms db :avet :block/name)
                             (mapcat (fn [d] (d/datoms db :eavt (:e d))))))

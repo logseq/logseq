@@ -60,7 +60,6 @@
      [(hooks/use-debounced-value @*input 100)])
 
     [:div.input-wrap
-     {:style {:margin-bottom "-2px"}}
      [:input.cp__select-input.w-full
       (merge {:type        "text"
               :class "!p-1.5"
