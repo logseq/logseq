@@ -4016,7 +4016,9 @@
            (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
              (move-blocks! children today-last-child true)
              (move-blocks! children today false)))
-         (state/close-modal!))))))
+         (state/close-modal!)
+         (when (seq children)
+           (notification/show! "Blocks added to today!" :success)))))))
 
 (defn quick-add
   []
