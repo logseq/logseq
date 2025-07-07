@@ -196,7 +196,7 @@
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div
+      [:div.flex.flex-col.gap-1
        (for [log download-logs]
          [:div (:message log)])])))
 

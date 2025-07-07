@@ -9,6 +9,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.rtc.indicator :as indicator]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -46,7 +47,6 @@
             [frontend.persist-db :as persist-db]
             [frontend.quick-capture :as quick-capture]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
@@ -386,8 +386,9 @@
       (shui/popup-show!
        nil
        (fn []
-         [:div.flex.items-center.justify-center.mt-8
-          (ui/loading (str "Downloading " graph-name))])
+         [:div.flex.items-center.justify-center.mt-8.gap-4
+          [:div (str "Downloading " graph-name)]
+          (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
     (when (util/mobile?)
