@@ -8,6 +8,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -15,6 +16,7 @@
             [frontend.rum :as frum]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [goog.date :as gdate]
             [logseq.db :as ldb]
             [logseq.shui.dialog.core :as shui-dialog]
@@ -81,6 +83,12 @@
    (ion/tab-button
     {:tab "search"}
     (ion/tabler-icon "search" {:size 22}) "Search")
+   (ion/tab-button
+    {:tab "quick-add"
+     :on-pointer-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/show-quick-add))}
+    (ion/tabler-icon "plus" {:size 22}) "Quick add")
    (ion/tab-button
     {:tab "settings"}
     (ion/tabler-icon "settings" {:size 22}) "Settings")))

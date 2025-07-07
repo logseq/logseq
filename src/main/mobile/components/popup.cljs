@@ -1,8 +1,10 @@
 (ns mobile.components.popup
   "Mobile popup"
   (:require [dommy.core :as dom]
+            [frontend.state :as state]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
+            [mobile.init :as init]
             [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
@@ -66,6 +68,9 @@
 (rum/defc popup < rum/reactive
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)]
+    (when open?
+      ;; (state/clear-edit!)
+      (init/keyboard-hide))
     (ion/modal
      (merge
       {:isOpen (boolean open?)

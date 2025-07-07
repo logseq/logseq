@@ -71,6 +71,7 @@
             [logseq.outliner.property :as outliner-property]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -3942,7 +3943,9 @@
            (edit-block! block :max {:container-id :unknown-container}))
          (api-insert-new-block! "" {:page (:block/uuid add-page)
                                     :container-id :unknown-container})))
-     (state/pub-event! [:dialog/quick-add]))))
+     (state/pub-event! [(if (util/mobile?)
+                          :dialog/mobile-quick-add
+                          :dialog/quick-add)]))))
 
 (defn quick-add-blocks!
   []
@@ -3956,6 +3959,7 @@
              (move-blocks! children today-last-child true)
              (move-blocks! children today false)))
          (state/close-modal!)
+         (mobile-state/set-popup! nil)
          (when (seq children)
            (notification/show! "Blocks added to today!" :success)))))))
 
