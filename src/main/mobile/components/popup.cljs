@@ -70,14 +70,6 @@
 (set! shui/popup-show! popup-show!)
 (set! shui/popup-hide! popup-hide!)
 
-(rum/defc inner-content <
-  {:will-unmount (fn [state]
-                   (state/clear-edit!)
-                   (init/keyboard-hide)
-                   state)}
-  [content-fn]
-  (content-fn))
-
 (rum/defc popup < rum/reactive
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
@@ -101,7 +93,10 @@
       {:isOpen (boolean open?)
        :initialBreakpoint initial-breakpoint
        :breakpoints breakpoints
-       :onDidDismiss (fn [] (mobile-state/set-popup! nil))
+       :onDidDismiss (fn []
+                       (mobile-state/set-popup! nil)
+                       (state/clear-edit!)
+                       (state/pub-event! [:mobile/keyboard-will-hide]))
        :expand "block"}
       (:modal-props opts))
      (ion/content
@@ -111,4 +106,4 @@
          [:h2.py-2.opacity-40 title])
        (when content-fn
          (mobile-ui/classic-app-container-wrap
-          (inner-content content-fn)))]))))
+          (content-fn)))]))))

@@ -26,7 +26,10 @@
     (ion/modal
      {:isOpen (boolean open?)
       :presenting-element presenting-element
-      :onDidDismiss (fn [] (mobile-state/set-modal! nil))
+      :onDidDismiss (fn []
+                      (mobile-state/set-modal! nil)
+                      (state/clear-edit!)
+                      (state/pub-event! [:mobile/keyboard-will-hide]))
       :mode "ios"                                          ;; force card modal for android
       :expand "block"}
 
