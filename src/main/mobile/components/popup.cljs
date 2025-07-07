@@ -81,7 +81,9 @@
 (rum/defc popup < rum/reactive
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
-        initial-breakpoint (if (= (:id opts) :ls-quick-add) 1 0.75)]
+        [initial-breakpoint breakpoints] (if (= (:id opts) :ls-quick-add)
+                                           [1 #js [0 1]]
+                                           [0.75 #js [0 0.75 1]])]
     (when open?
       (if (= :ls-quick-add (:id opts))
         (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
@@ -98,7 +100,7 @@
      (merge
       {:isOpen (boolean open?)
        :initialBreakpoint initial-breakpoint
-       :breakpoints #js [0 0.75 1]
+       :breakpoints breakpoints
        :onDidDismiss (fn [] (mobile-state/set-popup! nil))
        :expand "block"}
       (:modal-props opts))
