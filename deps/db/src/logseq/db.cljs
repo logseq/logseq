@@ -262,11 +262,7 @@
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
-(defn get-built-in-page
-  [db title]
-  (when db
-    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
-      (d/entity db [:block/uuid id]))))
+(def get-built-in-page common-initial-data/get-built-in-page)
 
 (defn library?
   [page]

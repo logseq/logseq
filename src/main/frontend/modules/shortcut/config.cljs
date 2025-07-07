@@ -261,7 +261,7 @@
 
    :editor/replace-block-reference-at-point {:binding "mod+shift+r"
                                              :fn      editor-handler/replace-block-reference-with-content-at-point}
-   :editor/copy-embed                       {:binding "mod+e"
+   :editor/copy-embed                       {:binding "mod+shift+e"
                                              :fn      editor-handler/copy-current-block-embed}
 
    :editor/paste-text-in-one-block-at-point {:binding "mod+shift+v"
@@ -539,6 +539,9 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
+   :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
+                                             :db-graph? true
+                                             :fn      editor-handler/quick-add}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
@@ -811,6 +814,7 @@
           :editor/toggle-number-list
           :editor/undo
           :editor/redo
+          :editor/quick-add
           :ui/toggle-brackets
           :go/search-in-page
           :go/search
@@ -913,7 +917,8 @@
      :editor/redo
      :editor/copy
      :editor/copy-text
-     :editor/cut]
+     :editor/cut
+     :editor/quick-add]
 
     :shortcut.category/formatting
     [:editor/bold
