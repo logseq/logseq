@@ -9,11 +9,6 @@
         }
     }
 
-    .cp__select-main {
-        width: fit-content;
-        margin: 0;
-    }
-
     .between-date {
         min-width: 36em;
         padding: 1em;
