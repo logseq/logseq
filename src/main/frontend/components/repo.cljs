@@ -107,23 +107,24 @@
             (ui/icon "dots" {:size 15})))
           (shui/dropdown-menu-content
            {:align "end"}
-           (shui/dropdown-menu-item
-            {:key "delete-locally"
-             :class "delete-local-graph-menu-item"
-             :on-click (fn []
-                         (let [prompt-str (if db-based?
-                                            (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from Logseq?")
-                                            (str "Are you sure you want to unlink the graph \"" url "\" from local folder?"))]
-                           (-> (shui/dialog-confirm!
-                                [:p.font-medium.-my-4 prompt-str
-                                 [:span.my-2.flex.font-normal.opacity-75
-                                  (if db-based?
-                                    [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                    [:small "⚠️ It won't remove your local files!"])]])
-                               (p/then (fn []
-                                         (repo-handler/remove-repo! repo)
-                                         (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
-            "Delete local graph")
+           (when root
+             (shui/dropdown-menu-item
+              {:key "delete-locally"
+               :class "delete-local-graph-menu-item"
+               :on-click (fn []
+                           (let [prompt-str (if db-based?
+                                              (str "Are you sure you want to permanently delete the graph \"" graph-name "\" from Logseq?")
+                                              (str "Are you sure you want to unlink the graph \"" url "\" from local folder?"))]
+                             (-> (shui/dialog-confirm!
+                                  [:p.font-medium.-my-4 prompt-str
+                                   [:span.my-2.flex.font-normal.opacity-75
+                                    (if db-based?
+                                      [:small "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                      [:small "⚠️ It won't remove your local files!"])]])
+                                 (p/then (fn []
+                                           (repo-handler/remove-repo! repo)
+                                           (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
+              "Delete local graph"))
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
               {:key "delete-remotely"
