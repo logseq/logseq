@@ -28,16 +28,16 @@
 
 (rum/defc silk-bottom-sheet
   []
-  (silkhq/bottom-sheet
-    (silkhq/bottom-sheet-trigger
+  (silkhq/detent-sheet
+    (silkhq/detent-sheet-trigger
       (shui/button "open bottom sheet / trigger"))
-    (silkhq/bottom-sheet-portal
-      (silkhq/bottom-sheet-view
-        (silkhq/bottom-sheet-backdrop)
-        (silkhq/bottom-sheet-content
-          {:class "flex flex-col justify-center items-center p-2"}
-          (silkhq/bottom-sheet-handle)
-          [:div.py-24.flex
+    (silkhq/detent-sheet-portal
+      (silkhq/detent-sheet-view
+        (silkhq/detent-sheet-backdrop)
+        (silkhq/detent-sheet-content
+          {:class "flex flex-col items-center p-2"}
+          (silkhq/detent-sheet-handle)
+          [:div.py-60.flex
            [:h1.my-4.text-2xl "hello silkhq"]])))
     ))
 
