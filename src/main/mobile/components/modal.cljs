@@ -7,6 +7,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.db :as ldb]
             [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
             [mobile.ionic :as ion]
@@ -47,7 +48,9 @@
                          (ui/menu-link
                           {:on-click (fn []
                                        (mobile-ui/open-modal!
-                                        "⚠️ Are you sure you want to delete this page(block)?"
+                                        (str "⚠️ Are you sure you want to delete this "
+                                             (if (ldb/page? block) "page" "block")
+                                             "?")
                                         {:type :alert
                                          :on-action (fn [{:keys [role]}]
                                                       (when (not= role "cancel")
