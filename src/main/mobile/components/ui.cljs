@@ -1,6 +1,7 @@
 (ns mobile.components.ui
   "Mobile ui"
   (:require [cljs-bean.core :as bean]
+            [logseq.shui.silkhq]
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as state]

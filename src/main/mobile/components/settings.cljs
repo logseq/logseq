@@ -5,6 +5,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
+            [logseq.shui.silkhq :as silkhq]
             [mobile.components.ui :as ui-component]
             [mobile.ionic :as ion]
             [rum.core :as rum]))
@@ -24,6 +25,21 @@
      [:h2.py-3.flex.justify-between.items-center
       [:strong.text-4xl.font-semibold (user-handler/username)]]
      [:div.text-sm.text-muted-foreground.px-1 (user-handler/email)]]))
+
+(rum/defc silk-bottom-sheet
+  []
+  (silkhq/bottom-sheet
+    (silkhq/bottom-sheet-trigger
+      (shui/button "open bottom sheet / trigger"))
+    (silkhq/bottom-sheet-portal
+      (silkhq/bottom-sheet-view
+        (silkhq/bottom-sheet-backdrop)
+        (silkhq/bottom-sheet-content
+          {:class "flex flex-col justify-center items-center p-2"}
+          (silkhq/bottom-sheet-handle)
+          [:div.py-24.flex
+           [:h1.my-4.text-2xl "hello silkhq"]])))
+    ))
 
 (rum/defc page < rum/reactive
   []
@@ -56,7 +72,8 @@
                                                                :modal-props {:class "graph-switcher"}}))}
                        [:span.text-muted-foreground {:slot "icon-only"}
                         (ion/tabler-icon "dots" {:size 20})])))))
-     (ion/content {:class "ion-padding"}
-      (user-profile login?)
-      [:div.mt-8
-       (repo/repos-cp)]))))
+      (ion/content {:class "ion-padding"}
+        (user-profile login?)
+        [:div.mt-8
+         (repo/repos-cp)]
+        (silk-bottom-sheet)))))
