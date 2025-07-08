@@ -1,0 +1,63 @@
+/* Stack Scenery */
+
+.SheetWithDepth-stackSceneryBackground {
+  /* SELF-LAYOUT */
+  position: fixed;
+  inset: 0;
+
+  /* APPEARANCE */
+  background-color: black;
+  opacity: 0;
+
+  will-change: opacity;
+}
+.SheetWithDepth-stackSceneryBackground.nativePageScrollReplaced-true {
+  /* APPEARANCE */
+  opacity: 1;
+}
+
+.SheetWithDepth-stackSceneryContainer {
+  /* INNER-LAYOUT */
+  position: relative;
+}
+
+.SheetWithDepth-stackSceneryFirstSheetBackdrop {
+  /* SELF-LAYOUT */
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+
+  /* APPEARANCE */
+  background-color: rgb(0, 0, 0);
+  opacity: 0;
+
+  /* INTERACTIVITY */
+  pointer-events: none;
+
+  /* MISCELLANEOUS */
+  will-change: opacity;
+}
+
+/* Sheet */
+
+.SheetWithDepth-view {
+  /* SELF-LAYOUT */
+  top: 0;
+  bottom: initial;
+  /* Adding 60px to make it fully visible below iOS Safari's
+    bottom UI */
+  height: calc(var(--silk-100-lvh-dvh-pct) + 60px);
+}
+
+.SheetWithDepth-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  height: calc(100% - max(calc(env(safe-area-inset-top) + 1.3vh), 2.6vh));
+}
+
+.SheetWithDepth-bleedingBackground {
+  /* APPEARANCE */
+  border-radius: 24px 24px 0 0;
+  background-color: white;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
