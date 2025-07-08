@@ -121,7 +121,9 @@
              (when-not skip-refresh?
                (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
 
-         (if children-only? children block))
+         (if children-only?
+           children
+           (if skip-transact? block (db/entity (:db/id block)))))
        (p/catch (fn [error]
                   (js/console.error error)
                   (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
