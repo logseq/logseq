@@ -2814,7 +2814,7 @@
                                   :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                                  "Remove tag"))])
                            popup-opts))}
-      (if (and @*hover? (not private-tag?))
+      (if (and @*hover? (not private-tag?) (not config/publishing?))
         [:a.inline-flex.text-muted-foreground
          {:title "Remove this tag"
           :style {:margin-top 1
