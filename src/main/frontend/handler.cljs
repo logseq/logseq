@@ -26,7 +26,6 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.test :as test]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
@@ -138,7 +137,6 @@
   [render]
 
   (idb/start)
-  (test/setup-test!)
   (get-system-info)
   (set-global-error-notification!)
 

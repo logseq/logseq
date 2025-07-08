@@ -56,7 +56,6 @@
         "dev-electron-app": "gulp electron",
         "release-electron": "run-s gulp:build && gulp electronMaker",
         "debug-electron": "cd static/ && yarn electron:debug",
-        "e2e-test": "cross-env DEBUG=pw:api CI=true npx playwright test --reporter github",
         "sync-android-release": "yarn clean && yarn release-mobile && rm -rf ./static/mobile/**/*.map && npx cap sync android",
         "sync-ios-release": "yarn clean && yarn release-mobile && rm -rf ./static/mobile/**/*.map && npx cap sync ios",
         "clean": "gulp clean",
