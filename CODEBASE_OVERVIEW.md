@@ -52,6 +52,7 @@ This is overview of this repository's most important directories and files.
     - `src/main/frontend/worker/` contains code for the separate worker asset.
     - `src/main/frontend/common/` contains common code shared by the worker asset and the frontend.
   - `src/main/logseq/` contains the api used by plugins.
+  - `src/main/mobile/` contains code for new mobile app.
   - `src/dev-cljs/` contains some development utilities.
 
 - `deps/` contains ClojureScript dependencies or libraries used by the frontend.
