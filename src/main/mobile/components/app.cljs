@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [frontend.components.journal :as journal]
             [frontend.components.rtc.indicator :as rtc-indicator]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
@@ -137,7 +136,6 @@
                      (when (and repo
                                 (ldb/get-graph-rtc-uuid (db/get-db))
                                 (user-handler/logged-in?)
-                                (config/db-based-graph? repo)
                                 (user-handler/team-member?))
                        [:<>
                   ;; (rum/with-key (rtc-collaborators)

@@ -19,7 +19,9 @@
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
          "frontend.components.property" "frontend.components.class"
-         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"]))
+         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
+         "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.ionic" "mobile.state"
+         "mobile.components"]))
 
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
@@ -57,7 +59,8 @@
          "src/main/frontend/components/objects.cljs"
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
-         "src/electron/electron/db.cljs"]))
+         "src/electron/electron/db.cljs"
+         "src/main/mobile"]))
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
@@ -136,7 +139,10 @@
                              ;; The next 3 are from components.property.value
                              "{:block/name page-title})"
                              "(when-not (db/get-page journal)"
-                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
+                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"
+                             ;; :block/name ones from src/main/mobile
+                             "(if-let [journal (db/get-page page-name)]"
+                             "(p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]"}
         res (grep-many file-concepts db-graph-paths)
         invalid-lines (when (= 0 (:exit res))
                         (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
