@@ -6,7 +6,8 @@
   "scripts": {
     "watch:ui:examples": "parcel serve ./examples/index.html",
     "build:ui:only": "parcel build --target ui",
-    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
+    "build:ionic:only": "parcel build --target ionic",
+    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only && yarn build:ionic:only",
     "watch:storybook": "storybook dev -p 6006",
     "postinstall": "yarn build:ui"
   },
@@ -32,6 +33,7 @@
     "@radix-ui/react-toggle": "^1.1.6",
     "@radix-ui/react-toggle-group": "^1.1.7",
     "@radix-ui/react-tooltip": "^1.2.4",
+    "@ionic/react": "8.5.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.0.0",
     "cmdk": "^0.2.0",
@@ -92,6 +94,14 @@
     "main": false,
     "ui": {
       "source": "src/ui.ts",
+      "outputFormat": "global",
+      "includeNodeModules": {
+        "react": false,
+        "react-dom": false
+      }
+    },
+    "ionic": {
+      "source": "src/ionic.ts",
       "outputFormat": "global",
       "includeNodeModules": {
         "react": false,

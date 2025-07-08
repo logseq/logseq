@@ -100,9 +100,7 @@
 (defn- handle-connection-change
   [e]
   (let [online? (= (gobj/get e "type") "online")]
-    (state/set-online! online?)
-    (state/<invoke-db-worker :thread-api/update-thread-atom
-                             :thread-atom/online-event online?)))
+    (state/set-online! online?)))
 
 (defn set-network-watcher!
   []

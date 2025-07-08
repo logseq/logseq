@@ -11,6 +11,11 @@
   (api/watch :electron)
   (api/repl :electron))
 
+(defn mobile-repl
+  []
+  (api/watch :mobile)
+  (api/repl :mobile))
+
 ;; Get the runtime id from http://localhost:9630/runtimes, pick the one which shows `browser-worker`
 (defn worker-repl
   ([]
@@ -31,8 +36,16 @@
            runtime-id (apply (if (= :old runtime-id-or-which) min max) runtime-ids)]
        (worker-repl runtime-id)))))
 
-(defn runtime-id-list
+(defn mobile-worker-repl
   []
-  (->> (api/repl-runtimes :app)
+  (when-let [runtime-id (->> (api/repl-runtimes :mobile)
+                             (filter (fn [runtime] (= :browser-worker (:host runtime))))
+                             (map :client-id)
+                             (apply max))]
+    (api/repl :mobile {:runtime-id runtime-id})))
+
+(defn runtime-id-list
+  [app]
+  (->> (api/repl-runtimes app)
        (filter (fn [runtime] (= :browser-worker (:host runtime))))
        (map :client-id)))

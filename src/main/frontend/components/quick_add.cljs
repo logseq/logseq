@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
@@ -21,17 +22,25 @@
   []
   (when (db/get-page (date/today))
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-      [:div.ls-quick-capture.flex.flex-1.flex-col.w-full.gap-4
-       [:div.font-medium.text-xl.border-b.pb-4
-        "Quick add"]
-       [:div.block.-ml-6.content
-        (page/page-blocks-cp add-page {})]
-       [:div.flex.flex-row.gap-2.items-center
-        [:div
-         (shui/button
-          {:variant :outline
-           :size :sm
-           :on-click (fn [_e]
-                       (editor-handler/quick-add-blocks!))}
-          (shui/shortcut ["mod" "e"])
-          "Add to today")]]])))
+      (let [mobile? (util/mobile?)
+            add-button [:div
+                        (shui/button
+                         {:variant (if mobile? :default :outline)
+                          :size :sm
+                          :on-click (fn [_e]
+                                      (editor-handler/quick-add-blocks!))}
+                         (when-not mobile? (shui/shortcut ["mod" "e"]))
+                         "Add to today")]]
+        [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
+         [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
+          [:div.font-medium
+           {:class (when-not mobile? "text-xs")}
+           "Quick add"]
+          (when mobile? add-button)]
+         [:div.content
+          {:class (if mobile?
+                    "flex flex-1 flex-col w-full"
+                    "block -ml-6")}
+          (page/page-blocks-cp add-page {})
+          (when-not mobile?
+            add-button)]]))))

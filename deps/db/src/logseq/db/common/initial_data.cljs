@@ -310,16 +310,17 @@
 
 (defn get-recent-updated-pages
   [db]
-  (some->>
-   (d/datoms db :avet :block/updated-at)
-   rseq
-   (keep (fn [datom]
-           (let [e (d/entity db (:e datom))]
-             (when (and (common-entity-util/page? e)
-                        (not (entity-util/hidden? e))
-                        (not (string/blank? (:block/title e))))
-               e))))
-   (take 30)))
+  (when db
+    (some->>
+     (d/datoms db :avet :block/updated-at)
+     rseq
+     (keep (fn [datom]
+             (let [e (d/entity db (:e datom))]
+               (when (and (common-entity-util/page? e)
+                          (not (entity-util/hidden? e))
+                          (not (string/blank? (:block/title e))))
+                 e))))
+     (take 30))))
 
 (defn- get-all-user-datoms
   [db]

@@ -7,7 +7,7 @@
   serve {:doc "Serve static assets"
          :requires ([babashka.http-server :as server])
          :task (server/exec (merge {:port 3002
-                                    :dir "../public"}
+                                    :dir "../static/"}
                                    cli-opts))}
 
   prn {:task (clojure "-X clojure.core/prn" cli-opts)}
