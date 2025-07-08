@@ -78,7 +78,17 @@
             (state/set-state! :editor/start-pos nil)
 
             (when-not (:graph/importing @state/state)
-              (react/refresh! repo affected-keys)
+
+              (let [edit-block-f @(:editor/edit-block-fn @state/state)
+                    delete-blocks? (and (= (:outliner-op tx-meta) :delete-blocks)
+                                        (:local-tx? tx-meta)
+                                        (not (:mobile-action-bar? tx-meta)))]
+                (state/set-state! :editor/edit-block-fn nil)
+                (when delete-blocks?
+                  (util/mobile-keep-keyboard-open))
+                (react/refresh! repo affected-keys)
+                (when edit-block-f
+                  (util/schedule edit-block-f)))
 
               (when (and state/lsp-enabled?
                          (seq blocks)

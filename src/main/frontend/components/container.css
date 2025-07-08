@@ -447,7 +447,7 @@
   @apply w-full max-w-[var(--ls-main-content-max-width)] flex-1;
 
   .page {
-    @apply px-5 pt-4;
+    @apply px-8 pt-4;
   }
 
   @screen sm {

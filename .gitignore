@@ -60,7 +60,7 @@ startup.png
 android/app/src/main/assets/capacitor.config.json
 
 *.sublime-*
-/public/static
+/public
 .yarn/
 .yarnrc.yml
 

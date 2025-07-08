@@ -79,8 +79,6 @@ jobs:
       - name: Prepare E2E test build
         run: |
           yarn gulp:build && clojure -M:cljs release app --config-merge "{:closure-defines {frontend.config/DEV-RELEASE true}}" --debug
-          rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/static/
-          ls -lR ./public
 
       - name: Run e2e tests
         run: cd clj-e2e && timeout 30m bb dev

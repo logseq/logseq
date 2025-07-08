@@ -412,30 +412,35 @@
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
     (validate-batch-deletion-of-property [block] property-id)
+    (when block
+      (cond
+        (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
+        nil
 
-    (cond
-      (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
-      nil
+        (= :logseq.property/status property-id)
+        (ldb/transact! conn
+                       [[:db/retract (:db/id block) property-id]
+                        [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
+                       {:outliner-op :save-block})
 
-      (= (:logseq.property/default-value property) (get block property-id))
-      (ldb/transact! conn
-                     [{:db/id (:db/id block)
-                       property-id :logseq.property/empty-placeholder}]
-                     {:outliner-op :save-block})
+        (= (:logseq.property/default-value property) (get block property-id))
+        (ldb/transact! conn
+                       [{:db/id (:db/id block)
+                         property-id :logseq.property/empty-placeholder}]
+                       {:outliner-op :save-block})
 
-      (and (ldb/class? block) (= property-id :logseq.property.class/extends))
-      (ldb/transact! conn
-                     [[:db/retract (:db/id block) :logseq.property.class/extends]
-                      [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
-                     {:outliner-op :save-block})
+        (and (ldb/class? block) (= property-id :logseq.property.class/extends))
+        (ldb/transact! conn
+                       [[:db/retract (:db/id block) :logseq.property.class/extends]
+                        [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
+                       {:outliner-op :save-block})
 
-      (contains? db-property/db-attribute-properties property-id)
-      (when block
+        (contains? db-property/db-attribute-properties property-id)
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]]
-                       {:outliner-op :save-block}))
-      :else
-      (batch-remove-property! conn [eid] property-id))))
+                       {:outliner-op :save-block})
+        :else
+        (batch-remove-property! conn [eid] property-id)))))
 
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.  If

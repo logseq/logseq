@@ -137,7 +137,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
     (cond
-      (and (re-find #"[^\w\s]" q) (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"])))            ; punctuations
+      (and (re-find #"[^\w\s]" q)
+           (or (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
+               (string/includes? q "/")))            ; punctuations
       (str "\"" match-input "\"*")
       (not= q match-input)
       (string/replace match-input "," "")

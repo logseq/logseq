@@ -106,7 +106,7 @@
     publishing?
     path
 
-    (util/file-protocol?)
+    (or (util/file-protocol?) (util/capacitor-new?))
     (string/replace path "/static/" "./")
 
     :else

@@ -2,8 +2,11 @@
 {:deps true
  :nrepl {:port 8701}
 
+ ;; :ssl   {:password "logseq"}
+
  ;; "." for /static
  :dev-http {3001 ["static" "."]
+            3002 "static/mobile"
             8021 "static/rtc-e2e-test"}
 
  :js-options {:js-package-dirs ["node_modules" "packages/tldraw/apps"]}
@@ -67,6 +70,53 @@
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]}}
 
+  :mobile {:target        :browser
+           :module-loader true
+           :js-options    {:ignore-asset-requires true
+                           :resolve {"react" {:target :global
+                                              :global "React"}
+                                     "react-dom" {:target :global
+                                                  :global "ReactDOM"}}} ;; handle `require(xxx.css)`
+           :modules       {:shared
+                           {:entries []}
+                           :main
+                           {:init-fn mobile.core/init
+                            :depends-on #{:shared}}
+                           :code-editor
+                           {:entries [frontend.extensions.code]
+                            :depends-on #{:main}}
+                           :db-worker
+                           {:init-fn frontend.worker.db-worker/init
+                            :depends-on #{:shared}
+                            :web-worker true}}
+
+           :output-dir       "./static/mobile/js"
+           :asset-path       "./js"
+           :release          {:asset-path "http://localhost"}
+           :compiler-options {:infer-externs      :auto
+                              :output-feature-set :es-next-in
+                              :source-map true
+                              :externs ["datascript/externs.js"
+                                        "externs.js"]
+                              :warnings {:fn-deprecated false
+                                         :redef false}
+                              :cross-chunk-method-motion false}
+           :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
+           :closure-defines
+           {;; Set to switch file sync server to dev, set this to false in `yarn watch`
+            frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
+            frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]}
+
+;; NOTE: electron, browser/mobile-app use different asset-paths.
+                  ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
+                  ;;   For electron devs, assets are located in ./js(via relative path).
+                  ;; :dev      {:asset-path "./js"}
+           :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
+                      :after-load mobile.core/render!          ;; after live-reloading finishes call this function
+                      :watch-path "/static/mobile"
+                      :preloads [devtools.preload
+                                 shadow.remote.runtime.cljs.browser]}}
+
   :electron {:target :node-script
              :output-to "static/electron.js"
              :main electron.core/main
@@ -108,48 +158,48 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options    {;; handle `require(xxx.css)`
-                               :ignore-asset-requires true
-                               :resolve {"react" {:target :global
-                                                  :global "React"}
-                                         "react-dom" {:target :global
-                                                      :global "ReactDOM"}}}
-               :modules       {:shared
-                               {:entries []}
-                               :main
-                               {:init-fn    frontend.publishing/init
-                                :depends-on #{:shared}}
-                               :code-editor
-                               {:entries    [frontend.extensions.code]
-                                :depends-on #{:main}}
-                               :excalidraw
-                               {:entries    [frontend.extensions.excalidraw]
-                                :depends-on #{:main}}
-                               :tldraw
-                               {:entries    [frontend.extensions.tldraw]
-                                :depends-on #{:main}}
-                               :db-worker
-                               {:init-fn   frontend.worker.db-worker/init
-                                :depends-on #{:shared}
-                                :web-worker true}}
+               :js-options {;; handle `require(xxx.css)`
+                            :ignore-asset-requires true
+                            :resolve {"react" {:target :global
+                                               :global "React"}
+                                      "react-dom" {:target :global
+                                                   :global "ReactDOM"}}}
+               :modules {:shared
+                         {:entries []}
+                         :main
+                         {:init-fn frontend.publishing/init
+                          :depends-on #{:shared}}
+                         :code-editor
+                         {:entries [frontend.extensions.code]
+                          :depends-on #{:main}}
+                         :excalidraw
+                         {:entries [frontend.extensions.excalidraw]
+                          :depends-on #{:main}}
+                         :tldraw
+                         {:entries [frontend.extensions.tldraw]
+                          :depends-on #{:main}}
+                         :db-worker
+                         {:init-fn frontend.worker.db-worker/init
+                          :depends-on #{:shared}
+                          :web-worker true}}
 
-               :output-dir       "./static/js/publishing"
-               :asset-path       "static/js"
-               :closure-defines  {logseq.common.config/PUBLISHING true
-                                  goog.debug.LOGGING_ENABLED true}
-               :compiler-options {:infer-externs      :auto
+               :output-dir "./static/js/publishing"
+               :asset-path "static/js"
+               :closure-defines {logseq.common.config/PUBLISHING true
+                                 goog.debug.LOGGING_ENABLED true}
+               :compiler-options {:infer-externs :auto
                                   :output-feature-set :es-next
                                   :source-map true
-                                  :externs            ["datascript/externs.js"
-                                                       "externs.js"]
-                                  :warnings           {:fn-deprecated false
-                                                       :redef false}
+                                  :externs ["datascript/externs.js"
+                                            "externs.js"]
+                                  :warnings {:fn-deprecated false
+                                             :redef false}
                                   ;; https://github.com/thheller/shadow-cljs/issues/611#issuecomment-620845276
                                   ;; fixes cljs.spec bug with code splitting
                                   :cross-chunk-method-motion false}
-               :devtools         {:before-load frontend.core/stop
-                                  :after-load  frontend.core/start
-                                  :preloads    [devtools.preload]}}
+               :devtools {:before-load frontend.core/stop
+                          :after-load frontend.core/start
+                          :preloads [devtools.preload]}}
 
   :stories-dev {:target :npm-module
                 :entries [logseq.shui.storybook]

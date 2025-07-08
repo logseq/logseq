@@ -288,7 +288,7 @@
                         (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [ref blocks gallery?]
+  [^js ref blocks gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))

@@ -152,7 +152,8 @@
       (shui/button-ghost-icon :cloud
                               {:on-click #(shui/popup-show! (.-target %)
                                                             (details online?)
-                                                            {:align "end"})
+                                                            {:align "end"
+                                                             :dropdown-menu? true})
                                :class (util/classnames [{:cloud true
                                                          :on (and online? (= :open rtc-state))
                                                          :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
@@ -196,7 +197,7 @@
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div
+      [:div.flex.flex-col.gap-1
        (for [log download-logs]
          [:div (:message log)])])))
 
