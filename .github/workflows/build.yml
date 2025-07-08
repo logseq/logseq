@@ -45,9 +45,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: |
-            yarn.lock
-            static/yarn.lock
+          cache-dependency-path: yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v3
