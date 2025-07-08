@@ -52,7 +52,7 @@ const css = {
 const common = {
   clean () {
     return del(
-      ['./static/**/*', '!./static/yarn.lock', '!./static/node_modules'])
+      ['./static/**/*', '!./static/node_modules'])
   },
 
   syncResourceFile () {
