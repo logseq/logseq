@@ -14,7 +14,6 @@ pom.xml.asc
 
 node_modules/
 static/**
-!static/yarn.lock
 tmp
 cljs-test-runner-out
 
