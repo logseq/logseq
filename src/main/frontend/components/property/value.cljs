@@ -1265,7 +1265,10 @@
                       (set-value! (util/evalue e))
                       (reset! *value (util/evalue e)))
          :on-blur (fn [_e]
-                    (set-property-value! value))
+                    (p/do!
+                     (set-property-value! value)
+                     (when (not= value (db-property/property-value-content (db/entity (:db/id value-block))))
+                       (set-value! (db-property/property-value-content value-block)))))
          :on-key-down (fn [e]
                         (let [input (rum/deref *input-ref)
                               pos (cursor/pos input)
