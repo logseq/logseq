@@ -138,4 +138,4 @@
   [name]
   (if NODETEST
     #js {}
-    (aget js/window.LSUI name)))
+    (some-> js/window.LSUI (aget name))))

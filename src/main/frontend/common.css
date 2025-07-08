@@ -515,7 +515,7 @@ svg.tip {
 /* endregion */
 
 hr {
-  margin: 2rem 0;
+  @apply my-4 sm:my-8 mx-0;
   border-color: var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)));
 }
 
