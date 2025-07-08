@@ -120,6 +120,18 @@ ion-buttons {
   @apply top-8;
 }
 
+#journals {
+  .ls-view-body {
+    .block-main-container {
+      @apply pr-10;
+    }
+
+    .ls-block .block-control {
+      @apply !right-5 !top-1;
+    }
+  }
+}
+
 .app-graph-select {
   ion-button {
     &::part(native) {
