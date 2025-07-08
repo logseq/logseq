@@ -3079,7 +3079,9 @@
     [:div.h-6
      (shui/button {:variant :ghost
                    :title "Open block references"
-                   :class "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100"
+                   :class (str "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100" (when (and (util/mobile?)
+                                                                                           (seq (:block/_parent block)))
+                                                                                  " !pr-4"))
                    :size  :sm
                    :on-click (fn [e]
                                (if (gobj/get e "shiftKey")
