@@ -133,6 +133,7 @@ const common = {
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
         'packages/ui/dist/ionic/*.js',
+        'packages/ui/dist/silkhq/*'
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile'))),
     )(...params)
   },

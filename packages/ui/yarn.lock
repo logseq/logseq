@@ -3157,6 +3157,11 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.34.9.tgz#1973871850856ae72bc678aeb066ab952330e923"
   integrity sha512-AyleYRPU7+rgkMWbEh71fQlrzRfeP6SyMnRf9XX4fCdDPAJumdSBqYEcWPMzVQ4ScAl7E4oFfK0GUVn77xSwbw==
 
+"@silk-hq/components@^0.9.10":
+  version "0.9.10"
+  resolved "https://registry.yarnpkg.com/@silk-hq/components/-/components-0.9.10.tgz#ed6baa898b4f36ce0e5ecadabfecef748546db74"
+  integrity sha512-dr6NRdGR2vovh4Uv27IhnkvpcUwHR9D7YZLCxTE6fyl4Zb6K6cGUlWVo3b3tgfCHVyirvrRvqWOF2nxMVlmVXg==
+
 "@sinclair/typebox@^0.27.8":
   version "0.27.8"
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.27.8.tgz#6667fac16c436b5434a387a34dedb013198f6e6e"
