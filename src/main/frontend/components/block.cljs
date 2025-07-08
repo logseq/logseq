@@ -3475,7 +3475,9 @@
      :on-drop (fn [event]
                 (block-drop event uuid block original-block *move-to'))
      :on-drag-end (fn [event]
-                    (dom/remove-class! (.-target event) "dragging")
+                    (doseq [block (or (seq (state/get-selection-blocks)) [(.-target event)])]
+                      (dom/remove-class! block "dragging"))
+                    (dom/remove! js/document.body (dom/sel1 "#dragging-ghost-element"))
                     (block-drag-end event *move-to'))}))
 
 (defn- root-block?
@@ -3672,8 +3674,22 @@
         (fn [event]
           (when-not (state/editing?)
             (util/stop-propagation event)
-            (dom/add-class! (.-target event) "dragging")
-            (on-drag-start event block block-id))))
+            (let [target ^js (.-target event)
+                  blocks (or (seq (state/get-selection-blocks)) [target])
+                  multiple? (> (count blocks) 1)
+                  element (when multiple?
+                            (let [element (dom/create-element "div")]
+                              (-> element
+                                  (dom/set-attr! "id" "dragging-ghost-element")
+                                  (dom/set-text! (str "Moving " (count blocks) " blocks"))
+                                  (dom/set-class! "p-2 rounded text-sm"))
+                              element))]
+              (doseq [block blocks]
+                (dom/add-class! block "dragging"))
+              (on-drag-start event block block-id)
+              (when element
+                (dom/append! js/document.body element)
+                (dnd/set-drag-image! event element (/ (.-offsetWidth target) 2) (/ (.-offsetHeight target) 2)))))))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
