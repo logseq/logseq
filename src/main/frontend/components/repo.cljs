@@ -159,7 +159,11 @@
         remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
-        repos (remove #(= (:url %) config/demo-repo) repos)
+        repos (cond->>
+               (remove #(= (:url %) config/demo-repo) repos)
+                (util/mobile?)
+                (keep (fn [item]
+                        (config/db-based-graph? (:url item)))))
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
      (when-not (util/capacitor-new?)
