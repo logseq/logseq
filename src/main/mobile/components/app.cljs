@@ -61,9 +61,7 @@
                                                 :on-action (fn [e]
                                                              (when-let [role (:role e)]
                                                                (if (= "add-new-graph" role)
-                                                                 (when-let [db-name (js/prompt "Create new graph")]
-                                                                   (when-not (string/blank? db-name)
-                                                                     (repo-handler/new-db! db-name)))
+                                                                 (state/pub-event! [:graph/new-db-graph])
                                                                  (when (string/starts-with? role "logseq_db_")
                                                                    (state/pub-event! [:graph/switch role])))))
                                                 :modal-props {:class "graph-switcher"}})))}
