@@ -62,7 +62,7 @@
       (.toLocaleString (js/Date. dst))
       (catch js/Error _e nil))))
 
-(rum/defc repos-inner
+(rum/defc ^:large-vars/cleanup-todo repos-inner
   "Graph list in `All graphs` page"
   [repos]
   (for [{:keys [root url remote? GraphUUID GraphSchemaVersion GraphName created-at last-seen-at] :as repo}

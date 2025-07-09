@@ -18,7 +18,7 @@
          "electron.db"
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
-         "frontend.components.property" "frontend.components.class"
+         "frontend.components.property" "frontend.components.class" "frontend.components.quick-add"
          "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
          "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.ionic" "mobile.state"
          "mobile.components"]))
@@ -44,6 +44,7 @@
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
    "deps/outliner/src/logseq/outliner/property.cljs"
+   "src/main/frontend/components/quick_add.cljs"
    "src/main/frontend/worker/handler/page/db_based"])
 
 (def db-graph-paths
