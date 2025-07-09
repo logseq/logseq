@@ -36,6 +36,13 @@ html.plt-capacitor.plt-android {
   }
 }
 
+html.plt-mobile {
+  button {
+    /* fix ionic default style */
+    border-style: solid;
+  }
+}
+
 html.has-mobile-keyboard {
   .ion-page:not(.ion-page-hidden) {
     & > ion-content::part(scroll) {
