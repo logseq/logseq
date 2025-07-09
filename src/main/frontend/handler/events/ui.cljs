@@ -250,6 +250,7 @@
    repo/new-db-graph
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
+    :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
 (defmethod events/handle :dialog-select/graph-open []
