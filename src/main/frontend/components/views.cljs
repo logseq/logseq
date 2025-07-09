@@ -252,7 +252,7 @@
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
                       (cond
-                        (util/meta-key? e)
+                        (or (util/meta-key? e) (util/mobile?))
                         (redirect!)
 
                         (.-shiftKey e)
@@ -304,26 +304,27 @@
             (render block*)))]
        [:div])
 
-     (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                      "opacity-" opacity)]
-       [:div.absolute.-right-1
-        [:div.flex.flex-row.items-center
-         (shui/button
-          {:variant :ghost
-           :title "Open"
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (redirect!))
-           :class class}
-          (ui/icon "arrow-right"))
-         (shui/button
-          {:variant :ghost
-           :title "Open in sidebar"
-           :class class
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (add-to-sidebar!))}
-          (ui/icon "layout-sidebar-right"))]])]))
+     (when-not (util/mobile?)
+       (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                        "opacity-" opacity)]
+         [:div.absolute.-right-1
+          [:div.flex.flex-row.items-center
+           (shui/button
+            {:variant :ghost
+             :title "Open"
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (redirect!))
+             :class class}
+            (ui/icon "arrow-right"))
+           (shui/button
+            {:variant :ghost
+             :title "Open in sidebar"
+             :class class
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (add-to-sidebar!))}
+            (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
