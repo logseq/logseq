@@ -197,7 +197,7 @@
   (let [download-logs-flow (accumulated-logs-flow *accumulated-download-logs)
         download-logs (hooks/use-flow-state download-logs-flow)]
     (when (seq download-logs)
-      [:div.flex.flex-col.gap-1
+      [:div.capitalize.flex.flex-col.gap-1
        (for [log download-logs]
          [:div (:message log)])])))
 
@@ -206,8 +206,8 @@
   (let [upload-logs-flow (accumulated-logs-flow *accumulated-upload-logs)
         upload-logs (hooks/use-flow-state upload-logs-flow)]
     (when (seq upload-logs)
-      [:div
-       (for [log upload-logs]
+      [:div.capitalize.flex.flex-col.gap-1
+       (for [log (reverse upload-logs)]
          [:div (:message log)])])))
 
 (def ^:private downloading?-flow
@@ -231,6 +231,14 @@
   (->> rtc-flows/rtc-upload-log-flow
        (m/eduction (map (fn [log] (not= :upload-completed (:sub-type log)))))
        (c.m/continue-flow false)))
+
+(defn on-upload-finished-task
+  [on-success]
+  (let [task (->> rtc-flows/rtc-upload-log-flow
+                  (m/reduce (fn [_ log]
+                              (when (= :upload-completed (:sub-type log))
+                                (on-success)))))]
+    (task (fn []) (fn []))))
 
 (rum/defc uploading-detail
   []
