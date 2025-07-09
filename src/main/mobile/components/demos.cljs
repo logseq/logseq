@@ -28,6 +28,21 @@
                 [:li "hello world list item!"])]
              ]))))))
 
+(rum/defc stacking-view-example
+  [{:keys [nested?]}]
+  (silkhq/stacking-sheet-view
+    (silkhq/stacking-sheet-backdrop)
+    (silkhq/stacking-sheet-content
+      (silkhq/stacking-sheet-handle)
+      [:div.flex.justify-center.py-10.flex-col.gap-3.items-center
+       [:h2.text-2xl.text-semibold.py-40 "Hello stacking bottom sheet..."]
+       (when (not nested?)
+         (silkhq/stacking-sheet
+           (silkhq/stacking-sheet-trigger
+             (shui/button "open: nested stacking sheet"))
+           (silkhq/stacking-sheet-portal
+             (stacking-view-example {:nested? true}))))])))
+
 (rum/defc silkhq-demos-page
   []
   (silkhq/depth-sheet-stack {:as-child true}
@@ -78,4 +93,13 @@
                  (depth-view-example {:nested? false})))
 
              ;; Stacking depth sheet case
+             (silkhq/stacking-sheet-stack
+               {:as-child true}
+               (silkhq/stacking-sheet
+                 (silkhq/stacking-sheet-trigger
+                   {:class "w-full"}
+                   (shui/button {:variant :secondary :class "w-full"} "3. Stacking Bottom Sheet"))
+
+                 (silkhq/stacking-sheet-portal
+                   (stacking-view-example {:nested? false}))))
              ]))))))

@@ -82,4 +82,4 @@
 (def stacking-sheet-outlet (silkhq-wrap "SheetWithStacking.Outlet"))
 (def stacking-sheet-backdrop (silkhq-wrap "SheetWithStacking.Backdrop"))
 (def stacking-sheet-view (silkhq-wrap "SheetWithStacking.View"))
-(def stacking-stack-sheet (silkhq-wrap "SheetWithStackingStack.Root"))
+(def stacking-sheet-stack (silkhq-wrap "SheetWithStackingStack.Root"))
