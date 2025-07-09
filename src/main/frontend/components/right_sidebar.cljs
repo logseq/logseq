@@ -8,6 +8,7 @@
             [frontend.components.page :as page]
             [frontend.components.profiler :as profiler]
             [frontend.components.shortcut-help :as shortcut-help]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -437,7 +438,7 @@
                                                                      (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when (state/sub [:ui/developer-mode?])
+        (when (and (state/sub [:ui/developer-mode?]) (not config/publishing?))
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}

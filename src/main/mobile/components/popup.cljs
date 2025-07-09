@@ -77,21 +77,18 @@
                                            [1 #js [0 1]]
                                            [0.75 #js [0 0.75 1]])]
     (when open?
-      (if (= :ls-quick-add (:id opts))
-        (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-          (when (:block/_parent add-page)
-            (js/setTimeout
-             (fn []
-               (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
-                 (editor-handler/edit-block! block :max {:container-id :unknown-container})))
-             500)))
-        (do
-          (state/clear-edit!)
-          (init/keyboard-hide))))
+      (state/clear-edit!)
+      (init/keyboard-hide))
     (ion/modal
      (merge
       {:isOpen (boolean open?)
        :initialBreakpoint initial-breakpoint
+       :onDidPresent (fn []
+                       (when (= :ls-quick-add (:id opts))
+                         (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+                           (when (:block/_parent add-page)
+                             (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
+                               (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))
        :breakpoints breakpoints
        :onDidDismiss (fn []
                        (mobile-state/set-popup! nil)

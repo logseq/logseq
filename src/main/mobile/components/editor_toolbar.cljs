@@ -1,7 +1,6 @@
 (ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
-  (:require [mobile.init :as init]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
@@ -11,6 +10,8 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
+            [mobile.init :as init]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (defn- blur-if-compositing
@@ -93,6 +94,7 @@
         (command #(let [parent-id (state/get-edit-input-id)]
                     (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
        [:div.toolbar-hide-keyboard
-        (command #(do
-                    (state/clear-edit!)
-                    (init/keyboard-hide)) {:icon "keyboard-show"})]])))
+        (command #(p/do!
+                   (editor-handler/save-current-block!)
+                   (state/clear-edit!)
+                   (init/keyboard-hide)) {:icon "keyboard-show"})]])))

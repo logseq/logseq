@@ -2814,7 +2814,7 @@
                                   :on-click #(db-property-handler/delete-property-value! (:db/id block) :block/tags (:db/id tag))}
                                  "Remove tag"))])
                            popup-opts))}
-      (if (and @*hover? (not private-tag?))
+      (if (and @*hover? (not private-tag?) (not config/publishing?))
         [:a.inline-flex.text-muted-foreground
          {:title "Remove this tag"
           :style {:margin-top 1
@@ -2844,7 +2844,10 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (:logseq.property.class/hide-from-node t)
+                                    (if (contains? t :logseq.property.class/hide-from-node)
+                                      (:logseq.property.class/hide-from-node t)
+                                      ;; Mobile app hides by default while everything else doesn't
+                                      (if (util/capacitor-new?) true false))
                                     (contains? hidden-internal-tags (:db/ident t))
                                     (and (util/mobile?) (= (:db/ident t) :logseq.class/Task))))))
           popup-opts {:align :end
@@ -3079,7 +3082,9 @@
     [:div.h-6
      (shui/button {:variant :ghost
                    :title "Open block references"
-                   :class "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100"
+                   :class (str "px-1 py-0 w-5 h-5 opacity-70 hover:opacity-100" (when (and (util/mobile?)
+                                                                                           (seq (:block/_parent block)))
+                                                                                  " !pr-4"))
                    :size  :sm
                    :on-click (fn [e]
                                (if (gobj/get e "shiftKey")
@@ -3475,7 +3480,9 @@
      :on-drop (fn [event]
                 (block-drop event uuid block original-block *move-to'))
      :on-drag-end (fn [event]
-                    (dom/remove-class! (.-target event) "dragging")
+                    (doseq [block (or (seq (state/get-selection-blocks)) [(.-target event)])]
+                      (dom/remove-class! block "dragging"))
+                    (dom/remove! js/document.body (dom/sel1 "#dragging-ghost-element"))
                     (block-drag-end event *move-to'))}))
 
 (defn- root-block?
@@ -3672,8 +3679,22 @@
         (fn [event]
           (when-not (state/editing?)
             (util/stop-propagation event)
-            (dom/add-class! (.-target event) "dragging")
-            (on-drag-start event block block-id))))
+            (let [target ^js (.-target event)
+                  blocks (or (seq (state/get-selection-blocks)) [target])
+                  multiple? (> (count blocks) 1)
+                  element (when multiple?
+                            (let [element (dom/create-element "div")]
+                              (-> element
+                                  (dom/set-attr! "id" "dragging-ghost-element")
+                                  (dom/set-text! (str "Moving " (count blocks) " blocks"))
+                                  (dom/set-class! "p-2 rounded text-sm"))
+                              element))]
+              (doseq [block blocks]
+                (dom/add-class! block "dragging"))
+              (on-drag-start event block block-id)
+              (when element
+                (dom/append! js/document.body element)
+                (dnd/set-drag-image! event element (/ (.-offsetWidth target) 2) (/ (.-offsetHeight target) 2)))))))
 
        (:property-default-value? config)
        (assoc :data-is-property-default-value (:property-default-value? config))
