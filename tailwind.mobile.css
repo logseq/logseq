@@ -6,13 +6,17 @@
 @import "packages/ui/src/colors.css";
 @import "packages/ui/src/index.css";  /* Tailwind base imported here */
 @import "resources/css/shui.css";
-@import "codemirror/lib/codemirror.css";
-@import "codemirror/theme/solarized.css";
+@import "inter-ui/inter.css";
 
-@import "node_modules/@ionic/react/css/palettes/dark.class.css";
-@import "src/main/frontend/animations.css";
 @import "photoswipe/dist/photoswipe.css";
 @import "packages/amplify/dist/amplify.css";
+@import "katex/dist/katex.min.css";
+@import "codemirror/lib/codemirror.css";
+@import "codemirror/theme/solarized.css";
+@import "resources/css/tabler-extension.css";
+@import "@tabler/icons-webfont/tabler-icons.min.css";
+@import "node_modules/@ionic/react/css/palettes/dark.class.css";
+@import "src/main/frontend/animations.css";
 @import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";
 @import "src/main/frontend/components/icon.css";
