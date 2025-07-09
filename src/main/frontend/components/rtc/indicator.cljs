@@ -20,6 +20,7 @@
 
 (defonce ^:private *detail-info
   (atom {:pending-local-ops 0
+         :pending-asset-ops 0
          :graph-uuid nil
          :local-tx nil
          :remote-tx nil
@@ -49,6 +50,7 @@
                       (m/reduce (fn [_ state]
                                   (swap! *detail-info assoc
                                          :pending-local-ops (:unpushed-block-update-count state)
+                                         :pending-asset-ops (:pending-asset-ops-count state)
                                          :graph-uuid (:graph-uuid state)
                                          :local-tx (:local-tx state)
                                          :remote-tx (:remote-tx state)
@@ -145,6 +147,7 @@
         online?                     (hooks/use-flow-state flows/network-online-event-flow)
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
+        pending-asset-ops           (:pending-asset-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
     [:div.cp__rtc-sync
      [:div.hidden {"data-testid" "rtc-tx"} (pr-str {:local-tx local-tx :remote-tx remote-tx})]
@@ -156,7 +159,10 @@
                                                              :dropdown-menu? true})
                                :class (util/classnames [{:cloud true
                                                          :on (and online? (= :open rtc-state))
-                                                         :idle (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
+                                                         :idle (and online?
+                                                                    (= :open rtc-state)
+                                                                    (zero? unpushed-block-update-count)
+                                                                    (zero? pending-asset-ops))
                                                          :queuing (pos? unpushed-block-update-count)}])})]]))
 
 (def ^:private *accumulated-download-logs (atom []))
