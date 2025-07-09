@@ -162,8 +162,8 @@
         repos (cond->>
                (remove #(= (:url %) config/demo-repo) repos)
                 (util/mobile?)
-                (keep (fn [item]
-                        (config/db-based-graph? (:url item)))))
+                (filter (fn [item]
+                          (config/db-based-graph? (:url item)))))
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
      (when-not (util/capacitor-new?)
