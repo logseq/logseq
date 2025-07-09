@@ -7,7 +7,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
             [mobile.ionic :as ion]
@@ -49,7 +49,7 @@
                           {:on-click (fn []
                                        (mobile-ui/open-modal!
                                         (str "⚠️ Are you sure you want to delete this "
-                                             (if (ldb/page? block) "page" "block")
+                                             (if (entity-util/page? block) "page" "block")
                                              "?")
                                         {:type :alert
                                          :on-action (fn [{:keys [role]}]

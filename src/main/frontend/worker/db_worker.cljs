@@ -249,7 +249,7 @@
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
       (println :debug "gc current graph")
-      (doseq [db [sqlite-db client-ops-db]]
+      (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
       (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at

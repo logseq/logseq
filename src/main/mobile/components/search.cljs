@@ -1,8 +1,6 @@
 (ns mobile.components.search
   "Mobile search"
-  (:require [mobile.ionic :as ion]
-            [mobile.state :as mobile-state]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
@@ -13,6 +11,8 @@
             [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
+            [mobile.ionic :as ion]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -106,7 +106,7 @@
              (ion/item
               {:on-click #(set-input! item)}
               [:div.flex.flex-row.items-center.gap-1
-               (ui/icon "search" {:size 14
+               (ui/icon "search" {:size 15
                                   :class "text-muted-foreground"})
                item])))]
 
@@ -122,7 +122,7 @@
              (when header
                [:div.opacity-50.text-sm
                 header])
-             [:div.flex.flex-row.items-center.gap-1
-              (when icon (ui/icon icon {:size 14
-                                        :class "text-muted-foreground"}))
+             [:div.flex.flex-row.items-start.gap-1
+              (when icon (ui/icon icon {:size 15
+                                        :class "text-muted-foreground mt-1"}))
               [:div text]]]))))))))

@@ -462,9 +462,11 @@
                                              :binding []}
 
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :graphs}))
+                                             :inactive config/publishing?
                                              :binding []}
 
    :graph/db-add                            {:fn #(state/pub-event! [:graph/new-db-graph])
+                                             :inactive config/publishing?
                                              :binding false}
 
    :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
@@ -541,6 +543,7 @@
 
    :editor/quick-add                        {:binding (if mac? "mod+e" "mod+alt+e")
                                              :db-graph? true
+                                             :inactive config/publishing?
                                              :fn      editor-handler/quick-add}
    :editor/jump                             {:binding "mod+j"
                                              :fn      jump-handler/jump-to}

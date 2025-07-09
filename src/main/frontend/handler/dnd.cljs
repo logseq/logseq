@@ -6,9 +6,17 @@
             [frontend.handler.property :as property-handler]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
+            [frontend.util.ref :as ref]
             [logseq.db :as ldb]))
+
+(defn set-drag-image!
+  ([e image]
+   (set-drag-image! e image 0 0))
+  ([e image offset-x offset-y]
+   (let [dt (.-dataTransfer e)]
+     (.setDragImage dt image offset-x offset-y)
+     e)))
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
