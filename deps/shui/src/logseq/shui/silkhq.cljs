@@ -14,6 +14,13 @@
     (let [path (util/get-path name)]
       (some-> js/window.LSSilkhq (gobj/getValueByKeys (clj->js path))))))
 
+(def fixed (silkhq-wrap "Fixed.Root"))
+(def fixed-content (silkhq-wrap "Fixed.Content"))
+
+(def scroll (silkhq-wrap "Scroll.Root"))
+(def scroll-trigger (silkhq-wrap "Scroll.Trigger"))
+(def scroll-content (silkhq-wrap "Scroll.Content"))
+(def scroll-view (silkhq-wrap "Scroll.View"))
 
 (def sheet (silkhq-wrap "Sheet.Root"))
 (def sheet-bleeding-background (silkhq-wrap "Sheet.BleedingBackground"))
