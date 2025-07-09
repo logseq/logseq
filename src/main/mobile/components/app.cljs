@@ -29,6 +29,7 @@
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.settings :as settings]
+            [mobile.components.demos :as demos]
             [mobile.components.ui :as ui-component]
             [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
@@ -90,7 +91,10 @@
     (ion/tabler-icon "plus" {:size 22}) "Quick add")
    (ion/tab-button
     {:tab "settings"}
-    (ion/tabler-icon "settings" {:size 22}) "Settings")))
+    (ion/tabler-icon "settings" {:size 22}) "Settings")
+    (ion/tab-button
+      {:tab "demos"}
+      (ion/tabler-icon "bug" {:size 22}) "Demos")))
 
 (rum/defc keep-keyboard-open
   []
@@ -225,6 +229,10 @@
       {:tab "settings"}
       (ion/content
        (settings/page)))
+      (ion/tab
+        {:tab "demos"}
+        (ion/content
+          (demos/silkhq-demos-page)))
 
      (bottom-tabs)
 

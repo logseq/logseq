@@ -314,3 +314,9 @@ html[data-color=logseq] {
     @apply bg-gray-02;
   }
 }
+
+/* silk styles */
+.app-silk-index-container {
+  @apply bg-white min-h-[100svh];
+}
+

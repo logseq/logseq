@@ -1,5 +1,5 @@
 import "@silk-hq/components/dist/main-unlayered.css"
-import { Sheet } from '@silk-hq/components'
+import { Fixed, Scroll, Sheet } from '@silk-hq/components'
 import { BottomSheet } from './BottomSheet'
 import { SheetWithDepth, SheetWithDepthStack } from './SheetWithDepth'
 import { SheetWithDetent } from './SheetWithDetent'
@@ -10,7 +10,7 @@ declare global {
 }
 
 const silkhq = {
-  Sheet, BottomSheet,
+  Sheet, Fixed, Scroll, BottomSheet,
   SheetWithDepth, SheetWithDepthStack,
   SheetWithStacking, SheetWithDetent,
   SheetWithStackingStack,
