@@ -9,7 +9,6 @@
             [frontend.db.conn :as db-conn]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
