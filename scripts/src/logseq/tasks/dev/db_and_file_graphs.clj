@@ -44,7 +44,6 @@
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
    "deps/outliner/src/logseq/outliner/property.cljs"
-   "src/main/frontend/components/quick_add.cljs"
    "src/main/frontend/worker/handler/page/db_based"])
 
 (def db-graph-paths
@@ -58,6 +57,7 @@
          "src/main/frontend/components/property.cljs"
          "src/main/frontend/components/property"
          "src/main/frontend/components/objects.cljs"
+         "src/main/frontend/components/quick_add.cljs"
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
          "src/electron/electron/db.cljs"
@@ -134,13 +134,10 @@
         ;; For now use the whole code line. If this is too brittle can make this smaller
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
+                             "{:block/name page-title})"
                              ;; TODO: Mv these 2 file-based ns out of db files
                              "(:require [logseq.db.file-based.rules :as file-rules]))"
                              "[logseq.db.file-based.schema :as file-schema]))"
-                             ;; The next 3 are from components.property.value
-                             "{:block/name page-title})"
-                             "(when-not (db/get-page journal)"
-                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"
                              ;; :block/name ones from src/main/mobile
                              "(if-let [journal (db/get-page page-name)]"
                              "(p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]"}
