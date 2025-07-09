@@ -316,7 +316,27 @@ html[data-color=logseq] {
 }
 
 /* silk styles */
-.app-silk-index-container {
+.app-silk-index-scroll-content {
   @apply bg-white min-h-[100svh];
+}
+
+.app-silk-scroll-view {
+  grid-area: 1 / 1;
+  min-height: 0;
+  width: 100%;
+  overflow: clip;
+  border-radius: 24px 24px 0 0;
+}
+
+.app-silk-scroll-content {
+  overflow: hidden;
+  overflow: clip;
+  padding: 20px;
+  position: relative;
+  display: grid;
+}
+
+.app-silk-index-container {
+  @apply p-4 flex flex-col gap-3;
 }
 
