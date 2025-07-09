@@ -7,7 +7,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.delete-blocks :as delete-blocks] ;; Load entity extensions
@@ -262,12 +261,9 @@
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
 
-(def get-built-in-page common-initial-data/get-built-in-page)
+(def get-built-in-page db-db/get-built-in-page)
 
-(defn library?
-  [page]
-  (and (built-in? page)
-       (= common-config/library-page-name (:block/title page))))
+(def library? db-db/library?)
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
