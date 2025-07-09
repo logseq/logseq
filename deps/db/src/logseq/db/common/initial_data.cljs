@@ -18,6 +18,8 @@
   [db page-name]
   (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
 
+;; FIXME: For DB graph built-in pages, look up by name -> uuid like
+;; get-built-in-page instead of this approach which is more error prone
 (defn get-first-page-by-name
   "Return the oldest page's db id for :block/name"
   [db page-name]

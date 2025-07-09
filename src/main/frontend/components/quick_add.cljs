@@ -3,6 +3,7 @@
   (:require [frontend.components.page :as page]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -20,7 +21,7 @@
                    (state/clear-selection!)
                    state)}
   []
-  (when (db/get-page (date/today))
+  (when (model/get-journal-page (date/today))
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)
             add-button [:div

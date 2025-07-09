@@ -251,7 +251,7 @@
       (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
-  "Get a page given its unsanitized name"
+  "Get a page given its unsanitized name or uuid"
   [db page-id-name-or-uuid]
   (when db
     (if (number? page-id-name-or-uuid)
@@ -260,6 +260,14 @@
                       (parse-uuid page-id-name-or-uuid))]
         (d/entity db [:block/uuid id])
         (d/entity db (get-first-page-by-name db (name page-id-name-or-uuid)))))))
+
+(defn get-journal-page
+  "Get a journal page given its unsanitized name.
+   This will be useful for DB graphs later as we can switch to a different lookup
+   approach for journals e.g. like get-built-in-page"
+  [db page-name]
+  (when db
+    (d/entity db (get-first-page-by-name db page-name))))
 
 (def get-built-in-page db-db/get-built-in-page)
 
