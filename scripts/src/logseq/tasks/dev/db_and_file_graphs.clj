@@ -173,7 +173,7 @@
   (let [db-concepts
         ;; from logseq.db.frontend.schema
         ["closed-value" "class/properties" "classes" "property/parent"
-         "logseq.property" "logseq.class" "db-based"]
+         "logseq.property" "logseq.class" "db-based" "library" "quick-add"]
         res (grep-many db-concepts file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained db specific concepts:")
