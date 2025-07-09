@@ -135,15 +135,7 @@
                                 (ldb/get-graph-rtc-uuid (db/get-db))
                                 (user-handler/logged-in?)
                                 (user-handler/team-member?))
-                       [:<>
-                  ;; (rum/with-key (rtc-collaborators)
-                  ;;   (str "collab-" repo))
-                        (rtc-indicator/indicator)
-                  ;; (when (user-handler/logged-in?)
-                  ;;   (rtc-indicator/downloading-detail))
-                  ;; (when (user-handler/logged-in?)
-                  ;;   (rtc-indicator/uploading-detail))
-                        ])]))))
+                       (rtc-indicator/indicator))]))))
 
    ;; main content
    (if db-restoring?

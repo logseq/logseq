@@ -1,6 +1,7 @@
 (ns frontend.components.repo
   (:require [clojure.string :as string]
             [frontend.common.async-util :as async-util]
+            [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -125,6 +126,27 @@
                                            (repo-handler/remove-repo! repo)
                                            (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
               "Delete local graph"))
+           (when (and db-based? root (not remote?))
+             (shui/dropdown-menu-item
+              {:key "logseq-sync"
+               :class "use-logseq-sync-menu-item"
+               :on-click (fn []
+                           (let [repo (state/get-current-repo)
+                                 token (state/get-auth-id-token)
+                                 remote-graph-name (config/db-graph-name (state/get-current-repo))]
+                             (when (and token remote-graph-name)
+                               (state/<invoke-db-worker :thread-api/rtc-async-upload-graph
+                                                        repo token remote-graph-name)
+                               (when (util/mobile?)
+                                 (shui/popup-show! nil
+                                                   (fn []
+                                                     (rtc-indicator/uploading-logs))
+                                                   {:id :rtc-graph-upload-log})
+                                 (rtc-indicator/on-upload-finished-task
+                                  (fn []
+                                    (shui/popup-hide! :rtc-graph-upload-log)
+                                    (rtc-flows/trigger-rtc-start repo)))))))}
+              "Use Logseq sync (Beta testing)"))
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
               {:key "delete-remotely"
