@@ -326,7 +326,6 @@
       :ui/cached-key->container-id           (atom {})
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
       :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
-      :feature/enable-rtc?                   (storage/get :logseq-rtc-enabled)
 
       :file/rename-event-chan                (async/chan 100)
       :ui/find-in-page                       nil
@@ -747,10 +746,6 @@ Similar to re-frame subscriptions"
    (enable-whiteboards? (get-current-repo)))
   ([repo]
    (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
-
-(defn enable-rtc?
-  []
-  (sub :feature/enable-rtc?))
 
 (defn enable-git-auto-push?
   [repo]
@@ -2362,8 +2357,3 @@ Similar to re-frame subscriptions"
   [days]
   (reset! (:ui/highlight-recent-days @state) days)
   (storage/set :ui/highlight-recent-days days))
-
-(defn set-rtc-enabled!
-  [value]
-  (storage/set :logseq-rtc-enabled value)
-  (set-state! :feature/enable-rtc? value))
