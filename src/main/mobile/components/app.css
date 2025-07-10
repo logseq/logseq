@@ -2,6 +2,16 @@
   --ls-page-title-size: 26px;
 }
 
+html.is-native-ios {
+  --safe-area-inset-top: 59px;
+  --safe-area-inset-bottom: 16px;
+}
+
+html.is-native-android {
+  --safe-area-inset-top: 46px;
+  --safe-area-inset-bottom: 16px;
+}
+
 html.plt-capacitor.plt-android {
   --ion-safe-area-top: 42px;
   --ion-safe-area-bottom: 16px;
@@ -345,5 +355,7 @@ html[data-color=logseq] {
 
 .app-silk-index-container {
   @apply p-4 flex flex-col gap-3;
+
+  padding-top: var(--safe-area-inset-top);
 }
 
