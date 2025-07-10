@@ -397,7 +397,7 @@
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
                   (config/db-based-graph? current-repo)
-                  (user-handler/team-member?))
+                  (user-handler/rtc-group?))
          [:<>
           (recent-slider)
           (rum/with-key (rtc-collaborators)
