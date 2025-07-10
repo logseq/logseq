@@ -47,7 +47,7 @@
       (reset! *last-popup-modal? false) pid)
 
     :else
-    (when (fn? content-fn)
+    (when content-fn
       (mobile-state/set-popup! {:open? true
                                 :content-fn content-fn
                                 :opts opts})
@@ -103,4 +103,4 @@
          [:h2.py-2.opacity-40 title])
        (when content-fn
          (mobile-ui/classic-app-container-wrap
-          (content-fn)))]))))
+          (if (fn? content-fn) (content-fn) content-fn)))]))))

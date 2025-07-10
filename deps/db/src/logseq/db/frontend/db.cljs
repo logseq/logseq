@@ -6,6 +6,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
@@ -120,3 +121,14 @@
     :logseq.class/Math-block :math
     :logseq.class/Quote-block :quote
     nil))
+
+(defn get-built-in-page
+  [db title]
+  (when db
+    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
+      (d/entity db [:block/uuid id]))))
+
+(defn library?
+  [page]
+  (and (entity-util/built-in? page)
+       (= common-config/library-page-name (:block/title page))))
