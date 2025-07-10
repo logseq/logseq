@@ -492,12 +492,13 @@
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-remote-profile?
-                   rtc-lock online-users pending-local-ops-count [local-tx remote-tx]]
+                   rtc-lock online-users pending-local-ops-count pending-asset-ops-count [local-tx remote-tx]]
                 {:graph-uuid graph-uuid
                  :local-graph-schema-version (db-schema/schema-version->string local-graph-schema-version)
                  :remote-graph-schema-version (db-schema/schema-version->string remote-graph-schema-version)
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
+                 :pending-asset-ops-count pending-asset-ops-count
                  :local-tx local-tx
                  :remote-tx remote-tx
                  :rtc-state rtc-state
@@ -510,6 +511,7 @@
               (m/watch *rtc-auto-push?) (m/watch *rtc-remote-profile?)
               (m/watch *rtc-lock') (m/watch *online-users)
               (client-op/create-pending-block-ops-count-flow repo)
+              (client-op/create-pending-asset-ops-count-flow repo)
               (rtc-log-and-state/create-local&remote-t-flow graph-uuid))))
           (catch Cancelled _))))))
 
@@ -651,7 +653,8 @@
   (c.m/run-background-task
    ::subscribe-state
    (m/reduce
-    (fn [_ v] (shared-service/broadcast-to-clients! :rtc-sync-state v))
+    (fn [_ v]
+      (shared-service/broadcast-to-clients! :rtc-sync-state v))
     create-get-state-flow)))
 
 (comment

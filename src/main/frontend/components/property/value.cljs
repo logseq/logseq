@@ -367,10 +367,10 @@
           (when d
             (let [journal (date/js-date->journal-title d)]
               (p/do!
-               (when-not (db/get-page journal)
+               (when-not (model/get-journal-page journal)
                  (page-handler/<create! journal {:redirect? false}))
                (when (fn? on-change)
-                 (let [value (if datetime? (tc/to-long d) (db/get-page journal))]
+                 (let [value (if datetime? (tc/to-long d) (model/get-journal-page journal))]
                    (on-change value)))
                (when-not datetime?
                  (shui/popup-hide! id)

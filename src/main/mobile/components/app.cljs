@@ -9,7 +9,6 @@
             [frontend.db.conn :as db-conn]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
@@ -139,15 +138,7 @@
                                 (ldb/get-graph-rtc-uuid (db/get-db))
                                 (user-handler/logged-in?)
                                 (user-handler/team-member?))
-                       [:<>
-                  ;; (rum/with-key (rtc-collaborators)
-                  ;;   (str "collab-" repo))
-                        (rtc-indicator/indicator)
-                  ;; (when (user-handler/logged-in?)
-                  ;;   (rtc-indicator/downloading-detail))
-                  ;; (when (user-handler/logged-in?)
-                  ;;   (rtc-indicator/uploading-detail))
-                        ])]))))
+                       (rtc-indicator/indicator))]))))
 
    ;; main content
    (if db-restoring?
