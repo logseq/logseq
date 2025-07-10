@@ -324,6 +324,11 @@ independent of format as format specific heading characters are stripped"
   (when page-id-name-or-uuid
     (ldb/get-page (conn/get-db) page-id-name-or-uuid)))
 
+(defn get-journal-page
+  [page-name]
+  (when page-name
+    (ldb/get-journal-page (conn/get-db) page-name)))
+
 (defn get-case-page
   [page-name-or-uuid]
   (when page-name-or-uuid

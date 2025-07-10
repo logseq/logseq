@@ -6,11 +6,11 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.common.uuid :as common-uuid]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]))
 
@@ -18,6 +18,8 @@
   [db page-name]
   (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
 
+;; FIXME: For DB graph built-in pages, look up by name -> uuid like
+;; get-built-in-page instead of this approach which is more error prone
 (defn get-first-page-by-name
   "Return the oldest page's db id for :block/name"
   [db page-name]
@@ -330,12 +332,6 @@
        (d/datoms db :eavt (:e d)))
      (d/datoms db :avet :logseq.property.user/email))))
 
-(defn get-built-in-page
-  [db title]
-  (when db
-    (let [id (common-uuid/gen-uuid :builtin-block-uuid title)]
-      (d/entity db [:block/uuid id]))))
-
 (defn get-initial-data
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
@@ -363,7 +359,7 @@
         user-datoms (get-all-user-datoms db)
         pages-datoms (if db-graph?
                        (let [contents-id (get-first-page-by-title db "Contents")
-                             capture-page-id (:db/id (get-built-in-page db common-config/quick-add-page-name))
+                             capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
                              views-id (get-first-page-by-title db common-config/views-page-name)]
                          (mapcat #(d/datoms db :eavt %)
                                  (remove nil? [contents-id capture-page-id views-id])))
