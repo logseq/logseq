@@ -26,7 +26,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
@@ -169,11 +168,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  ;; Disable login on Web until RTC is ready
-                  (when (and (not login?)
-                             (or
-                              (storage/get :login-enabled)
-                              (not util/web-platform?)))
+                  (when-not login?
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
@@ -397,7 +392,7 @@
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
                   (config/db-based-graph? current-repo)
-                  (user-handler/team-member?))
+                  (user-handler/rtc-group?))
          [:<>
           (recent-slider)
           (rum/with-key (rtc-collaborators)
