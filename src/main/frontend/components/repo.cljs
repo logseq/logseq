@@ -213,8 +213,7 @@
                 :on-click #(state/pub-event! [:graph/setup-a-repo]))]))])]
 
       (when (and (or (file-sync/enable-sync?)
-                     (state/enable-rtc?)
-                     (user-handler/team-member?))
+                     (user-handler/rtc-group?))
                  login?)
         [:div
          [:hr]
@@ -485,7 +484,7 @@
        :ref input-ref
        :placeholder "your graph name"
        :on-key-down submit!})
-     (when (user-handler/team-member?)
+     (when (user-handler/rtc-group?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
          {:id "rtc-sync"
