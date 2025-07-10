@@ -132,8 +132,7 @@
                     [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
                      (when (and repo
                                 (ldb/get-graph-rtc-uuid (db/get-db))
-                                (user-handler/logged-in?)
-                                (user-handler/team-member?))
+                                (user-handler/logged-in?))
                        (rtc-indicator/indicator))]))))
 
    ;; main content
