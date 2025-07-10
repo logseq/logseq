@@ -100,6 +100,15 @@
 (def parallax-page-topbar-dismiss-trigger (silkhq-wrap "ParallaxPage.TopBarDismissTrigger"))
 (def parallax-page-topbar-dismiss-trigger-portal (silkhq-wrap "ParallaxPage.TopBarDismissTriggerPortal"))
 
+(def parallax-page-stack (silkhq-wrap "ParallaxPageStack.Root"))
+(def parallax-page-stack-scenery-outlet (silkhq-wrap "ParallaxPageStack.SceneryOutlet"))
+;; stack topbar components
+(def parallax-page-stack-island (silkhq-wrap "ParallaxPageStack.IslandRoot"))
+(def parallax-page-stack-island-content (silkhq-wrap "ParallaxPageStack.IslandContent"))
+(def parallax-page-stack-topbar-dismiss-trigger-container (silkhq-wrap "ParallaxPageStack.TopBarDismissTriggerContainer"))
+(def parallax-page-stack-topbar-title-outlet (silkhq-wrap "ParallaxPageStack.TopBarTitleOutlet"))
+(def parallax-page-stack-topbar-title-container (silkhq-wrap "ParallaxPageStack.TopBarTitleContainer"))
+
 (def card-sheet (silkhq-wrap "CardSheet.Root"))
 (def card-sheet-portal (silkhq-wrap "CardSheet.Portal"))
 (def card-sheet-handle (silkhq-wrap "CardSheet.Handle"))
