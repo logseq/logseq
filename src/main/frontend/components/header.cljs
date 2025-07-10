@@ -169,11 +169,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  ;; Disable login on Web until RTC is ready
-                  (when (and (not login?)
-                             (or
-                              (storage/get :login-enabled)
-                              (not util/web-platform?)))
+                  (when-not login?
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
