@@ -41,7 +41,7 @@
            (silkhq/stacking-sheet-trigger
              (shui/button "open: nested stacking sheet"))
            (silkhq/stacking-sheet-portal
-             (stacking-view-example {:nested? true}))))])))
+             (stacking-view-example {:nested? false}))))])))
 
 (rum/defc silkhq-demos-page
   []
@@ -54,7 +54,7 @@
            :nativePageScrollReplacement true}
           (silkhq/scroll-content {:class "app-silk-index-scroll-content"}
             [:div.app-silk-index-container
-             [:h2.text-lg.font-semibold "Silk sheets demos"]
+             [:h2.text-xl.font-semibold.pt-4 "Silk sheets demos"]
 
              ;; Bottom Sheet case
              (silkhq/bottom-sheet
