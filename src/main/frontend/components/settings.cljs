@@ -860,19 +860,6 @@
                        [:div (t :settings-page/sync-diff-merge-desc)]
                        [:div (t :settings-page/sync-diff-merge-warn)]])}))
 
-(rum/defc rtc-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (state/set-rtc-enabled! value)))
-             true))
-
-(defn rtc-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label "RTC"
-    :action (rtc-enabled-switcher enabled?)}))
-
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
   (ui/toggle enabled?
@@ -1107,10 +1094,6 @@
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (when-not db-based? (zotero-settings-row))
-     (when (and (config/db-based-graph? current-repo)
-                (user-handler/team-member?))
-       ;; FIXME: Wire this up again to RTC init calls
-       (rtc-switcher-row (state/enable-rtc?)))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]

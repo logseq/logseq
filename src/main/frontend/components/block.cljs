@@ -2237,7 +2237,7 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show? (or collapsed? collapsable?))
-                               (and collapsed? (or page-title? order-list? config/publishing?)))
+                               (and collapsed? (or page-title? order-list? config/publishing? (util/mobile?))))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
