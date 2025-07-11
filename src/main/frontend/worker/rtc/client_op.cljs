@@ -92,7 +92,6 @@
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (nil? (first (d/datoms @conn :avet :graph-uuid))))
     (d/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
 
 (defn get-graph-uuid
@@ -470,13 +469,3 @@
       (m/ap
         (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
           (datom-count-fn @conn))))))
-
-(defn reset-client-op-conn
-  [repo]
-  (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
-                               (d/datoms @conn :avet :local-tx)
-                               (d/datoms @conn :avet :aes-key-jwk)
-                               (d/datoms @conn :avet :block/uuid))
-                       (map (fn [datom] [:db/retractEntity (:e datom)])))]
-      (d/transact! conn tx-data))))
