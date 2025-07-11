@@ -3966,3 +3966,10 @@
   (if (shui-dialog/get-modal :ls-dialog-quick-add)
     (quick-add-blocks!)
     (show-quick-add)))
+
+(defn quick-add-open-last-block!
+  []
+  (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+    (when (:block/_parent add-page)
+      (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
+        (edit-block! block :max {:container-id :unknown-container})))))
