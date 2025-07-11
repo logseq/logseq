@@ -4,9 +4,10 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as model]
             [frontend.fs :as fs]
-            [logseq.common.path :as path]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -17,9 +18,9 @@
             [frontend.util.fs :as fs-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util.block-ref :as block-ref]
-            [promesa.core :as p]
-            [frontend.db.async :as db-async]))
+            [promesa.core :as p]))
 
 ;; all IPC paths must be normalized! (via common-util/path-normalize)
 
@@ -42,12 +43,11 @@
 (defn- handle-add-and-change!
   [repo path content db-content ctime mtime backup?]
   (let [config (state/get-config repo)
-        path-hidden-patterns (:hidden config)
-        db-last-modified-at (db/get-file-last-modified-at repo path)]
+        path-hidden-patterns (:hidden config)]
     (when-not (or (and (seq path-hidden-patterns)
-                    (common-config/hidden? path path-hidden-patterns))
+                       (common-config/hidden? path path-hidden-patterns))
                   ;; File not changed
-                  (= db-last-modified-at mtime))
+                  (= content db-content))
       (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
               _ (when backup?
                   (-> (when-let [repo-dir (config/get-local-dir repo)]
@@ -102,7 +102,7 @@
                      exists-in-db?)
                 (p/let [dir-exists? (fs/file-exists? dir "")]
                   (when dir-exists?
-                    (when-let [page-name (db/get-file-page path)]
+                    (when-let [page-name (file-model/get-file-page path)]
                       (println "Delete page: " page-name ", file path: " path ".")
                       (page-handler/<delete! page-name #()))))
 
@@ -178,7 +178,7 @@
         (p/do!
          (when (seq deleted-files)
            (p/all (map (fn [path]
-                         (when-let [page-name (db/get-file-page path)]
+                         (when-let [page-name (file-model/get-file-page path)]
                            (println "Delete page: " page-name ", file path: " path ".")
                            (page-handler/<delete! page-name #())))
                        deleted-files)))

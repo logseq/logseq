@@ -1,142 +1,76 @@
-.cp__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  padding: 10px 20px;
-  background-color: var(--ls-primary-background-color);
-  z-index: 10;
-  display: flex;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  height: 80px;
-  align-items: flex-start;
-  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.05);
-
-  .bottom-action {
-    width: 23px;
-    height: 23px;
-  }
-
-  .ti, .timer {
-    color: var(--ls-primary-text-color);
-  }
-
-  .timer {
-    position: absolute;
-    left: 40px;
-  }
-}
-
 .action-bar {
-  position: fixed;
-  bottom: 100px;
-  height: 70px;
-  padding: 6px;
-  border-radius: 10px;
-  background-color: var(--ls-secondary-background-color);
-  overflow-x: overlay;
-  overflow-y: hidden;
-  box-shadow: rgba(0, 0, 0, 0.02) 0px 1px 1px 0px, rgba(27, 31, 35, 0.10) 0px 0px 0px 1px;
-  z-index: 100;
+  @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
+  shadow-md bg-[var(--ls-secondary-background-color)] z-[99999];
 
   .action-bar-commands {
-    position: relative;
-    display: flex;
-    justify-content: space-around;
-    width: 120%;
+    @apply relative flex w-full;
 
 
     .ti, .tie {
-      color: var(--ls-primary-text-color);
-      font-size: 23px;
-      opacity: 50%;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-75;
     }
 
     .description {
-      color: var(--ls-primary-text-color);
-      font-size: 13px;
-      opacity: 60%;
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-75;
     }
 
     button {
-      padding: 5px 10px
+        flex: 1;
+        display: flex;
+        flex-direction: column;   /* Stack icon and label */
+        align-items: center;      /* Center horizontally */
+        justify-content: center;  /* Center vertically */
+        padding: 12px 4px;
     }
   }
 }
 
 #mobile-editor-toolbar {
-  position: fixed;
-  bottom: 0;
-  transition: bottom 260ms;
-  transition-timing-function: ease-out;
-  left: 0;
-  width: 100%;
-  z-index: 9999;
-  display: flex;
-  justify-content: space-between;
+  @apply fixed -bottom-1 left-0 w-full z-[99999] flex justify-between bg-gray-100 border-t border-gray-200
+  dark:border-gray-800 dark:bg-[#222];
+
+  will-change: transform;
+  transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
+  opacity: var(--ls-native-toolbar-opacity, 0);
+  transition: transform 250ms ease-out, opacity 50ms ease-out;
 
   button {
-    @apply flex items-center py-2 px-2;
+    @apply flex items-center py-2 px-2 opacity-95;
   }
 
   .submenu {
-    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.02);
-    overflow-x: overlay;
-    overflow-y: hidden;
-    height: 40px;
-    display: none;
+    @apply fixed left-0 bottom-0 w-full flex-row justify-evenly items-center z-10 bg-base-2
+    hidden overflow-x-auto overflow-y-hidden h-5 border;
 
     &.show-submenu {
-      display: flex;
+      @apply flex;
     }
   }
 
   .toolbar-commands {
-    justify-content: space-between;
-    display: flex;
-    align-items: center;
-    overflow-x: overlay;
-    overflow-y: hidden;
-    overflow-scrolling: touch;
-    width: 95%;
+    @apply flex justify-between items-center overflow-y-hidden overflow-x-auto;
 
     &::-webkit-scrollbar {
-      height: 4px;
+      @apply h-1;
     }
   }
 
   .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
+    @apply border-l border-gray-200 dark:border-gray-700;
   }
 }
 
 html.is-native-ipad {
-  .cp__footer {
-    height: 55px;
-    right: 0;
-    box-shadow: none;
-    flex: 1;
-    index: 0;
-  }
-
   .action-bar {
-    width: 70%;
-    min-width: 550px;
-
-    .action-bar-commands {
-      width: 100%;
-    }
+    @apply w-[70%] min-w-[550px];
 
     @media (orientation: landscape) {
-      width: 50%;
+      @apply w-1/2;
     }
   }
 }
 
 html.is-native-iphone {
-
   .action-bar {
     left: 3%;
     right: 3%;
@@ -153,10 +87,6 @@ html.is-native-iphone {
       right: 15%;
       width: 70%;
       min-width: 450px;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 }
@@ -179,10 +109,6 @@ html.is-native-android {
       left: 15%;
       right: 15%;
       width: 70%;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 

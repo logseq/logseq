@@ -1,11 +1,12 @@
 (ns logseq.shui.dialog.core
-  (:require [rum.core :as rum]
-            [daiquiri.interpreter :refer [interpret]]
-            [medley.core :as medley]
-            [logseq.shui.util :as util]
+  (:require [daiquiri.interpreter :refer [interpret]]
             [logseq.shui.base.core :as base]
             [logseq.shui.form.core :as form]
-            [promesa.core :as p]))
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.util :as util]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; provider
 (def dialog (util/lsui-wrap "Dialog"))
@@ -127,13 +128,13 @@
                 auto-width? close-btn? root-props content-props]} config
         props (dissoc config
                       :id :title :description :content :footer :auto-width? :close-btn?
-                      :align :on-open-change :open? :root-props :content-props)
+                      :close :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (js/setTimeout #(detach-modal! id) 128)))
+         (detach-modal! id)))
      [open?])
 
     (dialog
@@ -157,12 +158,14 @@
         (cond-> (merge props content-props)
           auto-width? (assoc :data-auto-width true)
           (false? close-btn?) (assoc :data-close-btn false))
-        (when title
-          (dialog-header
-           (when title (dialog-title title))
-           (when description (dialog-description description))))
+
+        ;; nested title component is required for radix dialog content
+        (dialog-title {:class (when (nil? title) "hidden")} title)
+        (when description (dialog-description description))
+
         (when content
           [:div.ui__dialog-main-content content])
+
         (when footer
           (dialog-footer footer)))))))
 
@@ -171,10 +174,11 @@
   (let [{:keys [id title description content footer deferred open?]} config
         props (dissoc config :id :title :description :content :footer :deferred :open? :alert?)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when (false? open?)
-         (js/setTimeout #(detach-modal! id) 128)))
+         (let [timeout (js/setTimeout #(detach-modal! id) 128)]
+           #(js/clearTimeout timeout))))
      [open?])
 
     (alert-dialog
@@ -209,14 +213,15 @@
         *ok-ref (rum/use-ref nil)
         *reminder-ref (rum/use-ref nil)]
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (when ready?
-         (js/setTimeout
-          #(some-> (rum/deref *ok-ref) (.focus)) 128)))
+         (let [timeout (js/setTimeout
+                        #(some-> (rum/deref *ok-ref) (.focus)) 128)]
+           #(js/clearTimeout timeout))))
      [ready?])
 
-    (rum/use-effect!
+    (hooks/use-effect!
      (fn []
        (try
          (if-let [reminder-v (and reminder? (js/localStorage.getItem (str id)))]

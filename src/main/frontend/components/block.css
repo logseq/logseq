@@ -9,7 +9,6 @@
   @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
-    max-width: 100%;
 
     /* FIXME: img macros */
 
@@ -23,31 +22,6 @@
 
     &.loading-asset {
       width: 9px;
-    }
-  }
-
-  .asset-container {
-    @apply relative inline-block mt-2 w-full;
-
-    .asset-action-bar {
-      @apply top-0.5 right-0.5 absolute flex items-center
-      border bg-gray-02 rounded opacity-0 transition-opacity;
-    }
-
-    .asset-action-btn {
-      @apply m-1 p-0.5 truncate flex items-center opacity-70 select-none
-      hover:opacity-90 active:opacity-60;
-    }
-
-    &:hover, &:active {
-      .asset-action-bar {
-        @apply opacity-100;
-      }
-    }
-
-    > img {
-      max-width: unset;
-      width: 100%;
     }
   }
 
@@ -101,17 +75,15 @@
 }
 
 .breadcrumb {
-  @apply flex flex-row items-center flex-wrap;
+  @apply inline;
 
   .asset-container > img {
     height: 18px;
     width: unset !important;
   }
 
-  .inline-wrap {
-    & > div, & > div > div {
-      display: inherit;
-    }
+  a, svg, div {
+    @apply inline;
   }
 
   &.block-parents {
@@ -122,6 +94,12 @@
         opacity: 1;
       }
     }
+  }
+}
+
+.breadcrumb {
+  .property-value-inner[data-type], .property-value-inner .select-item {
+    display: inline;
   }
 }
 
@@ -386,7 +364,7 @@
   @apply rounded transition-[background];
 
   .bracket {
-    @apply opacity-30;
+    @apply opacity-30 inline-flex;
   }
 
   &:hover {
@@ -408,6 +386,12 @@
   &:has(.asset-ref.is-pdf) {
     .asset-block-wrap {
       @apply inline;
+    }
+  }
+
+  .block-title-wrap {
+    > .prefix-link {
+      @apply inline mx-1;
     }
   }
 }
@@ -485,7 +469,7 @@
 
   &[data-has-heading="2"], &:has(textarea.h2) {
     > .block-control-wrap {
-      @apply relative top-3;
+      @apply relative top-2.5;
     }
 
     .block-content-or-editor-wrap {
@@ -520,20 +504,64 @@
   }
 }
 
-.block-main-content {
+.ls-page-title-container .block-content-wrapper {
+  .ls-page-title-actions {
+    @apply absolute -top-5 opacity-0;
+    left: -2px;
+  }
+
   &:hover {
-    & > .db-page-title-actions {
+    & > .ls-page-title-actions {
       @apply delay-300 transition-opacity opacity-100;
+
     }
   }
 }
 
 .ls-block {
-  @apply relative py-0.5 transition-[background-color] mx-auto;
+  @apply flex-1 relative py-0.5 transition-[background-color] mx-auto;
+  width: 100%;
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  will-change: transform;
+
+  container-type: inline-size;
+  container-name: ls-block;
 
   &.selected {
     @apply rounded;
   }
+}
+
+.ls-table .ls-block {
+  container-type: initial;
+}
+
+#main-content-container, #right-sidebar {
+    container-type: inline-size;
+}
+
+@container (max-width: 600px) {
+    .time-spent, .positioned-properties.block-right, .view-actions, .ls-page-title .block-tags {
+        display: none;
+    }
+
+    .block-row {
+        @apply flex-col gap-0;
+    }
+
+    .ls-block-right {
+        @apply gap-0 -ml-1;
+    }
+    .ls-page-title .ls-block-right {
+        @apply ml-0;
+    }
+}
+
+@container ls-block (max-width: 430px) {
+    .ls-properties-area {
+        display: none;
+    }
 }
 
 .ls-block h1,
@@ -959,6 +987,10 @@ html.is-mac {
   .block-title-wrap {
     @apply overflow-hidden h-6 whitespace-nowrap text-ellipsis;
   }
+
+  .jtrigger {
+    @apply px-1;
+  }
 }
 
 .positioned-properties.block-below {
@@ -978,7 +1010,15 @@ html.is-mac {
 }
 
 .block-tag {
-  @apply flex flex-row items-center;
+  @apply flex relative pl-2 pr-1;
+}
+
+.block-tag.private-tag {
+  @apply pl-1;
+}
+
+.block-tag:hover {
+  @apply bg-gray-03 rounded;
 }
 
 .block-tag a.tag {
@@ -1004,10 +1044,12 @@ html.is-mac {
   height: 18px;
 }
 
+.ls-small-icon svg {
+    width: 12px;
+    height: 12px;
+}
 .ls-type-warning svg {
   color: var(--rx-gray-09);
-  width: 12px;
-  height: 12px;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
@@ -1018,6 +1060,18 @@ html.is-mac {
 .ls-page-title .positioned-properties svg, .page-ref svg {
   width: 16px;
   height: 16px;
+}
+
+.ls-page-title {
+  .positioned-properties, .time-spent {
+    margin-top: 15px;
+  }
+}
+
+.ls-page-title .ls-properties-area {
+    .positioned-properties, .time-spent {
+        margin-top: initial;
+    }
 }
 
 .ls-page-title .ls-page-icon button {
@@ -1036,7 +1090,7 @@ html.is-mac {
   }
 
   > .code-block-actions {
-    @apply absolute right-1 top-1 select-none z-[1] text-xs;
+    @apply flex flex-row gap-1 opacity-0 transition-opacity ease-in duration-300 absolute right-1 top-1 select-none z-[1] text-xs bg-gray-01;
 
     button {
       @apply !py-0 h-4 text-muted-foreground hover:text-foreground text-xs px-1;
@@ -1050,7 +1104,7 @@ html.is-mac {
 }
 
 .ls-resize-image {
-  @apply flex relative;
+  @apply flex relative w-fit cursor-pointer;
 
   .handle-left, .handle-right {
     @apply absolute w-[6px] h-[15%] min-h-[30px] bg-black/30 hover:bg-black/70
@@ -1077,4 +1131,41 @@ html.is-mac {
 .aspect-video {
   aspect-ratio: 16 / 9;
   height: auto;
+}
+
+.ls-filters {
+    div[data-testid='virtuoso-item-list'] button {
+        @apply mb-2;
+    }
+}
+
+.swipe-item {
+  touch-action: pan-y; /* disables horizontal scrolling on touch */
+}
+
+.ls-dialog-block {
+  @apply !w-[90dvw] !h-[75%] !max-w-4xl bg-gray-02 overflow-scroll;
+}
+
+.asset-container {
+    @apply relative inline-block mt-2 w-full;
+
+    .asset-action-bar {
+        @apply top-1 right-1 absolute flex items-center opacity-0 transition-opacity;
+
+        &[data-popup-active] {
+            @apply opacity-100;
+        }
+    }
+
+    .asset-action-btn {
+        @apply m-1 p-0.5 truncate flex items-center opacity-70 select-none
+        hover:opacity-90 active:opacity-60;
+    }
+
+    &:hover, &:active {
+        .asset-action-bar {
+            @apply opacity-100;
+        }
+    }
 }

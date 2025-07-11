@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [clojure.walk :as w]
             [daiquiri.interpreter :as interpreter]
-            [frontend.hooks :as hooks]
+            [logseq.shui.hooks :as hooks]
             [rum.core :refer [use-state] :as rum]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
@@ -143,12 +143,3 @@
    (let [[ref rect] (use-bounding-client-rect tick)
          bp (->breakpoint (when (some? rect) (.-width rect)))]
      [ref bp])))
-
-(defonce *key->atom (atom {}))
-(defn cached-derived-atom
-  "Make sure to return the same atom if `key` is the same."
-  [ref key f]
-  (or (get @*key->atom key)
-      (let [a (rum/derived-atom [ref] key f)]
-        (swap! *key->atom assoc key a)
-        a)))

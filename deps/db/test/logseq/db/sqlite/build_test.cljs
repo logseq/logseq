@@ -3,6 +3,7 @@
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.test.helper :as db-test]))
@@ -53,18 +54,18 @@
            conn
            [{:page {:block/title "page1"}
              :blocks [{:block/title "some todo"
-                       :build/properties {:logseq.task/status :logseq.task/status.doing}}
-                      {:block/title "some slide"
-                       :build/properties {:logseq.property/background-image "https://placekitten.com/200/300"}}]}])]
-    (is (= :logseq.task/status.doing
+                       :build/properties {:logseq.property/status :logseq.property/status.doing}}
+                      {:block/title "rojo"
+                       :build/properties {:logseq.property/background-color "red"}}]}])]
+    (is (= :logseq.property/status.doing
            (->> (db-test/find-block-by-content @conn "some todo")
-                :logseq.task/status
+                :logseq.property/status
                 :db/ident))
         "built-in property with closed value is created and correctly associated to a block")
 
-    (is (= "https://placekitten.com/200/300"
-           (->> (db-test/find-block-by-content @conn "some slide")
-                :logseq.property/background-image
+    (is (= "red"
+           (->> (db-test/find-block-by-content @conn "rojo")
+                :logseq.property/background-color
                 db-property/property-value-content))
         "built-in :default property is created and correctly associated to a block")))
 
@@ -103,7 +104,7 @@
         (sqlite-build/build-blocks-tx
          {:pages-and-blocks [{:page (select-keys (:block/page block) [:block/uuid])
                               :blocks [(merge {:block/title "imported task" :block/uuid (:block/uuid block)}
-                                              {:build/properties {:logseq.task/status :logseq.task/status.todo}
+                                              {:build/properties {:logseq.property/status :logseq.property/status.todo}
                                                :build/tags [:logseq.class/Task]})]}]
           :build-existing-tx? true})
         _ (d/transact! conn init-tx)
@@ -129,7 +130,7 @@
           "Tx doesn't try to create new blocks or modify existing idents")
       (is (= "imported task" (:block/title updated-block)))
       (is (= {:block/tags [:logseq.class/Task]
-              :logseq.task/status :logseq.task/status.todo}
+              :logseq.property/status :logseq.property/status.todo}
              (db-test/readable-properties updated-block))
           "Block's properties and tags are updated"))
 
@@ -180,3 +181,79 @@
 
     (is (= block-uuid (:block/uuid (db-test/find-block-by-content @conn "hi"))))
     (is (contains? (:block/refs block-with-block-ref) (db-test/find-block-by-content @conn "hi")))))
+
+(deftest build-class-and-property-pages
+  (let [class-uuid (random-uuid)
+        property-uuid (random-uuid)
+        conn (db-test/create-conn-with-blocks
+              {:classes {:C1 {:block/uuid class-uuid :build/keep-uuid? true}}
+               :properties {:p1 {:block/uuid property-uuid :build/keep-uuid? true}}
+               :pages-and-blocks
+               [{:page {:block/uuid class-uuid}
+                 :blocks [{:block/title "b1"
+                           :build/children [{:block/title "b2"}]}]}
+                {:page {:block/uuid property-uuid}
+                 :blocks [{:block/title "b3"
+                           :build/children [{:block/title "b4"}]}]}]
+               :build-existing-tx? true})]
+    (is (= ["b1" "b2"]
+           (->> (d/q '[:find [?b ...] :in $ ?page-id :where [?b :block/page ?page-id]]
+                     @conn [:block/uuid class-uuid])
+                (map #(:block/title (d/entity @conn %)))))
+        "Class page has correct blocks")
+
+    (is (= ["b3" "b4"]
+           (->> (d/q '[:find [?b ...] :in $ ?page-id :where [?b :block/page ?page-id]]
+                     @conn [:block/uuid property-uuid])
+                (map #(:block/title (d/entity @conn %)))))
+        "Property page has correct blocks")))
+
+(deftest property-value-with-properties-and-tags
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:p1 {:logseq.property/type :default}}
+               :classes {:C1 {}}
+               :pages-and-blocks
+               [{:page {:block/title "page1"}
+                 :blocks [{:block/title "block has pvalue with built-in tag"
+                           :build/properties
+                           {:p1 {:build/property-value :block
+                                 :block/title "t1"
+                                 :build/tags [:logseq.class/Task]}}}
+                          {:block/title "block has pvalue with user tag"
+                           :build/properties
+                           {:p1 {:build/property-value :block
+                                 :block/title "u1"
+                                 :build/tags [:C1]}}}
+                          {:block/title "Todo query",
+                           :build/tags [:logseq.class/Query],
+                           :build/properties
+                           {:logseq.property/query
+                            {:build/property-value :block
+                             :block/title "{:query (task Todo)}"
+                             :build/properties
+                             {:logseq.property.code/lang "clojure"
+                              :logseq.property.node/display-type :code}}}}]}]})]
+    (is (= {:logseq.property.node/display-type :code
+            :logseq.property.code/lang "clojure"}
+           (-> (db-test/find-block-by-content @conn "{:query (task Todo)}")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))
+    (is (= {:block/tags [:logseq.class/Task]}
+           (-> (db-test/find-block-by-content @conn "t1")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))
+    (is (= {:block/tags [:user.class/C1]}
+           (-> (db-test/find-block-by-content @conn "u1")
+               db-test/readable-properties
+               (dissoc :logseq.property/created-from-property))))))
+
+(deftest build-ontology-with-multiple-namespaces
+  (let [conn (db-test/create-conn-with-blocks
+              {:properties {:user.property/p1 {:logseq.property/type :default}
+                            :other.property/p1 {:logseq.property/type :default}}
+               :classes {:user.class/C1 {}
+                         :other.class/C1 {}}})]
+    (is (entity-util/property? (d/entity @conn :user.property/p1)))
+    (is (entity-util/property? (d/entity @conn :other.property/p1)))
+    (is (entity-util/class? (d/entity @conn :user.class/C1)))
+    (is (entity-util/class? (d/entity @conn :other.class/C1)))))

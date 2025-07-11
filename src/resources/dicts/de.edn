@@ -1,7 +1,6 @@
 {:all-files "Alle Dateien"
  :all-graphs "Alle Graphen"
  :all-journals "Alle Journale"
- :all-pages "Alle Seiten"
  :all-whiteboards "Alle Whiteboards"
  :auto-heading "Automatische Überschrift"
  :bold "Fett"
@@ -48,7 +47,6 @@
  :relaunch-confirm-to-work "Sie sollten die App neu starten, damit sie funktioniert. Möchten Sie sie jetzt neu starten?"
  :remove-background "Hintergrund entfernen"
  :remove-heading "Überschrift entfernen"
- :remove-orphaned-pages "Nie referenzierte Seiten löschen?"
  :save "Speichern"
  :settings "Einstellungen"
  :settings-of-plugins "Plugins"
@@ -236,7 +234,6 @@
  :page/copy-page-url "Seiten-URL kopieren"
  :page/created-at "Erstellt am"
  :page/delete "Seite löschen"
- :page/delete-confirmation "Diese Seite und die zugehörige Datei löschen?"
  :page/illegal-page-name "Seitenname nicht zulässig!"
  :page/logseq-is-having-a-problem "Logseq hat ein Problem festgestellt. Versuche zurückzukehren ..."
  :page/make-private "Privat machen"
@@ -245,8 +242,6 @@
  :page/open-in-finder "Im Verzeichnis öffnen"
  :page/open-with-default-app "Mit Standard-Anwendung öffnen"
  :page/page-already-exists "Die Seite “{1}” existiert bereits!"
- :page/slide-view "Als Slides anzeigen"
- :page/slide-view-tip-go-fullscreen (fn [] [[:span.opacity-70 "Tipp: Drücken Sie "] [:code "f"] [:span.opacity-70 ", um zum Vollbild zu wechseln"]])
  :page/something-went-wrong "Es ist etwas schief gelaufen."
  :page/step "Schritt {1}"
  :page/try "Versuch"
@@ -313,7 +308,6 @@
 
  :query/config-property-settings "Einstellungen für diese Query:"
 
- :right-side-bar/all-pages "Alle Seiten"
  :right-side-bar/block-ref "Blockreferenz"
  :right-side-bar/contents "Inhalt"
  :right-side-bar/flashcards "Karteikarten"
@@ -355,8 +349,6 @@
  :settings-page/update-available "Neue Version gefunden: "
  :settings-page/update-error-1 "⚠️ Ups, Etwas ist schiefgelaufen!"
  :settings-page/update-error-2 " Überprüfen Sie den "
-
- :settings-permission/start-granting "Erlauben"
 
  :tips/all-done "Alles erledigt!"
 

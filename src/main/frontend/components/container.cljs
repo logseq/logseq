@@ -20,6 +20,7 @@
             [frontend.context.i18n :refer [t tt]]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.extensions.pdf.utils :as pdf-utils]
@@ -31,11 +32,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
-            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
-            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -48,14 +46,17 @@
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
+            [promesa.core :as p]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -84,7 +85,6 @@
   [page icon recent?]
   (let [repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)
-        page (or (db/get-alias-source-page repo (:db/id page)) page)
         title (:block/title page)
         untitled? (db-model/untitled-page? title)
         name (:block/name page)
@@ -154,8 +154,12 @@
         (block/inline-text :markdown (:block/title page))
         untitled? (t :untitled)
         :else (let [title' (pdf-utils/fix-local-asset-pagename title)
-                    parent (:logseq.property/parent page)]
-                (if (and parent (not (ldb/class? page)))
+                    parent (:block/parent page)]
+                (if (and parent
+                         (not (or (ldb/class? page)
+                                  (and (:logseq.property/built-in? parent)
+                                       (= (:block/title parent)
+                                          common-config/library-page-name)))))
                   (str (:block/title parent) ns-util/parent-char title')
                   title')))]
 
@@ -247,8 +251,9 @@
              (shui/tabler-icon "filter-edit" {:size 14})]}
      [:div.sidebar-navigations.flex.flex-col.mt-1
        ;; required custom home page
-      (let [page (:page default-home)]
-        (if (and page (not (state/enable-journals? (state/get-current-repo))))
+      (let [page (:page default-home)
+            enable-journals? (state/enable-journals? (state/get-current-repo))]
+        (if (and page (not enable-journals?))
           (sidebar-item
            {:class "home-nav"
             :title page
@@ -259,17 +264,18 @@
             :icon "home"
             :shortcut :go/home})
 
-          (sidebar-item
-           {:class "journals-nav"
-            :active (and (not srs-open?)
-                         (or (= route-name :all-journals) (= route-name :home)))
-            :title (t :left-side-bar/journals)
-            :on-click-handler (fn [e]
-                                (if (gobj/get e "shiftKey")
-                                  (route-handler/sidebar-journals!)
-                                  (route-handler/go-to-journals!)))
-            :icon "calendar"
-            :shortcut :go/journals})))
+          (when enable-journals?
+            (sidebar-item
+             {:class "journals-nav"
+              :active (and (not srs-open?)
+                           (or (= route-name :all-journals) (= route-name :home)))
+              :title (t :left-side-bar/journals)
+              :on-click-handler (fn [e]
+                                  (if (gobj/get e "shiftKey")
+                                    (route-handler/sidebar-journals!)
+                                    (route-handler/go-to-journals!)))
+              :icon "calendar"
+              :shortcut :go/journals}))))
 
       (for [nav checked-navs]
         (cond
@@ -282,8 +288,7 @@
                 :href (rfe/href :whiteboards)
                 :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
                 :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-                :icon "whiteboard"
-                :icon-extension? true
+                :icon "writing"
                 :shortcut :go/whiteboards})))
 
           (= nav :flashcards)
@@ -605,7 +610,7 @@
                    (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -623,9 +628,6 @@
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
 
-      (when show-action-bar?
-        (action-bar/action-bar))
-
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?
         :data-is-full-width (or margin-less-pages?
@@ -634,7 +636,6 @@
        (when show-recording-bar?
          (recording-bar))
 
-       (mobile-bar)
        (footer/footer)
 
        (cond
@@ -700,15 +701,11 @@
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           (when (state/mobile?)
-             (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
   (let [default-home (get-default-home-if-valid)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         graph-parsing-state (state/sub [:graph/parsing-state current-repo])]
     (cond
       (or
@@ -727,31 +724,32 @@
               (:page default-home))
          (route-handler/redirect-to-page! (:page default-home))
 
-         (and config/publishing?
-              (not default-home)
-              (empty? latest-journals))
+         (or (not (state/enable-journals? current-repo))
+             (let [latest-journals (db/get-latest-journals (state/get-current-repo) 1)]
+               (and config/publishing?
+                    (not default-home)
+                    (empty? latest-journals))))
          (route-handler/redirect! {:to :all-pages})
 
          loading-files?
          (ui/loading (t :loading-files))
 
-         (seq latest-journals)
-         (journal/journals latest-journals)
-
-         ;; FIXME: why will this happen?
          :else
-         [:div])])))
+         (journal/all-journals))])))
 
 (defn- hide-context-menu-and-clear-selection
-  [e]
+  [e & {:keys [esc?]}]
   (state/hide-custom-context-menu!)
   (when-not (or (gobj/get e "shiftKey")
                 (util/meta-key? e)
                 (state/get-edit-input-id)
+                (some-> (.-target e) util/input?)
                 (= (shui-dialog/get-last-modal-id) :property-dialog)
                 (some-> (.-target e) (.closest ".ls-block"))
                 (some-> (.-target e) (.closest "[data-keep-selection]")))
-    (editor-handler/clear-selection!)))
+    (if (and esc? (editor-handler/popup-exists? :selection-action-bar))
+      (state/pub-event! [:editor/hide-action-bar])
+      (editor-handler/clear-selection!))))
 
 (rum/defc render-custom-context-menu
   [links position]
@@ -780,19 +778,20 @@
 (rum/defc new-block-mode < rum/reactive
   []
   (when (state/sub [:document/mode?])
-    (ui/tippy {:html [:div.p-2
-                      [:p.mb-2 [:b "Document mode"]]
-                      [:ul
-                       [:li
-                        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
-                        [:p.inline-block "to create new block"]]
-                       [:li
-                        [:p.inline-block.mr-1 "Click `D` or type"]
-                        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
-                        [:p.inline-block "to toggle document mode"]]]]}
-              [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
-               {:on-click state/toggle-document-mode!}
-               "D"])))
+    (ui/tooltip
+     [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+      {:on-click state/toggle-document-mode!}
+      "D"]
+     [:div.p-2
+      [:p.mb-2 [:b "Document mode"]]
+      [:ul
+       [:li
+        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
+        [:p.inline-block "to create new block"]]
+       [:li
+        [:p.inline-block.mr-1 "Click `D` or type"]
+        [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
+        [:p.inline-block "to toggle document mode"]]]])))
 
 (def help-menu-items
   [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
@@ -916,7 +915,9 @@
                                   (when block
                                     (state/clear-selection!)
                                     (state/conj-selection-block! block :down))
-                                  (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?)))
+                                  (p/do!
+                                   (db-async/<get-block (state/get-current-repo) (uuid block-id) {:children? false})
+                                   (show! (cp-content/block-context-menu-content target (uuid block-id) property-default-value?))))
 
                                 :else
                                 false)]
@@ -926,8 +927,13 @@
   nil)
 
 (defn- on-mouse-up
-  [_e]
-  (editor-handler/show-action-bar!))
+  [e]
+  (when-not (or (.closest (.-target e) ".block-control-wrap")
+                (.closest (.-target e) "button")
+                (.closest (.-target e) "input")
+                (.closest (.-target e) "textarea")
+                (.closest (.-target e) "a"))
+    (editor-handler/show-action-bar!)))
 
 (rum/defcs ^:large-vars/cleanup-todo root-container < rum/reactive
   (mixins/event-mixin
@@ -944,14 +950,13 @@
                                    util/node-test?
                                    (state/editing?))))
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection e)))
+                          (hide-context-menu-and-clear-selection e {:esc? true})))
                       (state/set-ui-last-key-code! (.-key e))))
      (mixins/listen state js/window "keyup"
                     (fn [_e]
                       (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content']
   (let [current-repo (state/sub :git/current-repo)
-        granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
         editor-font (some-> (state/sub :ui/editor-font) (name))
@@ -988,7 +993,7 @@
       :route route-match
       :current-repo current-repo
       :edit? edit?
-      :nfs-granted? granted?
+
       :db-restoring? db-restoring?
       :sidebar-open? sidebar-open?
       :settings-open? settings-open?
@@ -1063,7 +1068,6 @@
       (plugins/custom-js-installer
        {:t t
         :current-repo current-repo
-        :nfs-granted? granted?
         :db-restoring? db-restoring?})
       (app-context-menu-observer)
 
@@ -1072,6 +1076,7 @@
       [:a#download-as-json-v2.hidden]
       [:a#download-as-transit-debug.hidden]
       [:a#download-as-sqlite-db.hidden]
+      [:a#download-as-db-edn.hidden]
       [:a#download-as-roam-json.hidden]
       [:a#download-as-html.hidden]
       [:a#download-as-zip.hidden]

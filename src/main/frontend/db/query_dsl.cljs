@@ -8,7 +8,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.db.model :as model]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
@@ -19,6 +19,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]))
 
@@ -208,25 +209,30 @@
 ;; ===============
 (defn- resolve-timestamp-property
   [e]
-  (let [k' (second e)]
-    (when (or (keyword? k') (symbol? k') (string? k'))
-      (let [k (-> k'
-                  (name)
-                  (string/lower-case)
-                  (string/replace "_" "-")
-                  keyword)]
-        (case k
-          :created-at
-          :block/created-at
-          :updated-at
-          :block/updated-at
-          k)))))
+  (let [k (second e)]
+    (when (or (keyword? k) (symbol? k) (string? k))
+      (let [k' (-> k
+                   (name)
+                   (string/lower-case)
+                   (string/replace "_" "-")
+                   keyword)]
+        (if (and (config/db-based-graph?) (db-property/property? k'))
+          k'
+          (case k'
+            :created-at
+            :block/created-at
+            :updated-at
+            :block/updated-at
+            nil))))))
 
 (defn get-timestamp-property
   [e]
-  (let [k (resolve-timestamp-property e)]
-    (when (contains? #{:block/created-at :block/updated-at} k)
-      k)))
+  (when-let [k (resolve-timestamp-property e)]
+    (if (config/db-based-graph?)
+      (when (keyword? k)
+        k)
+      (when (contains? #{:block/created-at :block/updated-at} k)
+        k))))
 
 (defn- build-journal-between-two-arg
   [e]
@@ -707,7 +713,7 @@ Some bindings in this fn:
 
 (defn query-wrapper
   [where {:keys [blocks? block-attrs]}]
-  (let [block-attrs (or block-attrs (butlast model/file-graph-block-attrs))
+  (let [block-attrs (or block-attrs (butlast file-model/file-graph-block-attrs))
         q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
             `[:find (~'pull ~'?b ~block-attrs)
               :in ~'$ ~'%
@@ -732,10 +738,8 @@ Some bindings in this fn:
 
 (def db-block-attrs
   "Block attributes for db graph queries"
-  ;; '*' needed as we need to pull user properties and don't know their names in advance
-  '[*
-    {:block/page [:db/id :block/name :block/title :block/journal-day]}
-    {:block/_parent ...}])
+  ;; only needs :db/id for query/view
+  [:db/id])
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '/query' or '{{query }}'"
@@ -762,14 +766,13 @@ Some bindings in this fn:
                           #(sort-by % (fn [m prop] (get-in m [:block/properties prop])))
                           identity)
                transform-fn (comp sort-by' random-samples)]
-           (query-react/react-query repo
-                                    {:query query'
-                                     :query-string query-string
-                                     :rules rules}
-                                    (merge
-                                     {:use-cache? false
-                                      :transform-fn transform-fn}
-                                     query-opts))))))))
+           (last (query-react/react-query repo
+                                          {:query query'
+                                           :query-string query-string
+                                           :rules rules}
+                                          (merge
+                                           {:transform-fn transform-fn}
+                                           query-opts)))))))))
 
 (defn custom-query
   "Runs a dsl query with query as a seq. Primary use is from advanced query"
@@ -780,18 +783,18 @@ Some bindings in this fn:
           {query* :query :keys [sort-by blocks? rules]} (parse query-string {:db-graph? db-graph?})]
       (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                        :block-attrs (when db-graph? db-block-attrs)}))]
-        (query-react/react-query repo
-                                 (merge
-                                  query-m
-                                  {:query query'
-                                   :rules rules})
-                                 (merge
-                                  query-opts
-                                  (when sort-by
-                                    {:transform-fn
-                                     (if db-graph?
-                                       identity
-                                       #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
+        (last (query-react/react-query repo
+                                       (merge
+                                        query-m
+                                        {:query query'
+                                         :rules rules})
+                                       (merge
+                                        query-opts
+                                        (when sort-by
+                                          {:transform-fn
+                                           (if db-graph?
+                                             identity
+                                             #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))}))))))))
 
 (defn query-contains-filter?
   [query' filter-name]

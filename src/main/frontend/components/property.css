@@ -41,23 +41,33 @@
   margin-top: 2px;
 }
 
+.property-value-container .jtrigger {
+  @apply focus-visible:outline-none focus-visible:bg-gray-03 focus-visible:rounded;
+}
+
+.jtrigger {
+    @apply relative;
+
+    &-id {
+        @apply absolute left-[-19px] top-[3px] rounded-full leading-none
+        flex items-center justify-center bg-primary text-primary-foreground border-none
+        text-xs min-w-[20px] min-h-[20px] scale-95;
+    }
+}
+
+.ls-new-property .jtrigger {
+    &-id {
+      @apply left-[-11px] top-[2px];
+    }
+}
+
 .ls-properties-area {
   .property-pair {
     @apply flex flex-row flex-wrap space-x-1;
 
-    .jtrigger {
-      @apply relative;
-
-      &-id {
-        @apply absolute left-[-22px] top-[2px] rounded-full leading-none
-        flex items-center justify-center bg-primary text-primary-foreground border-none
-        text-xs min-w-[20px] min-h-[20px] scale-95;
-      }
-    }
-
     .jtrigger-view {
       > .jtrigger-id {
-        @apply left-[-14px];
+        @apply left-[-11px];
       }
 
       &:has(> .jtrigger-id) {
@@ -87,6 +97,12 @@
       &-inner[data-type=checkbox] {
         .jtrigger-id {
           @apply left-[-44px] top-[-2px];
+        }
+      }
+
+      &-inner[data-type=checkbox] {
+        .data-\[state\=checked\]\:bg-primary[data-state="checked"] {
+          background-color: hsl(var(--primary));
         }
       }
 
@@ -120,9 +136,6 @@
   }
 
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -150,11 +163,6 @@
     @apply w-full;
     margin: 0;
   }
-
-  .property-key a {
-    color: var(--ls-primary-text-color);
-  }
-
   .property-key a:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -164,8 +172,12 @@
   }
 }
 
+.property-key a, .ls-new-property a {
+    color: var(--ls-primary-text-color);
+}
+
 .ui__button.empty-btn, .empty-text-btn {
-  @apply !h-6 !px-0 font-normal opacity-50 text-sm;
+  @apply !h-6 !px-0 font-normal opacity-50;
 }
 
 .ui__button.empty-btn:hover, .empty-text-btn:hover {
@@ -185,14 +197,14 @@
 
 .property-value-inner {
   .select-item {
-    @apply flex items-center shrink;
+    @apply flex items-center shrink whitespace-nowrap;
   }
 
   &[data-type] {
     @apply flex items-center;
   }
 
-  &[data-type="datetime"] {
+  &[data-type=datetime] {
     @apply whitespace-nowrap;
   }
 }
@@ -226,9 +238,6 @@ input.simple-input:focus {
 .page-add-tags, .page-tags, .property-select, .ls-property-add,
 .property-configure, .ui__dropdown-menu-content {
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -271,10 +280,13 @@ a.control-link {
   }
 }
 
-.property-value-container {
+.ls-block.property-value-container {
   @apply flex-1 shrink-0;
   min-width: 100px;
   min-height: 28px;
+  padding-top: 0;
+  padding-bottom: 0;
+  container-type: normal;
 }
 
 .ls-page-properties .property-key, .ls-properties-area .property-key {
@@ -282,6 +294,7 @@ a.control-link {
 }
 
 .property-key {
+  font-size: 15px;
   /* Same height with one-line block container */
   min-width: 160px;
   min-height: 28px;
@@ -311,8 +324,10 @@ a.control-link {
 
   .property-icon {
     @apply flex items-center;
-    height: 26px;
-    margin-top: 1px;
+    svg {
+        width: 15px;
+        height: 15px;
+    }
   }
 
   .editor-inner {
@@ -345,8 +360,8 @@ a.control-link {
   }
 }
 
-.ls-property-dropdown-editor {
-  @apply w-[300px] p-1.5;
+.ls-property-dropdown {
+  @apply w-[260px] p-1.5;
 
   .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
   }

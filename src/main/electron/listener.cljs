@@ -5,23 +5,23 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.db.model :as db-model]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.file-based.model :as file-model]
             [frontend.fs.sync :as sync]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user]
-            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
-            [promesa.core :as p]
-            [frontend.handler.property.util :as pu]
-            [frontend.db :as db]
-            [frontend.db.async :as db-async]))
+            [promesa.core :as p]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -87,7 +87,7 @@
                          (route-handler/redirect-to-page! page-name {:block-id block-id}))
 
                        block-id
-                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id)]
+                       (p/let [block (db-async/<get-block (state/get-current-repo) block-id {:children? false})]
                          (if block
                            (if (pu/shape-block? block)
                              (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id block-id})
@@ -95,7 +95,7 @@
                            (notification/show! (str "Open link failed. Block-id `" block-id "` doesn't exist in the graph.") :error false)))
 
                        file
-                       (if-let [db-page-name (db-model/get-file-page file false)]
+                       (if-let [db-page-name (file-model/get-file-page file false)]
                          (route-handler/redirect-to-page! db-page-name)
                          (notification/show! (str "Open link failed. File `" file "` doesn't exist in the graph.") :error false))))))
 
@@ -119,7 +119,7 @@
                  ;; Handle open new window in renderer, until the destination graph doesn't rely on setting local storage
                  ;; No db cache persisting ensured. Should be handled by the caller
                  (fn [repo]
-                   (ui-handler/open-new-window-or-tab! nil repo)))
+                   (ui-handler/open-new-window-or-tab! repo)))
 
   (safe-api-call "invokeLogseqAPI"
                  (fn [^js data]

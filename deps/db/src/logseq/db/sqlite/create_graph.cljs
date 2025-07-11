@@ -13,7 +13,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-(defn- mark-block-as-built-in [block]
+(defn mark-block-as-built-in [block]
   (assoc block :logseq.property/built-in? true))
 
 (defn- schema->qualified-property-keyword
@@ -51,20 +51,19 @@
   "Given a properties map in the format of db-property/built-in-properties, builds their properties tx"
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [attribute schema title closed-values properties] :as m}]]
+   (fn [[db-ident {:keys [attribute schema title closed-values properties]}]]
      (let [db-ident (or attribute db-ident)
-           prop-name (or title (name (:name m)))
            schema' (schema->qualified-property-keyword schema)
            [property & others] (if closed-values
                                  (db-property-build/build-closed-values
                                   db-ident
-                                  prop-name
+                                  title
                                   {:db/ident db-ident :schema schema' :closed-values closed-values}
                                   {})
                                  [(sqlite-util/build-new-property
                                    db-ident
                                    schema'
-                                   {:title prop-name})])
+                                   {:title title})])
            pvalue-tx-m (->property-value-tx-m
                         (merge property
                                ;; This config is for :logseq.property/default-value and may need to
@@ -129,7 +128,9 @@
      :properties (filter entity-util/property? properties-tx)}))
 
 (def built-in-pages-names
-  #{"Contents"})
+  #{common-config/library-page-name
+    common-config/quick-add-page-name
+    "Contents"})
 
 (defn- validate-tx-for-duplicate-idents [tx]
   (when-let [conflicting-idents
@@ -170,7 +171,7 @@
   (build-initial-classes* db-class/built-in-classes db-ident->properties))
 
 (defn build-initial-views
-  "Builds initial blocks used for storing views. Used by db and file graphs"
+  "Builds initial blocks used for storing views"
   []
   (let [page-id (common-uuid/gen-uuid :builtin-block-uuid common-config/views-page-name)]
     [(sqlite-util/block-with-timestamps
@@ -191,10 +192,27 @@
      :logseq.property/hide? true
      :logseq.property/built-in? true})])
 
+(defn- build-initial-files [config-content]
+  [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
+    :file/path (str "logseq/" "config.edn")
+    :file/content config-content
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
+    :file/path (str "logseq/" "custom.css")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}
+   {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
+    :file/path (str "logseq/" "custom.js")
+    :file/content ""
+    :file/created-at (js/Date.)
+    :file/last-modified-at (js/Date.)}])
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
-  [config-content & {:keys [import-type]}]
+  [config-content & {:keys [import-type graph-git-sha]}]
   (assert (string? config-content))
   (let [initial-data (cond->
                       [(sqlite-util/kv :logseq.kv/db-type "db")
@@ -202,24 +220,13 @@
                        (sqlite-util/kv :logseq.kv/graph-initial-schema-version db-schema/version)
                        (sqlite-util/kv :logseq.kv/graph-created-at (common-util/time-ms))
                        ;; Empty property value used by db.type/ref properties
-                       {:db/ident :logseq.property/empty-placeholder}]
+                       {:db/ident :logseq.property/empty-placeholder
+                        :block/uuid (common-uuid/gen-uuid :builtin-block-uuid :logseq.property/empty-placeholder)}]
                        import-type
-                       (into (sqlite-util/import-tx import-type)))
-        initial-files [{:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/config.edn")
-                        :file/path (str "logseq/" "config.edn")
-                        :file/content config-content
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.css")
-                        :file/path (str "logseq/" "custom.css")
-                        :file/content ""
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}
-                       {:block/uuid (common-uuid/gen-uuid :builtin-block-uuid "logseq/custom.js")
-                        :file/path (str "logseq/" "custom.js")
-                        :file/content ""
-                        :file/created-at (js/Date.)
-                        :file/last-modified-at (js/Date.)}]
+                       (into (sqlite-util/import-tx import-type))
+                       graph-git-sha
+                       (conj (sqlite-util/kv :logseq.kv/graph-git-sha graph-git-sha)))
+        initial-files (build-initial-files config-content)
         {properties-tx :tx :keys [properties]} (build-initial-properties)
         db-ident->properties (zipmap (map :db/ident properties) properties)
         default-classes (build-initial-classes db-ident->properties)
@@ -227,7 +234,7 @@
                            (map mark-block-as-built-in))
         hidden-pages (concat (build-initial-views) (build-favorites-page))
         ;; These classes bootstrap our tags and properties as they depend on each other e.g.
-        ;; Root <-> Tag, classes-tx depends on logseq.property/parent, properties-tx depends on Property
+        ;; Root <-> Tag, classes-tx depends on logseq.property.class/extends, properties-tx depends on Property
         bootstrap-class? (fn [c] (contains? #{:logseq.class/Root :logseq.class/Property :logseq.class/Tag :logseq.class/Template} (:db/ident c)))
         bootstrap-classes (filter bootstrap-class? default-classes)
         bootstrap-class-ids (map #(select-keys % [:db/ident :block/uuid]) bootstrap-classes)

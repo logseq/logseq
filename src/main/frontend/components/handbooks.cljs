@@ -1,9 +1,9 @@
 (ns frontend.components.handbooks
   (:require ;[shadow.lazy :as lazy]
    [frontend.extensions.handbooks.core :as handbooks]
-   [frontend.hooks :as hooks]
    [frontend.modules.layout.core :as layout]
    [frontend.state :as state]
+   [logseq.shui.hooks :as hooks]
    [rum.core :as rum]))
 
 #_:clj-kondo/ignore

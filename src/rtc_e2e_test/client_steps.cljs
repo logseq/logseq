@@ -35,16 +35,16 @@
   client2: start rtc, wait page1, remote->client2"
   {:client1
    (m/sp
-     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+     (let [r (m/? (rtc-core/new-task--rtc-start false))]
        (is (nil? r))
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (m/sp
-     (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+     (let [r (m/? (rtc-core/new-task--rtc-start false))]
        (is (nil? r)))
      (m/?
       (c.m/backoff
-       (take 4 c.m/delays)
+       {}
        (m/sp
          (let [conn (helper/get-downloaded-test-conn)
                page1 (d/pull @conn '[*] [:block/uuid const/page1-uuid])
@@ -72,7 +72,7 @@
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
-    (take 4 c.m/delays)
+    {}
     (m/sp
       (let [conn (helper/get-downloaded-test-conn)
             page (d/pull @conn '[*] [:block/uuid const/page2-uuid])]
@@ -107,19 +107,19 @@
        (m/? (helper/new-task--wait-all-client-ops-sent))))
    :client2
    (c.m/backoff
-    (take 4 c.m/delays)
+    {}
     (m/sp
       (let [conn (helper/get-downloaded-test-conn)
             block1 (d/pull @conn
                            [{:block/tags [:db/ident]}
-                            {:logseq.task/status [:db/ident]}
-                            {:logseq.task/deadline [:block/journal-day]}]
+                            {:logseq.property/status [:db/ident]}
+                            {:logseq.property/deadline [:block/journal-day]}]
                            [:block/uuid const/block1-uuid])]
-        (when-not (= :logseq.task/status.doing (:db/ident (:logseq.task/status block1)))
+        (when-not (= :logseq.property/status.doing (:db/ident (:logseq.property/status block1)))
           (throw (ex-info "wait block1's task properties to be synced" {:missionary/retry true})))
         (is (= {:block/tags [{:db/ident :logseq.class/Task}],
-                :logseq.task/status {:db/ident :logseq.task/status.doing}
-                :logseq.task/deadline {:block/journal-day 20240907}}
+                :logseq.property/status {:db/ident :logseq.property/status.doing}
+                :logseq.property/deadline {:block/journal-day 20240907}}
                block1)))))})
 (def ^:private step4
   "client1:
@@ -162,7 +162,7 @@
        (m/? (helper/new-task--client1-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
-       (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
+       (is (nil? (m/? (rtc-core/new-task--rtc-start false))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (m/? (helper/new-task--client1-sync-barrier-2->1 "step5"))
        (let [message (m/? (helper/new-task--wait-message-from-other-client
@@ -189,7 +189,7 @@
        (m/? (helper/new-task--client2-sync-barrier-2->1 "move-blocks-concurrently-signal"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn (const/tx-data-map :move-blocks-concurrently-client2))
-       (is (nil? (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))))
+       (is (nil? (m/? (rtc-core/new-task--rtc-start false))))
        (m/? (helper/new-task--wait-all-client-ops-sent))
        (m/? (helper/new-task--client2-sync-barrier-2->1 "step5"))
        (m/? (helper/new-task--send-message-to-other-client
@@ -222,7 +222,7 @@ client2:
        (m/? (helper/new-task--client1-sync-barrier-1->2 "step6"))
        (m/? helper/new-task--stop-rtc)
        (helper/transact! conn tx-data2)
-       (let [r (m/? (rtc-core/new-task--rtc-start const/downloaded-test-repo const/test-token))]
+       (let [r (m/? (rtc-core/new-task--rtc-start false))]
          (is (nil? r))
          (m/? (helper/new-task--wait-all-client-ops-sent)))))
    :client2
@@ -231,7 +231,7 @@ client2:
        (m/? (helper/new-task--client2-sync-barrier-1->2 "step6"))
        (m/?
         (c.m/backoff
-         (take 4 c.m/delays)
+         {}
          (m/sp
            (let [page (d/pull @conn '[*] [:block/uuid const/step6-page-uuid])
                  page-blocks (when-let [page-id (:db/id page)]

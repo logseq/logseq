@@ -2,20 +2,20 @@
   "Table"
   (:require [clojure.set :as set]
             [dommy.core :refer-macros [sel1]]
+            [goog.object :as gobj]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
 (defn- get-head-container
   []
-  (sel1 "#head"))
-
-(defn- get-main-scroll-container
-  []
-  (sel1 "#main-content-container"))
+  (if (and js/window (gobj/get js/window "isCapacitorNew"))
+    (sel1 "ion-header")
+    (sel1 "#head")))
 
 (defn- row-selected?
   [row row-selection]
-  (let [id (:id row)]
+  (let [id (:db/id row)]
     (or
      (and (:selected-all? row-selection)
           ;; exclude ids
@@ -26,17 +26,16 @@
 
 (defn- select-some?
   [row-selection rows]
-  (boolean
-   (or
-    (and (seq (:selected-ids row-selection))
-         (some (:selected-ids row-selection) (map :db/id rows)))
-    (and (seq (:exclude-ids row-selection))
-         (not= (count rows) (count (:exclude-ids row-selection)))))))
+  (or
+   (and (seq (:selected-ids row-selection))
+        (some (:selected-ids row-selection) rows))
+   (and (seq (:excluded-ids row-selection))
+        (not= (count rows) (count (:excluded-ids row-selection))))))
 
 (defn- select-all?
   [row-selection rows]
   (and (seq (:selected-ids row-selection))
-       (set/subset? (set (map :db/id rows))
+       (set/subset? (set rows)
                     (:selected-ids row-selection))))
 
 (defn- toggle-selected-all!
@@ -47,7 +46,7 @@
       (and group-by-property value)
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/union (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/union (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       value
@@ -56,7 +55,7 @@
       group-by-property
       (let [new-selection (update row-selection :selected-ids
                                   (fn [ids]
-                                    (set/difference (set ids) (set (map :db/id (:rows table))))))]
+                                    (set/difference (set ids) (set (:rows table)))))]
         (set-row-selection! new-selection))
 
       :else
@@ -70,7 +69,7 @@
 
 (defn- row-toggle-selected!
   [row value set-row-selection! row-selection]
-  (let [id (:id row)
+  (let [id (:db/id row)
         new-selection (if (:selected-all? row-selection)
                         (update row-selection :excluded-ids (if value disj set-conj) id)
                         (update row-selection :selected-ids (if value set-conj disj) id))]
@@ -85,7 +84,7 @@
                        (remove (fn [item] (= (:id item) id)) sorting)
                        (map (fn [item] (if (= (:id item) id) (assoc item :asc? asc?) item)) sorting))
                      (when-not (nil? asc?)
-                       (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? asc?})))
+                       (into [{:id id :asc? asc?}] sorting)))
                    (remove nil?)
                    vec)]
     (set-sorting! value)
@@ -96,11 +95,11 @@
   (if (:selected-all? row-selection)
     (let [excluded-ids (:excluded-ids row-selection)]
       (if (seq excluded-ids)
-        (remove #(excluded-ids (:id %)) rows)
+        (remove #(excluded-ids %) rows)
         rows))
     (let [selected-ids (:selected-ids row-selection)]
       (when (seq selected-ids)
-        (filter #(selected-ids (:id %)) rows)))))
+        (filter #(selected-ids %) rows)))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
@@ -121,11 +120,12 @@
            ;; fns
            :column-visible? (fn [column] (impl/column-visible? column visible-columns))
            :column-toggle-visibility (fn [column v] (set-visible-columns! (assoc visible-columns (impl/column-id column) v)))
-           :selected-all? (or (:selected-all? row-selection)
+           :selected-all? (or (and (:selected-all? row-selection)
+                                   (nil? (seq (:excluded-ids row-selection))))
                               (select-all? row-selection filtered-rows))
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
-           :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
+           :row-toggle-selected! (fn [row-selection row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [table value]
                                    (toggle-selected-all! table value set-row-selection!))
            :column-set-sorting! (fn [sorting column asc?] (column-set-sorting! column set-sorting! sorting asc?)))))
@@ -144,58 +144,16 @@
                  prop)
      children]))
 
-;; FIXME: ux
-(defn- use-sticky-element!
-  [^js/HTMLElement container target-ref]
-  (rum/use-effect!
-   (fn []
-     (let [^js el (rum/deref target-ref)
-           ^js cls (.-classList el)
-           *ticking? (volatile! false)
-           el-top (-> el (.getBoundingClientRect) (.-top))
-           head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
-           translate (fn [offset]
-                       (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
-                       (if (zero? offset)
-                         (.remove cls "translated")
-                         (.add cls "translated")))
-           *last-offset (volatile! 0)
-           handle (fn []
-                    (let [scroll-top (js/parseInt (.-scrollTop container))
-                          offset (if (> (+ scroll-top head-top) el-top)
-                                   (+ (- scroll-top el-top) head-top 1) 0)
-                          offset (js/parseInt offset)
-                          last-offset @*last-offset]
-                      (if (and (not (zero? last-offset))
-                               (not= offset last-offset))
-                        (let [dir (if (neg? (- offset last-offset)) -1 1)]
-                          (loop [offset' (+ last-offset dir)]
-                            (translate offset')
-                            (if (and (not= offset offset')
-                                     (< (abs (- offset offset')) 100))
-                              (recur (+ offset' dir))
-                              (translate offset))))
-                        (translate offset))
-                      (vreset! *last-offset offset)))
-           handler (fn [^js e]
-                     (when (not @*ticking?)
-                       (js/window.requestAnimationFrame
-                        #(do (handle) (vreset! *ticking? false)))
-                       (vreset! *ticking? true)))]
-       (.addEventListener container "scroll" handler)
-       #(.removeEventListener container "scroll" handler)))
-   []))
-
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
-  [^js/HTMLDivElement target-ref]
-  (rum/use-effect!
+  [^js/HTMLDivElement target-ref container]
+  (hooks/use-effect!
    (fn []
      (let [^js target (rum/deref target-ref)
-           ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
+           ^js container (or (.closest target ".sidebar-item-list") container)
            ^js table (.closest target ".ls-table-rows")
            refs-table? (.closest table ".references")]
-       (when (not refs-table?)
+       (when (and (not refs-table?) container table)
          (let [^js target-cls (.-classList target)
                ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
                ^js page-el (.closest target ".page-inner")
@@ -205,7 +163,7 @@
                update-target-top! (fn []
                                     (when (not (.contains target-cls "ls-fixed"))
                                       (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
-                                                         (.-scrollTop container)))))
+                                                          (.-scrollTop container)))))
                update-footer! (fn []
                                 (let [tw (.-scrollWidth table)]
                                   (when (and table-footer (number? tw) (> tw 0))
@@ -228,7 +186,7 @@
                                        table-in-top (+ scroll-top head-height)
                                        table-bottom (.-bottom (.getBoundingClientRect table))
                                        fixed? (and (> table-bottom (+ head-height 90))
-                                                (> table-in-top @*el-top))]
+                                                   (> table-in-top @*el-top))]
                                    (if fixed?
                                      (.add target-cls "ls-fixed")
                                      (.remove target-cls "ls-fixed"))
@@ -236,7 +194,7 @@
                target-observe-handle! (fn [^js _e]
                                         (when (not @*ticking?)
                                           (js/window.requestAnimationFrame
-                                            #(do (target-observe!) (vreset! *ticking? false)))
+                                           #(do (target-observe!) (vreset! *ticking? false)))
                                           (vreset! *ticking? true)))
                resize-observer (js/ResizeObserver. update-target!)
                page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
@@ -251,20 +209,25 @@
 
            ;; teardown
            #(do (.removeEventListener container "scroll" target-observe!)
-              (.disconnect resize-observer)
-              (.disconnect page-resize-observer))))))
+                (.disconnect resize-observer)
+                (.disconnect page-resize-observer))))))
    []))
+
+(defn- mobile?
+  []
+  (when-let [user-agent js/navigator.userAgent]
+    (re-find #"Mobi" user-agent)))
 
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)
-        _ (use-sticky-element2! el-ref)]
+        _ (when-not (mobile?) (use-sticky-element2! el-ref (:main-container prop)))]
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref
              :style {:z-index 9}}
-            prop)
+            (dissoc prop :main-container))
      children]))
 
 (rum/defc table-footer
@@ -275,14 +238,15 @@
 (rum/defc table-row < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.ls-table-row.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
-                                                         prop)
+    [:div.ls-table-row.ls-block.flex.flex-row.items-center
+     (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+            prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.flex.relative prop
+    [:div.ls-table-cell.flex.relative.h-full (dissoc prop :select? :add-property?)
      [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
                         (cond
                           (:select? prop)
@@ -304,5 +268,3 @@
              :style {:z-index 101}}
             prop)
      children]))
-
-(def table-sort-rows impl/sort-rows)

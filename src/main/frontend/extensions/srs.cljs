@@ -267,13 +267,13 @@
                       (when-let [query' (query-dsl/query-wrapper query*
                                                                  {:blocks? true
                                                                   :block-attrs [:db/id :block/properties]})]
-                        (let [result (query-react/react-query repo
-                                                              {:query (with-meta query' {:cards-query? true})
-                                                               :rules (or rules [])}
-                                                              (merge
-                                                               {:use-cache? use-cache?}
-                                                               (when sort-by
-                                                                 {:transform-fn sort-by})))]
+                        (let [result (last (query-react/react-query repo
+                                                                    {:query (with-meta query' {:cards-query? true})
+                                                                     :rules (or rules [])}
+                                                                    (merge
+                                                                     {:use-cache? use-cache?}
+                                                                     (when sort-by
+                                                                       {:transform-fn sort-by}))))]
                           (when result
                             (flatten (util/react result)))))))]
        (vec result)))))
@@ -488,16 +488,17 @@
                                    :on-click   #(score-and-next-card 5 card card-index finished? phase review-records cb)})])
 
             (when preview?
-              (ui/tippy {:html [:div.text-sm
-                                (t :flashcards/modal-btn-reset-tip)]
-                         :class "tippy-hover"
-                         :interactive true}
-                        (ui/button [:span (t :flashcards/modal-btn-reset)]
-                                   :id "card-reset"
-                                   :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
-                                   :on-click (fn [e]
-                                               (util/stop e)
-                                               (operation-reset! card)))))]
+              (ui/tooltip
+               (ui/button [:span (t :flashcards/modal-btn-reset)]
+                          :id "card-reset"
+                          :class (util/hiccup->class "opacity-60.hover:opacity-100.card-reset")
+                          :on-click (fn [e]
+                                      (util/stop e)
+                                      (operation-reset! card)))
+
+               [:div.text-sm
+                (t :flashcards/modal-btn-reset-tip)]
+               {:trigger-props {:as-child false}}))]
            [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
@@ -629,27 +630,20 @@
 
            ;; FIXME: CSS issue
            (if @*preview-mode?
-             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-current-total)]
-                        :interactive true}
-                       [:div.opacity-60.text-sm.mr-2
-                        @*card-index
-                        [:span "/"]
-                        total])
-             (ui/tippy {:html [:div.text-sm (t :flashcards/modal-overdue-total)]
-                        ;; :class "tippy-hover"
-                        :interactive true}
-                       [:div.opacity-60.text-sm.mr-2
-                        (max 0 (- filtered-total @*card-index))
-                        [:span "/"]
-                        total]))
+             (ui/tooltip
+              [:div.opacity-60.text-sm.mr-2
+               @*card-index
+               [:span "/"]
+               total]
+              [:div.text-sm (t :flashcards/modal-current-total)])
+             (ui/tooltip
+              [:div.opacity-60.text-sm.mr-2
+               (max 0 (- filtered-total @*card-index))
+               [:span "/"]
+               total]
+              [:div.text-sm (t :flashcards/modal-overdue-total)]))
 
-           (ui/tippy
-            {:html [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
-             :delay [1000, 100]
-             :class "tippy-hover"
-             :interactive true
-             :disabled false}
-
+           (ui/tooltip
             (ui/button
              (merge
               {:icon "letter-a"
@@ -661,13 +655,11 @@
                :button-props {:id "preview-all-cards"}
                :small? true}
               (when @*preview-mode?
-                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))
+                {:icon-props {:style {:color "var(--ls-button-background)"}}})))
+            [:div.text-sm (t :flashcards/modal-toggle-preview-mode)]
+            {:trigger-props {:as-child false}})
 
-           (ui/tippy
-            {:html [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
-             :delay [1000, 100]
-             :class "tippy-hover"
-             :interactive true}
+           (ui/tooltip
             (ui/button
              (merge
               {:icon "arrows-shuffle"
@@ -677,7 +669,9 @@
                            (swap! *random-mode? not))
                :small? true}
               (when @*random-mode?
-                {:icon-props {:style {:color "var(--ls-button-background)"}}}))))]]
+                {:icon-props {:style {:color "var(--ls-button-background)"}}})))
+            [:div.text-sm (t :flashcards/modal-toggle-random-mode)]
+            {:trigger-props {:as-child false}})]]
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []

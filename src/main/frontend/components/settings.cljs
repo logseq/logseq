@@ -21,7 +21,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
@@ -34,6 +33,7 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -381,13 +381,7 @@
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
                       [:div.flex.items-center
-                       (ui/tippy
-                        {:html (case color
-                                 :none [:p {:style {:max-width "300px"}}
-                                        "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                                 :logseq "Logseq classical color"
-                                 (str (name color) " color"))
-                         :delay [1000, 100]}
+                       (ui/tooltip
                         (shui/button
                          {:class "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
                           :auto-focus (and _in-modal? active?)
@@ -402,7 +396,13 @@
                           {:class (if none? "h-0.5 w-full bg-red-700"
                                       "w-2 h-2 rounded-full transition ease-in duration-100")
                            :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
-                                   :opacity (if (or none? active?) 1 0)}}]))])]]
+                                   :opacity (if (or none? active?) 1 0)}}])
+
+                        (case color
+                          :none [:p {:style {:max-width "300px"}}
+                                 "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
+                          :logseq "Logseq classical color"
+                          (str (name color) " color")))])]]
 
     [:div
      (row-with-button-action
@@ -431,11 +431,8 @@
     {:for "custom_date_format"}
     (t :settings-page/custom-date-format)
     (when-not (config/db-based-graph? (state/get-current-repo))
-      (ui/tippy {:html        (t :settings-page/custom-date-format-warning)
-                 :class       "tippy-hover ml-2"
-                 :interactive true
-                 :disabled    false}
-                (svg/info)))]
+      (ui/tooltip [:span.flex.px-2 (svg/info)]
+                  [:span (t :settings-page/custom-date-format-warning)]))]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
@@ -484,11 +481,8 @@
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
           [(t :settings-page/preferred-outdenting)
-           (ui/tippy {:html        (outdenting-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+                       (outdenting-hint) {:content-props {:side "right"}})]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
@@ -501,22 +495,16 @@
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           [(t :settings-page/preferred-pasting-file)
-           (ui/tippy {:html        (t :settings-page/preferred-pasting-file-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+                       [:span.block.w-64 (t :settings-page/preferred-pasting-file-hint)])]
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
 (defn auto-expand-row [t auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
           [(t :settings-page/auto-expand-block-refs)
-           (ui/tippy {:html        (auto-expand-hint)
-                      :class       "tippy-hover ml-2"
-                      :interactive true
-                      :disabled    false}
-                     (svg/info))]
+           (ui/tooltip [:span.flex.px-2 (svg/info)]
+                       (auto-expand-hint))]
           auto-expand-block-refs?
           config-handler/toggle-auto-expand-block-refs!))
 
@@ -612,11 +600,11 @@
                   (not instrument-disabled?)))
           [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
-(defn clear-cache-row [t]
-  (row-with-button-action {:left-label   (t :settings-page/clear-cache)
-                           :button-label (t :settings-page/clear)
-                           :on-click     #(state/pub-event! [:graph/clear-cache!])
-                           :-for         "clear_cache"}))
+;; (defn clear-cache-row [t]
+;;   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
+;;                            :button-label (t :settings-page/clear)
+;;                            :on-click     #(state/pub-event! [:graph/clear-cache!])
+;;                            :-for         "clear_cache"}))
 
 (defn version-row [t version]
   (row-with-button-action {:left-label (t :settings-page/current-version)
@@ -835,11 +823,12 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
-     (clear-cache-row t)
+     ;; (clear-cache-row t)
 
-     (ui/admonition
-      :warning
-      [:p (t :settings-page/clear-cache-warning)])]))
+     ;; (ui/admonition
+     ;;  :warning
+     ;;  [:p (t :settings-page/clear-cache-warning)])
+     ]))
 
 (rum/defc sync-enabled-switcher
   [enabled?]
@@ -866,26 +855,10 @@
   (row-with-button-action
    {:left-label (str (t :settings-page/sync-diff-merge) " (Experimental!)") ;; Not included in i18n to avoid outdating translations
     :action (sync-diff-merge-enabled-switcher enabled?)
-    :desc (ui/tippy {:html        [:div
-                                   [:div (t :settings-page/sync-diff-merge-desc)]
-                                   [:div (t :settings-page/sync-diff-merge-warn)]]
-                     :class       "tippy-hover ml-2"
-                     :interactive true
-                     :disabled    false}
-                    (svg/info))}))
-
-(rum/defc rtc-enabled-switcher
-  [enabled?]
-  (ui/toggle enabled?
-             (fn []
-               (let [value (not enabled?)]
-                 (state/set-rtc-enabled! value)))
-             true))
-
-(defn rtc-switcher-row [enabled?]
-  (row-with-button-action
-   {:left-label "RTC"
-    :action (rtc-enabled-switcher enabled?)}))
+    :desc (ui/tooltip [:span.inline-flex.px-1 (svg/info)]
+                      [:div
+                       [:div (t :settings-page/sync-diff-merge-desc)]
+                       [:div (t :settings-page/sync-diff-merge-warn)]])}))
 
 (rum/defc whiteboards-enabled-switcher
   [enabled?]
@@ -1121,10 +1094,6 @@
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (when-not db-based? (zotero-settings-row))
-     (when (and (config/db-based-graph? current-repo)
-                (user-handler/team-member?))
-       ;; FIXME: Wire this up again to RTC init calls
-       (rtc-switcher-row (state/enable-rtc?)))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]

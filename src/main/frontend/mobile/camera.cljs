@@ -1,11 +1,10 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
-            ["@capacitor/filesystem" :refer [Filesystem]]
-            [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.handler.assets :as assets-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -22,39 +21,25 @@
       (p/catch (fn [error]
                  (log/error :photo/get-failed {:error error})))
       (p/then (fn [photo]
-                (if (nil? photo)
-                  (p/resolved nil)
-                  ;; NOTE: For iOS and Android, only jpeg format will be returned as base64 string.
-                  ;; See-also: https://capacitorjs.com/docs/apis/camera#galleryphoto
-                  (p/let [filename (str (date/get-date-time-string-2) ".jpeg")
-                          image-path (assets-handler/get-asset-path filename)
-                          _ret (.writeFile Filesystem (clj->js {:data (.-base64String photo)
-                                                                :path image-path
-                                                                :recursive true}))]
-                    filename))))
+                (let [id (state/get-edit-input-id)]
+                  (if (or (nil? photo) (nil? id))
+                    (p/resolved nil)
+                    ;; NOTE: For iOS and Android, only jpeg format will be returned as base64 string.
+                    ;; See-also: https://capacitorjs.com/docs/apis/camera#galleryphoto
+                    (p/let [filename (str (date/get-date-time-string-2) ".jpeg")
+                            _image-path (assets-handler/get-asset-path filename)
+                            base64string (.-base64String photo)
+                            file (js/File. #js [(util/base64string-to-unit8array base64string)]
+                                           filename #js {:type "image/jpeg"})]
+                      file)))))
       (p/catch (fn [error]
                  (log/error :file/write-failed {:error error})))))
 
-(defn embed-photo [id]
-  (let [block (state/get-edit-block)
+(defn embed-photo [_id]
+  (let [id (state/get-edit-input-id)
+        block (state/get-edit-block)
         input (state/get-input)
-        content (gobj/get input "value")
-        pos (cursor/pos input)
-        left-padding (cond
-                       (cursor/beginning-of-line? input)
-                       nil
-
-                       (= (and (not (zero? pos))
-                               (subs content (dec pos))) " ")
-                       nil
-
-                       :else " ")
+        _content (gobj/get input "value")
         format (get block :block/format :markdown)]
-    (p/let [filename (take-or-choose-photo)]
-      (when (not-empty filename)
-        (commands/simple-insert!
-         id
-         (str left-padding
-              (assets-handler/get-asset-file-link format (str "../assets/" filename) filename true)
-              " ")
-         {})))))
+    (p/let [file (take-or-choose-photo)
+            _ret (editor-handler/upload-asset! id [file] format editor-handler/*asset-uploading? true)])))

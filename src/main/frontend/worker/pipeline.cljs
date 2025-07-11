@@ -1,14 +1,18 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [logseq.common.defkeywords :refer [defkeywords]]
+            [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -48,9 +52,12 @@
             blocks)))
 
 (defn- insert-tag-templates
-  [repo conn tx-report]
+  [repo tx-report]
   (let [db (:db-after tx-report)
         journal-id (:db/id (d/entity db :logseq.class/Journal))
+        journal-page (some (fn [d] (when (and (= :block/journal-day (:a d)) (:added d))
+                                     (d/entity db (:e d))))
+                           (:tx-data tx-report))
         journal-template? (some (fn [d] (and (:added d) (= (:a d) :block/tags) (= (:v d) journal-id))) (:tx-data tx-report))
         tx-data (some->> (:tx-data tx-report)
                          (filter (fn [d] (and (= (:a d) :block/tags) (:added d))))
@@ -59,12 +66,11 @@
                                    (let [object (d/entity db e)
                                          template-blocks (->> (mapcat (fn [id]
                                                                         (let [tag (d/entity db id)
-                                                                              journal? (= journal-id id)
-                                                                              parents (ldb/get-page-parents tag {:node-class? true})
+                                                                              parents (ldb/get-class-extends tag)
                                                                               templates (mapcat :logseq.property/_template-applied-to (conj parents tag))]
                                                                           (cond->> templates
-                                                                            journal?
-                                                                            (map (fn [t] (assoc t :journal tag))))))
+                                                                            journal-page
+                                                                            (map (fn [t] (assoc t :journal journal-page))))))
                                                                       (set (map :v datoms)))
                                                               distinct
                                                               (sort-by :block/created-at)
@@ -83,8 +89,10 @@
                                                                                                                                               (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
-                                       (let [result (outliner-core/insert-blocks repo conn template-blocks object {:sibling? false
-                                                                                                                   :keep-uuid? journal-template?})]
+                                       (let [result (outliner-core/insert-blocks
+                                                     repo db template-blocks object
+                                                     {:sibling? false
+                                                      :keep-uuid? journal-template?})]
                                          (:tx-data result)))))))]
     tx-data))
 
@@ -101,9 +109,11 @@
     (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
                    true
                    (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
-      (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
-        (worker-util/post-message :notification
-                                  [["Invalid DB!"] :error]))))
+      (when-not valid?
+        (when (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
+          (shared-service/broadcast-to-clients! :notification
+                                                [["Invalid DB!"] :error]))
+        (throw (ex-info "Invalid data" {:graph repo})))))
 
   ;; Ensure :block/order is unique for any block that has :block/parent
   (when (or (:dev? context) (exists? js/process))
@@ -157,24 +167,81 @@
                                    :db-before (:db-before tx-report)))]
     {:tx-report final-tx-report}))
 
-(defn- invoke-hooks-default [repo conn {:keys [tx-meta] :as tx-report} context]
+(defn- gen-created-by-block
+  [decoded-id-token]
+  (let [user-uuid (:sub decoded-id-token)
+        user-name (:cognito:username decoded-id-token)
+        email (:email decoded-id-token)
+        now (common-util/time-ms)]
+    {:block/uuid (uuid user-uuid)
+     :block/name user-name
+     :block/title user-name
+     :block/tags :logseq.class/Page
+     :block/created-at now
+     :block/updated-at now
+     :logseq.property.user/name user-name
+     :logseq.property.user/email email}))
+
+(defn- add-created-by-ref-hook
+  [db-before db-after tx-data tx-meta]
+  (when (and (not (or (:undo? tx-meta) (:redo? tx-meta)
+                      (:rtc-tx? tx-meta) (:rtc-download-graph? tx-meta)))
+             (seq tx-data))
+    (when-let [decoded-id-token (some-> (worker-state/get-id-token) worker-util/parse-jwt)]
+      (let [created-by-ent (d/entity db-after [:block/uuid (uuid (:sub decoded-id-token))])
+            created-by-block (when (nil? created-by-ent)
+                               (assoc (gen-created-by-block decoded-id-token) :db/id "created-by-id"))
+            created-by-id (or (:db/id created-by-ent) "created-by-id")
+            add-created-by-tx-data
+            (keep
+             (fn [datom]
+               (let [attr (:a datom)
+                     value (:v datom)
+                     e (:e datom)]
+                 (cond
+                   ;; add created-by for new-block
+                   (and (keyword-identical? :block/uuid attr)
+                        (:added datom))
+                   (let [ent (d/entity db-after e)]
+                     (when-not (:logseq.property/created-by-ref ent)
+                       [:db/add e :logseq.property/created-by-ref created-by-id]))
+
+                   ;; update created-by when block change from empty-block-title to non-empty
+                   (and (keyword-identical? :block/title attr)
+                        (not (string/blank? value))
+                        (let [origin-title (:block/title (d/entity db-before e))]
+                          (and (some? origin-title)
+                               (string/blank? origin-title))))
+                   [:db/add e :logseq.property/created-by-ref created-by-id])))
+             tx-data)]
+        (cond->> add-created-by-tx-data
+          (nil? created-by-ent) (cons created-by-block))))))
+
+(defn- compute-extra-tx-data
+  [repo conn tx-report]
+  (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
+        display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
+        commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
+                      (commands/run-commands conn tx-report))
+        insert-templates-tx (insert-tag-templates repo tx-report)
+        created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
+    (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+
+(defn- invoke-hooks-default
+  [repo conn {:keys [tx-meta] :as tx-report} context]
   (try
-    (let [display-blocks-tx-data (add-missing-properties-to-typed-display-blocks (:db-after tx-report) (:tx-data tx-report))
-          commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
-                        (commands/run-commands tx-report))
-          ;; :block/refs relies on those changes
-          ;; idea: implement insert-templates using a command?
-          insert-templates-tx (insert-tag-templates repo conn tx-report)
-          tx-before-refs (concat display-blocks-tx-data commands-tx insert-templates-tx)
+    (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
+                           (compute-extra-tx-data repo conn tx-report))
           tx-report* (if (seq tx-before-refs)
                        (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
-                                                                        :outliner-op :pre-hook-invoke})]
+                                                                        :outliner-op :pre-hook-invoke
+                                                                        :skip-store? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
                        tx-report)
           {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
-          _ (when (sqlite-util/local-file-based-graph? repo)
+          _ (when (common-sqlite/local-file-based-graph? repo)
               (let [page-ids (distinct (map :db/id pages))]
                 (doseq [page-id page-ids]
                   (when (d/entity @conn page-id)
@@ -191,15 +258,16 @@
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
           refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn (concat insert-templates-tx block-refs) {:pipeline-replace? true}))
+                           (ldb/transact! conn block-refs {:pipeline-replace? true
+                                                           :skip-store? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
-                      ;; block path refs
+                        ;; block path refs
                         (when (seq blocks')
                           (let [blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
                             (compute-block-path-refs-tx tx-report* blocks')))
 
-                       ;; update block/tx-id
+                        ;; update block/tx-id
                         (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                      (concat pages blocks))
                               tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
@@ -208,13 +276,9 @@
                                     (when (:block/uuid (d/entity db-after db-id))
                                       {:db/id db-id
                                        :block/tx-id tx-id}))) updated-blocks))))
-          tx-report' (if (seq replace-tx)
-                       (ldb/transact! conn replace-tx {:pipeline-replace? true})
-                       (do
-                         (when-not (or (exists? js/process)
-                                       (::skip-store-conn tx-meta false))
-                           (d/store @conn))
-                         tx-report*))
+          tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true
+                                                     ;; Ensure db persisted
+                                                     :db-persist? true})
           _ (validate-db! repo conn tx-report* tx-meta context)
           full-tx-data (concat (:tx-data tx-report*)
                                (:tx-data refs-tx-report)
@@ -222,7 +286,9 @@
           final-tx-report (assoc tx-report'
                                  :tx-data full-tx-data
                                  :tx-meta tx-meta
-                                 :db-before (:db-before tx-report))
+                                 :db-before (:db-before tx-report)
+                                 :db-after (or (:db-after tx-report')
+                                               (:db-after tx-report)))
           affected-query-keys (when-not (:importing? context)
                                 (worker-react/get-affected-queries-keys final-tx-report))]
       {:tx-report final-tx-report
@@ -242,14 +308,9 @@
         (or from-disk? new-graph?)
         (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
               path-refs (distinct (compute-block-path-refs-tx tx-report blocks))
-              tx-report' (or
-                          (when (seq path-refs)
-                            (ldb/transact! conn path-refs {:pipeline-replace? true}))
-                          (do
-                            (when-not (or (exists? js/process)
-                                          (::skip-store-conn tx-meta false))
-                              (d/store @conn))
-                            tx-report))
+              tx-report' (if (seq path-refs)
+                           (ldb/transact! conn path-refs {:pipeline-replace? true})
+                           tx-report)
               full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
                                      :tx-meta (:tx-meta tx-report)

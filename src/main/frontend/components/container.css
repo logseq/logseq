@@ -55,7 +55,7 @@
 }
 
 #main-content-container {
-  @apply py-4 sm:pl-8 sm:pr-4;
+  @apply sm:py-8 py-2 sm:pl-8 sm:pr-4;
 }
 
 .left-sidebar-inner {
@@ -112,15 +112,15 @@
   }
 
   .page-icon {
-    @apply flex items-center mr-2 text-center align-baseline leading-none;
+    @apply flex items-center text-center align-baseline leading-none;
+  }
+
+  .ui__icon {
+    @apply relative flex justify-center w-[16px] text-base mr-2 opacity-70;
   }
 
   a.item {
     @apply flex items-center pl-1.5 pr-0.5 h-8 select-none;
-
-    .ui__icon {
-      @apply relative flex justify-center w-[16px] text-base mr-2;
-    }
 
     .graph-icon {
       @apply ml-[3px] mr-[11px];
@@ -132,10 +132,6 @@
 
     &:hover, &.active, > .thumb {
       background-color: var(--lx-gray-04, var(--ls-quaternary-background-color, var(--rx-gray-04)));
-
-      .ui__icon {
-        @apply opacity-100;
-      }
     }
   }
 
@@ -247,6 +243,14 @@
           }
         }
       }
+
+      .icon-cp-container {
+        @apply pr-1;
+
+        > .ui__icon {
+          @apply mr-0;
+        }
+      }
     }
 
     .hd .more {
@@ -281,7 +285,7 @@
 }
 
 .cp__sidebar-left-layout {
-  @apply fixed top-0 left-0 w-[10px] z-[var(--ls-z-index-level-5)];
+  @apply fixed top-0 left-0 w-[10px] z-[var(--ls-z-index-level-4)];
 
   a {
     @apply opacity-80 hover:opacity-100 text-foreground;
@@ -319,7 +323,7 @@
   }
 
   &.is-open {
-    width: 100%;
+    @apply w-full h-full;
 
     .left-sidebar-inner {
       transform: translate3d(0, 0, 0);
@@ -440,12 +444,16 @@
 }
 
 .cp__sidebar-main-content {
-  width: 100%;
-  max-width: var(--ls-main-content-max-width);
-  flex: 1;
+  @apply w-full max-w-[var(--ls-main-content-max-width)] flex-1;
 
   .page {
-    @apply px-4;
+    @apply px-8 pt-4;
+  }
+
+  @screen sm {
+    .page {
+      @apply px-2 pt-0;
+    }
   }
 }
 
@@ -548,7 +556,7 @@
     top: 0;
     left: 0;
     right: 0;
-    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-01, --ls-secondary-background-color, #d8e1e8);
+    background-color: or(--ls-right-sidebar-topbar-color, --lx-gray-02, --ls-secondary-background-color, #d8e1e8);
     z-index: 999;
     user-select: none;
     -webkit-app-region: drag;

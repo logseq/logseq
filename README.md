@@ -54,6 +54,7 @@
 
 ## Table of Contents
 
+  * [<g-emoji class="g-emoji" alias="database" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f680.png">🚀</g-emoji> Database Version](#-database-version)
   * [<g-emoji class="g-emoji" alias="thinking" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f914.png">🤔</g-emoji> Why Logseq?](#-why-logseq)
   * [<g-emoji class="g-emoji" alias="eyes" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f440.png">👀</g-emoji> How can I use it?](#-how-can-i-use-it)
   * [<g-emoji class="g-emoji" alias="books" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f4da.png">📚</g-emoji> Learn more](#-learn-more)
@@ -64,6 +65,19 @@
     * [<g-emoji class="g-emoji" alias="hammer_and_wrench" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f6e0.png">🛠️</g-emoji> Setting Up a Development Environment](#️-setting-up-a-development-environment)
   * [<g-emoji class="g-emoji" alias="sparkles" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/2728.png">✨</g-emoji> Inspiration](#-inspiration)
 * [<g-emoji class="g-emoji" alias="pray" fallback-src="https://github.githubassets.com/images/icons/emoji/unicode/1f64f.png">🙏</g-emoji> Thank You](#-thank-you)
+
+## 🚀 Database Version
+
+The Database version (DB version) of Logseq introduces DB graphs while maintaining support for file graphs. [See this page](https://github.com/logseq/docs/blob/master/db-version.md) to get an overview of the main features for DB graphs. If you are an existing user, [see changes with the DB version](https://github.com/logseq/docs/blob/master/db-version-changes.md). The DB version has its own new mobile app! To participate in the mobile app alpha, [please complete this brief form](https://forms.gle/nfefJv51jUuULbFB9). The DB version also has a new sync approach, RTC (Real Time Collaboration)! You can use it to sync graphs between multiple devices or collaborate with others. To participate in the RTC alpha, [please fill out this form](https://forms.gle/YSyF4WfKPSDuwyjH6).
+
+The DB version is in beta status while the new mobile app and RTC is in alpha. This means that **data loss is possible** so we recommend [automated backups](https://github.com/logseq/docs/blob/master/db-version.md#automated-backup) or [regular SQLite DB backups](https://github.com/logseq/docs/blob/master/db-version.md#graph-export). When using DB graphs, we recommend you create a dedicated test graph and choose one project that’s not crucial for you. When using file graphs, **data corruption is possible** as some file content can be duplicated. We only recommend using it with file graphs if you make regular backups with git.
+
+To get started with the DB version:
+* To try the latest web version, go to https://test.logseq.com/.
+* To try the latest desktop version, go to https://github.com/logseq/logseq/actions/workflows/build-desktop-release.yml and click on the latest release. Scroll to the bottom and under the `Artifacts` section download the artifact for your operating system.
+* To report bugs, please file them at https://github.com/logseq/db-test/issues.
+* For feature or enhancement requests, please file them on Discord on the `#db-feedback` channel.
+* For discussion, see the `#db-chat` channel in Discord.
 
 ## 🤔 Why Logseq?
 

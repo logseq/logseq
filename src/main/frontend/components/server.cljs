@@ -3,10 +3,10 @@
    [clojure.string :as string]
    [electron.ipc :as ipc]
    [frontend.handler.notification :as notification]
-   [frontend.hooks :as hooks]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
+   [logseq.shui.hooks :as hooks]
    [logseq.shui.ui :as shui]
    [medley.core :as medley]
    [promesa.core :as p]
@@ -74,7 +74,7 @@
                          (not= (util/safe-parse-int (or port 0))
                                (util/safe-parse-int (or (:port server-state) 0))))
         changed?     (or hp-changed? (->> [autostart (:autostart server-state)]
-                                          (mapv #(cond-> % (nil? %) not))
+                                          (mapv #(cond-> % (nil? %) boolean))
                                           (apply not=)))]
 
     [:div.cp__server-configs-panel.pt-5
@@ -104,7 +104,7 @@
        (ui/checkbox
         {:on-change #(let [checked (.-checked (.-target %))]
                        (swap! *configs assoc :autostart checked))
-         :value     (not (false? autostart))})
+         :checked   (not (false? autostart))})
 
        [:strong.select-none "Auto start server with the app launched"]]]
 

@@ -9,17 +9,16 @@
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.config :as config]
-            [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.fs :as fs]
             [frontend.fs.sync :as fs-sync]
-            [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.file-based.native-fs :as nfs-handler]
             [frontend.handler.file-sync :refer [*beta-unavailable?] :as file-sync-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -29,6 +28,7 @@
             [frontend.util.persist-var :as persist-var]
             [goog.functions :refer [debounce]]
             [logseq.common.util :as common-util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -478,7 +478,7 @@
                (map-indexed (fn [i f] (:time f)
                               (when-let [path (:path f)]
                                 (let [full-path   (util/node-path.join (config/get-repo-dir current-repo) path)
-                                      page-name   (db/get-file-page full-path)]
+                                      page-name   (file-model/get-file-page full-path)]
                                   {:title [:div.files-history.cursor-pointer
                                            {:key      i :class (when (= i 0) "is-first")
                                             :on-click (fn []

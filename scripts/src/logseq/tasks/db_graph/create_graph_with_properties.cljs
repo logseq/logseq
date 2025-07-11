@@ -4,9 +4,9 @@
    NOTE: This script is also used in CI to confirm graph creation works"
   (:require ["fs" :as fs]
             ["fs-extra$default" :as fse]
-            ["os" :as os]
             ["path" :as node-path]
             [babashka.cli :as cli]
+            [cljs.pprint :as pprint]
             [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -14,6 +14,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.cli :as outliner-cli]
             [nbb.classpath :as cp]
@@ -89,7 +90,9 @@
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
         ;; Block property blocks and queries
-        {:page {:block/title "Block Properties"}
+        {:page {:block/title "Block Properties"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all the combinations of property types and single/multiple values that are possible."}}
          :blocks
          [{:block/title "default property block" :build/properties {:default "haha"}}
           {:block/title "default property block" :build/properties {:default-many #{"yee" "haw" "sir"}}}
@@ -108,7 +111,9 @@
           {:block/title "date-many property block" :build/properties {:date-many #{[:build/page {:build/journal today-int}]
                                                                                    [:build/page {:build/journal yesterday-int}]}}}
           {:block/title "datetime property block" :build/properties {:datetime timestamp}}]}
-        {:page {:block/title "Property Queries"}
+        {:page {:block/title "Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for a specific value. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default \"haha\")")
           (query "(property default-many \"haw\")")
@@ -146,7 +151,9 @@
                                                                               [:build/page {:build/journal yesterday-int}]}}}}
         {:page {:block/title "datetime page" :build/properties {:datetime timestamp}}}
 
-        {:page {:block/title "Has Property Queries"}
+        {:page {:block/title "Has Property Queries"
+                :build/properties
+                {:logseq.property/description "This page demonstrates all property type combinations being queried for having a specific property. There should be 2 results for each query, one block and one page."}}
          :blocks
          [(query "(property default)")
           (query "(property default-many)")
@@ -190,6 +197,8 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :file {:alias :f
+          :desc "File to save generated sqlite.build EDN"}
    :config {:alias :c
             :coerce edn/read-string
             :desc "EDN map to add to config.edn"}})
@@ -201,21 +210,23 @@
             (println (str "Usage: $0 GRAPH-NAME [OPTIONS]\nOptions:\n"
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
-        [dir db-name] (if (string/includes? graph-dir "/")
-                        ((juxt node-path/dirname node-path/basename) graph-dir)
-                        [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        db-path (node-path/join dir db-name "db.sqlite")
-        _ (when (fs/existsSync db-path)
+        init-conn-args (sqlite-cli/->open-db-args graph-dir)
+        db-name (if (= 1 (count init-conn-args)) (first init-conn-args) (second init-conn-args))
+        db-path (apply node-path/join init-conn-args)
+        ;; Only remove the directory if the directory is being overwritten
+        _ (when (and (= 2 (count init-conn-args)) (fs/existsSync db-path))
             (fse/removeSync db-path))
-        conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
-                                                  :classpath (cp/get-classpath)})
-        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
+        conn (apply outliner-cli/init-conn
+                    (conj init-conn-args {:additional-config (:config options)
+                                          :classpath (cp/get-classpath)}))
+        init-data (create-init-data)
+        _ (when (:file options) (fs/writeFileSync (:file options) (with-out-str (pprint/pprint init-data))))
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)
         existing-names (set (map :v (d/datoms @conn :avet :block/title)))
         conflicting-names (set/intersection existing-names (set (keep :block/title init-tx)))]
     (when (seq conflicting-names)
       (println "Error: Following names conflict -" (string/join "," conflicting-names))
       (js/process.exit 1))
-    (println "DB dir: " (node-path/join dir db-name))
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/title init-tx)) "blocks ...")
     (d/transact! conn init-tx)

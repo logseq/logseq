@@ -1,0 +1,39 @@
+@charset "utf-8";
+
+@import "packages/ui/src/radix.css";
+@import "packages/ui/src/radix-hsl.css";
+@import "packages/ui/src/vars-classic.css";
+@import "packages/ui/src/colors.css";
+@import "packages/ui/src/index.css";  /* Tailwind base imported here */
+@import "resources/css/shui.css";
+@import "inter-ui/inter.css";
+
+@import "photoswipe/dist/photoswipe.css";
+@import "packages/amplify/dist/amplify.css";
+@import "katex/dist/katex.min.css";
+@import "codemirror/lib/codemirror.css";
+@import "codemirror/theme/solarized.css";
+@import "resources/css/tabler-extension.css";
+@import "@tabler/icons-webfont/tabler-icons.min.css";
+@import "node_modules/@ionic/react/css/palettes/dark.class.css";
+@import "src/main/frontend/animations.css";
+@import "src/main/frontend/common.css";
+@import "src/main/frontend/ui.css";
+@import "src/main/frontend/components/icon.css";
+@import "src/main/frontend/mobile/index.css";
+@import "src/main/frontend/components/theme.css";
+@import "src/main/frontend/components/block.css";
+@import "src/main/frontend/components/property.css";
+@import "src/main/frontend/components/editor.css";
+@import "src/main/frontend/components/content.css";
+@import "src/main/frontend/components/datepicker.css";
+@import "src/main/frontend/components/views.css";
+@import "src/main/frontend/components/block/views.css";
+@import "src/main/frontend/components/journal.css";
+@import "src/main/frontend/components/user/login.css";
+@import "src/main/frontend/extensions/code.css";
+@import "src/main/frontend/components/file_sync.css";
+@import "src/main/frontend/components/table.css";
+@import "src/main/frontend/components/command_palette.css";
+
+@import-glob "src/main/mobile/**/[!_]*.css";

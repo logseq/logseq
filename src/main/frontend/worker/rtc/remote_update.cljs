@@ -440,11 +440,14 @@ so need to pull earlier remote-data from websocket."})
     (concat tx-data1 tx-data2)))
 
 (defn- remote-op-value->tx-data
-  [db ent op-value]
+  "ignore-attr-set: don't update local attrs in this set"
+  [db ent op-value ignore-attr-set]
   (assert (some? (:db/id ent)) ent)
   (let [db-schema (d/schema db)
         local-block-map (->> ent
-                             (filter (comp update-op-watched-attr? first))
+                             (filter (fn [[attr _]]
+                                       (and (update-op-watched-attr? attr)
+                                            (not (contains? ignore-attr-set attr)))))
                              (keep (fn [[k v]]
                                      (when-let [[ref? card-many?] (get-schema-ref+cardinality db-schema k)]
                                        [k
@@ -496,7 +499,8 @@ so need to pull earlier remote-data from websocket."})
           (upsert-whiteboard-block repo conn op-value)
           (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
                 (ldb/transact! conn schema-tx-data {:persist-op? false :gen-undo-ops? false}))
-              (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)))]
+              (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)
+                                                                rtc-const/ignore-attrs-when-syncing))]
                 (ldb/transact! conn (concat tx-data update-block-order-tx-data)
                                {:persist-op? false :gen-undo-ops? false}))))))))
 
@@ -519,7 +523,8 @@ so need to pull earlier remote-data from websocket."})
     (let [r (check-block-pos @conn self parents block-order)]
       (case r
         :not-exist
-        (insert-or-move-block repo conn self parents block-order false op-value)
+        (do (insert-or-move-block repo conn self parents block-order false op-value)
+            (update-block-attrs repo conn self op-value))
         :wrong-pos
         (insert-or-move-block repo conn self parents block-order true op-value)
         ;; else

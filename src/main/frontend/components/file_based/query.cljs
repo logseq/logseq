@@ -1,6 +1,6 @@
 (ns frontend.components.file-based.query
-  (:require [frontend.components.query.result :as query-result]
-            [frontend.components.file-based.query-table :as query-table]
+  (:require [frontend.components.file-based.query-table :as query-table]
+            [frontend.components.query.result :as query-result]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
@@ -10,28 +10,23 @@
 
 (rum/defc query-refresh-button
   [query-time {:keys [on-pointer-down full-text-search?]}]
-  (ui/tippy
-   {:html  [:div
-            [:p
-             (if full-text-search?
-               [:span "Full-text search results will not be refreshed automatically."]
-               [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
-            [:p
-             "Click the refresh button instead if you want to see the latest result."]]
-    :interactive     true
-    :popperOptions   {:modifiers {:preventOverflow
-                                  {:enabled           true
-                                   :boundariesElement "viewport"}}}
-    :arrow true}
+  (ui/tooltip
    [:a.fade-link.flex
     {:on-pointer-down on-pointer-down}
-    (ui/icon "refresh" {:style {:font-size 20}})]))
+    (ui/icon "refresh" {:style {:font-size 20}})]
+   [:div
+    [:p
+     (if full-text-search?
+       [:span "Full-text search results will not be refreshed automatically."]
+       [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
+    [:p
+     "Click the refresh button instead if you want to see the latest result."]]))
 
 ;; Custom query header only used by file graphs
 (rum/defc custom-query-header
   [{:keys [dsl-query?] :as config}
    {:keys [title query] :as q}
-   {:keys [collapsed? result table? current-block view-f page-list? query-error-atom]}]
+   {:keys [collapsed? *result result table? current-block view-f page-list? query-error-atom]}]
   (let [dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
@@ -82,4 +77,4 @@
            (query-refresh-button query-time {:full-text-search? full-text-search?
                                              :on-pointer-down (fn [e]
                                                                 (util/stop e)
-                                                                (query-result/trigger-custom-query! config q query-error-atom (fn [])))}))]])]))
+                                                                (query-result/run-custom-query config q *result query-error-atom))}))]])]))

@@ -168,7 +168,8 @@
                (-> r
                    (update block-uuid assoc :remove :retract)
                    (update-in [block-uuid :update] (fn [old-op]
-                                                     (if old-op
+                                                     (if (and old-op
+                                                              (not (keyword-identical? :retract old-op)))
                                                        (merge-update-ops old-op op)
                                                        op))))
                :remove
@@ -454,6 +455,21 @@
     (let [ent (d/entity @conn [:block/uuid asset-uuid])]
       (when-let [e (:db/id ent)]
         (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
+
+(defn create-pending-asset-ops-count-flow
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (let [datom-count-fn (fn [db] (count (get-all-asset-ops* db)))
+          db-updated-flow
+          (m/observe
+           (fn ctor [emit!]
+             (d/listen! conn :create-pending-asset-ops-count-flow #(emit! true))
+             (emit! true)
+             (fn dtor []
+               (d/unlisten! conn :create-pending-asset-ops-count-flow))))]
+      (m/ap
+        (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+          (datom-count-fn @conn))))))
 
 (defn reset-client-op-conn
   [repo]

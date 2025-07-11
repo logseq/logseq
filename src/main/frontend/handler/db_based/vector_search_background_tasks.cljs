@@ -3,7 +3,6 @@
   (:require [frontend.common.missionary :as c.m]
             [frontend.config :as config]
             [frontend.flows :as flows]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [missionary.core :as m]))
 
@@ -18,5 +17,4 @@
   (constantly nil)
   (m/ap
     (m/?> flows/current-repo-flow)
-    (when-let [^js worker @db-browser/*worker]
-      (c.m/<? (.vec-search-init-embedding-model worker (state/get-current-repo)))))))
+    (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-init-embedding-model (state/get-current-repo))))))

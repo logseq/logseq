@@ -25,7 +25,7 @@
   [blocks target-block opts]
   (op-transact!
    (let [id (:db/id target-block)]
-    [:insert-blocks [blocks id opts]])))
+     [:insert-blocks [blocks id opts]])))
 
 (defn delete-blocks!
   [blocks opts]
@@ -38,20 +38,20 @@
   [blocks target-block sibling?]
   (op-transact!
    (let [ids (map :db/id blocks)
-        target-id (:db/id target-block)]
-    [:move-blocks [ids target-id sibling?]])))
+         target-id (:db/id target-block)]
+     [:move-blocks [ids target-id sibling?]])))
 
 (defn move-blocks-up-down!
   [blocks up?]
   (op-transact!
    (let [ids (map :db/id blocks)]
-    [:move-blocks-up-down [ids up?]])))
+     [:move-blocks-up-down [ids up?]])))
 
 (defn indent-outdent-blocks!
   [blocks indent? & {:as opts}]
   (op-transact!
    (let [ids (map :db/id blocks)]
-    [:indent-outdent-blocks [ids indent? opts]])))
+     [:indent-outdent-blocks [ids indent? opts]])))
 
 (defn upsert-property!
   [property-id schema property-opts]
@@ -79,9 +79,9 @@
    [:create-property-text-block [block-id property-id value opts]]))
 
 (defn batch-set-property!
-  [block-ids property-id value]
+  [block-ids property-id value opts]
   (op-transact!
-   [:batch-set-property [block-ids property-id value]]))
+   [:batch-set-property [block-ids property-id value opts]]))
 
 (defn batch-remove-property!
   [block-ids property-id]

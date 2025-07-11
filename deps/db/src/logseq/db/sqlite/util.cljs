@@ -6,16 +6,14 @@
             [datascript.core]
             [datascript.impl.entity :as de]
             [datascript.transit :as dt]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
-            [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defonce db-version-prefix "logseq_db_")
-(defonce file-version-prefix "logseq_local_")
 
 (def ^:private write-handlers (cljs-bean.transit/writer-handlers))
 (def ^:private read-handlers {})
@@ -43,6 +41,7 @@
       (try (transit/write writer o)
            (catch :default e
              (prn ::write-transit-str o)
+             (js/console.trace)
              (throw e))))))
 
 (def read-transit-str
@@ -50,24 +49,13 @@
                                    "datascript/Entity" identity)
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
-    (fn read-transit-str* [s] (transit/read reader s))))
+    (fn read-transit-str* [s]
+      (transit/read reader s))))
 
 (defn db-based-graph?
   [graph-name]
   (when graph-name
     (string/starts-with? graph-name db-version-prefix)))
-
-(defn local-file-based-graph?
-  [s]
-  (and (string? s)
-       (string/starts-with? s file-version-prefix)))
-
-(defn get-schema
-  "Returns schema for given repo"
-  [repo]
-  (if (db-based-graph? repo)
-    db-schema/schema
-    file-schema/schema))
 
 (def block-with-timestamps common-util/block-with-timestamps)
 
@@ -78,7 +66,6 @@
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
   ([db-ident prop-schema {:keys [title block-uuid ref-type? properties]}]
-   (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
@@ -112,17 +99,20 @@
    (cond-> (merge block
                   {:block/tags (set (conj (:block/tags block) :logseq.class/Tag))})
      (and (not= (:db/ident block) :logseq.class/Root)
-          (nil? (:logseq.property/parent block)))
-     (assoc :logseq.property/parent :logseq.class/Root))))
+          (nil? (:logseq.property.class/extends block)))
+     (assoc :logseq.property.class/extends :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
-  [page-name]
+  [title]
   (block-with-timestamps
-   {:block/name (common-util/page-name-sanity-lc page-name)
-    :block/title page-name
-    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid page-name)
-    :block/tags #{:logseq.class/Page}}))
+   (cond->
+    {:block/name (common-util/page-name-sanity-lc title)
+     :block/title title
+     :block/uuid (common-uuid/gen-uuid :builtin-block-uuid title)
+     :block/tags #{:logseq.class/Page}}
+     (contains? #{common-config/quick-add-page-name} title)
+     (assoc :logseq.property/hide? true))))
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under

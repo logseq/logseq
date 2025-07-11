@@ -1,6 +1,7 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs-time.core :as t]
+  (:require ["path" :as node-path]
+            [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
             [frontend.components.onboarding.setups :as setups]
@@ -10,14 +11,14 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.handler.file-based.import :as file-import-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
+            [frontend.handler.db-based.import :as db-import-handler]
+            [frontend.handler.file-based.import :as file-import-handler]
             [frontend.handler.import :as import-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.hooks :as hooks]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -26,11 +27,14 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.form.core :as form-core]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -44,10 +48,10 @@
   []
   (notification/show! "Import finished!" :success)
   (shui/dialog-close! :import-indicator)
-  (state/clear-async-query-state!)
-  (ui-handler/re-render-root!)
   (route-handler/redirect-to-home!)
-  (js/setTimeout ui-handler/re-render-root! 500))
+  (if util/web-platform?
+    (js/window.location.reload)
+    (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- roam-import-handler
   [e]
@@ -70,7 +74,7 @@
                           :error))))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? debug-transit? graph-name]}]
+  [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
   (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
@@ -91,7 +95,7 @@
             (set! (.-onload reader)
                   (fn []
                     (let [buffer (.-result ^js reader)]
-                      (import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
+                      (db-import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
                       (shui/dialog-close!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
@@ -99,7 +103,7 @@
                                        (js/console.error e)))
             (.readAsArrayBuffer reader file))))
 
-      debug-transit?
+      (or debug-transit? db-edn?)
       (let [graph-name (string/trim graph-name)]
         (cond
           (string/blank? graph-name)
@@ -112,7 +116,9 @@
           (do
             (state/set-state! :graph/importing :logseq)
             (let [reader (js/FileReader.)
-                  import-f import-handler/import-from-debug-transit!]
+                  import-f (if db-edn?
+                             db-import-handler/import-from-edn-file!
+                             db-import-handler/import-from-debug-transit!)]
               (set! (.-onload reader)
                     (fn [e]
                       (let [text (.. e -target -result)]
@@ -121,7 +127,9 @@
                          text
                          #(do
                             (state/set-state! :graph/importing nil)
-                            (finished-cb))))))
+                            (finished-cb)
+                            ;; graph input not closing
+                            (shui/dialog-close-all!))))))
               (.readAsText reader file)))))
 
       (or edn? json?)
@@ -292,6 +300,13 @@
                         :info false)
     (log/error :import-ignored-files {:msg (str "Import ignored " (count ignored-files) " file(s)")})
     (pprint/pprint ignored-files))
+  (when-let [ignored-assets (seq @(:ignored-assets import-state))]
+    (notification/show! (str "Import ignored " (count ignored-assets) " "
+                             (if (= 1 (count ignored-assets)) "asset" "assets")
+                             ". See the javascript console for more details.")
+                        :info false)
+    (log/error :import-ignored-assets {:msg (str "Import ignored " (count ignored-assets) " asset(s)")})
+    (pprint/pprint ignored-assets))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
     (notification/show!
      [:.mb-2
@@ -333,14 +348,32 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
-(defn- copy-asset [repo repo-dir file]
+(defn- read-asset [file assets]
   (-> (.arrayBuffer (:file-object file))
       (p/then (fn [buffer]
+                (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+                  (swap! assets assoc
+                         (gp-exporter/asset-path->name (:path file))
+                         {:size (.-size (:file-object file))
+                          :checksum checksum
+                          :type (db-asset/asset-path->type (:path file))
+                          :path (:path file)
+                          ;; Save buffer to avoid reading asset twice
+                          ::array-buffer buffer}))))))
+
+(defn- copy-asset [repo repo-dir asset-m]
+  (-> (::array-buffer asset-m)
+      (p/then (fn [buffer]
                 (let [content (js/Uint8Array. buffer)
-                      parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
+                      assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
                   (p/do!
-                   (fs/mkdir-if-not-exists parent-dir)
-                   (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
+                   (fs/mkdir-if-not-exists assets-dir)
+                   (if (:block/uuid asset-m)
+                     (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})
+                     (do
+                       (println "Copied asset" (pr-str (node-path/basename (:path asset-m)))
+                                "by its name since it was unused.")
+                       (fs/write-plain-text-file! repo assets-dir (node-path/basename (:path asset-m)) content {:skip-transact? true})))))))))
 
 (defn- import-file-graph
   [*files
@@ -365,12 +398,12 @@
                    ;; config file options
                    :default-config config/config-default-content
                    :<save-config-file (fn save-config-file [_ path content]
-                                        (let [migrated-content (repo-handler/migrate-db-config content)]
-                                          (db-editor-handler/save-file! path migrated-content)))
+                                        (db-editor-handler/save-file! path content))
                    ;; logseq file options
                    :<save-logseq-file (fn save-logseq-file [_ path content]
                                         (db-editor-handler/save-file! path content))
                    ;; asset file options
+                   :<read-asset read-asset
                    :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
@@ -378,7 +411,7 @@
                                   (let [tx-reports
                                         (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
                                     (doseq [tx-report tx-reports]
-                                      (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))))}
+                                      (db-browser/transact! repo (:tx-data tx-report) (:tx-meta tx-report)))))}
           {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
     (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
     (state/set-state! :graph/importing nil)
@@ -449,7 +482,7 @@
    [importing?])
   [:<>])
 
-(rum/defc importer < rum/reactive
+(rum/defc ^:large-vars/cleanup-todo importer < rum/reactive
   [{:keys [query-params]}]
   (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))
         importing? (state/sub :graph/importing)]
@@ -497,8 +530,6 @@
              [:span.flex.flex-col
               [[:strong "Debug Transit"]
                [:small "Import debug transit file into a new DB graph"]]]
-             ;; Test form style changes
-             #_[:a.button {:on-click #(import-file-to-db-handler nil {:import-graph-fn js/alert})} "Open"]
              [:input.absolute.hidden
               {:id "import-debug-transit"
                :type "file"
@@ -506,11 +537,24 @@
                             (shui/dialog-open!
                              #(set-graph-name-dialog e {:debug-transit? true})))}]])
 
+          (when (or (util/electron?) util/web-platform?)
+            [:label.action-input.flex.items-center.mx-2.my-2
+             [:span.as-flex-center [:i (svg/logo 28)]]
+             [:span.flex.flex-col
+              [[:strong "EDN to DB graph"]
+               [:small "Import a DB graph's EDN export into a new DB graph"]]]
+             [:input.absolute.hidden
+              {:id "import-db-edn"
+               :type "file"
+               :on-change (fn [e]
+                            (shui/dialog-open!
+                             #(set-graph-name-dialog e {:db-edn? true})))}]])
+
           (when (and (util/electron?) support-file-based?)
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
-              [[:strong "EDN / JSON"]
+              [[:strong "EDN / JSON to plain text graph"]
                [:small (t :on-boarding/importing-lsq-desc)]]]
              [:input.absolute.hidden
               {:id "import-lsq"

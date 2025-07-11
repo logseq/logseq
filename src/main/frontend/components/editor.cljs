@@ -1,6 +1,5 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
-            [datascript.impl.entity :as de]
             [dommy.core :as dom]
             [frontend.commands :as commands :refer [*matched-commands]]
             [frontend.components.file-based.datetime :as datetime-comp]
@@ -10,6 +9,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.block :as block-handler]
@@ -19,7 +19,6 @@
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.search :refer [fuzzy-search]]
             [frontend.state :as state]
@@ -34,10 +33,13 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]))
+
+(defonce no-matched-commands [["No matched commands" [[:editor/move-cursor-to-end]]]])
 
 (defn filter-commands
   [page? commands]
@@ -46,7 +48,7 @@
               (or
                (= "Add new property" (first item))
                (when (= (count item) 5)
-                 (contains? #{"TASK" "PRIORITY"} (last item))))) commands)
+                 (contains? #{"TASK STATUS" "TASK DATE" "PRIORITY"} (last item))))) commands)
     commands))
 
 (rum/defcs commands < rum/reactive
@@ -57,63 +59,59 @@
         _ (when (state/get-editor-action)
             (reset! *matched matched'))
         page? (db/page? (db/entity (:db/id (state/get-edit-block))))
-        matched (filter-commands page? @*matched)]
+        matched (or (filter-commands page? @*matched) no-matched-commands)
+        filtered? (not= matched @commands/*initial-commands)]
     (ui/auto-complete
      matched
-     {:get-group-name
-      (fn [item]
-        (when (= (count item) 5) (last item)))
+     (cond->
+      {:item-render
+       (fn [item]
+         (let [command-name (first item)
+               command-doc (get item 2)
+               plugin-id (get-in item [1 1 1 :pid])
+               doc (when (state/show-command-doc?) command-doc)
+               options (some-> item (get 3))
+               icon-name (some-> (if (map? options) (:icon options) options) (name))
+               command-name (if icon-name
+                              [:span.flex.items-center.gap-1
+                               (shui/tabler-icon icon-name)
+                               [:strong.font-normal command-name]]
+                              command-name)]
+           (cond
+             (or plugin-id (vector? doc))
+             [:div.has-help
+              {:title plugin-id}
+              command-name
+              (when doc (ui/tooltip [:small (svg/help-circle)] doc))]
 
-      :item-render
-      (fn [item]
-        (let [command-name (first item)
-              command-doc (get item 2)
-              plugin-id (get-in item [1 1 1 :pid])
-              doc (when (state/show-command-doc?) command-doc)
-              options (some-> item (get 3))
-              icon-name (some-> (if (map? options) (:icon options) options) (name))
-              command-name (if icon-name
-                             [:span.flex.items-center.gap-1
-                              (shui/tabler-icon icon-name)
-                              [:strong.font-normal command-name]]
-                             command-name)]
-          (cond
-            (or plugin-id (vector? doc))
-            [:div.has-help
-             {:title plugin-id}
-             command-name
-             (when doc (ui/tippy
-                        {:html doc
-                         :interactive true
-                         :fixed-position? true
-                         :position "right"}
+             (string? doc)
+             [:div {:title doc}
+              command-name]
 
-                        [:small (svg/help-circle)]))]
+             :else
+             [:div command-name])))
 
-            (string? doc)
-            [:div {:title doc}
-             command-name]
-
-            :else
-            [:div command-name])))
-
-      :on-chosen
-      (fn [chosen-item]
-        (let [command (first chosen-item)]
-          (reset! commands/*current-command command)
-          (let [command-steps (get (into {} matched) command)
-                restore-slash? (or
-                                (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
-                                (and
-                                 (not (fn? command-steps))
-                                 (not (contains? (set (map first command-steps)) :editor/input))
-                                 (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
-            (editor-handler/insert-command! id command-steps
-                                            format
-                                            {:restore? restore-slash?
-                                             :command command}))))
-      :class
-      "cp__commands-slash"})))
+       :on-chosen
+       (fn [chosen-item]
+         (let [command (first chosen-item)]
+           (reset! commands/*current-command command)
+           (let [command-steps (get (into {} matched) command)
+                 restore-slash? (or
+                                 (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
+                                 (and
+                                  (not (fn? command-steps))
+                                  (not (contains? (set (map first command-steps)) :editor/input))
+                                  (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+             (editor-handler/insert-command! id command-steps
+                                             format
+                                             {:restore? restore-slash?
+                                              :command command}))))
+       :class
+       "cp__commands-slash"}
+       (not filtered?)
+       (assoc :get-group-name
+              (fn [item]
+                (when (= (count item) 5) (last item))))))))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
@@ -126,7 +124,7 @@
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)
                 _ (when-not page (page-handler/<create! chosen-item {:redirect? false
-                                                                     :create-first-block? false}))
+                                                                     :reference? true}))
                 page' (db/get-page chosen-item)
                 current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
@@ -136,46 +134,64 @@
                                                  :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id pos format)))
 
+(defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
+  (if (or
+       (db/page-exists? q (if db-tag?
+                            #{:logseq.class/Tag}
+                            ;; Page existence here should be the same as entity-util/page?.
+                            ;; Don't show 'New page' if a page has any of these tags
+                            db-class/page-classes))
+       (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+    partial-matched-pages
+    (if db-tag?
+      (concat
+       ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
+       (when-not (let [entity (db/get-page q)]
+                   (and (ldb/internal-page? entity) (= (:block/title entity) q)))
+         [{:block/title (str (t :new-tag) " " q)}])
+       partial-matched-pages)
+      (cons {:block/title (str (t :new-page) " " q)}
+            partial-matched-pages))))
+
+(defn- search-pages
+  [q db-tag? db-based? set-matched-pages!]
+  (when-not (string/blank? q)
+    (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
+            result (if db-tag?
+                     (let [classes (editor-handler/get-matched-classes q)]
+                       (if (and (ldb/internal-page? block)
+                                (= (:block/title block) q))
+                         (cons {:block/title (util/format "Convert \"%s\" to tag" q)
+                                :db/id (:db/id block)
+                                :block/uuid (:block/uuid block)
+                                :convert-page-to-tag? true} classes)
+                         classes))
+                     (editor-handler/<get-matched-blocks q {:nlp-pages? true
+                                                            :page-only? (not db-based?)}))]
+      (set-matched-pages! result))))
+
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
-  (let [db? (config/db-based-graph? (state/get-current-repo))
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
         q (string/trim q)
         [matched-pages set-matched-pages!] (rum/use-state nil)
-        search-f (fn []
-                   (when-not (string/blank? q)
-                     (p/let [result (if db-tag?
-                                      (editor-handler/get-matched-classes q)
-                                      (editor-handler/<get-matched-blocks q {:nlp-pages? true}))]
-                       (set-matched-pages! result))))]
-    (hooks/use-effect! search-f [(hooks/use-debounced-value q 50)])
+        search-f #(search-pages q db-tag? db-based? set-matched-pages!)]
+    (hooks/use-effect! search-f [(hooks/use-debounced-value q 150)])
 
     (let [matched-pages' (if (string/blank? q)
-                           (if db-tag?
-                             (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                             (->> (map (fn [title] {:block/title title
-                                                    :nlp-date? true})
-                                       date/nlp-pages)
-                                  (take 10)))
+                           (when db-based?
+                             (if db-tag?
+                               (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                               (->> (map (fn [title] {:block/title title
+                                                      :nlp-date? true})
+                                         date/nlp-pages)
+                                    (take 10))))
                            ;; reorder, shortest and starts-with first.
-                           (let [matched-pages-with-new-page
-                                 (fn [partial-matched-pages]
-                                   (if (or (db/page-exists? q (if db-tag?
-                                                                #{:logseq.class/Tag}
-                                                                ;; Page existence here should be the same as entity-util/page?.
-                                                                ;; Don't show 'New page' if a page has any of these tags
-                                                                db-class/page-classes))
-                                           (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
-                                     partial-matched-pages
-                                     (if db-tag?
-                                       (concat [{:block/title (str (t :new-tag) " " q)}]
-                                               partial-matched-pages)
-                                       (cons {:block/title (str (t :new-page) " " q)}
-                                             partial-matched-pages))))]
-                             (if (and (seq matched-pages)
-                                      (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
-                               (cons (first matched-pages)
-                                     (matched-pages-with-new-page (rest matched-pages)))
-                               (matched-pages-with-new-page matched-pages))))]
+                           (if (and (seq matched-pages)
+                                    (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
+                             (cons (first matched-pages)
+                                   (matched-pages-with-new-page (rest matched-pages) db-tag? q))
+                             (matched-pages-with-new-page matched-pages db-tag? q)))]
       [:<>
        (ui/auto-complete
         matched-pages'
@@ -183,53 +199,61 @@
          :on-enter    (fn []
                         (page-handler/page-not-exists-handler input id q current-pos))
          :item-render (fn [block _chosen?]
-                        (let [block (if (and (:block/uuid block) (not (de/entity? block)))
-                                      (db/entity [:block/uuid (:block/uuid block)])
-                                      block)]
+                        (let [block' (if-let [id (:block/uuid block)]
+                                       (if-let [e (db/entity [:block/uuid id])]
+                                         (assoc e
+                                                :block/title (:block/title block)
+                                                :alias (:alias block))
+                                         block)
+                                       block)]
                           [:div.flex.flex-col
-                           (when-not (db/page? block)
+                           (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
                              (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block) {})]))
-                           [:div.flex.flex-row.items-center.gap-1
-                            (when-not db-tag?
-                              [:div.flex.items-center
+                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block') {})]))
+                           [:div.flex.flex-row.items-start
+                            (when-not (or db-tag? (not db-based?))
+                              [:div.flex.items-center.h-5.mr-1.opacity-50
                                (cond
-                                 (:nlp-date? block)
+                                 (:nlp-date? block')
                                  (ui/icon "calendar" {:size 14})
 
-                                 (ldb/class? block)
+                                 (ldb/class? block')
                                  (ui/icon "hash" {:size 14})
 
-                                 (ldb/property? block)
+                                 (ldb/property? block')
                                  (ui/icon "letter-p" {:size 14})
 
-                                 (db-model/whiteboard-page? block)
-                                 (ui/icon "whiteboard" {:extension? true})
+                                 (db-model/whiteboard-page? block')
+                                 (ui/icon "writing" {:size 14})
 
-                                 (db/page? block)
-                                 (ui/icon "page" {:extension? true})
+                                 (or (ldb/page? block') (:page? block))
+                                 (ui/icon "file" {:size 14})
 
-                                 (or (string/starts-with? (str (:block/title block)) (t :new-tag))
-                                     (string/starts-with? (str (:block/title block)) (t :new-page)))
+                                 (or (string/starts-with? (str (:block/title block')) (t :new-tag))
+                                     (string/starts-with? (str (:block/title block')) (t :new-page)))
                                  (ui/icon "plus" {:size 14})
 
                                  :else
                                  (ui/icon "letter-n" {:size 14}))])
 
-                            (let [title (if db-tag?
-                                          (let [target (first (:block/_alias block))]
-                                            (if (ldb/class? target)
-                                              (str (:block/title block) " -> alias: " (:block/title target))
-                                              (:block/title block)))
-                                          (block-handler/block-unique-title block))]
-                              (search-handler/highlight-exact-query title q))]]))
+                            (let [title (let [alias (get-in block' [:alias :block/title])
+                                              title (if (and db-based? (not (ldb/built-in? block')))
+                                                      (block-handler/block-unique-title block')
+                                                      (:block/title block'))]
+                                          (if alias
+                                            (str title " -> alias: " alias)
+                                            title))]
+                              (if (or (string/starts-with? title (t :new-tag))
+                                      (string/starts-with? title (t :new-page)))
+                                title
+                                (search-handler/highlight-exact-query title q)))]]))
          :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                     "Search for a tag"
                                                                     "Search for a node")]
          :class "black"})
 
-       (when (and db? db-tag? (not (string/blank? q)))
+       (when (and db-based? db-tag? (not (string/blank? q)))
          [:p.px-1.opacity-50.text-sm
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))
@@ -352,11 +376,11 @@
 
 (rum/defc template-search-aux
   [id q]
-  (let [db-based? (config/db-based-graph?)
-        [matched-templates set-matched-templates!] (rum/use-state nil)]
+  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
     (hooks/use-effect! (fn []
                          (p/let [result (editor-handler/<get-matched-templates q)]
-                           (set-matched-templates! result)))
+                           (set-matched-templates!
+                            (sort-by :block/title result))))
                        [q])
     (ui/auto-complete
      matched-templates
@@ -364,7 +388,7 @@
       :on-enter    (fn [_state] (state/clear-editor-action!))
       :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
       :item-render (fn [template]
-                     (if db-based? (:block/title template) (:template template)))
+                     (:block/title template))
       :class       "black"})))
 
 (rum/defc template-search < rum/reactive
@@ -735,6 +759,9 @@
       (and (= type :esc) (editor-handler/editor-commands-popup-exists?))
       nil
 
+      (state/editor-in-composition?)
+      nil
+
       (or (contains?
            #{:commands :page-search :page-search-hashtag :block-search :template-search
              :property-search :property-value-search :datepicker}
@@ -750,6 +777,8 @@
       ;; exit editing mode
       :else
       (let [select? (= type :esc)]
+        (when (.closest (.-target e) ".block-content")
+          (util/mobile-keep-keyboard-open))
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
@@ -797,6 +826,7 @@
                                       (when (= (util/ekey e) "Escape")
                                         (editor-on-hide state :esc e))))
                :auto-focus true
+               :auto-capitalize "off"
                :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))

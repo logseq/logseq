@@ -5,7 +5,6 @@
             ["emoji-mart" :as emoji-mart]
             ["react-intersection-observer" :as react-intersection-observer]
             ["react-textarea-autosize" :as TextareaAutosize]
-            ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-virtuoso" :refer [Virtuoso VirtuosoGrid]]
             [cljs-bean.core :as bean]
@@ -18,7 +17,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
@@ -32,6 +30,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.icon.v2 :as shui.icon.v2]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
@@ -40,6 +39,7 @@
             [rum.core :as rum]))
 
 (declare icon)
+(declare tooltip)
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -47,13 +47,12 @@
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
-(defonce icon-size (if (mobile-util/native-platform?) 26 20))
+(defonce icon-size (if (mobile-util/native-platform?) 24 20))
 
 (defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
 (defn last-shui-preview-popup?
@@ -62,9 +61,11 @@
      (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
-  (while (and (shui-popups?)
-              (not (last-shui-preview-popup?)))
-    (shui/popup-hide!)))
+  (if (util/mobile?)
+    (shui/popup-hide!)
+    (while (and (shui-popups?)
+                (not (last-shui-preview-popup?)))
+      (shui/popup-hide!))))
 
 (def built-in-colors
   ["yellow"
@@ -105,8 +106,6 @@
   {:did-mount (fn [state]
                 (let [^js el (rum/dom-node state)
                       *mouse-point (volatile! nil)]
-                  ;; Passing aria-label as a prop to TextareaAutosize removes the dash
-                  (.setAttribute el "aria-label" "editing block")
                   (doto el
                     (.addEventListener "select"
                                        #(let [start (util/get-selection-start el)
@@ -137,6 +136,7 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
+                     "data-testid" "block editor"
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
@@ -313,12 +313,13 @@
            [:div.flex-shrink-0.pt-2
             svg]
            [:div.ml-3.w-0.flex-1.pt-2
+
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
             (button
-             {:button-props {:aria-label "Close"}
+             {:button-props {"aria-label" "Close"}
               :variant :ghost
               :class "hover:bg-transparent hover:text-foreground scale-90"
               :on-click (fn []
@@ -396,7 +397,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content-container"))
+  (util/app-scroll-container-node))
 
 (defn focus-element
   [element]
@@ -709,14 +710,14 @@
 (rum/defc block-error
   "Well styled error message for blocks"
   [title {:keys [content section-attrs]}]
-  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+  [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui.w-full
    section-attrs
    [:div.flex.justify-between.items-center.px-1
     [:h5.text-error.pb-1 title]
     [:a.text-xs.opacity-50.hover:opacity-80
      {:href "https://github.com/logseq/logseq/issues/new?labels=from:in-app&template=bug_report.yaml"
       :target "_blank"} "report issue"]]
-   (when content [:pre.m-0.text-sm content])])
+   (when content [:pre.m-0.text-sm (str content)])])
 
 (def component-error
   "Well styled error message for higher level components. Currently same as
@@ -789,45 +790,6 @@
           :on-change on-item-change
           :checked selected}]
         label])]))
-
-(rum/defcs tippy < rum/static
-  (rum/local false ::mounted?)
-  [state {:keys [fixed-position? open? html] :as opts} child]
-  (let [*mounted? (::mounted? state)
-        manual (not= open? nil)
-        open? (if manual open? @*mounted?)
-        disabled? (not (state/enable-tooltip?))]
-    (Tippy (->
-            (merge {:arrow true
-                    :sticky true
-                    :delay 600
-                    :theme "customized"
-                    :disabled disabled?
-                    :unmountHTMLWhenHide true
-                    :open (if disabled? false open?)
-                    :trigger (if manual "manual" "mouseenter focus")
-                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
-                    :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
-                                                :hide {:enabled false}
-                                                :preventOverflow {:enabled false}}}
-                    :onShow #(when-not (or (state/editing?)
-                                           @(:ui/scrolling? @state/state))
-                               (reset! *mounted? true))
-                    :onHide #(reset! *mounted? false)}
-                   opts)
-            (assoc :html (or
-                          (when open?
-                            (try
-                              (when html
-                                (if (fn? html)
-                                  (html)
-                                  [:div.px-2.py-1
-                                   html]))
-                              (catch :default e
-                                (log/error :exception e)
-                                [:div])))
-                          [:div {:key "tippy"} ""])))
-           (rum/fragment {:key "tippy-children"} child))))
 
 (rum/defcs slider < rum/reactive
   {:init (fn [state]
@@ -910,18 +872,13 @@
 
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
-  [shortcut-key position content]
+  [shortcut-key _position content]
   (let [shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         enabled-tooltip? (state/enable-tooltip?)]
     (if (and enabled-tooltip? shortcut-tooltip?)
-      (tippy
-       {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
-        :interactive true
-        :position    position
-        :theme       "monospace"
-        :delay       [1000, 100]
-        :arrow       true}
-       content)
+      (tooltip content
+               [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+               {:trigger-props {:as-child true}})
       content)))
 
 (rum/defc progress-bar
@@ -947,7 +904,7 @@
   [:div {:style {:height height}}])
 
 (rum/defc lazy-visible-inner
-  [visible? content-fn ref fade-in?]
+  [visible? content-fn ref fade-in? placeholder]
   (let [[set-ref rect] (r/use-bounding-client-rect)
         placeholder-height (or (when rect (.-height rect)) 24)]
     [:div.lazy-visibility {:ref ref}
@@ -960,12 +917,12 @@
                       (.add cls "fade-enter-active"))}
              (content-fn)]
             (content-fn)))
-        (lazy-loading-placeholder placeholder-height))]]))
+        (or placeholder (lazy-loading-placeholder placeholder-height)))]]))
 
 (rum/defc lazy-visible
   ([content-fn]
    (lazy-visible content-fn nil))
-  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin _debug-id]
+  ([content-fn {:keys [initial-state trigger-once? fade-in? root-margin placeholder _debug-id]
                 :or {initial-state false
                      trigger-once? true
                      fade-in? true
@@ -975,10 +932,9 @@
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? _entry]
-                                                 (when-not (= in-view? visible?)
-                                                   (set-visible! in-view?)))})
+                                                 (set-visible! in-view?))})
          ref (.-ref inViewState)]
-     (lazy-visible-inner visible? content-fn ref fade-in?))))
+     (lazy-visible-inner visible? content-fn ref fade-in? placeholder))))
 
 (rum/defc menu-heading
   ([add-heading-fn auto-heading-fn rm-heading-fn]
@@ -1019,11 +975,14 @@
       :small? true)]]))
 
 (rum/defc tooltip
-  [trigger tooltip-content & {:keys [trigger-props]}]
+  [trigger tooltip-content & {:keys [portal? root-props trigger-props content-props]}]
   (shui/tooltip-provider
-   (shui/tooltip
-    (shui/tooltip-trigger trigger-props trigger)
-    (shui/tooltip-content tooltip-content))))
+   (shui/tooltip root-props
+                 (shui/tooltip-trigger (merge {:as-child true} trigger-props) trigger)
+                 (if (not (false? portal?))
+                   (shui/tooltip-portal
+                    (shui/tooltip-content content-props tooltip-content))
+                   (shui/tooltip-content content-props tooltip-content)))))
 
 (rum/defc DelDateButton
   [on-delete]

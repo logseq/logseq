@@ -67,6 +67,41 @@
   {:call-count @*fn-symbol->key->call-count
    :time-sum @*fn-symbol->key->time-sum})
 
+(def ^:private *ref-hash->coll-size (volatile! {}))
+(def ^:private *ref-hash->watches-count (volatile! {}))
+(def ^:private *ref-hash->ref (volatile! {}))
+
+(defn mem-leak-detect
+  "Add monitor on Atom/Volatile.
+  Show atoms/volatiles contains huge collections.
+  Show atoms have a huge number of watchers"
+  [& {:keys [data-count-threshold watches-count-threshold]
+      :or {data-count-threshold 5000 watches-count-threshold 1000}}]
+  (register-fn! 'cljs.core/reset!
+                :custom-key-fn (fn [[ref _] newval]
+                                 (let [coll-size (and (coll? newval) (count newval))
+                                       *ref-hash (delay (hash ref))]
+                                   (when (> coll-size data-count-threshold)
+                                     (vswap! *ref-hash->coll-size assoc @*ref-hash coll-size)
+                                     (vswap! *ref-hash->ref assoc @*ref-hash ref))
+                                   (let [watches-count (count (.-watches ^js ref))]
+                                     (when (> watches-count watches-count-threshold)
+                                       (vswap! *ref-hash->watches-count assoc @*ref-hash watches-count)
+                                       (vswap! *ref-hash->ref assoc @*ref-hash ref))))))
+  (register-fn! 'cljs.core/vreset!
+                :custom-key-fn (fn [[ref _] newval]
+                                 (let [coll-size (and (coll? newval) (count newval))
+                                       *ref-hash (delay (hash ref))]
+                                   (when (> coll-size data-count-threshold)
+                                     (vswap! *ref-hash->coll-size assoc @*ref-hash coll-size)
+                                     (vswap! *ref-hash->ref assoc @*ref-hash ref))))))
+
+(defn mem-leak-report
+  []
+  {:ref-hash->coll-size @*ref-hash->coll-size
+   :ref-hash->watches-count @*ref-hash->watches-count
+   :ref-hash->ref @*ref-hash->ref})
+
 (comment
   (register-fn! 'datascript.core/entity)
   (prn :profiling (keys @*fn-symbol->origin-fn))
@@ -83,4 +118,6 @@
 
   (register-fn! 'frontend.handler.profiler/test-fn-to-profile
                 :custom-key-fn (fn [args result] {:a args :r result}))
-  )
+
+  (mem-leak-detect)
+  [@*ref-hash->coll-size @*ref-hash->watches-count])

@@ -11,9 +11,9 @@
     &:first-child {
       @apply pt-0 min-h-[500px];
     }
+  }
 
-    &:last-child {
-      @apply border-none;
-    }
+  .journal-last-item {
+    @apply border-none;
   }
 }

@@ -13,6 +13,7 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.worker.db-listener :as worker-db-listener]
             [logseq.db :as ldb]
+            [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
@@ -514,6 +515,22 @@
                          (outliner-core/save-block! test-db (db/get-db test-db false)
                                                     (state/get-date-formatter)
                                                     block)))
+
+(deftest save-inline-tag
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
+        block (db-test/find-block-by-content @conn "test")
+        _ (outliner-core/save-block! "logseq_db_test" conn
+                                     "MMM do, yyyy"
+                                     {:block/uuid (:block/uuid block)
+                                      :block/refs '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Page]}),
+                                      :block/tags '({:block/name "audio", :block/title "audio", :block/uuid #uuid "6852be3e-6e80-4245-b72c-0d586f1fd007", :block/created-at 1750253118663, :block/updated-at 1750253118663, :block/tags [:logseq.class/Tag]}),
+                                      :block/title "test #[[6852be3e-6e80-4245-b72c-0d586f1fd007]]",
+                                      :db/id (:db/id block)})
+        audio-tag (ldb/get-page @conn "audio")]
+    (is (some? (:db/ident audio-tag)) "#audio doesn't have db/ident")
+    (is (= [:logseq.class/Tag] (map :db/ident (:block/tags audio-tag)))
+        "#audio has wrong tags")))
 
 (deftest save-test
   (load-test-files [{:file/path "pages/page1.md"

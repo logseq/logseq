@@ -6,37 +6,37 @@
 
 .cp__file-sync, .cp__rtc-sync {
   &-indicator {
-    .ui__button.cloud {
-      @apply relative;
+      .ui__button.cloud {
+          @apply relative;
 
-      &.on {
-        @apply after:content-['*'];
+          &.on {
+              @apply after:content-['*'];
 
-        &:after {
-          @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
+              &:after {
+                  @apply absolute bottom-2.5 right-1 w-[7px] h-[7px] rounded-full opacity-100 text-transparent;
 
-          background-color: var(--ls-color-file-sync-pending);
-        }
+                  background-color: var(--ls-color-file-sync-pending);
+              }
 
-        &.syncing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
+              &.syncing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
+
+              &.queuing {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-pending);
+                  }
+              }
+
+              &.idle {
+                  &:after {
+                      background-color: var(--ls-color-file-sync-idle);
+                  }
+              }
           }
-        }
-
-        &.queuing {
-          &:after {
-            background-color: var(--ls-color-file-sync-pending);
-          }
-        }
-
-        &.idle {
-          &:after {
-            background-color: var(--ls-color-file-sync-idle);
-          }
-        }
       }
-    }
 
     .debug-status {
       position: absolute;

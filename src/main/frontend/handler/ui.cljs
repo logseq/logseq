@@ -98,7 +98,7 @@
             (> (count fragment) 36)
             (subs fragment (- (count fragment) 36)))]
     (if (and id (util/uuid-string? id))
-      (let [elements (array-seq (js/document.getElementsByClassName (str "id" id)))]
+      (let [elements (util/get-blocks-by-id id)]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
         (state/exit-editing-and-set-selected-blocks! elements))
@@ -254,12 +254,11 @@
 
 (defn open-new-window-or-tab!
   "Open a new Electron window."
-  [repo target-repo]
-  (when-not (= repo target-repo)        ; TODO: remove this once we support multi-tabs OPFS access
-    (when target-repo
-      (if (util/electron?)
-        (ipc/ipc "openNewWindow" target-repo)
-        (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank")))))
+  [target-repo]
+  (when target-repo
+    (if (util/electron?)
+      (ipc/ipc "openNewWindow" target-repo)
+      (js/window.open (str config/app-website "#/?graph=" target-repo) "_blank"))))
 
 (defn toggle-show-empty-hidden-properties!
   []
@@ -289,7 +288,7 @@
                         (not show?))}))))
 
 (defn scroll-to-anchor-block
-  [ref blocks gallery?]
+  [^js ref blocks gallery?]
   (when ref
     (let [anchor (get-in (state/get-route-match) [:query-params :anchor])
           anchor-id (when (and anchor (string/starts-with? anchor "ls-block-"))

@@ -19,7 +19,7 @@
           blocks))
 
 (defn- get-file-page
-  "Copy of db/get-file-page. Too basic to couple to main app"
+  "Copy of file-model/get-file-page. Too basic to couple to main app"
   [db file-path]
   (ffirst
    (d/q
@@ -51,7 +51,7 @@
   (let [existing-file-page (get-file-page db file-path)
         pages-to-clear (distinct (filter some? [existing-file-page (:db/id file-page)]))
         blocks (mapcat (fn [page-id]
-                         (ldb/get-page-blocks db page-id {:pull-keys [:db/id :block/uuid]}))
+                         (:block/_page (d/entity db page-id)))
                        pages-to-clear)
         retain-uuids (set (keep :block/uuid retain-uuid-blocks))]
     (retract-blocks-tx (distinct blocks) retain-uuids)))
@@ -63,12 +63,10 @@ Options available:
   * :delete-blocks-fn - Optional fn which is called with the new page, file and existing block uuids
   which may be referenced elsewhere. Used to delete the existing blocks before saving the new ones.
    Implemented in file-common-handler/validate-and-get-blocks-to-delete for IoC
-* :skip-db-transact? - Boolean which skips transacting in order to batch transactions. Default is false
-* :extract-options - Options map to pass to extract/extract"
+  * :extract-options - Options map to pass to extract/extract"
   ([conn file-path content] (parse-file conn file-path content {}))
-  ([conn file-path content {:keys [delete-blocks-fn extract-options skip-db-transact? ctime mtime]
-                            :or {delete-blocks-fn (constantly [])
-                                 skip-db-transact? false}
+  ([conn file-path content {:keys [delete-blocks-fn extract-options ctime mtime]
+                            :or {delete-blocks-fn (constantly [])}
                             :as options}]
    (let [format (common-util/get-format file-path)
          file-content [{:file/path file-path}]
@@ -91,7 +89,7 @@ Options available:
 
                      :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-               delete-blocks (delete-blocks-fn @conn (first pages) file-path block-ids)
+               delete-blocks (delete-blocks-fn (first pages) file-path block-ids)
                block-refs-ids (->> (mapcat :block/refs blocks)
                                    (filter (fn [ref] (and (vector? ref)
                                                           (= :block/uuid (first ref)))))
@@ -110,13 +108,9 @@ Options available:
                           (or ctime (nil? file-entity))
                           (assoc :file/created-at (or ctime (js/Date.)))
                           mtime
-                          (assoc :file/last-modified-at mtime))])
-         result (if skip-db-transact?
-                  tx
-                  (do
-                    (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?]))
-                    nil))]
-     {:tx result
+                          (assoc :file/last-modified-at mtime))])]
+     (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?]))
+     {:tx tx
       :ast ast})))
 
 (defn filter-files

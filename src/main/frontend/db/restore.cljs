@@ -1,11 +1,12 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [cljs-time.core :as t]
-            [datascript.transit :as dt]
+            [datascript.core :as d]
             [frontend.db.conn :as db-conn]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
-            [logseq.db.common.sqlite :as sqlite-common-db]
+            [frontend.undo-redo :as undo-redo]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defn restore-graph!
@@ -13,14 +14,20 @@
   [repo & {:as opts}]
   (state/set-state! :graph/loading? true)
   (p/let [start-time (t/now)
-          data (persist-db/<fetch-init-data repo opts)
-          _ (assert (some? data) "No data found when reloading db")
-          {:keys [schema initial-data]} (dt/read-transit-str data)
+          {:keys [schema initial-data]} (persist-db/<fetch-init-data repo opts)
+          _ (state/set-current-repo! repo)
+          ;; Without valid schema app fails hard downstream
+          _ (when (nil? schema)
+              (throw (ex-info "No valid schema found when reloading db" {:repo repo})))
           conn (try
-                 (sqlite-common-db/restore-initial-data initial-data schema)
+                 (d/conn-from-datoms initial-data schema)
                  (catch :default e
+                   (prn :error :restore-initial-data-failed
+                        (ldb/write-transit-str {:schema schema
+                                                :initial-data initial-data}))
                    (js/console.error e)
                    (throw e)))
+          _ (undo-redo/listen-db-changes! repo conn)
           db-name (db-conn/get-repo-path repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
@@ -29,9 +36,4 @@
 
     (state/pub-event! [:graph/restored repo])
     (state/set-state! :graph/loading? false)
-    (state/pub-event! [:ui/re-render-root])
-
-    ;; (async/go
-    ;;   (async/<! (async/timeout 100))
-    ;;   (db-async/<fetch-all-pages repo))
-    ))
+    (state/pub-event! [:ui/re-render-root])))

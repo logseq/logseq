@@ -38,6 +38,11 @@
   &.faster {
     animation-duration: 0.3s;
   }
+
+  &.delay {
+    animation-duration: 0.2s;
+    animation-delay: 0.1s;
+  }
 }
 
 /* page transition */

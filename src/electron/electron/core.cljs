@@ -1,26 +1,26 @@
 (ns electron.core
-  (:require [electron.handler :as handler]
+  (:require ["/electron/utils" :as js-utils]
+            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
+            ["electron-deeplink" :refer [Deeplink]]
+            ["os" :as os]
+            ["path" :as node-path]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.db :as db]
+            [electron.exceptions :as exceptions]
+            [electron.fs-watcher :as fs-watcher]
+            [electron.git :as git]
+            [electron.handler :as handler]
+            [electron.logger :as logger]
+            [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
+            [electron.url :refer [logseq-url-handler]]
             [electron.utils :refer [*win mac? linux? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
-            [electron.url :refer [logseq-url-handler]]
-            [electron.logger :as logger]
-            [electron.server :as server]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [electron.fs-watcher :as fs-watcher]
-            ["path" :as node-path]
-            ["os" :as os]
-            ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
-            ["electron-deeplink" :refer [Deeplink]]
-            [electron.git :as git]
             [electron.window :as win]
-            [electron.exceptions :as exceptions]
-            ["/electron/utils" :as js-utils]
-            [logseq.publishing.export :as publish-export]))
+            [logseq.publishing.export :as publish-export]
+            [promesa.core :as p]))
 
 ;; Keep same as main/frontend.util.url
 (defonce LSP_SCHEME "logseq")
@@ -105,15 +105,15 @@
   (p/let [app-path (. app getAppPath)
           asset-filenames (->> (js->clj asset-filenames) (remove nil?))
           root-dir (or output-path (handler/open-dir-dialog))]
-         (when root-dir
-           (publish-export/create-export
-            html
-            app-path
-            repo-path
-            root-dir
-            {:asset-filenames asset-filenames
-             :log-error-fn logger/error
-             :notification-fn #(send-to-renderer :notification %)}))))
+    (when root-dir
+      (publish-export/create-export
+       html
+       app-path
+       repo-path
+       root-dir
+       {:asset-filenames asset-filenames
+        :log-error-fn logger/error
+        :notification-fn #(send-to-renderer :notification %)}))))
 
 (defn setup-app-manager!
   [^js win]
@@ -184,12 +184,7 @@
         template (conj template
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
-                                   :click (fn []
-                                            ;; FIXME: Open a different graph for now
-                                            ;; (p/let [graph-name (get-graph-name (state/get-graph-path))
-                                            ;;         _ (handler/broadcast-persist-graph! graph-name)]
-                                            ;;   (handler/open-new-window!))
-                                            )
+                                   :click (fn [] (handler/open-new-window! nil))
                                    :accelerator (if mac?
                                                   "CommandOrControl+N"
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
@@ -250,7 +245,7 @@
          ;; Add React developer tool
          (when-let [^js devtoolsInstaller (and dev? (js/require "electron-devtools-installer"))]
            (-> (.default devtoolsInstaller (.-REACT_DEVELOPER_TOOLS devtoolsInstaller))
-             (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
+               (.then #(js/console.log "Added Extension:" (.-REACT_DEVELOPER_TOOLS devtoolsInstaller)))))
 
          (let [t0 (setup-interceptor! app')
                ^js win (win/create-main-window!)
@@ -281,30 +276,30 @@
 
            ;; main window events
            (.on win "close" (fn [e]
-                                  (git/before-graph-close-hook!)
-                                  (when @*quit-dirty? ;; when not updating
-                                    (.preventDefault e)
+                              (git/before-graph-close-hook!)
+                              (when @*quit-dirty? ;; when not updating
+                                (.preventDefault e)
 
-                                    (let [windows (win/get-all-windows)
-                                          window @*win
-                                          multiple-windows? (> (count windows) 1)]
-                                      (cond
-                                        (or multiple-windows? (not mac?) @win/*quitting?)
-                                        (when window
-                                          (win/close-handler win handler/close-watcher-when-orphaned! e)
-                                          (reset! *win nil))
+                                (let [windows (win/get-all-windows)
+                                      window @*win
+                                      multiple-windows? (> (count windows) 1)]
+                                  (cond
+                                    (or multiple-windows? (not mac?) @win/*quitting?)
+                                    (when window
+                                      (win/close-handler win handler/close-watcher-when-orphaned! e)
+                                      (reset! *win nil))
 
-                                        (and mac? (not multiple-windows?))
+                                    (and mac? (not multiple-windows?))
                                         ;; Just hiding - don't do any actual closing operation
-                                        (do (.preventDefault ^js/Event e)
-                                            (if (and mac? (.isFullScreen win))
-                                              (do (.once win "leave-full-screen" #(.hide win))
-                                                  (.setFullScreen win false))
-                                              (.hide win)))
-                                        :else
-                                        nil)))))
+                                    (do (.preventDefault ^js/Event e)
+                                        (if (and mac? (.isFullScreen win))
+                                          (do (.once win "leave-full-screen" #(.hide win))
+                                              (.setFullScreen win false))
+                                          (.hide win)))
+                                    :else
+                                    nil)))))
            (.on app' "before-quit" (fn [_e]
-                                    (reset! win/*quitting? true)))
+                                     (reset! win/*quitting? true)))
 
            (.on app' "activate" #(when @*win (.show win)))))))
 

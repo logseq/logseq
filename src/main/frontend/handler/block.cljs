@@ -1,29 +1,27 @@
 (ns ^:no-doc frontend.handler.block
-  (:require
-   [clojure.set :as set]
-   [clojure.string :as string]
-   [clojure.walk :as walk]
-   [datascript.impl.entity :as de]
-   [dommy.core :as dom]
-   [frontend.config :as config]
-   [frontend.db :as db]
-   [frontend.db.model :as db-model]
-   [frontend.handler.file-based.property.util :as property-util]
-   [frontend.handler.property.util :as pu]
-   [frontend.mobile.haptics :as haptics]
-   [frontend.modules.outliner.op :as outliner-op]
-   [frontend.modules.outliner.ui :as ui-outliner-tx]
-   [frontend.state :as state]
-   [frontend.util :as util]
-   [frontend.util.file-based.drawer :as drawer]
-   [goog.dom :as gdom]
-   [goog.object :as gobj]
-   [logseq.db :as ldb]
-   [logseq.db.sqlite.util :as sqlite-util]
-   [logseq.graph-parser.block :as gp-block]
-   [logseq.outliner.core :as outliner-core]
-   [logseq.outliner.op]
-   [promesa.core :as p]))
+  (:require [clojure.string :as string]
+            [clojure.walk :as walk]
+            [datascript.impl.entity :as de]
+            [dommy.core :as dom]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.model :as db-model]
+            [frontend.handler.file-based.property.util :as property-util]
+            [frontend.handler.property.util :as pu]
+            [frontend.mobile.haptics :as haptics]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.file-based.drawer :as drawer]
+            [goog.object :as gobj]
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.graph-parser.block :as gp-block]
+            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.op]
+            [promesa.core :as p]))
 
 ;;  Fns
 
@@ -55,64 +53,11 @@
   [block]
   (get-timestamp block "Deadline"))
 
-(defn indentable?
-  [{:block/keys [parent] :as block}]
-  (when parent
-    (not= (:db/id (ldb/get-first-child (db/get-db) (:db/id parent)))
-          (:db/id block))))
-
-(defn outdentable?
-  [{:block/keys [level] :as _block}]
-  (not= level 1))
-
 (defn select-block!
   [block-uuid]
-  (let [blocks (js/document.getElementsByClassName (str "id" block-uuid))]
+  (let [blocks (util/get-blocks-by-id block-uuid)]
     (when (seq blocks)
       (state/exit-editing-and-set-selected-blocks! blocks))))
-
-(defn get-blocks-refed-pages
-  [aliases [block & children]]
-  (let [children-refs (mapcat :block/refs children)
-        refs (->>
-              (:block/path-refs block)
-              (concat children-refs)
-              (remove #(aliases (:db/id %))))]
-    (keep (fn [ref]
-            (when (:block/name ref)
-              {:db/id (:db/id ref)
-               :block/name (:block/name ref)
-               :block/title (:block/title ref)})) refs)))
-
-(defn filter-blocks
-  [ref-blocks filters]
-  (if (empty? filters)
-    ref-blocks
-    (let [exclude-ids (set (map :db/id (:excluded filters)))
-          include-ids (set (map :db/id (:included filters)))]
-      (cond->> ref-blocks
-        (seq exclude-ids)
-        (remove (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (seq (set/intersection exclude-ids ids)))))
-
-        (seq include-ids)
-        (filter (fn [block]
-                  (let [ids (set (map :db/id (:block/path-refs block)))]
-                    (set/subset? include-ids ids))))))))
-
-(defn get-filtered-ref-blocks-with-parents
-  [all-ref-blocks filtered-ref-blocks]
-  (when (seq filtered-ref-blocks)
-    (let [id->block (zipmap (map :db/id all-ref-blocks) all-ref-blocks)
-          get-parents (fn [block]
-                        (loop [block block
-                               result [block]]
-                          (let [parent (id->block (:db/id (:block/parent block)))]
-                            (if (and parent (not= (:db/id parent) (:db/id block)))
-                              (recur parent (conj result parent))
-                              result))))]
-      (distinct (mapcat get-parents filtered-ref-blocks)))))
 
 (defn get-idx-of-order-list-block
   [block order-list-type]
@@ -121,14 +66,13 @@
                             (= type order-list-type)))
         prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
-    (letfn [(page-fn? [b] (some-> b :block/name some?))
-            (order-sibling-list [b]
+    (letfn [(order-sibling-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-               (when (and (not (page-fn? b)) (order-block-fn? b))
+               (when (order-block-fn? b)
                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
@@ -219,30 +163,31 @@
                      save-code-editor? true}
                 :as opts}]
   (when (and (not config/publishing?) (:block/uuid block))
-    (p/do!
-     (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
-     (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
-       (state/clear-edit! {:clear-editing-block? false}))
-     (when-let [block-id (:block/uuid block)]
-       (let [repo (state/get-current-repo)
-             block (or (db/entity [:block/uuid block-id]) block)
-             content (or custom-content (:block/title block) "")
-             content-length (count content)
-             text-range (cond
-                          (vector? pos)
-                          (text-range-by-lst-fst-line content pos)
+    (let [repo (state/get-current-repo)]
+      (p/do!
+       (db-async/<get-block repo (:db/id block) {:children? false})
+       (when save-code-editor? (state/pub-event! [:editor/save-code-editor]))
+       (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+         (state/clear-edit! {:clear-editing-block? false}))
+       (when-let [block-id (:block/uuid block)]
+         (let [block (or (db/entity [:block/uuid block-id]) block)
+               content (or custom-content (:block/title block) "")
+               content-length (count content)
+               text-range (cond
+                            (vector? pos)
+                            (text-range-by-lst-fst-line content pos)
 
-                          (and (> tail-len 0) (>= (count content) tail-len))
-                          (subs content 0 (- (count content) tail-len))
+                            (and (> tail-len 0) (>= (count content) tail-len))
+                            (subs content 0 (- (count content) tail-len))
 
-                          (or (= :max pos) (<= content-length pos))
-                          content
+                            (or (= :max pos) (<= content-length pos))
+                            content
 
-                          :else
-                          (subs content 0 pos))
-             content (sanity-block-content repo (get block :block/format :markdown) content)]
-         (state/clear-selection!)
-         (edit-block-aux repo block content text-range (assoc opts :pos pos)))))))
+                            :else
+                            (subs content 0 pos))
+               content (sanity-block-content repo (get block :block/format :markdown) content)]
+           (state/clear-selection!)
+           (edit-block-aux repo block content text-range (assoc opts :pos pos))))))))
 
 (defn- get-original-block-by-dom
   [node]
@@ -306,168 +251,135 @@
                                      last)]
        (get-original-block-by-dom last-block-node)))))
 
-(defn indent-outdent-blocks!
-  [blocks indent? save-current-block]
-  (when (seq blocks)
-    (let [blocks (get-top-level-blocks blocks)]
-      (ui-outliner-tx/transact!
-       {:outliner-op :move-blocks
-        :real-outliner-op :indent-outdent}
-       (when save-current-block (save-current-block))
-       (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks)
-                                           indent?
-                                           {:parent-original (get-first-block-original)
-                                            :logical-outdenting? (state/logical-outdenting?)})))))
+(let [*timeout (atom nil)]
+  (defn indent-outdent-blocks!
+    [blocks indent? save-current-block]
+    (when-let [timeout *timeout]
+      (js/clearTimeout timeout))
+    (when (seq blocks)
+      (let [blocks-container (when-let [first-selected-node (first (state/get-selection-blocks))]
+                               (util/rec-get-blocks-container first-selected-node))
+            blocks' (get-top-level-blocks blocks)]
+        (p/do!
+         (ui-outliner-tx/transact!
+          {:outliner-op :move-blocks
+           :real-outliner-op :indent-outdent}
+          (when save-current-block (save-current-block))
+          (outliner-op/indent-outdent-blocks! (get-top-level-blocks blocks')
+                                              indent?
+                                              {:parent-original (get-first-block-original)
+                                               :logical-outdenting? (state/logical-outdenting?)}))
+         (when blocks-container
+           ;; Update selection nodes to be the new ones
+           (reset! *timeout
+                   (js/setTimeout
+                    #(state/set-selection-blocks! (dom/sel blocks-container ".ls-block.selected") :down)
+                    100))))))))
 
 (def *swipe (atom nil))
+(def *swiped? (atom false))
 
 (def *touch-start (atom nil))
 
-(defn- target-disable-swipe?
-  [target]
-  (let [user-defined-tags (get-in (state/get-config)
-                                  [:mobile :gestures/disabled-in-block-with-tags])]
-    (or (.closest target ".dsl-query")
-        (.closest target ".drawer")
-        (.closest target ".draw-wrap")
-        (some #(.closest target (util/format "[data-refs-self*=%s]" %))
-              user-defined-tags))))
-
 (defn on-touch-start
   [event uuid]
-  (let [target (.-target event)
-        input (state/get-input)
+  (util/stop-propagation event)
+  (let [input (state/get-input)
         input-id (state/get-edit-input-id)
         selection-type (.-type (.getSelection js/document))]
     (reset! *touch-start (js/Date.now))
     (when-not (and input
                    (string/ends-with? input-id (str uuid)))
       (state/clear-edit!))
-    (when-not (target-disable-swipe? target)
-      (when (not= selection-type "Range")
-        (when-let [touches (.-targetTouches event)]
-          (when (= (.-length touches) 1)
-            (let [touch (aget touches 0)
-                  x (.-clientX touch)
-                  y (.-clientY touch)]
-              (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil}))))))))
+    (when (not= selection-type "Range")
+      (when-let [touches (.-targetTouches event)]
+        (when (= (.-length touches) 1)
+          (let [touch (aget touches 0)
+                x (.-clientX touch)
+                y (.-clientY touch)]
+            (reset! *swipe {:x0 x :y0 y :xi x :yi y :tx x :ty y :direction nil})))))))
 
 (defn on-touch-move
-  [event block uuid edit? *show-left-menu? *show-right-menu?]
-  (when-let [touches (.-targetTouches event)]
-    (let [selection-type (.-type (.getSelection js/document))]
-      (when-not (= selection-type "Range")
-        (when (or (not (state/editing?))
-                  (< (- (js/Date.now) @*touch-start) 600))
-          (when (and (= (.-length touches) 1) @*swipe)
-            (let [{:keys [x0 xi direction]} @*swipe
-                  touch (aget touches 0)
-                  tx (.-clientX touch)
-                  ty (.-clientY touch)
-                  direction (if (nil? direction)
-                              (if (> tx x0)
-                                :right
-                                :left)
-                              direction)]
-              (swap! *swipe #(-> %
-                                 (assoc :tx tx)
-                                 (assoc :ty ty)
-                                 (assoc :xi tx)
-                                 (assoc :yi ty)
-                                 (assoc :direction direction)))
-              (when (< (* (- xi x0) (- tx xi)) 0)
+  [^js goog-event]
+  (let [event (.-event_ goog-event)]
+    (when-let [touches (.-targetTouches event)]
+      (let [selection-type (.-type (.getSelection js/document))
+            target (.-target event)
+            block-container (util/rec-get-node target "ls-block")]
+        (when-not (= selection-type "Range")
+          (when (or (not (state/editing?))
+                    (< (- (js/Date.now) @*touch-start) 600))
+            (when (and (= (.-length touches) 1) @*swipe)
+              (let [{:keys [x0 xi direction]} @*swipe
+                    touch (aget touches 0)
+                    tx (.-clientX touch)
+                    ty (.-clientY touch)
+                    direction (if (nil? direction)
+                                (if (> tx x0)
+                                  :right
+                                  :left)
+                                direction)]
                 (swap! *swipe #(-> %
-                                   (assoc :x0 tx)
-                                   (assoc :y0 ty))))
-              (let [{:keys [x0 y0]} @*swipe
-                    dx (- tx x0)
-                    dy (- ty y0)]
-                (when (and (< (. js/Math abs dy) 30)
-                           (> (. js/Math abs dx) 30))
-                  (let [left (gdom/getElement (str "block-left-menu-" uuid))
-                        right (gdom/getElement (str "block-right-menu-" uuid))]
-
-                    (cond
-                      (= direction :right)
-                      (do
-                        (reset! *show-left-menu? true)
-                        (when left
-                          (when (>= dx 0)
-                            (set! (.. left -style -width) (str dx "px")))
-                          (when (< dx 0)
-                            (set! (.. left -style -width) (str (max (+ 40 dx) 0) "px")))
-
-                          (let [indent (gdom/getFirstElementChild left)]
-                            (when (indentable? block)
-                              (if (>= (.-clientWidth left) 40)
-                                (set! (.. indent -style -opacity) "100%")
-                                (set! (.. indent -style -opacity) "30%"))))))
-
-                      (= direction :left)
-                      (do
-                        (reset! *show-right-menu? true)
-                        (when right
-                          (when (<= dx 0)
-                            (set! (.. right -style -width) (str (- dx) "px")))
-                          (when (> dx 0)
-                            (set! (.. right -style -width) (str (max (- 80 dx) 0) "px")))
-
-                          (let [outdent (gdom/getFirstElementChild right)
-                                more (when-not edit?
-                                       (gdom/getLastElementChild right))]
-                            (when (and outdent (outdentable? block))
-                              (if (and (>= (.-clientWidth right) 40)
-                                       (< (.-clientWidth right) 80))
-                                (set! (.. outdent -style -opacity) "100%")
-                                (set! (.. outdent -style -opacity) "30%")))
-
-                            (when more
-                              (if (>= (.-clientWidth right) 80)
-                                (set! (.. more -style -opacity) "100%")
-                                (set! (.. more -style -opacity) "30%"))))))
-                      :else
-                      nil)))))))))))
+                                   (assoc :tx tx)
+                                   (assoc :ty ty)
+                                   (assoc :xi tx)
+                                   (assoc :yi ty)
+                                   (assoc :direction direction)))
+                (when (< (* (- xi x0) (- tx xi)) 0)
+                  (swap! *swipe #(-> %
+                                     (assoc :x0 tx)
+                                     (assoc :y0 ty))))
+                (let [{:keys [x0 y0]} @*swipe
+                      dx (- tx x0)
+                      dy (- ty y0)]
+                  (when (and (< (. js/Math abs dy) 30)
+                             (> (. js/Math abs dx) 10)
+                             direction)
+                    (.preventDefault goog-event)
+                    (let [left (if (= direction :right)
+                                 (if (>= dx 0) (min dx 48) (max dx 0))
+                                 (if (<= dx 0) (- (min (js/Math.abs dx) 48)) (min dx 48)))]
+                      (reset! *swiped? true)
+                      (dom/set-style! block-container :transform (util/format "translateX(%dpx)" left)))))))))))))
 
 (defn on-touch-end
-  [_event block uuid *show-left-menu? *show-right-menu?]
+  [event]
+  (util/stop-propagation event)
   (when @*swipe
-    (let [left-menu (gdom/getElement (str "block-left-menu-" uuid))
-          right-menu (gdom/getElement (str "block-right-menu-" uuid))
-          {:keys [x0 tx]} @*swipe
-          dx (- tx x0)]
+    (let [target (.-target event)
+          swiped? @*swiped?
+          {:keys [x0 y0 tx ty]} @*swipe
+          dy (- ty y0)
+          dx (- tx x0)
+          block-container (util/rec-get-node target "ls-block")
+          select? (and (> (. js/Math abs dx) (. js/Math abs dy))
+                       (> (. js/Math abs dx) 10))]
       (try
-        (when (> (. js/Math abs dx) 10)
-          (cond
-            (and left-menu (>= (.-clientWidth left-menu) 40))
-            (when (indentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] true nil)
-                :light))
-
-            (and right-menu (<= 40 (.-clientWidth right-menu) 79))
-            (when (outdentable? block)
-              (haptics/with-haptics-impact
-                (indent-outdent-blocks! [block] false nil)
-                :light))
-
-            (and right-menu (>= (.-clientWidth right-menu) 80))
-            (haptics/with-haptics-impact
-              (do (state/set-state! :mobile/show-action-bar? true)
-                  (state/set-state! :mobile/actioned-block block)
-                  (select-block! uuid))
-              :light)
-
-            :else
-            nil))
+        (when (or select? swiped?)
+          (dom/set-style! block-container :transform "translateX(0)")
+          (when select?
+            (if (contains? (set (state/get-selection-block-ids)) (some-> (.getAttribute block-container "blockid") uuid))
+              (state/drop-selection-block! block-container)
+              (do
+                (state/clear-edit!)
+                (state/conj-selection-block! block-container nil)))
+            (if (seq (state/get-selection-blocks))
+              (state/set-state! :mobile/show-action-bar? true)
+              (when (:mobile/show-action-bar? @state/state)
+                (state/set-state! :mobile/show-action-bar? false)))
+            (haptics/haptics)))
+        (reset! *swiped? false)
         (catch :default e
           (js/console.error e))
         (finally
-          (reset! *show-left-menu? false)
-          (reset! *show-right-menu? false)
-          (reset! *swipe nil))))))
+          (reset! *swipe nil)
+          (reset! *touch-start nil))))))
 
 (defn on-touch-cancel
-  [*show-left-menu? *show-right-menu?]
-  (reset! *show-left-menu? false)
-  (reset! *show-right-menu? false)
-  (reset! *swipe nil))
+  [e]
+  (reset! *swipe nil)
+  (reset! *swiped? nil)
+  (reset! *touch-start nil)
+  (let [target (.-target e)
+        block-container (util/rec-get-node target "ls-block")]
+    (dom/set-style! block-container :transform "translateX(0)")))

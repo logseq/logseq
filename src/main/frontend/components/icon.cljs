@@ -6,7 +6,6 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.handler.property.util :as pu]
-            [frontend.hooks :as hooks]
             [frontend.search :as search]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
@@ -14,6 +13,7 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -29,9 +29,10 @@
         opts (dissoc opts :color?)
         item (cond
                (and (= :emoji (:type icon')) (:id icon'))
-               [:em-emoji (merge {:id (:id icon')
-                                  :style {:line-height 1}}
-                                 opts)]
+               [:span.ui__icon
+                [:em-emoji (merge {:id (:id icon')
+                                   :style {:line-height 1}}
+                                  opts)]]
 
                (and (= :tabler-icon (:type icon')) (:id icon'))
                (ui/icon (:id icon') opts))]
@@ -53,9 +54,9 @@
             (ldb/property? node-entity)
             "letter-p"
             (ldb/whiteboard? node-entity)
-            "whiteboard"
+            "writing"
             (ldb/page? node-entity)
-            "page"
+            "file"
             (= asset-type "pdf")
             "book"
             :else
@@ -64,10 +65,14 @@
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
-        node-icon (if (:own-icon? opts)
+        node-icon (cond
+                    (:own-icon? opts)
                     (get node-entity (pu/get-pid :logseq.property/icon))
+                    (:link? opts)
+                    "arrow-narrow-right"
+                    :else
                     (get-node-icon node-entity))]
-    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "page"} node-icon) (:not-text-or-page? opts)))
+    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))

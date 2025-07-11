@@ -8,10 +8,17 @@
   ;; rule "parent" is optimized for parent node -> child node nesting queries
   {:parent
    '[[(parent ?p ?c)
-      [?c :logseq.property/parent ?p]]
+      [?c :block/parent ?p]]
      [(parent ?p ?c)
-      [?t :logseq.property/parent ?p]
+      [?t :block/parent ?p]
       (parent ?t ?c)]]
+
+   :class-extends
+   '[[(class-extends ?p ?c)
+      [?c :logseq.property.class/extends ?p]]
+     [(class-extends ?p ?c)
+      [?t :logseq.property.class/extends ?p]
+      (class-extends ?t ?c)]]
 
    :alias
    '[[(alias ?e2 ?e1)
@@ -136,23 +143,21 @@
       [?b :block/tags ?tc]
       (or
        [(= ?t ?tc)]
-       (parent ?t ?tc))]
+       (class-extends ?t ?tc))]
 
-    :has-property-or-default-value
-    '[(has-property-or-default-value? ?b ?prop)
+    :has-property-or-object-property
+    '[(has-property-or-object-property? ?b ?prop)
       [?prop-e :db/ident ?prop]
       (or
        [?b ?prop _]
-       (and (object-has-class-property? ?b ?prop)
-            (or [?prop-e :logseq.property/default-value _]
-                [?prop-e :logseq.property/scalar-default-value _])))]
+       (object-has-class-property? ?b ?prop))]
 
     ;; Checks if a property exists for simple queries. Supports default values
     :has-simple-query-property
     '[(has-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (has-property-or-default-value? ?b ?prop)
+      (has-property-or-object-property? ?b ?prop)
       (or
        [(missing? $ ?prop-e :logseq.property/public?)]
        [?prop-e :logseq.property/public? true])]
@@ -162,7 +167,7 @@
     '[(has-private-simple-query-property ?b ?prop)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/tags :logseq.class/Property]
-      (has-property-or-default-value? ?b ?prop)]
+      (has-property-or-object-property? ?b ?prop)]
 
     ;; Checks if a property exists for any features that are not simple queries
     :has-property
@@ -221,13 +226,13 @@
     :task
     '[(task ?b ?statuses)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.task/status ?val)
+      (and (simple-query-property ?b :logseq.property/status ?val)
            [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
       ;; and needed to avoid binding error
-      (and (simple-query-property ?b :logseq.task/priority ?priority)
+      (and (simple-query-property ?b :logseq.property/priority ?priority)
            [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies
@@ -237,10 +242,10 @@
   {:task #{:simple-query-property}
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
-   :has-property-or-default-value #{:object-has-class-property}
-   :object-has-class-property #{:parent}
-   :has-simple-query-property #{:has-property-or-default-value}
-   :has-private-simple-query-property #{:has-property-or-default-value}
+   :has-property-or-object-property #{:object-has-class-property}
+   :object-has-class-property #{:class-extends}
+   :has-simple-query-property #{:has-property-or-object-property}
+   :has-private-simple-query-property #{:has-property-or-object-property}
    :property-default-value #{:existing-property-value :property-missing-value}
    :property-scalar-default-value #{:existing-property-value :property-missing-value}
    :property-value #{:property-default-value :property-scalar-default-value}

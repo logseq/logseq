@@ -1,7 +1,9 @@
 (ns frontend.format.block
   "Block code needed by app but not graph-parser"
   (:require [cljs-time.format :as tf]
+            [cljs.cache :as cache]
             [clojure.string :as string]
+            [frontend.common.cache :as common.cache]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -94,6 +96,29 @@ and handles unexpected failure."
           block (dissoc block :block.temp/ast-body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
+(defonce *blocks-ast-cache (volatile! (cache/lru-cache-factory {} :threshold 5000)))
+
+(defn- parse-title-and-body-helper
+  [format content]
+  (let [parse-config (mldoc/get-default-config format)
+        ast (->> (format/to-edn content format parse-config)
+                 (map first))
+        title (when (gp-block/heading-block? (first ast))
+                (:title (second (first ast))))
+        body (vec (if title (rest ast) ast))
+        body (drop-while gp-property/properties-ast? body)]
+    (cond->
+     (if (seq body) {:block.temp/ast-body body} {})
+      title
+      (assoc :block.temp/ast-title title))))
+
+(def ^:private cached-parse-title-and-body-helper
+  (common.cache/cache-fn
+   *blocks-ast-cache
+   (fn [format content]
+     [[format content] [format content]])
+   parse-title-and-body-helper))
+
 (defn parse-title-and-body
   ([block]
    (when (map? block)
@@ -102,25 +127,11 @@ and handles unexpected failure."
                                   (get block :block/format :markdown)
                                   (:block/pre-block? block)
                                   (:block/title block)))))
-  ([block-uuid format pre-block? content]
+  ([_block-uuid format pre-block? content]
    (when-not (string/blank? content)
      (let [content (if pre-block? content
                        (str (config/get-block-pattern format) " " (string/triml content)))]
-       (if-let [result (state/get-block-ast block-uuid content)]
-         result
-         (let [parse-config (mldoc/get-default-config format)
-               ast (->> (format/to-edn content format parse-config)
-                        (map first))
-               title (when (gp-block/heading-block? (first ast))
-                       (:title (second (first ast))))
-               body (vec (if title (rest ast) ast))
-               body (drop-while gp-property/properties-ast? body)
-               result (cond->
-                       (if (seq body) {:block.temp/ast-body body} {})
-                        title
-                        (assoc :block.temp/ast-title title))]
-           (state/add-block-ast-cache! block-uuid content result)
-           result))))))
+       (cached-parse-title-and-body-helper format content)))))
 
 (defn break-line-paragraph?
   [[typ break-lines]]

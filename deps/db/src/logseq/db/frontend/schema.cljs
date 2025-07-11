@@ -37,7 +37,7 @@
          (map (juxt :major :minor)
               [(parse-schema-version x) (parse-schema-version y)])))
 
-(def version (parse-schema-version "64.4"))
+(def version (parse-schema-version "65.8"))
 
 (defn major-version
   "Return a number.
@@ -61,7 +61,7 @@
     :else (throw (ex-info "Not a schema-version" {:data schema-version}))))
 
 (def schema
-  "Schema for DB graphs"
+  "Schema for DB graphs. :block/tags are classes in this schema"
   (merge
    (apply dissoc file-schema/schema file-schema/file-only-attributes)
    {:block/name {:db/index true}        ; remove db/unique for :block/name

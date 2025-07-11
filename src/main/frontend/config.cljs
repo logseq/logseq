@@ -106,7 +106,7 @@
     publishing?
     path
 
-    (util/file-protocol?)
+    (or (util/file-protocol?) (util/capacitor-new?))
     (string/replace path "/static/" "./")
 
     :else
@@ -361,6 +361,10 @@
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
 (defonce db-version-prefix sqlite-util/db-version-prefix)
+
+(defn db-graph-name
+  [repo-with-prefix]
+  (string/replace-first repo-with-prefix db-version-prefix ""))
 
 (defn local-file-based-graph?
   [s]

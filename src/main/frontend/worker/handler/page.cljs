@@ -27,14 +27,12 @@
 (defn create!
   "Create page. Has the following options:
 
-   * :create-first-block?      - when true, create an empty block if the page is empty.
    * :uuid                     - when set, use this uuid instead of generating a new one.
    * :class?                   - when true, adds a :block/tags ':logseq.class/Tag'
    * :whiteboard?              - when true, adds a :block/tags ':logseq.class/Whiteboard'
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
-   * :created-by               - when set, set :logseq.property/created-by, only for db-based-graphs
   TODO: Add other options"
   [repo conn config title & {:as options}]
   (if (ldb/db-based-graph? @conn)
@@ -96,10 +94,10 @@
                                        delete-property-tx
                                        [[:db.fn/retractEntity (:db/id page)]])
                 restore-class-parent-tx (when db-based?
-                                          (->> (filter (fn [p] (ldb/class? p)) (:logseq.property/_parent page))
+                                          (->> (filter ldb/class? (:logseq.property.class/_extends page))
                                                (map (fn [p]
                                                       {:db/id (:db/id p)
-                                                       :logseq.property/parent :logseq.class/Root}))))
+                                                       :logseq.property.class/extends :logseq.class/Root}))))
                 tx-data (concat truncate-blocks-tx-data
                                 restore-class-parent-tx
                                 delete-page-tx

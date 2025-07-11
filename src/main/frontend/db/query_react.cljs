@@ -3,18 +3,18 @@
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.model :as model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.db.frontend.inputs :as db-inputs]
-            [logseq.common.util.page-ref :as page-ref]
             [frontend.util :as util]
-            [frontend.date :as date]
             [lambdaisland.glogi :as log]
-            [logseq.db :as ldb]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.inputs :as db-inputs]))
 
 (defn resolve-input
   "Wrapper around db-inputs/resolve-input which provides editor-specific state"
@@ -100,6 +100,7 @@
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
+
     (let [query (resolve-query query)
           repo (or repo (state/get-current-repo))
           db (conn/get-db repo)
@@ -113,4 +114,4 @@
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
       (when config/dev? (js/console.groupEnd))
-      (apply react/q repo k query-opts query inputs))))
+      [k (apply react/q repo k query-opts query inputs)])))

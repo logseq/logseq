@@ -10,12 +10,14 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
+            [frontend.util :as util]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [rum.core :as rum]))
 
-(defn trigger-custom-query!
-  [config query *query-error set-result!]
+(defn run-custom-query
+  [config query *result *query-error]
   (let [repo (state/get-current-repo)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
@@ -23,33 +25,37 @@
     (try
       (cond
         (:dsl-query? config)
-        (let [q (:query query)
-              form (common-util/safe-read-string {:log-error? false} q)]
-          (cond
-            (and (symbol? form)
-                                ;; Queries only containing template should trigger a query
-                 (not (re-matches template/template-re (string/trim q))))
-            nil
+        (let [result (let [q (:query query)
+                           form (common-util/safe-read-string {:log-error? false} q)]
+                       (cond
+                         (and (symbol? form)
+                 ;; Queries only containing template should trigger a query
+                              (not (re-matches template/template-re (string/trim q))))
+                         nil
 
-            (re-matches #"^\".*\"$" q) ; full-text search
-            (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
-              (when (seq blocks)
-                (let [result (->> blocks
-                                  (keep (fn [b]
-                                          (when-not (= (:block/uuid b) current-block-uuid)
-                                            (let [entity (db/entity [:block/uuid (:block/uuid b)])]
-                                              (when-not (ldb/hidden? entity)
-                                                entity))))))]
-                  (set-result! (atom result)))))
+                         (re-matches #"^\".*\"$" q) ; full-text search
+                         (do
+                           (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+                             (when (seq blocks)
+                               (let [result (->> blocks
+                                                 (keep (fn [b]
+                                                         (when-not (= (:block/uuid b) current-block-uuid)
+                                                           (let [entity (or (db/entity [:block/uuid (:block/uuid b)]) b)]
+                                                             (when-not (ldb/hidden? entity)
+                                                               entity))))))]
+                                 (reset! *result result))))
+                           (rum/react *result))
 
-            :else
-            (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
-              (set-result! (or result (atom []))))))
+                         :else
+                         (let [result (query-dsl/query (state/get-current-repo) q {:cards? (:cards? config)})]
+                           (when (util/atom? result)
+                             (rum/react result)))))]
+          [nil result])
 
         :else
-        (set-result! (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                       ;; FIXME: Remove this temporary workaround for reactivity not working
-                                                       :use-cache? false})))
+        (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
+                                                           :built-in-query? (:built-in-query? config)})]
+          [k (rum/react result)]))
       (catch :default e
         (reset! *query-error e)))))
 
