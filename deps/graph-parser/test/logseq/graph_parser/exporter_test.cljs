@@ -103,7 +103,8 @@
            {:size (.-length buffer)
             :checksum checksum
             :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})))
+            :path (:path file)})
+    buffer))
 
 ;; Copied from db-import script and tweaked for an in-memory import
 (defn- import-file-graph-to-db
@@ -119,10 +120,11 @@
                         ;; asset file options
                          :<read-asset <read-asset-file
                          :<copy-asset (fn copy-asset [m]
-                                        (when-not (:block/uuid m)
-                                          (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
-                                                   "does not have a :block/uuid"))
-                                        (swap! assets conj m))}
+                                        (if (:block/uuid m)
+                                          (swap! assets conj m)
+                                          (when-not (:pdf-annotation? m)
+                                            (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
+                                                     "does not have a :block/uuid"))))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
@@ -190,7 +192,7 @@
                 (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
         "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
-(deftest-async export-basic-graph-with-convert-all-tags
+(deftest-async ^:focus export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
@@ -206,13 +208,14 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 27 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 28 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
-      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
+      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
       (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
       (is (= 10
@@ -235,7 +238,8 @@
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      (is (= 3 (count @assets))))
+      ;; (cljs.pprint/pprint @(:ignored-files import-state))
+      (is (= 5 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -418,6 +422,15 @@
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Imported into Asset page")
+      ;; Annotations
+      (is (= {:logseq.property.pdf/hl-color :logseq.property/color.blue
+              :logseq.property.pdf/hl-page 8
+              :block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Sina_de_Capoeria_Batizado_2025_-_Program_Itinerary_1752179325104_0"}
+             (dissoc (db-test/readable-properties (db-test/find-block-by-content @conn "Duke School"))
+                     :logseq.property.pdf/hl-value :logseq.property/ls-type))
+          "Pdf text highlight has correct properties")
+
       ;; Quotes
       (is (= {:block/tags [:logseq.class/Quote-block]
               :logseq.property.node/display-type :quote}
