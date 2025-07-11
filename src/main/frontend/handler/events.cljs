@@ -392,6 +392,8 @@
           (indicator/downloading-logs)])
        {:id :download-rtc-graph}))
     (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<get-remote-graphs)
+    (repo-handler/refresh-repos!)
     (when (util/mobile?)
       (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
