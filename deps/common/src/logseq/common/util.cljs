@@ -1,14 +1,14 @@
 (ns logseq.common.util
   "Util fns shared between the app. Util fns only rely on
   clojure standard libraries."
-  (:require [cljs.reader :as reader]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.reader :as reader]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [logseq.common.log :as log]
             [goog.string :as gstring]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [logseq.common.log :as log]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -292,13 +292,13 @@
       (:block/name page)))
 
 (defn string-join-path
-  #_:clj-kondo/ignore
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]
+  #_:clj-kondo/ignore
   (string/join "/" parts))
 
-(def escape-chars "[]{}().+*?|$")
+(def ^:private escape-chars "\\[]{}().+*?|$^")
 
 (defn escape-regex-chars
   "Escapes characters in string `old-value"
@@ -364,3 +364,48 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
                 (nil? (:block/created-at block))
                 (assoc :block/created-at updated-at))]
     block))
+
+(defn get-timestamp
+  [value]
+  (let [now (t/now)
+        f t/minus]
+    (if (string? value)
+      (case value
+        "1 day ago"
+        (tc/to-long (f now (t/days 1)))
+        "3 days ago"
+        (tc/to-long (f now (t/days 3)))
+        "1 week ago"
+        (tc/to-long (f now (t/weeks 1)))
+        "1 month ago"
+        (tc/to-long (f now (t/months 1)))
+        "3 months ago"
+        (tc/to-long (f now (t/months 3)))
+        "1 year ago"
+        (tc/to-long (f now (t/years 1)))
+        nil)
+      (tc/to-long (tc/to-date value)))))
+
+(defn keyword->string
+  [x]
+  (if (keyword? x)
+    (if-let [nn (namespace x)]
+      (str nn "/" (name x))
+      (name x))
+    x))
+
+(defn by-sorting
+  [sorting]
+  (let [get-value+cmp
+        (map
+         (fn [{:keys [get-value asc?]}]
+           [get-value
+            (if asc? compare #(compare %2 %1))])
+         sorting)]
+    (fn [a b]
+      (reduce
+       (fn [order [get-value cmp]]
+         (if (zero? order)
+           (cmp (get-value a) (get-value b))
+           (reduced order)))
+       0 get-value+cmp))))

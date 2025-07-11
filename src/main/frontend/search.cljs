@@ -2,19 +2,15 @@
   "Provides search functionality for a number of features including Cmd-K
   search. Most of these fns depend on the search protocol"
   (:require [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
             [frontend.search.agency :as search-agency]
             [frontend.search.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
@@ -59,7 +55,7 @@
                              (p/let [result (db-async/<get-all-templates repo)]
                                (vals result)))]
            (when (seq templates)
-             (let [extract-fn (if db-based? :block/title :template)]
+             (let [extract-fn :block/title]
                (fuzzy/fuzzy-search templates q {:limit limit
                                                 :extract-fn extract-fn})))))))))
 
@@ -111,25 +107,3 @@
   [repo]
   (when-let [engine (get-engine repo)]
     (protocol/remove-db! engine)))
-
-(defn get-unlinked-refs
-  "Get matched result from search first, and then filter by worker db"
-  [eid]
-  (when-let [repo (state/get-current-repo)]
-    (p/let [entity (db/entity eid)
-            alias-names (conj (set (map util/safe-page-name-sanity-lc
-                                        (db/get-page-alias-names repo eid)))
-                              (:block/title entity))
-            q (string/join " " alias-names)
-            result (block-search repo q {:limit 100})
-            eids (->> result
-                      (remove :page?)
-                      (remove (fn [b] (= (:block/uuid b) (:block/uuid entity))))
-                      (map (fn [b] [:block/uuid (:block/uuid b)])))
-            result (when (seq eids)
-                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id entity) (ldb/write-transit-str eids)))
-            result' (when result (ldb/read-transit-str result))]
-      (when result' (d/transact! (db/get-db repo false) result'))
-      (some->> result'
-               db-model/sort-by-order-recursive
-               db-utils/group-by-page))))

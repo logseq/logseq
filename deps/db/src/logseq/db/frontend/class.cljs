@@ -1,9 +1,13 @@
 (ns logseq.db.frontend.class
   "Class related fns for DB graphs and frontend/datascript usage"
   (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Main class vars
@@ -24,16 +28,16 @@
 
      :logseq.class/Journal
      {:title "Journal"
-      :properties {:logseq.property/parent :logseq.class/Page
+      :properties {:logseq.property.class/extends :logseq.class/Page
                    :logseq.property.journal/title-format "MMM do, yyyy"}}
 
      :logseq.class/Whiteboard
      {:title "Whiteboard"
-      :properties {:logseq.property/parent :logseq.class/Page}}
+      :properties {:logseq.property.class/extends :logseq.class/Page}}
 
      :logseq.class/Task
      {:title "Task"
-      :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline :logseq.task/scheduled]}}
+      :schema {:properties [:logseq.property/status :logseq.property/priority :logseq.property/deadline :logseq.property/scheduled]}}
 
      :logseq.class/Query
      {:title "Query"
@@ -47,7 +51,7 @@
      :logseq.class/Cards
      {:title "Cards"
       :properties {:logseq.property/icon {:type :tabler-icon :id "search"}
-                   :logseq.property/parent :logseq.class/Query}}
+                   :logseq.property.class/extends :logseq.class/Query}}
 
      :logseq.class/Asset
      {:title "Asset"
@@ -92,7 +96,7 @@
   "Children of :logseq.class/Page"
   (set
    (keep (fn [[class-ident m]]
-           (when (= (get-in m [:properties :logseq.property/parent]) :logseq.class/Page) class-ident))
+           (when (= (get-in m [:properties :logseq.property.class/extends]) :logseq.class/Page) class-ident))
          built-in-classes)))
 
 (def page-classes
@@ -108,7 +112,7 @@
 (def private-tags
   "Built-in classes that are private and should not be used by a user directly.
   These used to be in block/type"
-  (set/union internal-tags
+  (set/union (disj internal-tags :logseq.class/Root)
              #{:logseq.class/Journal :logseq.class/Whiteboard}))
 
 (def hidden-tags
@@ -117,21 +121,46 @@
 
 ;; Helper fns
 ;; ==========
+(defn get-structured-children
+  "Returns all children of a class"
+  [db eid]
+  (->>
+   (d/q '[:find [?c ...]
+          :in $ ?p %
+          :where
+          (class-extends ?p ?c)]
+        db
+        eid
+        (:class-extends rules/rules))
+   (remove #{eid})))
+
+(defn get-class-extends
+  "Returns all extends of a class"
+  [node]
+  (assert (de/entity? node) "get-class-extends `node` should be an entity")
+  (loop [extends (:logseq.property.class/extends node)
+         result #{}]
+    (if (seq extends)
+      (recur (set (mapcat :logseq.property.class/extends extends))
+             (into result extends))
+      result)))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.
    NOTE: Only use this when creating a db-ident for a new class."
-  [class-name]
-  (db-ident/create-db-ident-from-name "user.class" class-name))
+  [db class-name]
+  (let [db-ident (db-ident/create-db-ident-from-name "user.class" class-name)]
+    (if db
+      (db-ident/ensure-unique-db-ident db db-ident)
+      db-ident)))
 
 (defn build-new-class
   "Builds a new class with a unique :db/ident. Also throws exception for user
   facing messages when name is invalid"
   [db page-m]
   {:pre [(string? (:block/title page-m))]}
-  (let [db-ident (create-user-class-ident-from-name (:block/title page-m))
-        db-ident' (db-ident/ensure-unique-db-ident db db-ident)]
-    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident'))))
+  (let [db-ident (create-user-class-ident-from-name db (:block/title page-m))]
+    (sqlite-util/build-new-class (assoc page-m :db/ident db-ident))))
 
 (defonce logseq-class "logseq.class")
 
@@ -139,3 +168,8 @@
   "Determines if keyword is a logseq class"
   [kw]
   (= logseq-class (namespace kw)))
+
+(defn user-class-namespace?
+  "Determines if namespace string is a user class"
+  [s]
+  (string/includes? s ".class"))

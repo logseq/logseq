@@ -17,12 +17,14 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
+            [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
   [{:keys [to path-params query-params push]
     :or {push true}}]
+  (shui/popup-hide!)
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (route-fn to path-params query-params))
   ;; force return nil for usage in render phase of React
@@ -74,7 +76,7 @@
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
+  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard? ignore-alias?]
                :or {click-from-recent? false}
                :as opts}]
    (when (or (uuid? page-name)
@@ -82,10 +84,10 @@
      (let [page (db/get-page page-name)
            whiteboard? (db/whiteboard-page? page)]
        (if (and (not config/dev?)
-                (or (ldb/hidden? page)
+                (or (and (ldb/hidden? page) (not (ldb/property? page)))
                     (and (ldb/built-in? page) (ldb/private-built-in-page? page))))
          (notification/show! "Cannot go to an internal page." :warning)
-         (if-let [source (db/get-alias-source-page (state/get-current-repo) (:db/id page))]
+         (if-let [source (and (not ignore-alias?) (db/get-alias-source-page (state/get-current-repo) (:db/id page)))]
            (redirect-to-page! (:block/uuid source) opts)
            (do
            ;; Always skip onboarding when loading an existing whiteboard

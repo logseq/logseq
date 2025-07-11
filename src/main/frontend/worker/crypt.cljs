@@ -1,6 +1,7 @@
 (ns frontend.worker.crypt
   "Fns to en/decrypt some block attrs"
   (:require [datascript.core :as d]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
             [promesa.core :as p]))
 
@@ -122,3 +123,7 @@
     (assert (some? conn) repo)
     (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
       {:aes-key-jwk (:v aes-key-datom)})))
+
+(def-thread-api :thread-api/rtc-get-graph-keys
+  [repo]
+  (get-graph-keys-jwk repo))

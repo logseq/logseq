@@ -18,6 +18,7 @@
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.events :as events]
+            [frontend.handler.events.ui]
             [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
@@ -26,11 +27,9 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
-            [frontend.handler.test :as test]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.idb :as idb]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -45,12 +44,10 @@
 
 (defn- set-global-error-notification!
   []
-  (when-not config/dev?
-    (set! js/window.onerror
-          (fn [message, _source, _lineno, _colno, error]
-            (when-not (error/ignored? message)
-              (js/console.error message)
-              (log/error :exception error))))))
+  (set! js/window.onerror
+        (fn [message, _source, _lineno, _colno, error]
+          (when-not (error/ignored? message)
+            (log/error :exception error)))))
 
 (defn- watch-for-date!
   []
@@ -92,8 +89,6 @@
          (fn []
            (js/console.log "db restored, setting up repo hooks")
 
-           (state/pub-event! [:modal/nfs-ask-permission])
-
            (page-handler/init-commands!)
 
            (watch-for-date!)
@@ -116,10 +111,11 @@
   []
   (state/set-page-blocks-cp! page/page-cp)
   (state/set-component! :block/->hiccup block/->hiccup)
-  (state/set-component! :block/linked-references reference/block-linked-references)
+  (state/set-component! :block/linked-references reference/references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/inline-title block/inline-title)
   (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/reference block/block-reference)
   (state/set-component! :block/blocks-container block/blocks-container)
@@ -142,7 +138,6 @@
   [render]
 
   (idb/start)
-  (test/setup-test!)
   (get-system-info)
   (set-global-error-notification!)
 
@@ -155,7 +150,6 @@
   (i18n/start)
   (instrument/init)
   (state/set-online! js/navigator.onLine)
-  (set-network-watcher!)
 
   (-> (util/indexeddb-check?)
       (p/catch (fn [_e]
@@ -167,8 +161,6 @@
   (events/run!)
 
   (p/do!
-   (when (mobile-util/native-platform?)
-     (mobile/mobile-preinit))
    (-> (p/let [_ (db-browser/start-db-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
@@ -183,6 +175,8 @@
            (p/do! (db-browser/start-inference-worker!)
                   (db-browser/<connect-db-worker-and-infer-worker!)
                   (reset! vector-search-flows/*infer-worker-ready true)))
+         (set-network-watcher!)
+
          (when (util/electron?)
            (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)

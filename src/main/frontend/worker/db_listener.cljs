@@ -1,10 +1,10 @@
 (ns frontend.worker.db-listener
   "Db listeners for worker-db."
-  (:require [cljs-bean.core :as bean]
-            [datascript.core :as d]
-            [frontend.worker-common.util :as worker-util]
+  (:require [datascript.core :as d]
+            [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.search :as search]
+            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
             [logseq.outliner.batch-tx :as batch-tx]
@@ -16,6 +16,7 @@
 (defn- sync-db-to-main-thread
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
+  (when repo (worker-state/set-db-latest-tx-time! repo))
   (let [{:keys [from-disk?]} tx-meta
         result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
         tx-report' (:tx-report result)]
@@ -26,17 +27,15 @@
                    :tx-data (:tx-data tx-report')
                    :tx-meta tx-meta}
                   (dissoc result :tx-report))]
-        (worker-util/post-message :sync-db-changes data))
+        (shared-service/broadcast-to-clients! :sync-db-changes data))
 
       (when-not from-disk?
         (p/do!
-         (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
-               ^js wo (worker-state/get-worker-object)]
-           (when wo
-             (when (seq blocks-to-remove-set)
-               (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
-             (when (seq blocks-to-add)
-               (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))
+         (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
+           (when (seq blocks-to-remove-set)
+             ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
+           (when (seq blocks-to-add)
+             ((@thread-api/*thread-apis :thread-api/search-upsert-blocks) repo blocks-to-add))))))
     tx-report'))
 
 (comment

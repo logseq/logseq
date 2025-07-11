@@ -7,9 +7,11 @@
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.text :as text]))
 
@@ -138,7 +140,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
     (cond
-      (and (re-find #"[^\w\s]" q) (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"])))            ; punctuations
+      (and (re-find #"[^\w\s]" q)
+           (or (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
+               (string/includes? q "/")))            ; punctuations
       (str "\"" match-input "\"*")
       (not= q match-input)
       (string/replace match-input "," "")
@@ -192,21 +196,29 @@ DROP TRIGGER IF EXISTS blocks_au;
       (seq (fuzzy/search-normalize match true))
       (seq (fuzzy/search-normalize q true))))))
 
+(defn- hidden-entity?
+  [entity]
+  (or (ldb/hidden? entity)
+      (let [page (:block/page entity)]
+        (and (ldb/hidden? page)
+             (not= (:block/title page) common-config/quick-add-page-name)))))
+
 (defn- page-or-object?
   [entity]
   (and (or (ldb/page? entity) (ldb/object? entity))
-       (not (ldb/hidden? entity))))
+       (not (hidden-entity? entity))))
 
 (defn get-all-fuzzy-supported-blocks
   "Only pages and objects are supported now."
   [db]
   (let [page-ids (->> (d/datoms db :avet :block/name)
                       (map :e))
-        object-ids (->> (d/datoms db :avet :block/tags)
-                        (map :e))
+        object-ids (when (ldb/db-based-graph? db)
+                     (->> (d/datoms db :avet :block/tags)
+                          (map :e)))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
-    (remove ldb/hidden? blocks)))
+    (remove hidden-entity? blocks)))
 
 (defn- sanitize
   [content]
@@ -220,17 +232,20 @@ DROP TRIGGER IF EXISTS blocks_au;
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
-      ;; Should properties be included in the search indice?
-      ;; It could slow down the search indexing, also it can be confusing
-      ;; if the showing properties are not useful to users.
-      ;; (let [content (if (and db-based? (seq (:block/properties block)))
-      ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
-      ;;                 content)])
-    (let [title (ldb/get-title-with-parents (assoc block :block.temp/search? true))]
-      (when uuid
-        {:id (str uuid)
-         :page (str (or (:block/uuid page) uuid))
-         :title (if (page-or-object? block) title (sanitize title))}))))
+    (try
+      (let [title (cond->
+                   (-> block
+                       (update :block/title ldb/get-title-with-parents)
+                       db-content/recur-replace-uuid-in-block-title)
+                    (ldb/journal? block)
+                    (str " " (:block/journal-day block)))]
+        (when uuid
+          {:id (str uuid)
+           :page (str (or (:block/uuid page) uuid))
+           :title (if (page-or-object? block) title (sanitize title))}))
+      (catch :default e
+        (prn "Error: failed to run block->index on block " (:db/id block))
+        (js/console.error e)))))
 
 (defn build-fuzzy-search-indice
   "Build a block title indice from scratch.
@@ -274,11 +289,13 @@ DROP TRIGGER IF EXISTS blocks_au;
    * :limit - Number of result to limit search results. Defaults to 100
    * :dev? - Allow all nodes to be seen for development. Defaults to false
    * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev?]
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only? library-page-search?]
                           :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (let [match-input (get-match-input q)
+          page-count (count (d/datoms @conn :avet :block/name))
+          large-graph? (> page-count 2500)
           non-match-input (when (<= (count q) 2)
                             (str "%" (string/replace q #"\s+" "%") "%"))
           limit  (or limit 100)
@@ -295,34 +312,41 @@ DROP TRIGGER IF EXISTS blocks_au;
                       (str select pg-sql " title match ? or title match ? order by rank limit ?")
                       (str select pg-sql " title match ? order by rank limit ?"))
           non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?)
-          non-match-result (when non-match-input
+          matched-result (when-not page-only?
+                           (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
+          non-match-result (when (and (not page-only?) non-match-input)
                              (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
-          fuzzy-result (when-not page (fuzzy-search repo @conn q option))
+           ;; fuzzy is too slow for large graphs
+          fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
           result (->> (concat fuzzy-result matched-result non-match-result)
                       (common-util/distinct-by :id)
                       (keep (fn [result]
                               (let [{:keys [id page title snippet]} result
                                     block-id (uuid id)]
                                 (when-let [block (d/entity @conn [:block/uuid block-id])]
-                                  (when (if dev?
-                                          true
-                                          (if built-in?
-                                            (or (not (ldb/built-in? block))
-                                                (not (ldb/private-built-in-page? block))
-                                                (ldb/class? block))
-                                            (or (not (ldb/built-in? block))
-                                                (ldb/class? block))))
-                                    {:db/id (:db/id block)
-                                     :block/uuid block-id
-                                     :block/title (if (ldb/page? block)
-                                                    (ldb/get-title-with-parents block)
-                                                    (or snippet title))
-                                     :block/page (if (common-util/uuid-string? page)
-                                                   (uuid page)
-                                                   nil)
-                                     :block/tags (seq (map :db/id (:block/tags block)))
-                                     :page? (ldb/page? block)}))))))
+                                  (when-not (and library-page-search?
+                                                 (or (:block/parent block)
+                                                     (not (ldb/internal-page? block)))) ; remove pages that already have parents
+                                    (when (if dev?
+                                            true
+                                            (if built-in?
+                                              (or (not (ldb/built-in? block))
+                                                  (not (ldb/private-built-in-page? block))
+                                                  (ldb/class? block))
+                                              (or (not (ldb/built-in? block))
+                                                  (ldb/class? block))))
+                                      {:db/id (:db/id block)
+                                       :block/uuid block-id
+                                       :block/title (if (ldb/page? block)
+                                                      (ldb/get-title-with-parents block)
+                                                      (or snippet title))
+                                       :block/page (if (common-util/uuid-string? page)
+                                                     (uuid page)
+                                                     nil)
+                                       :block/tags (seq (map :db/id (:block/tags block)))
+                                       :page? (ldb/page? block)
+                                       :alias (some-> (first (:block/_alias block))
+                                                      (select-keys [:block/uuid :block/title]))})))))))
           page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
       (->>
        (concat page-or-object-result
@@ -340,16 +364,13 @@ DROP TRIGGER IF EXISTS blocks_au;
     (->> (d/datoms db :avet :block/uuid)
          (map :v)
          (keep #(d/entity db [:block/uuid %]))
-         (remove (fn [e]
-                   (or (ldb/hidden? e)
-                       (ldb/hidden? (:block/page e))))))))
+         (remove hidden-entity?))))
 
 (defn build-blocks-indice
   [repo db]
   (build-fuzzy-search-indice repo db)
   (->> (get-all-blocks db)
-       (keep block->index)
-       (bean/->js)))
+       (keep block->index)))
 
 (defn- get-blocks-from-datoms-impl
   [repo {:keys [db-after db-before]} datoms]
@@ -368,11 +389,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                     set)
                                blocks-to-add-set)]
       {:blocks-to-remove     (->>
-                              (keep #(d/entity db-before %) blocks-to-remove-set)
-                              (remove ldb/hidden?))
+                              (keep #(d/entity db-before %) blocks-to-remove-set))
        :blocks-to-add        (->>
                               (keep #(d/entity db-after %) blocks-to-add-set')
-                              (remove ldb/hidden?))})))
+                              (remove hidden-entity?))})))
 
 (defn- get-affected-blocks
   [repo tx-report]

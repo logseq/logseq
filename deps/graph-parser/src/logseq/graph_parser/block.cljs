@@ -132,7 +132,7 @@
     (when (some-> block-id parse-uuid)
       block-id)))
 
-(defn- paragraph-block?
+(defn paragraph-block?
   [block]
   (and
    (vector? block)
@@ -345,7 +345,7 @@
               (when namespace?
                 (let [namespace' (first (common-util/split-last "/" original-page-name))]
                   (when-not (string/blank? namespace')
-                    {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace')}})))
+                    {:block/namespace {:block/name (string/trim (common-util/page-name-sanity-lc namespace'))}})))
               (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
                 (let [current-ms (common-util/time-ms)]
                   {:block/created-at current-ms
@@ -373,7 +373,7 @@
     as there's no chance to introduce timestamps via editing in page
    `skip-existing-page-check?`: if true, allows pages to have the same name"
   [original-page-name db with-timestamp? date-formatter
-   & {:keys [page-uuid class? created-by] :as options}]
+   & {:keys [page-uuid class?] :as options}]
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (ldb/db-based-graph? db)
@@ -399,8 +399,7 @@
           (let [tags (if class? [:logseq.class/Tag]
                          (or (:block/tags page)
                              [:logseq.class/Page]))]
-            (cond-> (assoc page :block/tags tags)
-              created-by (assoc :logseq.property/created-by created-by)))
+            (assoc page :block/tags tags))
           (assoc page :block/type (or (:block/type page) "page")))))))
 
 (defn- db-namespace-page?
@@ -699,57 +698,49 @@
                                                    (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                                (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page?
-  "For sanity check only.
-   For renaming file externally, the file is actually deleted and transacted before-hand."
-  [db block-uuid current-page-name]
-  (when (and db current-page-name)
-    (when-let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid block-uuid])))]
-      (not= current-page-name block-page-name))))
-
 (defn fix-block-id-if-duplicated!
-  "If the block exists in another page, we need to fix it
-   If the block exists in the current extraction process, we also need to fix it"
-  [db page-name *block-exists-in-extraction block]
-  (let [block (if (or (@*block-exists-in-extraction (:block/uuid block))
-                      (block-exists-in-another-page? db (:block/uuid block) page-name))
+  "If the block exists in another page or the current page, we need to fix it"
+  [db page-name *extracted-block-ids block]
+  (let [block-page-name (:block/name (:block/page (d/entity db [:block/uuid (:block/uuid block)])))
+        block (if (or (and block-page-name (not= block-page-name page-name))
+                      (contains? @*extracted-block-ids (:block/uuid block)))
                 (fix-duplicate-id block)
                 block)]
-    (swap! *block-exists-in-extraction conj (:block/uuid block))
+    (swap! *extracted-block-ids conj (:block/uuid block))
     block))
 
 (defn extract-blocks
   "Extract headings from mldoc ast. Args:
-  *`blocks`: mldoc ast.
-  *  `content`: markdown or org-mode text.
-  *  `format`: content's format, it could be either :markdown or :org-mode.
-  *  `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+  * `ast`: mldoc ast.
+  * `content`: markdown or org-mode text.
+  * `format`: content's format, it could be either :markdown or :org-mode.
+  * `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
      * :db-graph-mode? : Set when a db graph in the frontend
      * :export-to-db-graph? : Set when exporting to a db graph"
-  [blocks content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
-  {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
+  [ast content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
+  {:pre [(seq ast) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
-        all-blocks (vec (reverse blocks))
+        all-blocks (vec (reverse ast))
         [blocks body pre-block-properties]
         (loop [headings []
-               blocks (reverse blocks)
+               ast-blocks (reverse ast)
                block-idx 0
                timestamps {}
                properties {}
                body []]
-          (if (seq blocks)
-            (let [[block pos-meta] (first blocks)]
+          (if (seq ast-blocks)
+            (let [[ast-block pos-meta] (first ast-blocks)]
               (cond
-                (paragraph-timestamp-block? block)
-                (let [timestamps (extract-timestamps block)
+                (paragraph-timestamp-block? ast-block)
+                (let [timestamps (extract-timestamps ast-block)
                       timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) (inc block-idx) timestamps' properties body))
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps' properties body))
 
-                (gp-property/properties-ast? block)
-                (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) (inc block-idx) timestamps properties body))
+                (gp-property/properties-ast? ast-block)
+                (let [properties (extract-properties (second ast-block) (assoc user-config :format format))]
+                  (recur headings (rest ast-blocks) (inc block-idx) timestamps properties body))
 
-                (heading-block? block)
+                (heading-block? ast-block)
                 ;; for db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
                 (let [cut-multiline? (and export-to-db-graph?
                                           (when-let [prev-block (first (get all-blocks (dec block-idx)))]
@@ -771,14 +762,19 @@
                                       (and export-to-db-graph?
                                            (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
                                                 (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
-                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options')
-                      block'' (if (or db-graph-mode? export-to-db-graph?)
+                      block' (construct-block ast-block properties timestamps body encoded-content format pos-meta' options')
+                      block'' (cond
+                                db-graph-mode?
                                 block'
-                                (assoc block' :macros (extract-macros-from-ast (cons block body))))]
-                  (recur (conj headings block'') (rest blocks) (inc block-idx) {} {} []))
+                                export-to-db-graph?
+                                (assoc block' :block.temp/ast-blocks (cons ast-block body))
+                                :else
+                                (assoc block' :macros (extract-macros-from-ast (cons ast-block body))))]
+
+                  (recur (conj headings block'') (rest ast-blocks) (inc block-idx) {} {} []))
 
                 :else
-                (recur headings (rest blocks) (inc block-idx) timestamps properties (conj body block))))
+                (recur headings (rest ast-blocks) (inc block-idx) timestamps properties (conj body ast-block))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body

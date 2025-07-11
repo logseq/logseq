@@ -314,3 +314,31 @@ html.is-zoomed-native-ios {
     min-width: auto;
   }
 }
+
+
+.cp__header {
+    > .r > div:not(.ui__dropdown-trigger) a, button {
+        @apply opacity-70 text-[inherit];
+
+        &:hover {
+            @apply opacity-100;
+        }
+    }
+}
+
+.cp__header {
+    .ls-block-breadcrumb {
+        @apply text-sm pl-4;
+    }
+    .breadcrumb {
+        @apply flex items-center;
+    }
+
+    .breadcrumb a {
+        @apply !opacity-75 hover:!opacity-100;
+        span {
+            @apply whitespace-nowrap text-ellipsis inline-block overflow-x-hidden align-middle;
+            max-width: 34ch;
+        }
+    }
+}

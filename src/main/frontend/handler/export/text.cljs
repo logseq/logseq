@@ -1,6 +1,5 @@
 (ns frontend.handler.export.text
   "export blocks/pages as text"
-  (:refer-clojure :exclude [map filter mapcat concat remove newline])
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -11,6 +10,8 @@
               simple-asts->string space]]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
+            [logseq.common.path :as path]
+            [logseq.db :as ldb]
             [logseq.graph-parser.schema.mldoc :as mldoc-schema]
             [malli.core :as m]
             [promesa.core :as p]))
@@ -506,8 +507,7 @@
   "options:
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
   :remove-options [:emphasis :page-ref :tag :property]
-  :other-options {:keep-only-level<=N int :newline-after-block bool}
-  :page-title-only? boolean"
+  :other-options {:keep-only-level<=N int :newline-after-block bool}"
   [repo root-block-uuids-or-page-uuid options]
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
@@ -515,10 +515,16 @@
     :export-blocks-as-markdown
     (try
       (let [content
-            (if (uuid? root-block-uuids-or-page-uuid)
+            (cond
              ;; page
-              (common/get-page-content root-block-uuids-or-page-uuid)
-              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid options))
+              (and (= 1 (count root-block-uuids-or-page-uuid))
+                   (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
+              (common/get-page-content (first root-block-uuids-or-page-uuid))
+              (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
+              (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
+                   (string/join "\n"))
+              :else
+              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
             first-block (and (coll? root-block-uuids-or-page-uuid)
                              (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
             format (get first-block :block/format :markdown)]
@@ -538,14 +544,14 @@
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo "md"))]
-    (when (seq files)
-      (let [files (export-files-as-markdown files nil)
-            repo (-> repo
-                     (string/replace config/db-version-prefix "")
-                     (string/replace config/local-db-prefix ""))
-            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+  (p/let [files* (util/profile :get-file-content (common/<get-file-contents repo "md"))]
+    (when (seq files*)
+      (let [files (export-files-as-markdown files* nil)
+            repo' (if (config/db-based-graph? repo)
+                    (string/replace repo config/db-version-prefix "")
+                    (path/basename repo))
+            zip-file-name (str repo' "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo')]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))

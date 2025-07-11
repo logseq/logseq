@@ -1,16 +1,34 @@
 (ns frontend.components.block.macros
   "Logseq macros that render and evaluate in blocks"
   (:require [clojure.walk :as walk]
+            [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db.conn :as db-conn]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.state :as state]
             [goog.string :as gstring]
             [goog.string.format]
-            [frontend.state :as state]
-            [frontend.config :as config]))
+            [logseq.db.frontend.property :as db-property]))
+
+(defn- properties-by-name
+  "Given a block from a query result, returns a map of its properties indexed by
+  property idents and titles"
+  [db block]
+  (->> (db-property/properties block)
+       (mapcat (fn [[k v]]
+                 ;; For now just support cardinality :one
+                 (when-not (set? v)
+                   (let [prop-val (some->> (:db/id v)
+                                           (d/entity db)
+                                           db-property/property-value-content)
+                         property (d/entity db k)]
+                     [[(keyword (:block/title property)) prop-val]
+                      [(:db/ident property) prop-val]]))))
+       (into {})))
 
 (defn- normalize-query-function
-  [ast repo result]
+  [ast* repo result]
   (let [ast (walk/prewalk
              (fn [f]
                (if (and (list? f)
@@ -25,30 +43,24 @@
                     (first f)
                     (list 'map (second f) 'result)))
                  f))
-             ast)]
+             ast*)
+        db-based-graph? (config/db-based-graph? repo)
+        ;; These keyword aliases should be the same as those used in the query-table for sorting
+        special-file-graph-keywords
+        {:block :block/title
+         :page :block/name
+         :created-at :block/created-at
+         :updated-at :block/updated-at}]
     (walk/postwalk
      (fn [f]
        (cond
          (keyword? f)
-         ;; These keyword aliases should be the same as those used in the query-table for sorting
-         (case f
-           :block
-           :block/title
-
-           :page
-           :block/name
-
-           :created-at
-           :block/created-at
-
-           :updated-at
-           :block/updated-at
-
-           (let [prop-key (if (config/db-based-graph? repo) (name f) f)
-                 vals (map #(get-in % [:block/properties prop-key]) result)
+         (if-let [kw (and (not db-based-graph?) (get special-file-graph-keywords f))]
+           kw
+           (let [vals (map #(get-in % [:block/properties f]) result)
                  int? (some integer? vals)]
              `(~'fn [~'b]
-                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
+                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
                             ~'result-num (~'parseFloat ~'result-str)
                             ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
                            (~'or ~'result (~'when ~int? 0))))))
@@ -65,9 +77,12 @@
                        (mapcat val query-result*)
                        query-result*)
         repo (state/get-current-repo)
+        db (db-conn/get-db repo)
         query-result' (if (config/db-based-graph? repo)
-                       (map #(assoc % :block/properties (db-pu/properties-by-name repo %)) query-result)
-                       query-result)
+                        (->> query-result
+                             (map #(d/entity db (:db/id %)))
+                             (map #(hash-map :block/properties (properties-by-name db %))))
+                        query-result)
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
                       (normalize-query-function repo query-result')

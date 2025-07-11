@@ -18,6 +18,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.file-based.priority :as priority]
+            [frontend.util.ref :as ref]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
@@ -125,7 +126,7 @@
 (defn db-based-statuses
   []
   (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/status)))
+       (db-pu/get-closed-property-values :logseq.property/status)))
 
 (defn db-based-embed-page
   []
@@ -198,7 +199,8 @@
      [:editor/set-property :block/tags :logseq.class/Query]
      [:editor/set-property :logseq.property/query ""]
      [:editor/set-property-on-block-property :logseq.property/query :logseq.property.node/display-type :code]
-     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]]
+     [:editor/set-property-on-block-property :logseq.property/query :logseq.property.code/lang "clojure"]
+     [:editor/exit]]
     (->block "query")))
 
 (defn db-based-code-block
@@ -241,19 +243,16 @@
                 (if db-based?
                   (db-based-statuses)
                   (file-based-statuses))
-                (mapv (fn [m]
-                        (let [command (if db-based?
-                                        [:div.flex.flex-row.items-center.gap-2 m [:div.text-xs.opacity-50 "Status"]]
-                                        m)
-                              icon (if db-based?
-                                     (case m
+                (mapv (fn [command]
+                        (let [icon (if db-based?
+                                     (case command
                                        "Canceled" "Cancelled"
                                        "Doing" "InProgress50"
-                                       m)
+                                       command)
                                      "square-asterisk")]
-                          [command (->marker m) (str "Set status to " m) icon]))))]
+                          [command (->marker command) (str "Set status to " command) icon]))))]
     (when (seq result)
-      (map (fn [v] (conj v "TASK")) result))))
+      (map (fn [v] (conj v "TASK STATUS")) result))))
 
 (defn file-based-priorities
   []
@@ -262,7 +261,7 @@
 (defn db-based-priorities
   []
   (map (fn [e] (:block/title e))
-       (db-pu/get-closed-property-values :logseq.task/priority)))
+       (db-pu/get-closed-property-values :logseq.property/priority)))
 
 (defn get-priorities
   []
@@ -273,17 +272,17 @@
                   (db-based-priorities)
                   (file-based-priorities))
                 (mapv (fn [item]
-                        (let [command (if db-based?
-                                        [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
-                                        item)]
-                          [command (->priority item) (str "Set priority to " item)
+                        (let [command item]
+                          [command
+                           (->priority item)
+                           (str "Set priority to " item)
                            (if db-based?
                              (str "priorityLvl" item)
                              (str "circle-letter-" (util/safe-lower-case item)))])))
                 (with-no-priority)
                 (vec))]
     (when (seq result)
-      (map (fn [v] (conj v "PRIORITY")) result))))
+      (map (fn [v] (into v ["PRIORITY"])) result))))
 
 ;; Credits to roamresearch.com
 
@@ -297,8 +296,9 @@
   []
   (mapv (fn [level]
           (let [heading (str "Heading " level)]
-            [heading (->heading level) heading (str "h-" level)])) (range 1 7)))
+            [heading (->heading level) heading (str "h-" level) "Heading"])) (range 1 7)))
 
+(defonce *latest-matched-command (atom ""))
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
@@ -358,10 +358,20 @@
 
       ;; task management
       (get-statuses)
-      [["Deadline" [[:editor/clear-current-slash]
-                    [:editor/set-deadline]] "" :icon/calendar-stats]
-       ["Scheduled" [[:editor/clear-current-slash]
-                     [:editor/set-scheduled]] "" :icon/calendar-month]]
+
+      ;; task date
+      [["Deadline"
+        [[:editor/clear-current-slash]
+         [:editor/set-deadline]]
+        ""
+        :icon/calendar-stats
+        "TASK DATE"]
+       ["Scheduled"
+        [[:editor/clear-current-slash]
+         [:editor/set-scheduled]]
+        ""
+        :icon/calendar-month
+        "TASK DATE"]]
 
       ;; priority
       (get-priorities)
@@ -424,16 +434,15 @@
          ["Draw" (fn []
                    (let [file (draw/file-name)
                          path (str common-config/default-draw-directory "/" file)
-                         text (page-ref/->page-ref path)]
+                         text (ref/->page-ref path)]
                      (p/let [_ (draw/create-draw-with-default-content path)]
                        (println "draw file created, " path))
                      text)) "Draw a graph with Excalidraw"])
 
-       (when (util/electron?)
-         ["Upload an asset"
-          [[:editor/click-hidden-file-input :id]]
-          "Upload file types like image, pdf, docx, etc.)"
-          :icon/upload])
+       ["Upload an asset"
+        [[:editor/click-hidden-file-input :id]]
+        "Upload file types like image, pdf, docx, etc.)"
+        :icon/upload]
 
        ["Template" [[:editor/input command-trigger nil]
                     [:editor/search-template]] "Insert a created template here"
@@ -474,12 +483,18 @@
 (defn init-commands!
   [get-page-ref-text]
   (let [commands (commands-map get-page-ref-text)]
+    (reset! *latest-matched-command "")
     (reset! *initial-commands commands)
     (reset! *matched-commands commands)))
 
+(defn set-matched-commands!
+  [command matched-commands]
+  (reset! *latest-matched-command command)
+  (reset! *matched-commands matched-commands))
+
 (defn reinit-matched-commands!
   []
-  (reset! *matched-commands @*initial-commands))
+  (set-matched-commands! "" @*initial-commands))
 
 (defn restore-state
   []
@@ -576,16 +591,10 @@
                       (count value)
                       (or forward-pos 0))
                    (or backward-pos 0))]
-    (state/set-edit-content! (state/get-edit-input-id)
-                             (str prefix value))
-    ;; HACK: save scroll-pos of current pos, then add trailing content
-    (let [scroll-container (util/nearest-scrollable-container input)
-          scroll-pos (.-scrollTop scroll-container)]
-      (state/set-block-content-and-last-pos! id new-value new-pos)
-      (cursor/move-cursor-to input new-pos)
-      (set! (.-scrollTop scroll-container) scroll-pos)
-      (when check-fn
-        (check-fn new-value (dec (count prefix)) new-pos)))))
+    (state/set-block-content-and-last-pos! id new-value new-pos)
+    (cursor/move-cursor-to input new-pos)
+    (when check-fn
+      (check-fn new-value (dec (count prefix)) new-pos))))
 
 (defn simple-replace!
   [id value selected
@@ -741,7 +750,7 @@
 (defn- db-based-set-status
   [status]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/status status)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/status status)))
 
 (defmethod handle-step :editor/set-status [[_ status] format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -780,8 +789,8 @@
   [priority]
   (when-let [block (state/get-edit-block)]
     (if (nil? priority)
-      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.task/priority)
-      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority))))
+      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/priority)
+      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))

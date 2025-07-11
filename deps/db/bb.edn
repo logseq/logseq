@@ -38,9 +38,9 @@
                                                 :property :simple-query-property :private-property
                                                 :property-scalar-default-value
                                                 :property-missing-value
-                                                :has-property-or-default-value)))))}}
+                                                :has-property-or-object-property)))))}}
 
  :tasks/config
  {:large-vars
   {:max-lines-count 50
-   :metadata-exceptions #{:large-vars/doc-var}}}}
+   :metadata-exceptions #{:large-vars/doc-var :large-vars/cleanup-todo}}}}

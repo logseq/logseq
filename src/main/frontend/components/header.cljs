@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [dommy.core :as d]
             [frontend.common.missionary :as c.m]
+            [frontend.components.block :as component-block]
             [frontend.components.export :as export]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.page-menu :as page-menu]
@@ -23,14 +24,14 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.hooks :as hooks]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.util :as shui-util]
             [missionary.core :as m]
@@ -54,9 +55,9 @@
   {:will-mount (fn [state]
                  (reset!
                   (::online-users-canceler state)
-                  (c.m/run-task
-                   (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
-                   :fetch-online-users :succ (constantly nil)))
+                  (c.m/run-task :fetch-online-users
+                    (m/reduce (fn [_ v] (reset! (::online-users state) v)) rtc-flows/rtc-online-users-flow)
+                    :succ (constantly nil)))
                  state)
    :will-unmount (fn [state]
                    (when @(::online-users-canceler state) (@(::online-users-canceler state)))
@@ -66,7 +67,7 @@
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users @(::online-users state)]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-1.text-sm.py-2.bg-gray-01.items-center
+      [:div.rtc-collaborators.flex.gap-1.text-sm.bg-gray-01.items-center
        (shui/button-ghost-icon :user-plus
                                {:on-click #(shui/dialog-open!
                                             (fn []
@@ -118,7 +119,9 @@
 (rum/defc ^:large-vars/cleanup-todo toolbar-dots-menu < rum/reactive
   [{:keys [current-repo t]}]
   (let [page (some-> (sidebar/get-current-page) db/get-page)
-        page-menu (if (ldb/page? page)
+        ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+        working-page? (if config/publishing? (not (state/sub :db/restoring?)) true)
+        page-menu (if (and working-page? (ldb/page? page))
                     (page-menu/page-menu page)
                     (when-not config/publishing?
                       (when (config/db-based-graph?)
@@ -165,11 +168,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  ;; Disable login on Web until RTC is ready
-                  (when (and (not login?)
-                             (or
-                              (storage/get :login-enabled)
-                              (not util/web-platform?)))
+                  (when-not login?
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
@@ -331,10 +330,21 @@
   (when (state/sub :ui/toggle-highlight-recent-blocks?)
     (recent-slider-inner)))
 
-(rum/defc ^:large-vars/cleanup-todo header < rum/reactive
+(rum/defc block-breadcrumb
+  [page-name]
+  [:div.ls-block-breadcrumb
+   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                     (db/entity [:block/uuid (uuid page-name)]))]
+     (when (:block/parent page)
+       [:div.text-sm
+        (component-block/breadcrumb {}
+                                    (state/get-current-repo)
+                                    (:block/uuid page)
+                                    {:header? true})]))])
+
+(rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
-  (let [_ (state/sub [:user/info :UserGroups])
-        electron-mac? (and util/mac? (util/electron?))
+  (let [electron-mac? (and util/mac? (util/electron?))
         left-menu (left-menu-button {:on-click (fn []
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
@@ -363,7 +373,7 @@
              [:button.it.navigation.nav-left.button.icon.opacity-70
               {:title (t :header/go-back) :on-click #(js/window.history.back)}
               (ui/icon "chevron-left" {:size 26})]))
-         ;; search button for non-mobile
+                 ;; search button for non-mobile
          (when current-repo
            (ui/with-shortcut :go/search "right"
              [:button.button.icon#search-button
@@ -374,50 +384,70 @@
                               (state/pub-event! [:go/search]))}
               (ui/icon "search" {:size ui/icon-size})])))]]
 
-     [:div.r.flex.drag-region
-      (when (and current-repo
-                 (ldb/get-graph-rtc-uuid (db/get-db))
-                 (user-handler/logged-in?)
-                 (config/db-based-graph? current-repo)
-                 (user-handler/team-member?))
-        [:<>
-         (recent-slider)
-         (rum/with-key (rtc-collaborators)
-           (str "collab-" current-repo))
-         (rtc-indicator/indicator)])
+     [:div.r.flex.drag-region.justify-between.items-center.gap-2.overflow-x-hidden.w-full
+      [:div.flex.flex-1
+       (block-breadcrumb (state/get-current-page))]
+      [:div.flex
+       (when (and current-repo
+                  (ldb/get-graph-rtc-uuid (db/get-db))
+                  (user-handler/logged-in?)
+                  (config/db-based-graph? current-repo)
+                  (user-handler/rtc-group?))
+         [:<>
+          (recent-slider)
+          (rum/with-key (rtc-collaborators)
+            (str "collab-" current-repo))
+          (rtc-indicator/indicator)])
 
-      (when (and current-repo
-                 (not (config/demo-graph? current-repo))
-                 (not (config/db-based-graph? current-repo))
-                 (user-handler/alpha-or-beta-user?))
-        (fs-sync/indicator))
+       (when (user-handler/logged-in?)
+         (rtc-indicator/downloading-detail))
+       (when (user-handler/logged-in?)
+         (rtc-indicator/uploading-detail))
 
-      (when (and (not= (state/get-current-route) :home)
-                 (not custom-home-page?))
-        (home-button))
+       (when (and current-repo
+                  (not (config/demo-graph? current-repo))
+                  (not (config/db-based-graph? current-repo))
+                  (user-handler/alpha-or-beta-user?))
+         (fs-sync/indicator))
 
-      (when config/lsp-enabled?
-        [:<>
-         (plugins/hook-ui-items :toolbar)
-         (plugins/updates-notifications)])
+       (when (and (not= (state/get-current-route) :home)
+                  (not custom-home-page?))
+         (home-button))
 
-      (when (state/feature-http-server-enabled?)
-        (server/server-indicator (state/sub :electron/server)))
+       (when config/lsp-enabled?
+         [:<>
+          (plugins/hook-ui-items :toolbar)
+          (plugins/updates-notifications)])
 
-      (when (util/electron?)
-        (back-and-forward))
+       (when (state/feature-http-server-enabled?)
+         (server/server-indicator (state/sub :electron/server)))
 
-      (when-not (mobile-util/native-platform?)
-        (new-block-mode))
+       (when (util/electron?)
+         (back-and-forward))
 
-      (when config/publishing?
-        [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-         (t :graph)])
+       (when-not (mobile-util/native-platform?)
+         (new-block-mode))
 
-      (toolbar-dots-menu {:t            t
-                          :current-repo current-repo
-                          :default-home default-home})
+       (when config/publishing?
+         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
+          (t :graph)])
 
-      (sidebar/toggle)
+       (toolbar-dots-menu {:t            t
+                           :current-repo current-repo
+                           :default-home default-home})
 
-      (updater-tips-new-version t)]]))
+       (sidebar/toggle)
+
+       (updater-tips-new-version t)]]]))
+
+(def ^:private header-related-flow
+  (m/latest
+   (fn [state rtc-running?]
+     {:user-groups (get-in state [:user/info :UserGroups])
+      :rtc-running? rtc-running?})
+   (m/watch state/state) rtc-flows/rtc-running-flow))
+
+(rum/defc header
+  [opts]
+  (let [_m (hooks/use-flow-state header-related-flow)]
+    (header-aux opts)))

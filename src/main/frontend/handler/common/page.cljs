@@ -2,19 +2,19 @@
   "Common fns for file and db based page handlers, including create!, delete!
   and favorite fns. This ns should be agnostic of file or db concerns but there
   is still some file-specific tech debt to remove from create!"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
+            [dommy.core :as dom]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.fs :as fs]
-            [frontend.handler.block :as block-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -40,12 +40,11 @@
 (defn <create!
   ([title]
    (<create! title {}))
-  ([title {:keys [redirect?]
+  ([title {:keys [redirect? today-journal?]
            :or   {redirect? true}
            :as options}]
    (when (string? title)
      (p/let [repo (state/get-current-repo)
-             conn (db/get-db repo false)
              db-based? (config/db-based-graph? repo)
              title (if (and db-based? (string/includes? title " #")) ; tagged page
                      (wrap-tags title)
@@ -57,26 +56,37 @@
                                (common-util/split-first (str "#" page-ref/left-brackets) (:block/title parsed-result)))
                               string/trim)
                       title)]
-       (if (and has-tags? (nil? title'))
-         (notification/show! "Page name can't include \"#\"." :warning)
+       (cond
+         (and has-tags? (nil? title'))
+         (notification/show! "Page name can't include \"#\"." :error)
+         (and has-tags?
+              (seq (set/intersection ldb/private-tags (set (map :db/ident (:block/tags parsed-result))))))
+         (notification/show! (str "New page can't set built-in tags: "
+                                  (string/join ", "
+                                               (keep #(when (ldb/private-tags (:db/ident %)) (pr-str (:block/title %)))
+                                                     (:block/tags parsed-result))))
+                             :error)
+         :else
          (when-not (string/blank? title')
-           (p/let [current-user-id (user/user-uuid)
-                   options' (if db-based?
+           (p/let [options' (if db-based?
                               (cond-> (update options :tags concat (:block/tags parsed-result))
                                 (nil? (:split-namespace? options))
-                                (assoc :split-namespace? true)
-                                current-user-id
-                                (assoc :created-by current-user-id))
+                                (assoc :split-namespace? true))
                               options)
-                   result (ui-outliner-tx/transact!
-                           {:outliner-op :create-page}
-                           (outliner-op/create-page! title' options'))
-                   [_page-name page-uuid] (ldb/read-transit-str result)
+                   [_page-name page-uuid] (ui-outliner-tx/transact!
+                                           {:outliner-op :create-page}
+                                           (outliner-op/create-page! title' options'))
                    page (db/get-page (or page-uuid title'))]
              (when redirect?
                (route-handler/redirect-to-page! page-uuid)
-               (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-                 (block-handler/edit-block! first-block :max {:container-id :unknown-container})))
+               (when-not today-journal?
+                 (js/setTimeout
+                  (fn []
+                    (when-let [block-add-button (->> (dom/sel ".block-add-button")
+                                                     (filter #(= (str (:db/id page)) (dom/attr % "parentblockid")))
+                                                     first)]
+                      (.click block-add-button)))
+                  200)))
              page)))))))
 
 ;; favorite fns
@@ -168,9 +178,8 @@
               (notification/show! "Journals enabled" :success)))
            (-> (p/let [res (ui-outliner-tx/transact!
                             {:outliner-op :delete-page}
-                            (outliner-op/delete-page! page-uuid))
-                       res' (ldb/read-transit-str res)]
-                 (if res'
+                            (outliner-op/delete-page! page-uuid))]
+                 (if res
                    (when ok-handler (ok-handler))
                    (when error-handler (error-handler))))
                (p/catch (fn [error]

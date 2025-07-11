@@ -296,7 +296,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             size: [this.props.size[0], newHeight],
           })
 
-          if (loaded) app.persist({replace: true})
+          if (loaded) app.persist({})
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
@@ -305,7 +305,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       if (!this.initialHeightCalculated) {
         setTimeout(() => {
           this.onResetBounds()
-          app.persist({replace: true})
+          app.persist({})
         })
       }
     }, [this.initialHeightCalculated])
@@ -423,9 +423,10 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
     const onPageNameChanged = React.useCallback((id: string, isPage: boolean) => {
       this.initialHeightCalculated = false
       const blockType = isPage ? 'P' : 'B'
+      const height = isPage ? 320 : 40
       this.update({
         pageId: id,
-        size: [400, 320],
+        size: [400, height],
         blockType: blockType,
         compact: blockType === 'B',
       })
@@ -489,7 +490,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
                 setTimeout(() => {
                   app.api.editShape(this)
                   window.logseq?.api?.edit_block?.(uuid)
-                })
+                }, 128)
               }}
               placeholder="Create or search your graph..."
             />

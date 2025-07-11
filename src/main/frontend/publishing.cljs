@@ -56,8 +56,7 @@
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
               _ (let [db-transit-str (unescape-html data)]
-                  (when-let [^js worker @state/*db-worker]
-                    (.resetDB worker repo db-transit-str)))
+                  (state/<invoke-db-worker :thread-api/reset-db repo db-transit-str))
               _ (repo-handler/restore-and-setup-repo! repo)]
         (state/set-db-restoring! false)
         (ui-handler/re-render-root!)))))
@@ -85,10 +84,11 @@
   []
   (state/set-page-blocks-cp! page-component/page-cp)
   (state/set-component! :block/->hiccup block/->hiccup)
-  (state/set-component! :block/linked-references reference/block-linked-references)
+  (state/set-component! :block/linked-references reference/references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/inline-title block/inline-title)
   (state/set-component! :block/breadcrumb block/breadcrumb)
   (state/set-component! :block/blocks-container block/blocks-container)
   (state/set-component! :block/reference block/block-reference)

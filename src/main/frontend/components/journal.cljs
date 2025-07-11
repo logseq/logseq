@@ -1,50 +1,46 @@
 (ns frontend.components.journal
   (:require [frontend.components.page :as page]
-            [frontend.db :as db]
+            [frontend.components.views :as views]
             [frontend.db-mixins :as db-mixins]
-            [frontend.handler.page :as page-handler]
-            [frontend.mixins :as mixins]
+            [frontend.db.react :as react]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.functions :refer [debounce]]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc journal-cp < rum/reactive
-  [page]
-  [:div.journal-item.content {:key (:db/id page)}
-   (let [repo (state/sub :git/current-repo)]
-     (page/page-cp {:repo repo
-                    :page-name (str (:block/uuid page))}))])
+(rum/defc journal-cp < rum/static
+  [id last?]
+  [:div.journal-item.content
+   (when last?
+     {:class "journal-last-item"})
+   (page/page-cp {:db/id id
+                  :journals? true})])
 
-(defn on-scroll
-  [node {:keys [threshold on-load]
-         :or {threshold 500}}]
-  (when (util/bottom-reached? node threshold)
-    (on-load)))
-
-(defn attach-listeners
-  "Attach scroll and resize listeners."
-  [state]
-  (let [node (js/document.getElementById "main-content-container")
-        opts {:on-load page-handler/load-more-journals!}
-        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
-    (mixins/listen state node :scroll debounced-on-scroll)))
-
-(rum/defc journals < rum/reactive
-  (mixins/event-mixin attach-listeners)
-  {:will-unmount (fn [state]
-                   (state/set-journals-length! 3)
-                   state)}
-  [latest-journals]
-  (when (seq latest-journals)
-    [:div#journals
-     (for [journal latest-journals]
-       (rum/with-key
-         (journal-cp journal)
-         (str "journal-" (:db/id journal))))]))
+(defn- sub-journals
+  []
+  (when-let [repo (state/get-current-repo)]
+    (some-> (react/q repo
+                     [:frontend.worker.react/journals]
+                     {:query-fn (fn [_]
+                                  (p/let [{:keys [data]} (views/<load-view-data nil {:journals? true})]
+                                    (remove nil? data)))}
+                     nil)
+            util/react)))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
-  (let [journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
-    (journals latest-journals)))
+  (let [data (sub-journals)]
+    (when (seq data)
+      [:div#journals
+       (ui/virtualized-list
+        {:custom-scroll-parent (util/app-scroll-container-node)
+         :increase-viewport-by {:top 300 :bottom 300}
+         :compute-item-key (fn [idx]
+                             (let [id (util/nth-safe data idx)]
+                               (str "journal-" id)))
+         :total-count (count data)
+         :item-content (fn [idx]
+                         (let [id (util/nth-safe data idx)
+                               last? (= (inc idx) (count data))]
+                           (journal-cp id last?)))})])))

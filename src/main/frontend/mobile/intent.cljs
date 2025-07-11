@@ -1,7 +1,7 @@
 (ns frontend.mobile.intent
-  (:require ["@capacitor/filesystem" :refer [Filesystem]]
+  (:require ["@capacitor/action-sheet" :refer [ActionSheet]]
+            ["@capacitor/filesystem" :refer [Filesystem]]
             ["@capacitor/share" :refer [^js Share]]
-            ["@capacitor/action-sheet" :refer [ActionSheet]]
             ["path" :as node-path]
             ["send-intent" :refer [^js SendIntent]]
             [clojure.pprint :as pprint]
@@ -17,11 +17,11 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
+            [frontend.util.ref :as ref]
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]))
 
 (defn open-or-share-file
@@ -121,7 +121,7 @@
              (.copy Filesystem (clj->js {:from url :to path}))
              (fn [error]
                (log/error :copy-file-error {:error error})))
-          url (page-ref/->page-ref title)
+          url (ref/->page-ref title)
           template (get-in (state/get-config)
                            [:quick-capture-templates :text]
                            "**{time}** [[quick capture]]: {url}")]

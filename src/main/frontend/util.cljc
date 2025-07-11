@@ -6,7 +6,6 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
@@ -37,40 +36,6 @@
    [clojure.string :as string]
    [clojure.walk :as walk]))
 
-#?(:cljs (goog-define NODETEST false)
-   :clj (def NODETEST false))
-(defonce node-test? NODETEST)
-
-#?(:cljs
-   (extend-protocol IPrintWithWriter
-     symbol
-     (-pr-writer [sym writer _]
-       (-write writer (str "\"" (.toString sym) "\"")))))
-#?(:cljs
-   (extend-protocol INamed
-     UUID
-     (-name [this] (str this))
-     (-namespace [_] nil)))
-
-#?(:cljs (defonce ^js node-path utils/nodePath))
-#?(:cljs (defonce ^js sem-ver semver))
-#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
-#?(:cljs (defn app-scroll-container-node
-           ([]
-            (gdom/getElement "main-content-container"))
-           ([el]
-            (if (.closest el "#main-content-container")
-              (app-scroll-container-node)
-              (or
-               (gdom/getElementByClass "sidebar-item-list")
-               (app-scroll-container-node))))))
-#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
-#?(:cljs (defonce convert-to-roman utils/convertToRoman))
-#?(:cljs (defonce convert-to-letters utils/convertToLetters))
-#?(:cljs (defonce hsl2hex utils/hsl2hex))
-
-#?(:cljs (def string-join-path common-util/string-join-path))
-
 #?(:cljs
    (do
      (def safe-re-find common-util/safe-re-find)
@@ -79,25 +44,9 @@
        (when (string? s)
          (keyword (string/replace s " " "_"))))))
 
-#?(:cljs
-   (do
-     (def uuid-string? common-util/uuid-string?)
-     (defn check-password-strength
-       {:malli/schema [:=> [:cat :string] [:maybe
-                                           [:map
-                                            [:contains [:sequential :string]]
-                                            [:length :int]
-                                            [:id :int]
-                                            [:value :string]]]]}
-       [input]
-       (when-let [^js ret (and (string? input)
-                               (not (string/blank? input))
-                               (passwordStrength input))]
-         (bean/->clj ret)))
-     (defn safe-sanitize-file-name
-       {:malli/schema [:=> [:cat :string] :string]}
-       [s]
-       (sanitizeFilename (str s)))))
+#?(:cljs (goog-define NODETEST false)
+   :clj (def NODETEST false))
+(defonce node-test? NODETEST)
 
 #?(:cljs
    (do
@@ -125,7 +74,73 @@
        []
        (when-not node-test?
          (safe-re-find #"Mobi" js/navigator.userAgent)))
-     (def mobile? (memoize mobile*?))))
+     (def mobile? (memoize mobile*?))
+     (def capacitor-new? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
+
+#?(:cljs
+   (extend-protocol IPrintWithWriter
+     symbol
+     (-pr-writer [sym writer _]
+       (-write writer (str "\"" (.toString sym) "\"")))))
+#?(:cljs
+   (extend-protocol INamed
+     UUID
+     (-name [this] (str this))
+     (-namespace [_] nil)))
+
+#?(:cljs (defonce ^js node-path utils/nodePath))
+#?(:cljs (defonce ^js sem-ver semver))
+#?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
+#?(:cljs
+   (defn current-page-scroll
+     []
+     (some-> (or
+              (js/document.querySelector "ion-modal.show-modal")
+              (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
+             (.querySelector "ion-content.scrolling")
+             (.-shadowRoot)
+             (.querySelector "[part=scroll]"))))
+
+#?(:cljs (defn app-scroll-container-node
+           ([]
+            (if (capacitor-new?)
+              (current-page-scroll)
+              (gdom/getElement "main-content-container")))
+           ([el]
+            (if (capacitor-new?)
+              (current-page-scroll)
+              (if (.closest el "#main-content-container")
+                (app-scroll-container-node)
+                (or
+                 (gdom/getElementByClass "sidebar-item-list")
+                 (app-scroll-container-node)))))))
+#?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
+#?(:cljs (defonce convert-to-roman utils/convertToRoman))
+#?(:cljs (defonce convert-to-letters utils/convertToLetters))
+#?(:cljs (defonce hsl2hex utils/hsl2hex))
+#?(:cljs (defonce base64string-to-unit8array utils/base64ToUint8Array))
+
+#?(:cljs (def string-join-path common-util/string-join-path))
+
+#?(:cljs
+   (do
+     (def uuid-string? common-util/uuid-string?)
+     (defn check-password-strength
+       {:malli/schema [:=> [:cat :string] [:maybe
+                                           [:map
+                                            [:contains [:sequential :string]]
+                                            [:length :int]
+                                            [:id :int]
+                                            [:value :string]]]]}
+       [input]
+       (when-let [^js ret (and (string? input)
+                               (not (string/blank? input))
+                               (passwordStrength input))]
+         (bean/->clj ret)))
+     (defn safe-sanitize-file-name
+       {:malli/schema [:=> [:cat :string] :string]}
+       [s]
+       (sanitizeFilename (str s)))))
 
 #?(:cljs
    (do
@@ -201,54 +216,21 @@
      []
      (gobj/get js/window "innerWidth")))
 
-;; Keep the following colors in sync with common.css
-#?(:cljs
-   (defn- get-computed-bg-color
-     []
-     ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
-     (let [styles (js/window.getComputedStyle js/document.body)
-           bg-color (gobj/get styles "background-color")
-           ;; convert rgb(r,g,b) to #rrggbb
-           rgb2hex (fn [rgb]
-                     (->> rgb
-                          (map (comp #(.toString % 16) parse-long string/trim))
-                          (map #(if (< (count %) 2)
-                                  (str "0" %)
-                                  %))
-                          (string/join)
-                          (str "#")))]
-       (when (string/starts-with? bg-color "rgb")
-         (let [rgb (-> bg-color
-                       (string/replace #"^rgb[^\d]+" "")
-                       (string/replace #"\)$" "")
-                       (string/split #","))
-               rgb (take 3 rgb)]
-           (rgb2hex rgb))))))
-
-#?(:cljs
-   (defn set-android-theme
-     []
-     (let [f #(when (mobile-util/native-android?)
-                (when-let [bg-color (try (get-computed-bg-color)
-                                         (catch :default _
-                                           nil))]
-                  (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
-                  (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))]
-       (js/setTimeout f 32))))
-
 #?(:cljs
    (defn set-theme-light
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (set-android-theme))))
+      (when (mobile-util/native-android?)
+        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (set-android-theme))))
+      (when (mobile-util/native-android?)
+        (.setBackgroundColor StatusBar (clj->js {:color "#000000"}))))))
 
 (defn find-first
   [pred coll]
@@ -354,6 +336,9 @@
                           (gobj/get range "endContainer")
                           (gobj/get range "endOffset"))
                  (let [contents (.cloneContents pre-caret-range)
+                       ;; Remove all `.select-none` nodes
+                       _  (doseq [el (.querySelectorAll contents ".select-none")]
+                            (.remove el))
                        html (some-> (first (.-childNodes contents))
                                     (gobj/get "innerHTML")
                                     str)
@@ -365,7 +350,7 @@
                                        (string/ends-with? html "<div class=\"is-paragraph\"></div></div></span></div></div></div>")
                                        ;; multiple lines with a new line
                                        (string/ends-with? html "<br></div></div></span></div></div></div>")))
-                       value (.toString pre-caret-range)]
+                       value (.-textContent contents)]
                    (if br-ended?
                      (str value "\n")
                      value)))))
@@ -528,14 +513,6 @@
           (.scrollIntoView block
                            #js {:behavior (if animate? "smooth" "auto")
                                 :block    "center"}))))))
-
-#?(:cljs
-   (defn bottom-reached?
-     [node threshold]
-     (let [full-height (gobj/get node "scrollHeight")
-           scroll-top' (gobj/get node "scrollTop")
-           client-height (gobj/get node "clientHeight")]
-       (<= (- full-height scroll-top' client-height) threshold))))
 
 #?(:cljs
    (defn link?
@@ -744,11 +721,9 @@
 
 #?(:cljs
    (defn get-nodes-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)
              start (min idx-1 idx-2)
              end (inc (max idx-1 idx-2))]
@@ -756,11 +731,9 @@
 
 #?(:cljs
    (defn get-direction-between-two-nodes
-     [id1 id2 class]
+     [node-1 node-2 class]
      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-       (let [node-1 (gdom/getElement id1)
-             node-2 (gdom/getElement id2)
-             idx-1 (.indexOf nodes node-1)
+       (let [idx-1 (.indexOf nodes node-1)
              idx-2 (.indexOf nodes node-2)]
          (if (>= idx-1 idx-2)
            :up
@@ -787,16 +760,21 @@
 #?(:cljs
    (defn get-blocks-noncollapse
      ([]
-      (->> (d/sel "div:not(.reveal) .ls-block")
+      (->> (d/sel "div .ls-block")
            (filter (fn [b] (some? (gobj/get b "offsetParent"))))))
      ([blocks-container]
-      (->> (d/sel blocks-container "div:not(.reveal) .ls-block")
+      (->> (d/sel blocks-container "div .ls-block")
            (filter (fn [b] (some? (gobj/get b "offsetParent"))))))))
 
 #?(:cljs
    (defn remove-embedded-blocks [blocks]
      (->> blocks
           (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
+
+#?(:cljs
+   (defn remove-property-value-blocks [blocks]
+     (->> blocks
+          (remove (fn [b] (d/has-class? b "property-value-container"))))))
 
 #?(:cljs
    (defn get-selected-text
@@ -821,7 +799,7 @@
                              (pr-str
                               {:graph graph
                                :embed-block? embed-block?
-                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
+                               :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))
@@ -830,11 +808,16 @@
   (keep-indexed #(when (not= %1 n) %2) coll))
 
 #?(:cljs
+   (defn atom? [v]
+     (instance? Atom v)))
+
+#?(:cljs
    (defn react
      [ref]
-     (if rum/*reactions*
-       (rum/react ref)
-       @ref)))
+     (when ref
+       (if rum/*reactions*
+         (rum/react ref)
+         @ref))))
 
 #?(:cljs
    (def time-ms common-util/time-ms))
@@ -882,13 +865,16 @@
      "Gets previous non-collapsed block. If given a container
       looks up blocks in that container e.g. for embed"
      ([block] (get-prev-block-non-collapsed block {}))
-     ([block {:keys [container up-down?]}]
+     ([block {:keys [container up-down? exclude-property?]}]
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (let [blocks (if up-down?
-                       (skip-same-top-blocks blocks block)
-                       blocks)]
+        (let [blocks (cond->>
+                      (if up-down?
+                        (skip-same-top-blocks blocks block)
+                        blocks)
+                       exclude-property?
+                       (remove (fn [node] (d/has-class? node "property-value-container"))))]
           (when-let [index (.indexOf blocks block)]
             (let [idx (dec index)]
               (when (>= idx 0)
@@ -898,7 +884,8 @@
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
-                            remove-embedded-blocks)]
+                            remove-embedded-blocks
+                            remove-property-value-blocks)]
        (when-let [index (.indexOf blocks block)]
          (let [idx (dec index)]
            (when (>= idx 0)
@@ -906,11 +893,14 @@
 
 #?(:cljs
    (defn get-next-block-non-collapsed
-     [block {:keys [up-down?]}]
+     [block {:keys [up-down? exclude-property?]}]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (let [blocks (if up-down?
-                      (skip-same-top-blocks blocks block)
-                      blocks)]
+       (let [blocks (cond->>
+                     (if up-down?
+                       (skip-same-top-blocks blocks block)
+                       blocks)
+                      exclude-property?
+                      (remove (fn [node] (d/has-class? node "property-value-container"))))]
          (when-let [index (.indexOf blocks block)]
            (let [idx (inc index)]
              (when (>= (count blocks) idx)
@@ -991,12 +981,15 @@
                    :clj nil))
 
 #?(:cljs
+   (defn get-blocks-by-id
+     [block-id]
+     (when (uuid-string? (str block-id))
+       (d/sel (format "[blockid='%s']" (str block-id))))))
+
+#?(:cljs
    (defn get-first-block-by-id
      [block-id]
-     (when block-id
-       (let [block-id (str block-id)]
-         (when (uuid-string? block-id)
-           (first (array-seq (js/document.getElementsByClassName (str "id" block-id)))))))))
+     (first (get-blocks-by-id block-id))))
 
 #?(:cljs
    (defn url-encode
@@ -1033,8 +1026,7 @@
                      (d/set-attr! :type "text/css")
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
-           (d/append! parent-node link))
-         (set-android-theme)))))
+           (d/append! parent-node link))))))
 
 (defn remove-common-preceding
   [col1 col2]
@@ -1244,21 +1236,14 @@
 
 (def keyboard-height (atom nil))
 #?(:cljs
-   (defn scroll-editor-cursor
-     [^js/HTMLElement el & {:keys [to-vw-one-quarter?]}]
-     (when (and el (or (mobile-util/native-platform?) (mobile?)))
+   (defn mobile-get-scroll
+     [^js/HTMLElement el]
+     (when (and el (mobile?))
        (let [box-rect    (.getBoundingClientRect el)
              box-top     (.-top box-rect)
              box-bottom  (.-bottom box-rect)
-
-             header-height (-> (gdom/getElementByClass "cp__header")
-                               .-clientHeight)
-
-             main-node   (app-scroll-container-node el)
-             scroll-top'  (.-scrollTop main-node)
-
              current-pos (get-selection-start el)
-             grapheme-pos (get-graphemes-pos (.-value (.textContent el)) current-pos)
+             grapheme-pos (get-graphemes-pos (.-value el) current-pos)
              mock-text   (some-> (gdom/getElement "mock-text")
                                  gdom/getChildren
                                  array-seq
@@ -1268,22 +1253,23 @@
 
              cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
              vw-height   (or (.-height js/window.visualViewport)
-                             (.-clientHeight js/document.documentElement))
-             ;; mobile toolbar height: 40px
-             scroll      (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))]
-         (cond
-           (and to-vw-one-quarter? (> cursor-y (* vw-height 0.4)))
-           (set! (.-scrollTop main-node) (+ scroll-top' (- cursor-y (/ vw-height 4))))
+                             (.-clientHeight js/document.documentElement))]
+         {:scroll (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))
+          :cursor-y cursor-y
+          :offset-height offset-height}))))
 
+#?(:cljs
+   (defn scroll-editor-cursor
+     [^js/HTMLElement el]
+     (when (and el (mobile?))
+       (let [header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
+             main-node   (app-scroll-container-node el)
+             scroll-top'  (.-scrollTop main-node)
+             {:keys [scroll offset-height cursor-y]} (mobile-get-scroll el)]
+         (cond
            (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
                 (>= cursor-y header-height))
            (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
-
-           (< cursor-y header-height)
-           (let [_ (.scrollIntoView el true)
-                 main-node (app-scroll-container-node el)
-                 scroll-top' (.-scrollTop main-node)]
-             (set! (.-scrollTop main-node) (- scroll-top' (/ vw-height 4))))
 
            (> scroll 0)
            (set! (.-scrollTop main-node) (+ scroll-top' scroll))
@@ -1350,10 +1336,6 @@
   [block]
   (:block/collapsed? block))
 
-#?(:cljs
-   (defn atom? [v]
-     (instance? Atom v)))
-
 ;; https://stackoverflow.com/questions/32511405/how-would-time-ago-function-implementation-look-like-in-clojure
 #?(:cljs
    (defn human-time
@@ -1387,9 +1369,7 @@
 #?(:cljs
    (def JS_ROOT
      (when-not node-test?
-       (if (= js/location.protocol "file:")
-         "./js"
-         "./static/js"))))
+       "./js")))
 
 #?(:cljs
    (defn js-load$
@@ -1535,3 +1515,13 @@ Arg *stop: atom, reset to true to stop the loop"
      [^js target]
      (when target
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
+
+#?(:cljs
+   (defn mobile-keep-keyboard-open
+     ([]
+      (mobile-keep-keyboard-open true))
+     ([schedule?]
+      (when (mobile?)
+        (let [f #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
+                   (.focus node))]
+          (if schedule? (schedule f) (f)))))))

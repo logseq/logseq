@@ -5,8 +5,8 @@
             [datascript.impl.entity :as de]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.datascript-report :as ds-report]))
 
@@ -160,7 +160,7 @@
                     (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
                          (into {}))
                     ;; both page and parent shouldn't be counted as refs
-                    (dissoc :block/parent :block/page
+                    (dissoc :block/parent :block/page :logseq.property/created-by-ref
                             :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))

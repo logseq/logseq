@@ -2,29 +2,34 @@
   "Property related util fns. Fns used in both DB and file graphs should go here"
   (:require [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]))
 
+(defn get-file-pid
+  "Gets file graph property id given the db graph ident"
+  [db-ident]
+  ;; Map of unique cases where the db graph keyword name is different than the file graph id
+  (let [unique-file-ids {:logseq.property/order-list-type :logseq.order-list-type
+                         :logseq.property.tldraw/page :logseq.tldraw.page
+                         :logseq.property.tldraw/shape :logseq.tldraw.shape
+                         :logseq.property/publishing-public? :public}]
+    (or (get unique-file-ids db-ident)
+        (keyword (name db-ident)))))
+
+;; TODO: replace repo with db later to remove this fn
 (defn get-pid
   "Get a built-in property's id (keyword name for file graph and db-ident for db
   graph) given its db-ident. No need to use this fn in a db graph only context"
   [repo db-ident]
   (if (sqlite-util/db-based-graph? repo)
     db-ident
-    (get-in db-property/built-in-properties [db-ident :name] (name db-ident))))
-
-(defn built-in-has-ref-value?
-  "Given a built-in's db-ident, determine if its property value is a ref"
-  [db-ident]
-  (contains? db-property-type/value-ref-property-types
-             (get-in db-property/built-in-properties [db-ident :schema :type])))
+    (get-file-pid db-ident)))
 
 (defn lookup
   "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
   [repo block db-ident]
   (if (sqlite-util/db-based-graph? repo)
     (let [val (get block db-ident)]
-      (if (built-in-has-ref-value? db-ident) (db-property/property-value-content val) val))
+      (if (db-property/built-in-has-ref-value? db-ident) (db-property/property-value-content val) val))
     (get (:block/properties block) (get-pid repo db-ident))))
 
 (defn get-block-property-value

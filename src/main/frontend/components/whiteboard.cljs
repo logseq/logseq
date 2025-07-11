@@ -4,8 +4,11 @@
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as model]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -14,14 +17,12 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.common.util :as common-util]
+            [logseq.shui.hooks :as hooks]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [frontend.config :as config]
-            [frontend.db.async :as db-async]
-            [logseq.common.util :as common-util]
-            [frontend.db :as db]
-            [logseq.shui.ui :as shui]))
+            [shadow.loader :as loader]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -36,21 +37,22 @@
     (when draw-component
       (draw-component page-uuid shape-id))))
 
-(rum/defc tldraw-preview < rum/reactive
-  {:init (fn [state]
-           (p/let [_ (loader/load :tldraw)]
-             (reset! tldraw-loaded? true))
-           (let [page-uuid (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) page-uuid))
-           state)}
+(rum/defc tldraw-preview
   [page-uuid]
   (when page-uuid
-    (let [loaded? (rum/react tldraw-loaded?)
-          tldr (whiteboard-handler/get-page-tldr page-uuid)
-          generate-preview (when loaded?
-                             (resolve 'frontend.extensions.tldraw/generate-preview))]
-      (when (and generate-preview (not (state/sub-async-query-loading page-uuid)))
-        (generate-preview tldr)))))
+    (let [[loading? set-loading!] (hooks/use-state true)]
+      (hooks/use-effect!
+       (fn []
+         (p/do!
+          (loader/load :tldraw)
+          (db-async/<get-block (state/get-current-repo) page-uuid)
+          (set-loading! false)))
+       [])
+      (when-not loading?
+        (let [tldr (whiteboard-handler/get-page-tldr page-uuid)
+              generate-preview (resolve 'frontend.extensions.tldraw/generate-preview)]
+          (when generate-preview
+            (generate-preview tldr)))))))
 
 ;; TODO: move to frontend.components.reference
 (rum/defcs references-count < rum/reactive db-mixins/query
@@ -64,7 +66,6 @@
      (let [*open? (::open? state)
            page-entity (model/get-page page-name-or-uuid)
            page (model/sub-block (:db/id page-entity))
-           block-uuid (:block/uuid page-entity)
            refs-count (count (:block/_refs page))]
        (when (> refs-count 0)
          (shui/popover
@@ -79,7 +80,7 @@
            {:on-open-auto-focus #(.preventDefault %)}
            (shui/popover-arrow {:class-name "popper-arrow"})
            [:div {:class classname}
-            (reference/block-linked-references block-uuid)])))))))
+            (reference/references page {})])))))))
 
 ;; This is not accurate yet
 (defn- get-page-human-update-time
@@ -133,11 +134,13 @@
 
 (rum/defc whiteboard-dashboard
   []
-  (if (state/enable-whiteboards?)
-    (let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
-                           (sort-by :block/updated-at)
-                           reverse)
-          [ref rect] (use-bounding-client-rect)
+  (let [[whiteboards set-whiteboards!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-whiteboards (state/get-current-repo))]
+         (set-whiteboards! result)))
+     [])
+    (let [[ref rect] (use-bounding-client-rect)
           [container-width] (when rect [(.-width rect) (.-height rect)])
           cols (cond (< container-width 600) 1
                      (< container-width 900) 2
@@ -165,7 +168,6 @@
                 (map (fn [id]
                        (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
                      checked-page-ids)
-                false
                 (fn []
                   (set-checked-page-ids #{})
                   (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
@@ -186,8 +188,7 @@
                                                                                     (conj checked-page-ids id)
                                                                                     (disj checked-page-ids id))))})]))
          (for [n (range empty-cards)]
-           [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
-    [:div "This feature is not publicly available yet."]))
+           [:div.dashboard-card.dashboard-bg-card {:key n}])]]])))
 
 (rum/defc whiteboard-page
   [page-uuid block-id]

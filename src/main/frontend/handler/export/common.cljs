@@ -10,10 +10,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
@@ -59,19 +57,19 @@
 (defn- get-blocks-contents
   [repo root-block-uuid & {:keys [init-level]
                            :or {init-level 1}}]
-  (-> (db/pull-many (keep :db/id (db/get-block-and-children repo root-block-uuid)))
-      (outliner-tree/blocks->vec-tree (str root-block-uuid))
-      (outliner-file/tree->file-content {:init-level init-level})))
+  (let [block (db/entity [:block/uuid root-block-uuid])
+        link (:block/link block)
+        block' (or link block)
+        root-id (:block/uuid block')
+        blocks (db/get-block-and-children repo root-id)]
+    (-> (outliner-tree/blocks->vec-tree repo blocks root-id {:link link})
+        (outliner-file/tree->file-content {:init-level init-level
+                                           :link link}))))
 
 (defn root-block-uuids->content
-  [repo root-block-uuids & {:keys [page-title-only?]}]
+  [repo root-block-uuids]
   (let [contents (mapv (fn [id]
-                         (if-let [page (and page-title-only?
-                                            (let [e (db/entity [:block/uuid id])]
-                                              (when (:block/name e)
-                                                e)))]
-                           (:block/title page)
-                           (get-blocks-contents repo id))) root-block-uuids)]
+                         (get-blocks-contents repo id)) root-block-uuids)]
     (string/join "\n" (mapv string/trim-newline contents))))
 
 (declare remove-block-ast-pos Properties-block-ast?)
@@ -190,24 +188,20 @@
 
 (defn <get-all-pages
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-pages worker repo)]
-      (ldb/read-transit-str result))))
+  (state/<invoke-db-worker :thread-api/export-get-all-pages repo))
 
 (defn <get-debug-datoms
   [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (.get-debug-datoms worker repo)))
+  (state/<invoke-db-worker :thread-api/export-get-debug-datoms repo))
 
 (defn <get-all-page->content
-  [repo]
-  (when-let [^object worker @db-browser/*worker]
-    (p/let [result (.get-all-page->content worker repo)]
-      (ldb/read-transit-str result))))
+  [repo options]
+  (state/<invoke-db-worker :thread-api/export-get-all-page->content repo options))
 
 (defn <get-file-contents
   [repo suffix]
-  (p/let [page->content (<get-all-page->content repo)]
+  (p/let [page->content (<get-all-page->content repo
+                                                {:export-bullet-indentation (state/get-export-bullet-indentation)})]
     (clojure.core/map (fn [[page-title content]]
                         {:path (str page-title "." suffix)
                          :content content

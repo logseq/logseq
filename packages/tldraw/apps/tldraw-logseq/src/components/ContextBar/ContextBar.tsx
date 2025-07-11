@@ -54,7 +54,7 @@ const _ContextBar: TLContextBarComponent<Shape> = ({ shapes, offsets, hidden }) 
             <React.Fragment key={idx}>
               <Action />
               {idx < Actions.length - 1 && (
-                <LSUI.Separator orientation="vertical" />
+                <LSUI.Separator className="tl-toolbar-separator" orientation="vertical" />
               )}
             </React.Fragment>
           ))}

@@ -38,10 +38,10 @@
                               ;; remove :db/id as it adds needless declarations to schema
                               #(validator [(dissoc % :db/id)])
                               ent-maps)]
-        (js/console.log "changed eids:" changed-ids tx-meta)
+        (prn "changed eids:" changed-ids :tx-meta tx-meta)
         (if (seq invalid-ent-maps)
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
-            (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
+            (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
             (doseq [m invalid-ent-maps]
               (let [m' (update m :block/properties (fn [properties]
                                                      (map (fn [[p v]]
@@ -97,7 +97,7 @@
         ent-maps* (db-malli-schema/datoms->entities datoms)
         ent-maps (mapv
                   ;; Remove some UI interactions adding this e.g. import
-                  #(dissoc % :block.temp/fully-loaded?)
+                  #(dissoc % :block.temp/load-status :block.temp/has-children?)
                   (db-malli-schema/update-properties-in-ents db ent-maps*))
         errors (binding [db-malli-schema/*db-for-validate-fns* db]
                  (-> (map (fn [e]
@@ -118,7 +118,7 @@
     {:entities (count entities)
      :pages (count (filter :block/name entities))
      ;; Nodes that aren't pages
-     :blocks (count (filter :block/parent entities))
+     :blocks (count (filter :block/page entities))
      :classes classes-count
      :properties properties-count
      ;; Objects that aren't classes or properties

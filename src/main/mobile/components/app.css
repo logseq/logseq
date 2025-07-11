@@ -1,0 +1,323 @@
+:root {
+  --ls-page-title-size: 26px;
+}
+
+html.plt-capacitor.plt-android {
+  --ion-safe-area-top: 42px;
+  --ion-safe-area-bottom: 16px;
+
+  ion-button, ion-tab-button {
+    --ripple-color: rgba(0, 0, 0, .3); /* 设置涟漪颜色为透明 */
+  }
+
+  ion-app {
+    margin-top: 0;
+  }
+
+  .header-md {
+    box-shadow: 0 2px 8px #eee;
+    border-bottom: .5px solid rgba(0, 0, 0, .15);
+  }
+
+  .searchbar-input.sc-ion-searchbar-md {
+    @apply shadow-none;
+  }
+
+  ion-modal {
+    ion-content {
+      #app-container-wrapper {
+        @apply pt-0;
+      }
+    }
+  }
+
+  .pswp__top-bar {
+    @apply relative top-8;
+  }
+}
+
+html.plt-mobile {
+  button {
+    /* fix ionic default style */
+    border-style: solid;
+  }
+}
+
+html.has-mobile-keyboard {
+  .ion-page:not(.ion-page-hidden) {
+    & > ion-content::part(scroll) {
+      padding-bottom: 512px !important;
+    }
+  }
+}
+
+html {
+  &[data-theme=dark] {
+    &[data-color=logseq] {
+      --background: var(--ls-primary-background-color);
+      --ion-item-background: var(--ls-primary-background-color);
+      --ion-text-color: var(--ls-primary-text-color);
+      --ion-toolbar-color: var(--ls-link-text-color);
+      --ion-item-color: var(--ls-primary-text-color);
+      --ion-item-border-color: var(--ls-border-color);
+
+      input, textarea {
+        caret-color: var(--ls-primary-text-color);
+      }
+
+      ion-toolbar::part(background), ion-tab-bar,
+      ion-tab-button, ion-header {
+        background-color: var(--lx-gray-01);
+      }
+
+      ion-modal {
+        --background: var(--lx-gray-01);
+        --backdrop-color: var(--ls-secondary-background-color);
+      }
+
+      #mobile-editor-toolbar {
+        background: var(--ls-secondary-background-color);
+      }
+
+      .action-sheet-group.sc-ion-action-sheet-ios,
+      .alert-wrapper.sc-ion-alert-ios {
+        --background: var(--ls-primary-background-color);
+        --button-background: var(--ls-primary-background-color);
+        --button-color: var(--ls-primary-text-color);
+      }
+
+      .header-md {
+        box-shadow: 0 2px 8px var(--ls-secondary-background-color);
+      }
+
+      .sc-ion-buttons-ios, .sc-ion-buttons-md {
+        &.text-muted-foreground {
+          color: var(--lx-gray-02);
+        }
+      }
+    }
+  }
+}
+
+ul {
+  @apply !list-disc ml-1 mt-2 list-inside;
+
+  li {
+    @apply pl-0;
+  }
+}
+
+.bg-background {
+  @apply bg-gray-01;
+}
+
+ion-textarea {
+  textarea {
+    @apply !p-1 min-h-[120px];
+  }
+}
+
+ion-buttons {
+  &:has(.app-graph-select) {
+    @apply max-w-[60%] overflow-hidden;
+  }
+}
+
+.pswp__top-bar {
+  @apply top-8;
+}
+
+#journals {
+  .ls-view-body {
+    .block-main-container {
+      @apply pr-10;
+    }
+
+    .ls-block .block-control {
+      @apply !right-5 !top-1;
+    }
+  }
+}
+
+.app-graph-select {
+  ion-button {
+    &::part(native) {
+      @apply whitespace-nowrap overflow-hidden font-semibold active:opacity-80 pr-8;
+    }
+  }
+}
+
+.sc-ion-buttons-md {
+  &.text-muted-foreground {
+    @apply text-gray-600;
+  }
+}
+
+.app-login-modal {
+  @apply mx-8 p-0;
+}
+
+.ui__notifications {
+  @apply fixed top-8 pointer-events-none w-full;
+
+  z-index: 9999;
+
+  & -content {
+    @apply inset-0 flex items-end justify-center px-4 py-2
+    pointer-events-none sm:px-6 sm:py-2 sm:items-start sm:justify-end;
+  }
+
+  .notification-area {
+    @apply border;
+
+    background-color: var(--ion-color-light-tint);
+  }
+}
+
+.block-modal-page {
+  > ion-header {
+    @apply pt-5 pb-1 px-4 flex justify-between bg-white/10;
+  }
+
+  > ion-content {
+    #app-container-wrapper {
+      @apply relative -top-6;
+    }
+
+    .ls-view-body {
+      @apply max-w-[90vw];
+    }
+  }
+}
+
+.block-content-or-editor-inner {
+  @apply min-h-[25px];
+}
+
+ion-tab-bar {
+  box-shadow: 0 0 1px #999999;
+  padding-top: 4px;
+
+  ion-tab-button {
+    @apply opacity-70;
+
+    &.tab-selected {
+      @apply opacity-100 text-accent-11 font-semibold;
+    }
+  }
+}
+
+ion-modal {
+  .property-select {
+    .cp__select-main {
+      @apply w-auto;
+    }
+  }
+}
+
+ion-content {
+  .block-main-container {
+    &[data-has-heading] {
+      > .block-control-wrap {
+        @apply static;
+      }
+    }
+
+    &[data-has-heading="1"], &:has(textarea.h1) {
+      > .block-control-wrap, > .block-control-wrap > .block-control {
+        @apply mt-[18px];
+      }
+    }
+
+    &[data-has-heading="2"], &:has(textarea.h2) {
+      > .block-control-wrap, > .block-control-wrap > .block-control {
+        @apply mt-3;
+      }
+    }
+  }
+
+  &::part(background) {
+    @apply !bg-transparent;
+  }
+
+  .ion-page {
+    @apply bg-gray-01;
+  }
+}
+
+.latex.initial {
+  @apply pt-1;
+
+  .katex-html {
+    &[aria-hidden="true"] {
+      @apply hidden;
+    }
+  }
+}
+
+[type='text']:focus, [type='email']:focus, [type='url']:focus,
+[type='password']:focus, [type='number']:focus, [type='date']:focus, [type='datetime-local']:focus,
+[type='month']:focus, [type='search']:focus, [type='tel']:focus, [type='time']:focus, [type='week']:focus,
+[multiple]:focus, textarea:focus, select:focus {
+  box-shadow: none;
+}
+
+.ui__popover-content, .ui__dropdown-menu-content {
+  &[data-editor-popup-ref=page-search],
+  &[data-editor-popup-ref=page-search-hashtag],
+  &[data-editor-popup-ref=commands] {
+    min-width: 61.8vw;
+    max-width: calc(100vw - 40px);
+
+    &[data-side=top] {
+      max-height: var(--top-popup-content-max-height, 50vh);
+    }
+
+    &[data-side=bottom] {
+      max-height: var(--bottom-popup-content-max-height, 50vh);
+    }
+  }
+}
+
+html[data-color=logseq] {
+  &[data-theme=light] {
+    --ion-color-primary: var(--rx-logseq-11);
+  }
+}
+
+.graph-switcher .action-sheet-button {
+  font-size: 1.125em;
+}
+
+@container ls-block (max-width: 430px) {
+  .block-modal-page .ls-properties-area {
+    display: initial;
+  }
+}
+
+.property-key {
+  min-width: 0px;
+}
+
+.property-block-container {
+  margin-left: 0px;
+}
+
+.ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
+  width: 26px;
+  height: 26px;
+}
+
+.ls-page-title .ls-page-icon button {
+  margin-top: 6px;
+}
+
+.ls-page-title {
+  margin-left: -8px;
+}
+
+.ls-block[draggable="true"] {
+  &.dragging {
+    @apply bg-gray-02;
+  }
+}
