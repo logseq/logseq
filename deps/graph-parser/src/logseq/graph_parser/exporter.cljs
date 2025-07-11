@@ -35,7 +35,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1005,9 +1006,41 @@
           block-title
           asset-name-to-uuids))
 
+(defn- build-annotation-tx
+  "Creates annotations for a pdf asset given the asset's edn file"
+  [asset-edn-map new-asset {:keys [log-fn] :or {log-fn prn}}]
+  (let [color-text-idents
+        (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
+             (map (juxt :value :db-ident))
+             (into {}))]
+    (mapv #(let [user-attributes
+                 {:logseq.property.pdf/hl-color (get color-text-idents (get-in % [:properties :color]))
+                  :logseq.property.pdf/hl-page (:page %)
+                  :block/title (get-in % [:content :text])}
+                 _ (when (some (comp nil? val) user-attributes)
+                     (log-fn :missing-annotation-attributes "Annotation is missing some attributes so set reasonable defaults for them"
+                             {:annotation user-attributes :asset (:block/title new-asset)}))
+                 annotation (merge
+                             ;; Reasonable defaults for user attributes
+                             {:logseq.property.pdf/hl-color :logseq.property/color.yellow
+                              :logseq.property.pdf/hl-page 1
+                              :block/title ""}
+                             user-attributes
+                             {:block/uuid (d/squuid)
+                              :block/order (db-order/gen-key)
+                              :logseq.property/ls-type :annotation
+                              :logseq.property.pdf/hl-value (dissoc % :id)
+                              :logseq.property/asset [:block/uuid (:block/uuid new-asset)]
+                              :block/tags [:logseq.class/Pdf-annotation]
+                              :block/parent [:block/uuid (:block/uuid new-asset)]
+                              :block/page :logseq.class/Asset})]
+             (prn :annotation-added! user-attributes)
+             (add-missing-timestamps annotation))
+          (get-in asset-edn-map [:edn-content :highlights]))))
+
 (defn- handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links]} {:keys [assets ignored-assets]}]
+  [block {:keys [asset-links]} {:keys [assets ignored-assets]} opts]
   (if (seq asset-links)
     (let [asset-maps
           (keep
@@ -1028,12 +1061,19 @@
                                            :logseq.property.asset/size (:size asset-data)
                                            :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
                                           (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
-                                            {:logseq.property.asset/resize-metadata metadata}))]
-                      ;;  (prn :asset-added! (node-path/basename asset-name) #_(get @assets asset-name))
+                                            {:logseq.property.asset/resize-metadata metadata}))
+                         asset-edn-path (when (= "pdf" (path/file-ext asset-name)) (string/replace-first asset-name #"(?i)\.pdf$" ".edn"))
+                         ;; Mark edn asset so it isn't treated like a normal asset later
+                         _ (when (get @assets asset-edn-path)
+                             (swap! assets assoc-in [asset-edn-path :pdf-annotation?] true))
+                         asset-tx (concat [new-asset]
+                                          (when-let [asset-edn-map (get @assets asset-edn-path)]
+                                            (build-annotation-tx asset-edn-map new-asset opts)))]
+                     (prn :asset-added! (node-path/basename asset-name))
                       ;;  (cljs.pprint/pprint asset-link)
                      (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-block))
                      {:asset-name-uuid [asset-name (:block/uuid new-asset)]
-                      :asset new-asset}))
+                      :asset-tx asset-tx}))
                  (do
                    (swap! ignored-assets conj
                           {:reason "No asset data found for this asset path"
@@ -1041,7 +1081,7 @@
                            :location {:block (:block/title block)}})
                    nil))))
            asset-links)
-          asset-blocks (keep :asset asset-maps)
+          asset-blocks (mapcat :asset-tx asset-maps)
           asset-names-to-uuids
           (into {} (map :asset-name-uuid asset-maps))]
       (cond-> {:block
@@ -1094,7 +1134,7 @@
         {block-after-built-in-props :block deadline-properties-tx :properties-tx}
         (update-block-deadline-and-scheduled block page-names-to-uuids options)
         {block-after-assets :block :keys [asset-blocks-tx]}
-        (handle-assets-in-block block-after-built-in-props walked-ast-blocks (select-keys import-state [:assets :ignored-assets]))
+        (handle-assets-in-block block-after-built-in-props walked-ast-blocks (select-keys import-state [:assets :ignored-assets]) (select-keys options [:log-fn]))
         ;; :block/page should be [:block/page NAME]
         journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
         prepared-block (cond-> block-after-assets
@@ -1793,7 +1833,11 @@
                           (sort-by :path *asset-files)
                           (range 0 (count *asset-files)))
         read-asset (fn read-asset [{:keys [path] :as file}]
-                     (-> (<read-asset-file file assets)
+                     (-> (p/let [byte-array (<read-asset-file file assets)]
+                           (when (= "edn" (path/file-ext (:path file)))
+                             (swap! assets assoc-in
+                                    [(asset-path->name path) :edn-content]
+                                    (common-util/safe-read-map-string (utf8/decode byte-array)))))
                          (p/catch
                           (fn [error]
                             (notify-user {:msg (str "Import failed to read " (pr-str path) " with error:\n" (.-message error))
