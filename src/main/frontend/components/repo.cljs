@@ -464,13 +464,14 @@
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
                                 (rtc-handler/<rtc-create-graph! repo)
-                                (state/set-state! :rtc/uploading? false)
-                                (rtc-flows/trigger-rtc-start repo))
+                                (rtc-flows/trigger-rtc-start repo)
+                                (rtc-handler/<get-remote-graphs)
+                                (repo-handler/refresh-repos!))
                               (p/catch (fn [error]
-                                         (reset! *creating-db? false)
-                                         (state/set-state! :rtc/uploading? false)
-                                         (log/error :create-db-failed error)))))
-                           (reset! *creating-db? false)
+                                         (log/error :create-db-failed error)))
+                              (p/finally (fn []
+                                           (state/set-state! :rtc/uploading? false)
+                                           (reset! *creating-db? false)))))
                            (shui/dialog-close!))))))
         submit! (fn [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
