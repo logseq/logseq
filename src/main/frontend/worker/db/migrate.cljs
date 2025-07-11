@@ -4,6 +4,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -378,6 +379,7 @@
         (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))))
 
 (defn ensure-built-in-data-exists!
+  "Return tx-data"
   [conn]
   (let [*uuids (atom {})
         data (->> (sqlite-create-graph/build-db-initial-data "")
@@ -430,11 +432,13 @@
                    [:block/uuid (@*uuids (second f))]
                    :else
                    f))
-               data)]
-    (d/transact! conn data' {:fix-db? true
-                             :db-migrate? true})))
+               data)
+        r (d/transact! conn data' {:fix-db? true
+                                   :db-migrate? true})]
+    (:tx-data r)))
 
 (defn- upgrade-version!
+  "Return tx-data"
   [conn db-based? version {:keys [properties classes fix]}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
@@ -462,14 +466,15 @@
         tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
-                  tx-data)]
-    (ldb/transact! conn tx-data' {:db-migrate? true})
-    (println "DB schema migrated to" version)))
+                  tx-data)
+        r (ldb/transact! conn tx-data' {:db-migrate? true})]
+    (println "DB schema migrated to" version)
+    (:tx-data r)))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
-  [conn]
+  [repo conn]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
@@ -489,11 +494,17 @@
                                   (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
                                              (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
                                     [v updates])))
-                              schema-version->updates)]
+                              schema-version->updates)
+                *tx-data-coll (atom [])]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
-              (upgrade-version! conn db-based? v m))
-            (ensure-built-in-data-exists! conn))
+              (let [tx-data (upgrade-version! conn db-based? v m)]
+                (swap! *tx-data-coll conj tx-data)))
+            (client-op/add-migration-datoms! repo version-in-db db-schema/version @*tx-data-coll)
+            (swap! *tx-data-coll conj (ensure-built-in-data-exists! conn))
+            {:from-version version-in-db
+             :to-version db-schema/version
+             :tx-data-coll @*tx-data-coll})
           (catch :default e
             (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
             (js/console.error e)

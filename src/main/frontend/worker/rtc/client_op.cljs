@@ -82,6 +82,7 @@
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :aes-key-jwk {:db/index true}
+   :migration-datoms {:db/index true}
 
    ;; device
    :device/uuid {:db/unique :db.unique/identity}
@@ -469,3 +470,10 @@
       (m/ap
         (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
           (datom-count-fn @conn))))))
+
+(defn add-migration-datoms!
+  [repo from-version to-version datoms]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (d/transact! conn [{:migration-datoms {:datoms datoms
+                                           :from from-version
+                                           :to to-version}}])))
