@@ -297,7 +297,7 @@
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (db-migrate/migrate conn)
+        (db-migrate/migrate repo conn)
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

@@ -47,3 +47,24 @@
                            (migration-updates->client-ops db client-schema-version)))]
     (client-op/add-ops! repo ops)
     ops))
+
+(defn local-datoms-tx-data=>remote-tx-data
+  [db datoms-tx-data]
+  (let [e->datoms (group-by :e datoms-tx-data)
+        e->datomvec-coll
+        (update-vals
+         e->datoms
+         (fn [datoms]
+           (let [e (:e (first datoms))
+                 need-block-uuid-datom?
+                 (every?
+                  (fn [{:keys [a added]}]
+                    (or (not= :block/uuid a)
+                        (and (= :block/uuid a) (false? added))))
+                  datoms)
+                 block-uuid (when need-block-uuid-datom? (:block/uuid (d/entity db e)))
+                 datoms* (cond->> datoms
+                           (and need-block-uuid-datom? block-uuid)
+                           (cons (d/datom e :block/uuid block-uuid)))]
+             (map (fn [{:keys [e a v tx added]}] [e a v tx added]) datoms*))))]
+    e->datomvec-coll))
