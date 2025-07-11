@@ -2,6 +2,7 @@
   "Flows related to RTC"
   (:require [frontend.common.missionary :as c.m]
             [frontend.flows :as flows]
+            [frontend.mobile.flows :as mobile-flows]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m])
@@ -28,8 +29,8 @@
 (def rtc-state-flow
   (m/watch (:rtc/state @state/state)))
 
-(def rtc-state-stream-flow
-  (m/stream rtc-state-flow))
+(def rtc-running-flow
+  (m/eduction (map :rtc-lock) rtc-state-flow))
 
 (def rtc-online-users-flow
   (c.m/throttle
@@ -40,7 +41,7 @@
                       (:rtc-lock m))
              (:online-users m))))
     (dedupe)
-    rtc-state-stream-flow)))
+    rtc-state-flow)))
 
 (def ^:private network-online-change-flow
   (m/stream
@@ -64,7 +65,7 @@ conditions:
   (->> (m/latest
         (fn [rtc-state _ login-user]
           (assoc rtc-state :login-user login-user))
-        (c.m/continue-flow rtc-state-stream-flow)
+        rtc-state-flow
         (c.m/continue-flow network-online-change-flow)
         flows/current-login-user-flow)
        (m/eduction
@@ -98,7 +99,7 @@ conditions:
     (let [visibility (m/?< flows/document-visibility-state-flow)]
       (try
         (if (= "visible" visibility)
-          (let [rtc-lock (:rtc-lock (m/? (m/reduce {} nil (m/eduction (take 1) rtc-state-flow))))]
+          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
             (if (not rtc-lock)
               :document-visible&rtc-not-running
               (m/amb)))
@@ -106,20 +107,58 @@ conditions:
         (catch Cancelled _
           (m/amb))))))
 
+(def ^:private network-online&rtc-not-running-flow
+  (m/ap
+    (let [online? (m/?< flows/network-online-event-flow)]
+      (try
+        (if online?
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
+              :network-online&rtc-not-running
+              (m/amb)))
+          (m/amb))
+        (catch Cancelled _
+          (m/amb))))))
+
+(def ^:private mobile-app-active&rtc-not-running-flow
+  (m/ap
+    (let [app-active? (m/?< mobile-flows/mobile-app-state-flow)]
+      (try
+        (if app-active?
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
+              :mobile-app-active&rtc-not-running
+              (m/amb)))
+          (m/amb))
+        (catch Cancelled _ (m/amb))))))
+
 (def trigger-start-rtc-flow
   (->>
-   [(m/eduction
+   [;; login-user changed
+    (m/eduction
      (keep (fn [user] (when (:email user) [:login])))
      flows/current-login-user-flow)
+    ;; repo changed
     (m/eduction
      (keep (fn [repo] (when repo [:graph-switch repo])))
      flows/current-repo-flow)
+    ;; trigger-rtc by somewhere else
     (m/eduction
      (keep (fn [repo] (when repo [:trigger-rtc repo])))
      (m/watch *rtc-start-trigger))
+    ;; document visibilitychange->true
     (m/eduction
      (map vector)
-     document-visible&rtc-not-running-flow)]
+     document-visible&rtc-not-running-flow)
+    ;; network online->true
+    (m/eduction
+     (map vector)
+     network-online&rtc-not-running-flow)
+    ;; for mobile, app active event + rtc-not-running
+    (m/eduction
+     (map vector)
+     mobile-app-active&rtc-not-running-flow)]
    (apply c.m/mix)
-   (m/eduction (filter (fn [_] (some? (state/get-auth-id-token)))))
+   (m/latest vector flows/current-login-user-flow)
+   (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))
    (c.m/debounce 200)))

@@ -14,7 +14,13 @@
   "Rules used by frontend.db.query-dsl for file graphs. The symbols ?b and ?p
   respectively refer to block and page. Do not alter them as they are
   programmatically built by the query-dsl ns"
-  {:page-property
+  {:block-parent
+   '[[(block-parent ?p ?c)
+      [?c :block/parent ?p]]
+     [(block-parent ?p ?c)
+      [?t :block/parent ?p]
+      (block-parent ?t ?c)]]
+   :page-property
    '[(page-property ?p ?key ?val)
      [?p :block/name]
      [?p :block/properties ?prop]

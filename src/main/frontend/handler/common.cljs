@@ -3,12 +3,10 @@
   (:require ["ignore" :as Ignore]
             [cljs-bean.core :as bean]
             [cljs.reader :as reader]
-            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]))
 
@@ -43,26 +41,6 @@
         (println error-message-or-handler))
       {})))
 
-(defn fix-pages-timestamps
-  [pages]
-  (map (fn [{:block/keys [created-at updated-at journal-day] :as p}]
-         (cond->
-          p
-
-           (nil? created-at)
-           (assoc :block/created-at
-                  (if journal-day
-                    (date/journal-day->utc-ms journal-day)
-                    (util/time-ms)))
-
-           (nil? updated-at)
-           (assoc :block/updated-at
-                  ;; Not exact true
-                  (if journal-day
-                    (date/journal-day->utc-ms journal-day)
-                    (util/time-ms)))))
-       pages))
-
 (defn listen-to-scroll!
   [element]
   (let [*scroll-timer (atom nil)
@@ -72,7 +50,7 @@
                     (state/set-state! :ui/scrolling? true)
                     (state/save-scroll-position! (util/scroll-top))
                     (state/save-main-container-position!
-                     (-> (gdom/getElement "main-content-container")
+                     (-> (util/app-scroll-container-node)
                          (gobj/get "scrollTop")))
                     (reset! *scroll-timer (js/setTimeout
                                            (fn [] (state/set-state! :ui/scrolling? false)) 500)))

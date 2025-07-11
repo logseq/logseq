@@ -1,19 +1,20 @@
 (ns ^:no-doc frontend.handler.assets
   (:require [cljs-http-missionary.client :as http]
             [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
-            [frontend.common.missionary :as c.m]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.asset :as db-asset]
             [medley.core :as medley]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p])
+  (:import [missionary Cancelled]))
 
 (defn alias-enabled?
   []
@@ -48,15 +49,6 @@
     (medley/find-first #(= name (:name (second %1)))
                        (medley/indexed alias-dirs))))
 
-(defn- convert-platform-protocol
-  [full-path]
-
-  (cond-> full-path
-    (and (string? full-path)
-         (mobile-util/native-platform?))
-    (string/replace-first
-     #"^(file://|assets://)" common-config/capacitor-protocol-with-prefix)))
-
 (defn resolve-asset-real-path-url
   [repo rpath]
   (when-let [rpath (and (string? rpath)
@@ -85,7 +77,7 @@
                     (if has-schema?
                       (path/path-join graph-root rpath)
                       (path/prepend-protocol "file:" (path/path-join graph-root rpath)))))]
-        (convert-platform-protocol ret)))))
+        ret))))
 
 (defn normalize-asset-resource-url
   "try to convert resource file to url asset link"
@@ -153,8 +145,6 @@
               css
               (map vector rel-paths blob-urls)))))
 
-(defonce *assets-url-cache (atom {}))
-
 (defn <make-asset-url
   "Make asset URL for UI element, to fill img.src"
   [path] ;; path start with "/assets"(editor) or compatible for "../assets"(whiteboards)
@@ -176,42 +166,21 @@
         (resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
+        ;; fullpath will be encoded
         (path/prepend-protocol "assets:" full-path)
 
-        (mobile-util/native-platform?)
-        (mobile-util/convert-file-src full-path)
+        ;(mobile-util/native-platform?)
+        ;(mobile-util/convert-file-src full-path)
 
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
         (p/let [binary (fs/read-file repo-dir path {})
                 blob (js/Blob. (array binary) (clj->js {:type "image"}))]
-          (when blob (js/URL.createObjectURL blob)))
-
-        :else ;; nfs
-        (let [handle-path (str "handle/" full-path)
-              cached-url  (get @*assets-url-cache (keyword handle-path))]
-          (if cached-url
-            (p/resolved cached-url)
-            ;; Loading File from handle cache
-            ;; Use await file handle, to ensure all handles are loaded.
-            (p/let [handle (nfs/await-get-nfs-file-handle repo handle-path)
-                    file   (and handle (.getFile handle))]
-              (when file
-                (p/let [url (js/URL.createObjectURL file)]
-                  (swap! *assets-url-cache assoc (keyword handle-path) url)
-                  url)))))))))
-
-(defn- decode-digest
-  [^js/Uint8Array digest]
-  (.. (js/Array.from digest)
-      (map (fn [s] (.. s (toString 16) (padStart 2 "0"))))
-      (join "")))
+          (when blob (js/URL.createObjectURL blob)))))))
 
 (defn get-file-checksum
   [^js/Blob file]
   (-> (.arrayBuffer file)
-      (.then (fn [buf] (js/crypto.subtle.digest "SHA-256" buf)))
-      (.then (fn [dig] (js/Uint8Array. dig)))
-      (.then decode-digest)))
+      (.then db-asset/<get-file-array-buffer-checksum)))
 
 (defn <get-all-assets
   []
@@ -263,7 +232,11 @@
         repo-dir (config/get-repo-dir repo)
         file-path (path/path-join common-config/local-assets-dir
                                   (str asset-block-id-str "." asset-type))]
-    (fs/write-file! repo repo-dir file-path data {})))
+    (p/do!
+     (fs/write-plain-text-file! repo repo-dir file-path data {})
+     (state/update-state!
+      :assets/asset-file-write-finish
+      (fn [m] (assoc-in m [repo asset-block-id-str] (common-util/time-ms)))))))
 
 (defn <unlink-asset
   [repo asset-block-id asset-type]
@@ -283,14 +256,13 @@
                                        :body asset-file
                                        :with-credentials? false
                                        :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
-                 @*progress-flow)
-       :upload-asset-progress
-       :succ (constantly nil))
+      (c.m/run-task :upload-asset-progress
+        (m/reduce (fn [_ v]
+                    (state/update-state!
+                     :rtc/asset-upload-download-progress
+                     (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                  @*progress-flow)
+        :succ (constantly nil))
       (let [{:keys [status] :as r} (m/? http-task)]
         (when-not (http/unexceptional-status? status)
           {:ex-data {:type :rtc.exception/upload-asset-failed :data (dissoc r :body)}})))))
@@ -301,20 +273,44 @@
     (let [*progress-flow (atom nil)
           http-task (http/get get-url {:with-credentials? false
                                        :response-type :array-buffer
-                                       :*progress-flow *progress-flow})]
-      (c.m/run-task
-       (m/reduce (fn [_ v]
-                   (state/update-state!
-                    :rtc/asset-upload-download-progress
-                    (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
-                 @*progress-flow)
-       :download-asset-progress
-       :succ (constantly nil))
-      (let [{:keys [status body] :as r} (m/? http-task)]
-        (if-not (http/unexceptional-status? status)
-          {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
-          (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
-              nil))))))
+                                       :*progress-flow *progress-flow})
+          progress-canceler
+          (c.m/run-task :download-asset-progress
+            (m/reduce (fn [_ v]
+                        (state/update-state!
+                         :rtc/asset-upload-download-progress
+                         (fn [m] (assoc-in m [repo asset-block-uuid-str] v))))
+                      @*progress-flow)
+            :succ (constantly nil))]
+      (try
+        (let [{:keys [status body] :as r} (m/? http-task)]
+          (if-not (http/unexceptional-status? status)
+            {:ex-data {:type :rtc.exception/download-asset-failed :data (dissoc r :body)}}
+            (do (c.m/<? (<write-asset repo asset-block-uuid-str asset-type body))
+                nil)))
+        (catch Cancelled e
+          (progress-canceler)
+          (throw e))))))
+
+(def-thread-api :thread-api/unlink-asset
+  [repo asset-block-id asset-type]
+  (<unlink-asset repo asset-block-id asset-type))
+
+(def-thread-api :thread-api/get-all-asset-file-paths
+  [repo]
+  (<get-all-asset-file-paths repo))
+
+(def-thread-api :thread-api/get-asset-file-metadata
+  [repo asset-block-id asset-type]
+  (<get-asset-file-metadata repo asset-block-id asset-type))
+
+(def-thread-api :thread-api/rtc-upload-asset
+  [repo asset-block-uuid-str asset-type checksum put-url]
+  (new-task--rtc-upload-asset repo asset-block-uuid-str asset-type checksum put-url))
+
+(def-thread-api :thread-api/rtc-download-asset
+  [repo asset-block-uuid-str asset-type get-url]
+  (new-task--rtc-download-asset repo asset-block-uuid-str asset-type get-url))
 
 (comment
   ;; read asset

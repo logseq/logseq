@@ -1,6 +1,8 @@
 (ns frontend.flows
   "This ns contains some event flows."
-  (:require [malli.core :as ma]
+  (:require [frontend.mobile.flows :as mobile-flows]
+            [frontend.mobile.util :as mobile-util]
+            [malli.core :as ma]
             [missionary.core :as m]))
 
 ;; Some Input Atoms
@@ -18,6 +20,8 @@
 
 (def ^:private current-login-user-validator (ma/validator current-login-user-schema))
 (def *current-login-user (atom nil :validator current-login-user-validator))
+
+(def *network-online? (atom nil))
 
 ;; Public Flows
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -42,3 +46,8 @@
             (fn dtor [] (.removeEventListener ^js js/document "visibilitychange" callback-fn)))))
        (m/eduction (dedupe))
        (m/relieve)))
+
+(def network-online-event-flow
+  (if (mobile-util/native-platform?)
+    (m/eduction (map :connected) mobile-flows/mobile-network-status-flow)
+    (m/watch *network-online?)))

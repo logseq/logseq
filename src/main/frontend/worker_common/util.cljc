@@ -6,7 +6,7 @@
                      [goog.crypt :as crypt]
                      [goog.crypt.Hmac]
                      [goog.crypt.Sha256]
-                     [logseq.db.common.sqlite :as sqlite-common-db]
+                     [logseq.db.common.sqlite :as common-sqlite]
                      [frontend.common.file.util :as wfu])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
@@ -22,12 +22,15 @@
         (do ~@body))))
 
 #?(:cljs
+   (def dev? js/goog.DEBUG))
+
+#?(:cljs
    (do
      (def post-message wfu/post-message)
 
      (defn get-pool-name
        [graph-name]
-       (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
+       (str "logseq-pool-" (common-sqlite/sanitize-db-name graph-name)))
 
      (defn- decode-username
        [username]

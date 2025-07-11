@@ -63,7 +63,8 @@
     (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
-    (or (string/includes? url "twitter.com") (string/includes? url "x.com"))
+    (or (re-matches #"^https://twitter\.com.*?$" url)
+        (re-matches #"^https://x\.com.*?$" url))
     (util/format "{{twitter %s}}" url)))
 
 (defn- try-parse-as-json
@@ -236,9 +237,16 @@
    (fn [error]
      (js/console.error error))))
 
+(defn- editing-display-type-block?
+  []
+  (boolean
+   (when-let [editing-block (some-> (state/get-edit-block) :db/id db/entity)]
+     (:logseq.property.node/display-type editing-block))))
+
 (defn- paste-text-or-blocks-aux
   [input e text html]
-  (if (or (thingatpt/markdown-src-at-point input)
+  (if (or (editing-display-type-block?)
+          (thingatpt/markdown-src-at-point input)
           (thingatpt/org-admonition&src-at-point input))
     (when-not (mobile-util/native-ios?)
       (util/stop e)

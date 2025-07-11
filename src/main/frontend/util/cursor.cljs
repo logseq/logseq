@@ -209,29 +209,30 @@
   (textarea-cursor-rect-last-row? (get-caret-pos input)))
 
 (defn- next-cursor-pos-up-down [direction cursor]
-  (let [elms  (-> (gdom/getElement "mock-text")
-                  gdom/getChildren
-                  array-seq)
-        chars' (->> elms
-                    (map mock-char-pos)
-                    (group-by :top))
-        tops  (sort (keys chars'))
-        tops-p (partition-by #(== (:top cursor) %) tops)
-        line-next
-        (if (= :up direction)
-          (-> tops-p first last)
-          (-> tops-p last first))
-        lefts
-        (->> (get chars' line-next)
-             (partition-by (fn [char-pos]
-                             (<= (:left char-pos) (:left cursor)))))
-        left-a (-> lefts first last)
-        left-c (-> lefts last first)
-        closer'
-        (if (> 2 (count lefts))
-          left-a
-          (closer left-a cursor left-c))]
-    (:pos closer')))
+  (when-let [mock-text (gdom/getElement "mock-text")]
+    (let [elms  (-> mock-text
+                    gdom/getChildren
+                    array-seq)
+          chars' (->> elms
+                      (map mock-char-pos)
+                      (group-by :top))
+          tops  (sort (keys chars'))
+          tops-p (partition-by #(== (:top cursor) %) tops)
+          line-next
+          (if (= :up direction)
+            (-> tops-p first last)
+            (-> tops-p last first))
+          lefts
+          (->> (get chars' line-next)
+               (partition-by (fn [char-pos]
+                               (<= (:left char-pos) (:left cursor)))))
+          left-a (-> lefts first last)
+          left-c (-> lefts last first)
+          closer'
+          (if (> 2 (count lefts))
+            left-a
+            (closer left-a cursor left-c))]
+      (:pos closer'))))
 
 (defn- move-cursor-up-down
   [input direction]

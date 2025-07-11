@@ -12,7 +12,6 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.hooks :as hooks]
             [frontend.mixins :as mixins]
             [frontend.rum :as rum-utils]
             [frontend.search :as search]
@@ -20,6 +19,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -202,7 +202,7 @@
 
 (rum/defc remote-readme-display
   [{:keys [repo]} _content]
-  (let [src (str (if (string/includes? js/location.href "logseq")
+  (let [src (str (if (string/includes? js/location.host "logseq")
                    "./static/" "./") "marketplace.html?repo=" repo)]
     [:iframe.lsp-frame-readme {:src src}]))
 
@@ -585,14 +585,14 @@
 
       (when (and develop-mode? (util/electron?) (not market?))
         [:div
-         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
-                    :arrow true}
-                   (ui/button
-                    (t :plugin/load-unpacked)
-                    {:icon "upload"
-                     :intent "link"
-                     :class "load-unpacked"
-                     :on-click plugin-handler/load-unpacked-plugin}))
+         (ui/tooltip
+          (ui/button
+           (t :plugin/load-unpacked)
+           {:icon "upload"
+            :intent "link"
+            :class "load-unpacked"
+            :on-click plugin-handler/load-unpacked-plugin})
+          [:div (t :plugin/unpacked-tips)])
 
          (when (util/electron?)
            (unpacked-plugin-loader selected-unpacked-pkg))])]
@@ -1075,9 +1075,7 @@
 
            [:div.px-4
             (when-not (string/blank? notes)
-              (ui/tippy
-               {:html [:p notes]}
-               [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")]))]])]
+              (ui/tooltip [:span.opacity-30.hover:opacity-80 (ui/icon "info-circle")] [:p notes]))]])]
 
        ;; all done
        [:div.py-4 [:strong.text-4xl (str "\uD83C\uDF89 " (t :plugin/all-updated))]])
@@ -1526,13 +1524,13 @@
             (bean/->clj (.-settingsSchema pl)) pl)))]]]]))
 
 (rum/defc custom-js-installer
-  [{:keys [t current-repo db-restoring? nfs-granted?]}]
+  [{:keys [t current-repo db-restoring?]}]
   (hooks/use-effect!
    (fn []
      (when (and (not db-restoring?)
-                (or (not util/nfs?) nfs-granted?))
+                (not util/nfs?))
        (ui-handler/exec-js-if-exists-&-allowed! t)))
-   [current-repo db-restoring? nfs-granted?])
+   [current-repo db-restoring?])
   nil)
 
 (rum/defc perf-tip-content

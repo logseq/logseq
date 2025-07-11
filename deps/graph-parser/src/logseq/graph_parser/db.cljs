@@ -59,3 +59,10 @@
   [db page-name]
   (some-> (ldb/get-page db page-name)
           :block/file))
+
+(defn get-all-namespace-relation
+  [db]
+  (d/q '[:find ?page ?parent
+         :where
+         [?page :block/namespace ?parent]]
+       db))

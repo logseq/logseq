@@ -1,8 +1,8 @@
 (ns frontend.util.page
   "Provides util fns for page blocks"
-  (:require [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.db :as db]))
+  (:require [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn get-current-page-name
   "Fetch the current page's original name with same approach as get-current-page-id"
@@ -22,15 +22,6 @@
   []
   (let [page-name (state/get-current-page)]
     (:db/id (db/get-page page-name))))
-
-(defn get-latest-edit-page-id
-  "Fetch the editing page id. If there is an edit-input-id set, we are probably still
-   on editing mode"
-  []
-  (or
-    (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
-    ;; not found
-    (get-current-page-id)))
 
 (defn get-page-file-rpath
   "Gets the file path of a page. If no page is given, detects the current page.

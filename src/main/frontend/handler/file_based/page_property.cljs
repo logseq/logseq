@@ -2,6 +2,7 @@
   "Page property fns for file graphs"
   (:require [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.file-based.model :as file-model]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
@@ -53,7 +54,7 @@
   [page key value]
   (let [repo (state/get-current-repo)
         key (keyword key)
-        pre-block (db/get-pre-block repo (:db/id page))
+        pre-block (file-model/get-pre-block repo (:db/id page))
         format (state/get-preferred-format)
         page-id {:db/id (:db/id page)}
         org? (= format :org)
@@ -74,8 +75,8 @@
                    :block/parent page-id
                    :block/page page-id
                    :block/title (if org?
-                                    (str "#+" (string/upper-case (name key)) ": " value)
-                                    (str (name key) ":: " value))
+                                  (str "#+" (string/upper-case (name key)) ": " value)
+                                  (str (name key) ":: " value))
                    :block/format format
                    :block/properties {key value}
                    :block/pre-block? true}

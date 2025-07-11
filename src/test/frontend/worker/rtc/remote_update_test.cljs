@@ -15,7 +15,7 @@
                                :block/title "local-content"}])
             op-value {:block/title (ldb/write-transit-str "remote-content")}]
         (is (= [[:db/add (:db/id (d/entity db [:block/uuid block-uuid])) :block/title "remote-content"]]
-               (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value)))))
+               (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value nil)))))
 
     (testing ":block/tags (1)"
       (let [db (d/db-with db [{:block/uuid block-uuid}
@@ -26,7 +26,7 @@
                                                                     [:block/uuid ref-uuid1]
                                                                     [:block/uuid ref-uuid2]]))]
         (is (= #{[:db/add db-id :block/tags ref1] [:db/add db-id :block/tags ref2]}
-               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value nil))))))
 
     (testing ":block/tags (2)"
       (let [db (d/db-with db [{:db/id "ref1"
@@ -39,7 +39,7 @@
                                                                [:block/uuid ref-uuid2]]))]
         (is (= #{[:db/retract db-id :block/tags [:block/uuid ref-uuid1]]
                  [:db/add db-id :block/tags ref2]}
-               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value nil))))))
 
     (testing ":block/tags (3): ref2 not exist"
       (let [db (d/db-with db [{:db/id "ref1"
@@ -48,19 +48,28 @@
                                :block/tags ["ref1"]}])
             op-value {:block/tags [ref-uuid2]}]
         (is (= #{[:db/retract (:db/id (d/entity db [:block/uuid block-uuid])) :block/tags [:block/uuid ref-uuid1]]}
-               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value nil))))))
     (testing ":block/updated-at"
       (let [db (d/db-with db [{:block/uuid block-uuid
                                :block/updated-at 1}])
             ent (d/entity db [:block/uuid block-uuid])]
         (is (= [[:db/retract (:db/id ent) :block/updated-at]]
-               (#'subject/remote-op-value->tx-data db ent {})))))
-    (testing ":logseq.task/status, op-value don't have this attr, means remove this attr"
+               (#'subject/remote-op-value->tx-data db ent {} nil)))))
+    (testing ":logseq.property/status, op-value don't have this attr, means remove this attr"
       (let [db (d/db-with db [{:db/id "ref1"
                                :block/uuid ref-uuid1}
                               {:block/uuid block-uuid
-                               :logseq.task/status "ref1"}])
+                               :logseq.property/status "ref1"}])
             op-value {}
             ent (d/entity db [:block/uuid block-uuid])]
-        (is (= [[:db/retract (:db/id ent) :logseq.task/status]]
-               (#'subject/remote-op-value->tx-data db ent op-value)))))))
+        (is (= [[:db/retract (:db/id ent) :logseq.property/status]]
+               (#'subject/remote-op-value->tx-data db ent op-value nil)))))
+    (testing "dont update ignored attrs"
+      (let [db (d/db-with db [{:block/uuid block-uuid
+                               :logseq.property.view/feature-type :aaa}])
+            op-value {}
+            ent (d/entity db [:block/uuid block-uuid])
+            ignore-attr-set #{:logseq.property.view/feature-type}]
+        (is (empty? (#'subject/remote-op-value->tx-data db ent op-value ignore-attr-set)))
+        (is (= [[:db/retract (:db/id ent) :logseq.property.view/feature-type]]
+               (#'subject/remote-op-value->tx-data db ent op-value nil)))))))

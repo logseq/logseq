@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
@@ -39,7 +40,8 @@
     (println pull-data)
     (notification/show!
      [:div.ls-wrap-widen
-      [:pre.code pull-data]
+      [:pre.code (str "ID: " (:db/id result) "\n"
+                      pull-data)]
       [:br]
       (ui/button "Copy to clipboard"
                  :on-click #(.writeText js/navigator.clipboard pull-data))]
@@ -90,8 +92,7 @@
         (notification/show! "No page found" :warning)))))
 
 (defn ^:export validate-db []
-  (when-let [^Object worker @state/*db-worker]
-    (.validate-db worker (state/get-current-repo))))
+  (state/<invoke-db-worker :thread-api/validate-db (state/get-current-repo)))
 
 (defn import-chosen-graph
   [repo]
@@ -101,3 +102,9 @@
 
 (defn ^:export replace-graph-with-db-file []
   (state/pub-event! [:dialog-select/db-graph-replace]))
+
+(defn ^:export rtc-stop []
+  (rtc-handler/<rtc-stop!))
+
+(defn ^:export rtc-start []
+  (rtc-handler/<rtc-start! (state/get-current-repo)))

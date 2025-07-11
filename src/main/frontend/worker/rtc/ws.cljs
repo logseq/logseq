@@ -4,6 +4,7 @@
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
   (:require [cljs-http-missionary.client :as http]
             [frontend.common.missionary :as c.m]
+            [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [missionary.core :as m]))
@@ -88,7 +89,8 @@
                (pos-int? open-ws-timeout))
           [retry-count open-ws-timeout])
   (c.m/backoff
-   (take retry-count c.m/delays)
+   {:delay-seq (take retry-count c.m/delays)
+    :reset-flow worker-flows/online-event-flow}
    (m/sp
      (try
        (if-let [ws (m/? (m/timeout (create-mws* url) open-ws-timeout))]

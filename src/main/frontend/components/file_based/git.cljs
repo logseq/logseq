@@ -2,10 +2,10 @@
   (:require [clojure.string :as string]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.shell :as shell]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.hooks :as hooks]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -48,11 +48,14 @@
 
 (rum/defc file-version-selector
   [versions path get-content]
-  (let
-   [[content set-content!] (rum/use-state  nil)
-    [hash  set-hash!] (rum/use-state   "HEAD")]
-    (hooks/use-effect! (fn [] (p/let [c (get-content hash path)] (set-content! c)) [hash path]))
-    [:div.flex
+  (let [[content set-content!] (rum/use-state  nil)
+        [hash  set-hash!] (rum/use-state "HEAD")]
+    (hooks/use-effect!
+     (fn []
+       (p/let [c (get-content hash path)]
+         (set-content! c)))
+     [hash path])
+    [:div.flex.overflow-y-auto {:class "max-h-[calc(85vh_-_4rem)]"}
      [:div.overflow-y-auto {:class "w-48 max-h-[calc(85vh_-_4rem)] "}
       [:div.font-bold "File history - " path]
       (for [line  versions]
@@ -65,7 +68,7 @@
              {:on-click (fn []  (set-hash!  hash))}
              hash]
             title]
-           [:div.opacity-50 time]]))]
+           [:div.opacity-50.text-sm time]]))]
      [:div.flex-1.p-4
       [:div.w-full.sm:max-w-lg {:style {:width 700}}
        [:div.font-bold.mb-4 (str path (util/format " (%s)" hash))]
@@ -73,7 +76,7 @@
        (ui/button "Revert"
                   :on-click (fn []
                               (file-handler/alter-file (state/get-current-repo)
-                                               path
-                                               content
-                                               {:re-render-root? true
-                                                :skip-compare? true})))]]]))
+                                                       path
+                                                       content
+                                                       {:re-render-root? true
+                                                        :skip-compare? true})))]]]))

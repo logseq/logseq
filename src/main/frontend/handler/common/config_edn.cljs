@@ -1,12 +1,13 @@
 (ns frontend.handler.common.config-edn
   "Common fns related to config.edn - global and repo"
-  (:require [malli.error :as me]
-            [malli.core :as m]
+  (:require [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.edn :as edn]
-            [lambdaisland.glogi :as log]
             [frontend.handler.notification :as notification]
             [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [malli.core :as m]
+            [malli.error :as me]
             [reitit.frontend.easy :as rfe]))
 
 (defn- humanize-more
@@ -76,7 +77,7 @@ nested keys or positional errors e.g. tuples"
       (do
         (config-notification-show! [:<> "Failed to read file " (file-link path)]
                                    "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'.")
-                false)
+        false)
       ;; Custom error message is better than malli's "invalid type" error
       (not (map? parsed-body))
       (do
@@ -86,44 +87,11 @@ nested keys or positional errors e.g. tuples"
       :else
       (validate-config-map parsed-body schema path))))
 
-(def file-only-config
-  "File only config that is deprecated in DB graphs"
-  {:preferred-format
-   "is not used in DB graphs as there is only markdown mode."
-   :preferred-workflow
-   "is not used in DB graphs"
-   :property/separated-by-commas
-   "is not used in DB graphs"
-   :property-pages/enabled?
-   "is not used in DB graphs as all properties have pages"
-   :property-pages/excludelist
-   "is not used in DB graphs"
-   :hidden
-   "is not used in DB graphs"
-   :org-mode/insert-file-link?
-   "is not used in DB graphs"
-   :block-hidden-properties
-   "is not used in DB graphs as hiding a property is done in its configuration"
-   :ignored-page-references-keywords
-   "is not used in DB graphs"
-   :file/name-format
-   "is not used in DB graphs"
-   :feature/enable-block-timestamps?
-   "is not used in DB graphs as it is always enabled"
-   :favorites
-   "is not stored in config for DB graphs"
-   :journal/page-title-format
-   "is not used in DB graphs"
-   :srs/learning-fraction
-   "is not used in DB graphs"
-   :srs/initial-interval
-   "is not used in DB graphs"})
-
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
   [path content {:keys [db-graph?]}]
   (let [body (try (edn/read-string content)
-               (catch :default _ ::failed-to-detect))
+                  (catch :default _ ::failed-to-detect))
         warnings (cond->
                   {:editor/command-trigger
                    "is no longer supported. Please use '/' and report bugs on it."
@@ -131,7 +99,7 @@ nested keys or positional errors e.g. tuples"
                    "is no longer supported."}
                    db-graph?
                    (merge
-                    file-only-config))]
+                    common-config/file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

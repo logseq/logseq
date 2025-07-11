@@ -3,9 +3,9 @@
             ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
             [cljs-bean.core :as bean]
-            [frontend.hooks :as hooks]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [logseq.shui.hooks :as hooks]
             [rum.core :as rum]))
 
 (def dnd-context (r/adapt-class DndContext))
@@ -35,9 +35,14 @@
      children]))
 
 (rum/defc items
-  [col {:keys [on-drag-end parent-node vertical? sort-by-inner-element?]
-        :or {vertical? true}}]
-  (let [ids (mapv :id col)
+  [col* {:keys [on-drag-end parent-node vertical? sort-by-inner-element?]
+         :or {vertical? true}}]
+  (assert (every? :id col*))
+  (when (some #(nil? (:id %)) col*)
+    (js/console.error "dnd-kit items without id")
+    (prn :col col*))
+  (let [col (filter :id col*)
+        ids (mapv :id col)
         items' (bean/->js ids)
         id->item (zipmap ids col)
         [items-state set-items] (rum/use-state items')

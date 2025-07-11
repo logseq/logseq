@@ -1,15 +1,14 @@
 (ns frontend.util.persist-var
   "System-component-like ns that provides an atom-like abstraction over an edn
   file"
-  (:require [frontend.config :as config]
-            [frontend.state :as state]
+  (:require [cljs.reader :as reader]
+            [frontend.config :as config]
             [frontend.fs :as fs]
+            [frontend.state :as state]
             [frontend.util :as util]
-            [cljs.reader :as reader]
             [promesa.core :as p]))
 
-
-(defn- load-rpath 
+(defn- load-rpath
   "Returns the relative path to the file that stores the persist-var"
   [location]
   (str config/app-name "/" location ".edn"))
@@ -67,7 +66,7 @@
             repo (state/get-current-repo)
             content (str (get-in @*value [repo :value]))
             dir (config/get-repo-dir repo)]
-        (fs/write-file! repo dir path content {:skip-compare? true}))))
+        (fs/write-plain-text-file! repo dir path content {:skip-compare? true}))))
 
   IDeref
   (-deref [_this]
@@ -82,7 +81,6 @@
   IPrintWithWriter
   (-pr-writer [_ w _opts]
     (write-all w (str "#PersistVar[" @*value ", loc: " location "]"))))
-
 
 (def *all-persist-vars (atom []))
 
@@ -106,6 +104,4 @@
 (comment
   (do
     (def bbb (persist-var 1 "aaa"))
-    (-save bbb)
-
-    ))
+    (-save bbb)))

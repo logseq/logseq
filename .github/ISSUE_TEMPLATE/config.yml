@@ -1,4 +1,7 @@
 contact_links:
+  - name: Database Version Issue
+    url: https://github.com/logseq/db-test/issues
+    about: For issues related to unreleased Database Version
   - name: Feature request
     url: https://discuss.logseq.com/new-topic?category=feature-requests
     about: Suggest an idea for Logseq

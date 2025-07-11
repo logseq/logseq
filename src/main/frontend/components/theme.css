@@ -124,9 +124,11 @@ main.ls-fold-button-on-right {
   .ls-block {
     .block-control {
       @apply absolute -right-3 pr-2 pt-1 top-0 z-[1]
-      opacity-20 active:opacity-100;
+      opacity-50 active:opacity-100;
+      margin-top: 3px;
 
       .rotating-arrow.collapsed svg {
+        margin-left: -2px;
         transform: rotate(180deg);
       }
     }

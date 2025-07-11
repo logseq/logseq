@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - '*.md'
   pull_request:
-    branches: [master, "feat/db"]
+    branches: [master]
     paths-ignore:
       - '*.md'
 
@@ -45,9 +45,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'yarn'
-          cache-dependency-path: |
-            yarn.lock
-            static/yarn.lock
+          cache-dependency-path: yarn.lock
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -112,13 +110,13 @@ jobs:
         run: clojure -M:clj-kondo --parallel --lint src
 
       - name: Carve lint for unused vars
-        run: bb lint:carve 2>/dev/null
+        run: bb lint:carve
 
       - name: Lint for vars that are too large
-        run: bb lint:large-vars 2>/dev/null
+        run: bb lint:large-vars
 
       - name: Lint for namespaces that aren't documented
-        run: bb lint:ns-docstrings 2>/dev/null
+        run: bb lint:ns-docstrings
 
       - name: Lint invalid translation entries
         run: bb lang:validate-translations
@@ -165,115 +163,20 @@ jobs:
         run: cd scripts && yarn install --frozen-lockfile
 
       - name: Create DB graph with properties
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./db-graph-with-props
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./properties-graph
 
       # TODO: Use a smaller, test-focused graph to test classes
       - name: Create DB graph with classes
-        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./db-graph-with-schema
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./schema-graph
 
       - name: Fetch deps/db yarn deps
         run: cd deps/db && yarn install --frozen-lockfile
 
       - name: Validate created DB graphs
-        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
+        run: cd deps/db && yarn nbb-logseq script/validate_db.cljs ../../scripts/properties-graph ../../scripts/schema-graph --closed-maps --group-errors
 
-  e2e-test:
-    # TODO: Re-enable when ready to enable tests for file graphs
-    if: false
-    runs-on: ubuntu-22.04
+      - name: Export a created DB graph
+        run: cd deps/db && yarn nbb-logseq script/export_graph.cljs ../../scripts/properties-graph -f properties.edn -T
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: |
-            yarn.lock
-            static/yarn.lock
-
-      - name: Set up Java
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Set up Clojure
-        uses: DeLaGuardo/setup-clojure@10.1
-        with:
-          cli: ${{ env.CLOJURE_VERSION }}
-
-      - name: Clojure cache
-        uses: actions/cache@v3
-        id: clojure-deps
-        with:
-          path: |
-            ~/.m2/repository
-            ~/.gitlibs
-          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-clojure-deps-
-
-      - name: Fetch Clojure deps
-        if: steps.clojure-deps.outputs.cache-hit != 'true'
-        run: clojure -A:cljs -P
-
-      - name: Shadow-cljs cache
-        uses: actions/cache@v3
-        with:
-          path: .shadow-cljs
-          # ensure update cache every time
-          key: ${{ runner.os }}-shadow-cljs-${{ github.sha }}
-          # will match most recent upload
-          restore-keys: |
-            ${{ runner.os }}-shadow-cljs-
-
-      - name: Fetch yarn deps
-        run: yarn install
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-
-      # NOTE: require the app to be build in debug mode(compile instead of build).
-      - name: Prepare E2E test build
-        run: |
-          yarn gulp:build && clojure -M:cljs compile app publishing electron
-          (cd static && yarn install && yarn rebuild:all)
-
-      # Exits with 0 if yarn.lock is up to date or 1 if we forgot to update it
-      - name: Ensure static yarn.lock is up to date
-        run: git diff --exit-code static/yarn.lock
-
-      - name: Install Fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox
-
-      # Emulate a virtual framebuffer on machines with no display hardware
-      - name: Run XVFB
-        run: Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
-
-      # Start a lightweight window manager to simulate window actions (maximize,restore etc)
-      - name: Start Fluxbox
-        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
-
-      - name: Run Playwright test - 1/2
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=1/2
-        env:
-          LOGSEQ_CI: true
-          DEBUG: "pw:api"
-          RELEASE: true # skip dev only test
-
-      - name: Run Playwright test - 2/2
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=2/2
-        env:
-          LOGSEQ_CI: true
-          DEBUG: "pw:api"
-          RELEASE: true # skip dev only test
-
-      - name: Save test artifacts
-        if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-test-report
-          path: e2e-dump/*
-          retention-days: 1
+      - name: Create graph from the export and diff the two graphs
+        run: cd deps/db && yarn nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs ./properties-graph2 properties.edn -iv && yarn nbb-logseq script/diff_graphs.cljs ../../scripts/properties-graph ./properties-graph2 -T

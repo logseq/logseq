@@ -19,16 +19,14 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -82,7 +80,8 @@
                           (let [block-uuids (state/get-selection-block-ids)]
                             (shui/popup-hide!)
                             (shui/dialog-open!
-                             #(export/export-blocks block-uuids {:whiteboard? false}))))}
+                             #(export/export-blocks block-uuids {:whiteboard? false
+                                                                 :export-type :selected-nodes}))))}
       (t :content/copy-export-as))
 
      (shui/dropdown-menu-item
@@ -232,18 +231,14 @@
          (shui/dropdown-menu-item
           {:key      "Copy block ref"
            :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id
-                                                       (if db? page-ref/->page-ref block-ref/->block-ref)))}
+                       (editor-handler/copy-block-ref! block-id ref/->block-ref))}
           (t :content/copy-block-ref))
 
          (when-not db?
            (shui/dropdown-menu-item
             {:key      "Copy block embed"
              :on-click (fn [_e]
-                         (editor-handler/copy-block-ref! block-id
-                                                         (if db?
-                                                           block-ref/->block-ref
-                                                           #(util/format "{{embed ((%s))}}" %))))}
+                         (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
             (t :content/copy-block-emebed)))
 
          ;; TODO Logseq protocol mobile support
@@ -261,7 +256,8 @@
           {:key      "Copy as"
            :on-click (fn [_]
                        (shui/dialog-open!
-                        #(export/export-blocks [block-id] {:whiteboard? false})))}
+                        #(export/export-blocks [block-id] {:whiteboard? false
+                                                           :export-type :block})))}
           (t :content/copy-export-as))
 
          (when-not property-default-value?
@@ -354,11 +350,9 @@
                {:key "(Dev) Show block content history"
                 :on-click
                 (fn []
-                  (let [^object worker @db-browser/*worker
-                        token (state/get-auth-id-token)
+                  (let [token (state/get-auth-id-token)
                         graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                    (p/let [result (.rtc-get-block-content-versions worker token graph-uuid (str block-id))
-                            blocks-versions (ldb/read-transit-str result)]
+                    (p/let [blocks-versions (state/<invoke-db-worker :thread-api/rtc-get-block-content-versions token graph-uuid block-id)]
                       (prn :Dev-show-block-content-history)
                       (doseq [[block-uuid versions] blocks-versions]
                         (prn :block-uuid block-uuid)
@@ -418,7 +412,7 @@
      hiccup
      [:div.cursor (t :content/click-to-edit)])])
 
-(rum/defc non-hiccup-content < rum/reactive
+(rum/defc non-hiccup-content
   [id content on-click on-hide config format]
   (let [edit? (state/sub-editing? id)]
     (if edit?

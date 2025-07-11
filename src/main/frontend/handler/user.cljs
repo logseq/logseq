@@ -5,6 +5,7 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! go]]
+            [clojure.set :as set]
             [clojure.string :as string]
             [frontend.common.missionary :as c.m]
             [frontend.config :as config]
@@ -127,12 +128,16 @@
   ([id-token access-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (set-token-to-localstorage! id-token access-token))
+   (set-token-to-localstorage! id-token access-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user)))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
    (state/set-auth-refresh-token refresh-token)
-   (set-token-to-localstorage! id-token access-token refresh-token)))
+   (set-token-to-localstorage! id-token access-token refresh-token)
+   (some->> (parse-jwt (state/get-auth-id-token))
+            (reset! flows/*current-login-user))))
 
 (defn- <refresh-tokens
   "return refreshed id-token, access-token"
@@ -201,7 +206,6 @@
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
-  (reset! flows/*current-login-user (parse-jwt (state/get-auth-id-token)))
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
@@ -278,9 +282,9 @@
 
 ;;; user groups
 
-(defn team-member?
+(defn rtc-group?
   []
-  (contains? (state/user-groups) "team"))
+  (boolean (seq (set/intersection (state/user-groups) #{"team" "rtc_2025_07_10"}))))
 
 (defn alpha-user?
   []

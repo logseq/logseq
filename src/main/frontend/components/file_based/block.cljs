@@ -4,12 +4,12 @@
             [frontend.components.file-based.datetime :as datetime-comp]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repeated :as repeated]
-            [frontend.hooks :as hooks]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.file-based.clock :as clock]
             [frontend.util.file-based.drawer :as drawer]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -81,10 +81,9 @@
 (defn priority-cp
   [{:block/keys [pre-block? priority] :as block}]
   (when (and (not pre-block?) priority)
-    (ui/tippy
-     {:interactive true
-      :html (set-priority block priority)}
-     (priority-text priority))))
+    (ui/tooltip
+     (priority-text priority)
+     (set-priority block priority))))
 
 (defn clock-summary-cp
   [block body]
@@ -96,22 +95,20 @@
                  (not= summary "0m")
                  (not (string/blank? summary)))
         [:div {:style {:max-width 100}}
-         (ui/tippy {:html        (fn []
-                                   (when-let [logbook (drawer/get-logbook body)]
-                                     (let [clocks (->> (last logbook)
-                                                       (filter #(string/starts-with? % "CLOCK:"))
-                                                       (remove string/blank?))]
-                                       [:div.p-4
-                                        [:div.font-bold.mb-2 "LOGBOOK:"]
-                                        [:ul
-                                         (for [clock (take 10 (reverse clocks))]
-                                           [:li clock])]])))
-                    :interactive true
-                    :in-editor?  true
-                    :delay       [1000, 100]}
-                   [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
-                    [:a.fade-link
-                     summary]])]))))
+         (ui/tooltip
+          [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
+           [:a.fade-link
+            summary]]
+
+          (when-let [logbook (drawer/get-logbook body)]
+            (let [clocks (->> (last logbook)
+                              (filter #(string/starts-with? % "CLOCK:"))
+                              (remove string/blank?))]
+              [:div.p-4
+               [:div.font-bold.mb-2 "LOGBOOK:"]
+               [:ul
+                (for [clock (take 10 (reverse clocks))]
+                  [:li clock])]])))]))))
 
 (rum/defc timestamp-editor
   [ast *show-datapicker?]

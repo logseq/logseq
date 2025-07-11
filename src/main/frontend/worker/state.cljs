@@ -1,33 +1,46 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [logseq.common.config :as common-config]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]))
-
-(defkeywords
-  :undo/repo->page-block-uuid->undo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"}
-  :undo/repo->page-block-uuid->redo-ops {:doc "{repo {<page-block-uuid> [op1 op2 ...]}}"})
 
 (defonce *main-thread (atom nil))
 (defonce *infer-worker (atom nil))
 
-(defonce *state (atom {:worker/object nil
+(defn- <invoke-main-thread*
+  [qkw direct-pass? args-list]
+  (let [main-thread @*main-thread]
+    (when (nil? main-thread)
+      (prn :<invoke-main-thread-error qkw)
+      (throw (ex-info "main-thread has not been initialized" {})))
+    (apply main-thread qkw direct-pass? args-list)))
 
-                       :db/latest-transact-time {}
+(defn <invoke-main-thread
+  "invoke main thread api"
+  [qkw & args]
+  (<invoke-main-thread* qkw false args))
+
+(comment
+  (defn <invoke-main-thread-direct-pass
+    "invoke main thread api.
+  But directly pass args to main-thread and result from main-thread as well."
+    [qkw & args]
+    (<invoke-main-thread* qkw true args)))
+
+(defonce *state (atom {:db/latest-transact-time {}
                        :worker/context {}
 
                        ;; FIXME: this name :config is too general
                        :config {}
                        :git/current-repo nil
 
+                       :auth/id-token nil
+                       :auth/access-token nil
+                       :auth/refresh-token nil
+
                        :rtc/downloading-graph? false
 
-                       :undo/repo->page-block-uuid->undo-ops (atom {})
-                       :undo/repo->page-block-uuid->redo-ops (atom {})
-
-                       ;; new implementation
-                       :undo/repo->ops (atom {})
-                       :redo/repo->ops (atom {})}))
+                       ;; thread atoms, these atoms' value are syncing from ui-thread
+                       :thread-atom/online-event (atom nil)}))
 
 (defonce *rtc-ws-url (atom nil))
 
@@ -103,14 +116,6 @@
   (swap! *state (fn [old-state]
                   (merge old-state new-state))))
 
-(defn set-worker-object!
-  [worker]
-  (swap! *state assoc :worker/object worker))
-
-(defn get-worker-object
-  []
-  (:worker/object @*state))
-
 (defn get-date-formatter
   [repo]
   (common-config/get-date-formatter (get-config repo)))
@@ -118,3 +123,7 @@
 (defn set-rtc-downloading-graph!
   [value]
   (swap! *state assoc :rtc/downloading-graph? value))
+
+(defn get-id-token
+  []
+  (:auth/id-token @*state))

@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.react :as react]
             [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]
             [frontend.util :as util]
             [logseq.common.util.page-ref :as page-ref]))
@@ -17,6 +18,12 @@
 
 ;; Test helpers
 ;; ============
+
+(def db-block-attrs
+  ;; '*' needed as we need to pull user properties and don't know their names in advance
+  '[*
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
 
 (def dsl-query*
   "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
@@ -48,10 +55,13 @@
                                     :query (apply list 'has-property (rest (:query m)))}
                                    :else
                                    m)]
-                          m'))]
+                          m'))
+                      query-dsl/db-block-attrs db-block-attrs]
           (apply query-dsl/query args))))
     :else
-    query-dsl/query))
+    (fn dsl-query-star [& args]
+      (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+        (apply query-dsl/query args)))))
 
 (defn- ->smart-query
   "Updates to file version if js/process.env.DB_GRAPH is not set"
@@ -63,14 +73,15 @@
 
 (defn- dsl-query
   [s]
-  (db/clear-query-state!)
+  (react/clear-query-state!)
   (when-let [result (dsl-query* test-helper/test-db (->smart-query s))]
     (map first (deref result))))
 
 (defn- custom-query
   [query]
-  (db/clear-query-state!)
-  (when-let [result (query-dsl/custom-query test-helper/test-db query {})]
+  (react/clear-query-state!)
+  (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+                      (query-dsl/custom-query test-helper/test-db query {}))]
     (map first (deref result))))
 
 ;; Tests
@@ -269,7 +280,7 @@ prop-d:: [[nada]]"}])
                 {:logseq.property/default-value "Todo"}
                 :build/properties-ref-types {:entity :number}}}
       :classes {:Mytask {:build/class-properties [:status]}
-                :Bug {:build/class-parent :Mytask}}
+                :Bug {:build/class-extends [:Mytask]}}
       :pages-and-blocks
       [{:page {:block/title "page1"}
         :blocks [{:block/title "task1"
@@ -437,11 +448,11 @@ prop-d:: [[nada]]"}])
   (load-test-files (if js/process.env.DB_GRAPH
                      [{:page {:block/title "page1"}
                        :blocks [{:block/title "[#A] b1"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.high}}
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}
                                 {:block/title "[#B] b2"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.medium}}
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.medium}}
                                 {:block/title "[#A] b3"
-                                 :build/properties {:logseq.task/priority :logseq.task/priority.high}}]}]
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]
 
                      [{:file/path "pages/page1.md"
                        :file/content "foo:: bar

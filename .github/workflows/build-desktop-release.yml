@@ -38,13 +38,13 @@ on:
         type: boolean
         required: true
         default: true
-      build-android:
-        description: 'Build Android App'
-        type: boolean
-        required: true
-        default: true
-  schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
-    - cron: '0 14 * * MON-FRI'
+      # build-android:
+      #   description: 'Build Android App'
+      #   type: boolean
+      #   required: true
+      #   default: true
+  # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
+  #   - cron: '0 14 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.11.1.1413'
@@ -170,58 +170,6 @@ jobs:
         with:
           name: static
           path: static
-
-  e2e-test:
-    name: E2E Test Shard ${{ matrix.shard }}
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        shard: [1, 2, 3]
-    needs: [ compile-cljs ]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Download The Static Asset
-        uses: actions/download-artifact@v4
-        with:
-          name: static
-          path: static
-
-      - name: Set up Node
-        uses: actions/setup-node@v3
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'yarn'
-          cache-dependency-path: |
-            yarn.lock
-            static/yarn.lock
-
-      - name: Fetch yarn deps for E2E test
-        run: |
-          yarn install
-          (cd static && yarn install && yarn rebuild:all)
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
-
-      - name: Install Fluxbox
-        run: sudo apt-get update && sudo apt-get install -y fluxbox
-
-      # Emulate a virtual framebuffer on machines with no display hardware
-      - name: Run XVFB
-        run: Xvfb :1 -screen 0 1024x768x24 >/dev/null 2>&1 &
-
-      # Start a lightweight window manager to simulate window actions (maximize,restore etc)
-      - name: Start Fluxbox
-        run:  DISPLAY=:1.0 fluxbox >/dev/null 2>&1 &
-
-      - name: Run Playwright test
-        run: DISPLAY=:1.0 npx playwright test --reporter github --shard=${{ matrix.shard }}/3
-        env:
-          LOGSEQ_CI: true
-          DEBUG: "pw:api"
-          RELEASE: true # skip dev only test
-
   build-linux-x64:
     runs-on: ubuntu-22.04
     needs: [ compile-cljs ]
@@ -359,6 +307,8 @@ jobs:
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
+        env:
+          DEBUG: electron-packager
         #env:
         #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
         #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
@@ -445,7 +395,7 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App for x64
-        run: yarn install && yarn electron:make
+        run: yarn install && yarn rebuild:all && yarn electron:make
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
@@ -518,7 +468,7 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Fetch deps and fix dugit arch for arm64
-        run: yarn install --ignore-platform && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
+        run: yarn install --ignore-platform && yarn rebuild:all && cd node_modules/dugite && npm_config_arch=arm64 node script/download-git.js
         working-directory: ./static
 
       - name: Build/Release Electron App for arm64
@@ -542,23 +492,26 @@ jobs:
           path: builds
 
   # reuse workflow via workflow_call
-  build-android:
-    uses: ./.github/workflows/build-android.yml
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
-    with:
-      build-target: "${{ github.event.inputs.build-target }}"
-      # if scheduled, use production mode
-      enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
-    secrets:
-      ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
-      ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-      SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
+  # build-android:
+  #   uses: ./.github/workflows/build-android.yml
+  #   if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
+  #   with:
+  #     build-target: "${{ github.event.inputs.build-target }}"
+  #     # if scheduled, use production mode
+  #     enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
+  #   secrets:
+  #     ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
+  #     ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+  #     SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
   codesign-windows:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
     needs: [ build-windows ]
     runs-on: [self-hosted, macos, token]
     steps:
+      - name: Remove old builds
+        run: rm -rf ./builds && mkdir ./builds
+
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
@@ -580,7 +533,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -619,11 +572,11 @@ jobs:
           name: logseq-win64-builds
           path: ./
 
-      - name: Download Android Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-android-builds
-          path: ./
+      # - name: Download Android Artifacts
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: logseq-android-builds
+      #     path: ./
 
       - name: Generate SHA256 checksums
         run: |
@@ -642,7 +595,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nightly
-          name: 'Desktop/Android APP Nightly Release $$'
+          name: 'Desktop app Nightly Release $$'
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: |
@@ -660,7 +613,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -699,12 +652,12 @@ jobs:
           name: logseq-win64-builds
           path: ./
 
-      - name: Download Android Artifacts
-        uses: actions/download-artifact@v4
-        if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
-        with:
-          name: logseq-android-builds
-          path: ./
+      # - name: Download Android Artifacts
+      #   uses: actions/download-artifact@v4
+      #   if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
+      #   with:
+      #     name: logseq-android-builds
+      #     path: ./
 
       - name: List files
         run: ls -rl
@@ -734,7 +687,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
-          name: Desktop/Android APP ${{ steps.ref.outputs.version }} (Beta Testing)
+          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
