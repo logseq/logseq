@@ -2844,10 +2844,7 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (if (contains? t :logseq.property.class/hide-from-node)
-                                      (:logseq.property.class/hide-from-node t)
-                                      ;; Mobile app hides by default while everything else doesn't
-                                      (if (util/capacitor-new?) true false))
+                                    (:logseq.property.class/hide-from-node t)
                                     (contains? hidden-internal-tags (:db/ident t))
                                     (and (util/mobile?) (= (:db/ident t) :logseq.class/Task))))))
           popup-opts {:align :end
