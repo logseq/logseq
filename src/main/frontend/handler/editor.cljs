@@ -1475,7 +1475,10 @@
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
        (p/let [file-name (node-path/basename (.-name file))
-               file-name-without-ext (db-asset/asset-name->title file-name)
+               file-name-without-ext* (db-asset/asset-name->title file-name)
+               file-name-without-ext (if (= file-name-without-ext* "image")
+                                       (date/get-date-time-string-2)
+                                       file-name-without-ext*)
                checksum (assets-handler/get-file-checksum file)
                existing-asset (db-async/<get-asset-with-checksum repo checksum)]
          (if existing-asset
@@ -3966,3 +3969,10 @@
   (if (shui-dialog/get-modal :ls-dialog-quick-add)
     (quick-add-blocks!)
     (show-quick-add)))
+
+(defn quick-add-open-last-block!
+  []
+  (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
+    (when (:block/_parent add-page)
+      (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
+        (edit-block! block :max {:container-id :unknown-container})))))
