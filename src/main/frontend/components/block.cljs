@@ -1157,23 +1157,24 @@
                (excalidraw uuid-or-title (:block/uuid config))]
 
               :else
-              [:span.page-reference
-               {:data-ref (str uuid-or-title)}
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/left-brackets])
-               (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-                 [:div.inline-block
-                  {:style {:margin-right 1
-                           :margin-top -2
-                           :vertical-align "middle"}
-                   :on-pointer-down (fn [e]
-                                      (util/stop e))}
-                  (block-positioned-properties config block :block-left)])
-               (page-cp config' (if (uuid? uuid-or-title)
-                                  {:block/uuid uuid-or-title}
-                                  {:block/name uuid-or-title}))
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/right-brackets])])))))))
+              (let [blank-title? (string/blank? (:block/title block))]
+                [:span.page-reference
+                 {:data-ref (str uuid-or-title)}
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/left-brackets])
+                 (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+                   [:div.inline-block
+                    {:style {:margin-right 1
+                             :margin-top -2
+                             :vertical-align "middle"}
+                     :on-pointer-down (fn [e]
+                                        (util/stop e))}
+                    (block-positioned-properties config block :block-left)])
+                 (page-cp config' (if (uuid? uuid-or-title)
+                                    {:block/uuid uuid-or-title}
+                                    {:block/name uuid-or-title}))
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
 
 (defn- latex-environment-content
   [name option content]
