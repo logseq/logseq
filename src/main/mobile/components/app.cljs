@@ -4,11 +4,13 @@
             [clojure.string :as string]
             [frontend.components.journal :as journal]
             [frontend.components.rtc.indicator :as rtc-indicator]
+            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
@@ -35,10 +37,17 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc app-graphs-select
+(rum/defc app-graphs-select < rum/reactive
   []
   (let [current-repo (state/get-current-repo)
-        graphs (state/get-repos)
+        graphs (->> (state/sub [:me :repos])
+                    (util/distinct-by :url))
+        remote-graphs (state/sub :rtc/graphs)
+        graphs (->>
+                (if (seq remote-graphs)
+                  (repo-handler/combine-local-&-remote-graphs graphs remote-graphs)
+                  graphs)
+                (filter (fn [item] (config/db-based-graph? (:url item)))))
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
@@ -49,9 +58,11 @@
        :class "border-none w-full rounded-lg"
        :on-click (fn []
                    (let [buttons (concat
-                                  (for [repo graphs]
-                                    {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
-                                     :role (:url repo)})
+                                  (->>
+                                   (for [repo graphs]
+                                     {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
+                                      :role (:url repo)})
+                                   (remove (fn [{:keys [text]}] (string/blank? text))))
                                   [{:text "Add new graph"
                                     :role "add-new-graph"}])]
                      (ui-component/open-modal! "Switch graph"

@@ -1,11 +1,8 @@
 (ns mobile.components.popup
   "Mobile popup"
   (:require [dommy.core :as dom]
-            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
-            [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.ui :as shui]
             [mobile.components.ui :as mobile-ui]
@@ -85,10 +82,7 @@
        :initialBreakpoint initial-breakpoint
        :onDidPresent (fn []
                        (when (= :ls-quick-add (:id opts))
-                         (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
-                           (when (:block/_parent add-page)
-                             (let [block (last (ldb/sort-by-order (:block/_parent add-page)))]
-                               (editor-handler/edit-block! block :max {:container-id :unknown-container}))))))
+                         (editor-handler/quick-add-open-last-block!)))
        :breakpoints breakpoints
        :onDidDismiss (fn []
                        (mobile-state/set-popup! nil)

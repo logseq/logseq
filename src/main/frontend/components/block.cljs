@@ -1157,23 +1157,24 @@
                (excalidraw uuid-or-title (:block/uuid config))]
 
               :else
-              [:span.page-reference
-               {:data-ref (str uuid-or-title)}
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/left-brackets])
-               (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-                 [:div.inline-block
-                  {:style {:margin-right 1
-                           :margin-top -2
-                           :vertical-align "middle"}
-                   :on-pointer-down (fn [e]
-                                      (util/stop e))}
-                  (block-positioned-properties config block :block-left)])
-               (page-cp config' (if (uuid? uuid-or-title)
-                                  {:block/uuid uuid-or-title}
-                                  {:block/name uuid-or-title}))
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/right-brackets])])))))))
+              (let [blank-title? (string/blank? (:block/title block))]
+                [:span.page-reference
+                 {:data-ref (str uuid-or-title)}
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/left-brackets])
+                 (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+                   [:div.inline-block
+                    {:style {:margin-right 1
+                             :margin-top -2
+                             :vertical-align "middle"}
+                     :on-pointer-down (fn [e]
+                                        (util/stop e))}
+                    (block-positioned-properties config block :block-left)])
+                 (page-cp config' (if (uuid? uuid-or-title)
+                                    {:block/uuid uuid-or-title}
+                                    {:block/name uuid-or-title}))
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
 
 (defn- latex-environment-content
   [name option content]
@@ -2844,10 +2845,7 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (if (contains? t :logseq.property.class/hide-from-node)
-                                      (:logseq.property.class/hide-from-node t)
-                                      ;; Mobile app hides by default while everything else doesn't
-                                      (if (util/capacitor-new?) true false))
+                                    (:logseq.property.class/hide-from-node t)
                                     (contains? hidden-internal-tags (:db/ident t))
                                     (and (util/mobile?) (= (:db/ident t) :logseq.class/Task))))))
           popup-opts {:align :end

@@ -19,14 +19,18 @@
    :will-unmount (fn [state]
                    (state/clear-edit!)
                    (state/clear-selection!)
-                   state)}
+                   state)
+   :did-mount (fn [state]
+                (when-not (util/mobile?)
+                  (editor-handler/quick-add-open-last-block!))
+                state)}
   []
   (when (model/get-journal-page (date/today))
     (when-let [add-page (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)]
       (let [mobile? (util/mobile?)
             add-button [:div
                         (shui/button
-                         {:variant (if mobile? :default :outline)
+                         {:variant :default
                           :size :sm
                           :on-click (fn [_e]
                                       (editor-handler/quick-add-blocks!))}
@@ -35,13 +39,11 @@
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
          [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
           [:div.font-medium
-           {:class (when-not mobile? "text-xs")}
            "Quick add"]
           (when mobile? add-button)]
          [:div.content
           {:class (if mobile?
                     "flex flex-1 flex-col w-full"
                     "block -ml-6")}
-          (page/page-blocks-cp add-page {})
-          (when-not mobile?
-            add-button)]]))))
+          (page/page-blocks-cp add-page {})]
+         (when-not mobile? add-button)]))))
