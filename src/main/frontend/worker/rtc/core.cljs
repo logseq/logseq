@@ -247,6 +247,7 @@
       started-dfv
       (m/sp
         (try
+          (log/info :rtc :loop-starting)
           ;; init run to open a ws
           (m/? get-ws-create-task)
           (started-dfv true)
@@ -368,7 +369,10 @@
                          rtc-loop-task
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
-                                 (log/info :rtc-loop-task e)))
+                                 (log/info :rtc-loop-task e)
+                                 (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
+                                   ;; if fail reason is websocket-timeout, try to restart rtc
+                                   (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
               start-ex (m/? onstarted-task)]
           (if (instance? ExceptionInfo start-ex)
             (do

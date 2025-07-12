@@ -10,4 +10,4 @@
 
 (if config/dev?
   (log/set-levels {:glogi/root :info})
-  (log/set-levels {:glogi/root :warn}))
+  (log/set-levels {:glogi/root :info}))
