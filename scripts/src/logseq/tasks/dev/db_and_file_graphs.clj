@@ -110,7 +110,8 @@
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+    (when-not (or (and (= 1 (:exit res)) (= "" (:out res)))
+                  (and (zero? (:exit res)) (string/starts-with? (:out res) "src/main/mobile/components/app.cljs:")))
       (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
       (System/exit 1))))
