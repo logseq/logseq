@@ -35,8 +35,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [logseq.graph-parser.utf8 :as utf8]))
+            [logseq.graph-parser.utf8 :as utf8]
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1035,8 +1035,30 @@
                               :block/parent [:block/uuid (:block/uuid new-asset)]
                               :block/page :logseq.class/Asset})]
              (prn :annotation-added! user-attributes)
-             (add-missing-timestamps annotation))
+             (sqlite-util/block-with-timestamps annotation))
           (get-in asset-edn-map [:edn-content :highlights]))))
+
+(defn- build-new-asset [asset-data]
+  (merge (sqlite-util/block-with-timestamps
+          {:block/uuid (d/squuid)
+           :block/order (db-order/gen-key)
+           :block/page :logseq.class/Asset
+           :block/parent :logseq.class/Asset})
+         {:block/tags [:logseq.class/Asset]
+          :logseq.property.asset/type (:type asset-data)
+          :logseq.property.asset/checksum (:checksum asset-data)
+          :logseq.property.asset/size (:size asset-data)}))
+
+(defn- build-annotation-images [asset-name assets]
+  ;; TODO: Handle win
+  (let [image-dir (str (string/replace-first asset-name #"(?i)\.pdf$" "") "/")
+        image-names (filter #(string/starts-with? % image-dir) (keys @assets))]
+    (prn :images! asset-name image-names)
+    (mapv #(let [new-asset (merge (build-new-asset (get assets %))
+                                  {:block/title "pdf area highlight"})]
+             (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-asset))
+             new-asset)
+          image-names)))
 
 (defn- handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
@@ -1049,17 +1071,8 @@
                (if-let [asset-data (and asset-name (get @assets asset-name))]
                  (if (:block/uuid asset-data)
                    {:asset-name-uuid [asset-name (:block/uuid asset-data)]}
-                   (let [new-block (sqlite-util/block-with-timestamps
-                                    {:block/uuid (d/squuid)
-                                     :block/order (db-order/gen-key)
-                                     :block/page :logseq.class/Asset
-                                     :block/parent :logseq.class/Asset})
-                         new-asset (merge new-block
-                                          {:block/tags [:logseq.class/Asset]
-                                           :logseq.property.asset/type (:type asset-data)
-                                           :logseq.property.asset/checksum (:checksum asset-data)
-                                           :logseq.property.asset/size (:size asset-data)
-                                           :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
+                   (let [new-asset (merge (build-new-asset asset-data)
+                                          {:block/title (db-asset/asset-name->title (node-path/basename asset-name))}
                                           (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                                             {:logseq.property.asset/resize-metadata metadata}))
                          asset-edn-path (when (= "pdf" (path/file-ext asset-name)) (string/replace-first asset-name #"(?i)\.pdf$" ".edn"))
@@ -1068,10 +1081,11 @@
                              (swap! assets assoc-in [asset-edn-path :pdf-annotation?] true))
                          asset-tx (concat [new-asset]
                                           (when-let [asset-edn-map (get @assets asset-edn-path)]
-                                            (build-annotation-tx asset-edn-map new-asset opts)))]
+                                            (concat (build-annotation-images asset-name assets)
+                                                    (build-annotation-tx asset-edn-map new-asset opts))))]
                      (prn :asset-added! (node-path/basename asset-name))
                       ;;  (cljs.pprint/pprint asset-link)
-                     (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-block))
+                     (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-asset))
                      {:asset-name-uuid [asset-name (:block/uuid new-asset)]
                       :asset-tx asset-tx}))
                  (do
