@@ -2655,13 +2655,7 @@
         selection-blocks (state/get-selection-blocks)
         starting-block (state/get-selection-start-block-or-first)
         mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
-        block-dom-element (util/rec-get-node target "ls-block")
-        cursor-range (if (util/ios?)
-                       (:block/title block)
-                       (some-> block-dom-element
-                               (dom/by-class "block-content-inner")
-                               first
-                               util/caret-range))]
+        block-dom-element (util/rec-get-node target "ls-block")]
 
     (if mobile-selection?
       (let [ids (set (state/get-selection-block-ids))]
@@ -2722,7 +2716,13 @@
                                           (->> title
                                                (property-file/remove-built-in-properties-when-file-based
                                                 (state/get-current-repo) format)
-                                               (drawer/remove-logbook)))]
+                                               (drawer/remove-logbook)))
+                                cursor-range (if (util/ios?)
+                                               (:block/title block)
+                                               (some-> block-dom-element
+                                                       (dom/by-class "block-content-inner")
+                                                       first
+                                                       util/caret-range))]
                             (state/set-editing!
                              edit-input-id
                              content
