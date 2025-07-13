@@ -1475,7 +1475,10 @@
      (for [[_index ^js file] (map-indexed vector files)]
       ;; WARN file name maybe fully qualified path when paste file
        (p/let [file-name (node-path/basename (.-name file))
-               file-name-without-ext (db-asset/asset-name->title file-name)
+               file-name-without-ext* (db-asset/asset-name->title file-name)
+               file-name-without-ext (if (= file-name-without-ext* "image")
+                                       (date/get-date-time-string-2)
+                                       file-name-without-ext*)
                checksum (assets-handler/get-file-checksum file)
                existing-asset (db-async/<get-asset-with-checksum repo checksum)]
          (if existing-asset
