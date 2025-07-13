@@ -109,6 +109,18 @@
 (def parallax-page-stack-topbar-title-outlet (silkhq-wrap "ParallaxPageStack.TopBarTitleOutlet"))
 (def parallax-page-stack-topbar-title-container (silkhq-wrap "ParallaxPageStack.TopBarTitleContainer"))
 
+(def page (silkhq-wrap "page.Root"))
+(def page-portal (silkhq-wrap "page.Portal"))
+(def page-handle (silkhq-wrap "page.Handle"))
+(def page-content (silkhq-wrap "page.Content"))
+(def page-title (silkhq-wrap "page.Title"))
+(def page-description (silkhq-wrap "page.Description"))
+(def page-trigger (silkhq-wrap "page.Trigger"))
+(def page-outlet (silkhq-wrap "page.Outlet"))
+(def page-backdrop (silkhq-wrap "page.Backdrop"))
+(def page-view (silkhq-wrap "page.View"))
+
+
 (def card-sheet (silkhq-wrap "CardSheet.Root"))
 (def card-sheet-portal (silkhq-wrap "CardSheet.Portal"))
 (def card-sheet-handle (silkhq-wrap "CardSheet.Handle"))
