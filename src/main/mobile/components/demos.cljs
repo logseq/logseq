@@ -43,6 +43,17 @@
            (silkhq/stacking-sheet-portal
              (stacking-view-example {:nested? false}))))])))
 
+(rum/defc parallax-page-view-example
+  []
+  (silkhq/parallax-page-view-portal
+    (silkhq/parallax-page-view
+      (silkhq/parallax-page-backdrop)
+      (silkhq/parallax-page-content
+        [:h2.text-lg.font-medium.my-4.bg-green-100 "parallax page"])
+      (silkhq/parallax-page-topbar-portal
+        (silkhq/parallax-page-topbar-title "New page title"))
+      )))
+
 (rum/defc silkhq-demos-page
   []
   (silkhq/depth-sheet-stack {:as-child true}
@@ -105,4 +116,23 @@
 
                      (silkhq/stacking-sheet-portal
                        (stacking-view-example {:nested? false}))))
-                 ]))))))))
+
+                 ;; parallax page
+                 (silkhq/parallax-page
+                   (silkhq/parallax-page-trigger
+                     {:class "w-full"}
+                     (shui/button {:variant :secondary :class "w-full"} "4. Parallax page"))
+                   (parallax-page-view-example))
+                 ]))))
+
+        ;; top bar
+        ;(silkhq/parallax-page-stack-island {:as-child true}
+          ;(silkhq/fixed
+          ;  (silkhq/parallax-page-stack-island-content
+          ;    (silkhq/fixed-content {:as-child true :class "flex justify-center items-center"}
+          ;      [:div.app-silk-topbar-title.text-semibold
+          ;       (silkhq/parallax-page-stack-topbar-title-outlet "Silk demos")
+          ;       (silkhq/parallax-page-stack-topbar-title-container)
+          ;       ])))
+          ;)
+        ))))
