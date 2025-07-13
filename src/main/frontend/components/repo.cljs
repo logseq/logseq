@@ -126,7 +126,9 @@
                                            (repo-handler/remove-repo! repo)
                                            (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
               "Delete local graph"))
-           (when (and db-based? root (not remote?))
+           (when (and db-based? root
+                      (not remote?)
+                      (= url (state/get-current-repo)))
              (shui/dropdown-menu-item
               {:key "logseq-sync"
                :class "use-logseq-sync-menu-item"
@@ -141,11 +143,14 @@
                                  (shui/popup-show! nil
                                                    (fn []
                                                      (rtc-indicator/uploading-logs))
-                                                   {:id :rtc-graph-upload-log})
-                                 (rtc-indicator/on-upload-finished-task
-                                  (fn []
-                                    (shui/popup-hide! :rtc-graph-upload-log)
-                                    (rtc-flows/trigger-rtc-start repo)))))))}
+                                                   {:id :rtc-graph-upload-log}))
+
+                               (rtc-indicator/on-upload-finished-task
+                                (fn []
+                                  (when (util/mobile?) (shui/popup-hide! :rtc-graph-upload-log))
+                                  (p/do!
+                                   (rtc-flows/trigger-rtc-start repo)
+                                   (rtc-handler/<get-remote-graphs)))))))}
               "Use Logseq sync (Beta testing)"))
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
@@ -165,9 +170,12 @@
                                                             (fn [graph-uuid _graph-schema-version]
                                                               (async-util/c->p (file-sync/<delete-graph graph-uuid))))]
                                         (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                        (when (= (state/get-current-repo) repo)
+                                          (state/<invoke-db-worker :thread-api/rtc-stop))
                                         (p/do! (<delete-graph GraphUUID GraphSchemaVersion)
                                                (state/delete-remote-graph! repo)
-                                               (state/set-state! [:file-sync/remote-graphs :loading] false)))))))))}
+                                               (state/set-state! [:file-sync/remote-graphs :loading] false)
+                                               (rtc-handler/<get-remote-graphs)))))))))}
               "Delete from server")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
@@ -228,9 +236,7 @@
             :on-click (fn []
                         (when-not (util/capacitor-new?)
                           (file-sync/load-session-graphs))
-                        (p/do!
-                         (rtc-handler/<get-remote-graphs)
-                         (repo-handler/refresh-repos!))))]]
+                        (rtc-handler/<get-remote-graphs)))]]
          (repos-inner remote-graphs)])]]))
 
 (defn- repos-dropdown-links [repos current-repo downloading-graph-id & {:as opts}]
@@ -464,13 +470,13 @@
                               (p/do
                                 (state/set-state! :rtc/uploading? true)
                                 (rtc-handler/<rtc-create-graph! repo)
-                                (state/set-state! :rtc/uploading? false)
-                                (rtc-flows/trigger-rtc-start repo))
+                                (rtc-flows/trigger-rtc-start repo)
+                                (rtc-handler/<get-remote-graphs))
                               (p/catch (fn [error]
-                                         (reset! *creating-db? false)
-                                         (state/set-state! :rtc/uploading? false)
-                                         (log/error :create-db-failed error)))))
-                           (reset! *creating-db? false)
+                                         (log/error :create-db-failed error)))
+                              (p/finally (fn []
+                                           (state/set-state! :rtc/uploading? false)
+                                           (reset! *creating-db? false)))))
                            (shui/dialog-close!))))))
         submit! (fn [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))

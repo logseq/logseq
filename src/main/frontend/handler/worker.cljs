@@ -55,6 +55,9 @@
 (defmethod handle :notify-existing-file  [_ _worker data]
   (state/pub-event! [:graph/notify-existing-file data]))
 
+(defmethod handle :remote-graph-gone []
+  (state/pub-event! [:rtc/remote-graph-gone]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 
