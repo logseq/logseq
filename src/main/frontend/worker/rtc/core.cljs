@@ -9,6 +9,7 @@
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.db :as rtc-db]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
@@ -246,6 +247,7 @@
       started-dfv
       (m/sp
         (try
+          (log/info :rtc :loop-starting)
           ;; init run to open a ws
           (m/? get-ws-create-task)
           (started-dfv true)
@@ -367,10 +369,15 @@
                          rtc-loop-task
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
-                                 (log/info :rtc-loop-task e)))
+                                 (log/info :rtc-loop-task e)
+                                 (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
+                                   ;; if fail reason is websocket-timeout, try to restart rtc
+                                   (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
               start-ex (m/? onstarted-task)]
           (if (instance? ExceptionInfo start-ex)
-            start-ex
+            (do
+              (canceler)
+              start-ex)
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
                                             :local-graph-schema-version schema-version
@@ -442,7 +449,14 @@
                                     {:action "delete-graph"
                                      :graph-uuid graph-uuid
                                      :schema-version (str schema-version)}))]
-        (when ex-data (log/info ::delete-graph-failed {:graph-uuid graph-uuid :ex-data ex-data}))
+        (if ex-data
+          (log/info ::delete-graph-failed {:graph-uuid graph-uuid :ex-data ex-data})
+          ;; Clean up rtc data in existing dbs so that the graph can be uploaded again
+          (when-let [repo (worker-state/get-current-repo)]
+            (when-let [conn (worker-state/get-datascript-conn repo)]
+              (let [graph-id (ldb/get-graph-rtc-uuid @conn)]
+                (when (= (str graph-id) (str graph-uuid))
+                  (rtc-db/remove-rtc-data-in-conn! repo))))))
         (boolean (nil? ex-data))))))
 
 (defn new-task--get-users-info

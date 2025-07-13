@@ -695,7 +695,6 @@
 
 (rum/defcs ^:large-vars/cleanup-todo page-inner <
   (rum/local false ::mouse-down?)
-  (rum/local false ::hover?)
   "The inner div of page reference component
 
    page-name-in-block is the overridable name of the page (legacy)
@@ -707,8 +706,7 @@
     :or {with-parent? true}
     :as config}
    page-entity children label]
-  (let [*hover? (::hover? state)
-        *mouse-down? (::mouse-down? state)
+  (let [*mouse-down? (::mouse-down? state)
         tag? (:tag? config)
         page-name (when (:block/title page-entity)
                     (util/page-name-sanity-lc (:block/title page-entity)))
@@ -728,8 +726,6 @@
        :draggable true
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
-       :on-mouse-over #(reset! *hover? true)
-       :on-mouse-leave #(reset! *hover? false)
        :on-pointer-down (fn [^js e]
                           (cond
                             (util/link? (.-target e))
@@ -833,26 +829,18 @@
   (let [*el-trigger (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
-       (when-not (state/editing?)
-         (when (true? visible?)
-           (shui/popup-show!
-            (hooks/deref *el-trigger) render
-            {:root-props {:onOpenChange (fn [v] (set-visible! v))
-                          :modal false}
-             :content-props {:class "ls-preview-popup"
-                             :onInteractOutside (fn [^js e] (.preventDefault e))
-                             :onEscapeKeyDown (fn [^js e]
-                                                (when (state/editing?)
-                                                  (.preventDefault e)
-                                                  (some-> (hooks/deref *el-popup) (.focus))))}
-             :as-dropdown? false}))
-
-         (when (false? visible?)
-           (shui/popup-hide!)
-           (when (state/get-edit-block)
-             (state/clear-edit!)))
-         (hooks/set-ref! *timer nil)
-         (hooks/set-ref! *timer1 nil))
+       (when (true? visible?)
+         (shui/popup-show!
+          (hooks/deref *el-trigger) render
+          {:root-props {:onOpenChange (fn [v] (set-visible! v))
+                        :modal false}
+           :content-props {:class "ls-preview-popup"
+                           :onInteractOutside (fn [^js e] (.preventDefault e))
+                           :onEscapeKeyDown (fn [^js e]
+                                              (when (state/editing?)
+                                                (.preventDefault e)
+                                                (some-> (hooks/deref *el-popup) (.focus))))}
+           :as-dropdown? false}))
 
         ;; teardown
        (fn []
@@ -862,17 +850,17 @@
 
     [:span.preview-ref-link
      {:ref *el-trigger
-      :on-mouse-enter (fn [^js e]
-                        (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
-                                 (hooks/deref *el-trigger))
-                          (let [timer (hooks/deref *timer)
-                                timer1 (hooks/deref *timer1)]
-                            (when-not timer
-                              (hooks/set-ref! *timer
-                                              (js/setTimeout #(set-visible! true) 1000)))
-                            (when timer1
-                              (js/clearTimeout timer1)
-                              (hooks/set-ref! *timer1 nil)))))
+      :on-mouse-move (fn [^js e]
+                       (when (= (some-> (.-target e) (.closest ".preview-ref-link"))
+                                (hooks/deref *el-trigger))
+                         (let [timer (hooks/deref *timer)
+                               timer1 (hooks/deref *timer1)]
+                           (when-not timer
+                             (hooks/set-ref! *timer
+                                             (js/setTimeout #(set-visible! true) 1000)))
+                           (when timer1
+                             (js/clearTimeout timer1)
+                             (hooks/set-ref! *timer1 nil)))))
       :on-mouse-leave (fn []
                         (let [timer (hooks/deref *timer)
                               timer1 (hooks/deref *timer1)]
@@ -941,8 +929,7 @@
      (if (boolean? in-popup?)
        (if (and (not (:preview? config))
                 (not in-popup?)
-                (or (not manual?) open?)
-                (not (state/editing?)))
+                (or (not manual?) open?))
          (popup-preview-impl children
                              {:visible? visible? :set-visible! set-visible!
                               :*timer *timer :*timer1 *timer1
@@ -1157,23 +1144,24 @@
                (excalidraw uuid-or-title (:block/uuid config))]
 
               :else
-              [:span.page-reference
-               {:data-ref (str uuid-or-title)}
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/left-brackets])
-               (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
-                 [:div.inline-block
-                  {:style {:margin-right 1
-                           :margin-top -2
-                           :vertical-align "middle"}
-                   :on-pointer-down (fn [e]
-                                      (util/stop e))}
-                  (block-positioned-properties config block :block-left)])
-               (page-cp config' (if (uuid? uuid-or-title)
-                                  {:block/uuid uuid-or-title}
-                                  {:block/name uuid-or-title}))
-               (when brackets?
-                 [:span.text-gray-500.bracket page-ref/right-brackets])])))))))
+              (let [blank-title? (string/blank? (:block/title block))]
+                [:span.page-reference
+                 {:data-ref (str uuid-or-title)}
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/left-brackets])
+                 (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+                   [:div.inline-block
+                    {:style {:margin-right 1
+                             :margin-top -2
+                             :vertical-align "middle"}
+                     :on-pointer-down (fn [e]
+                                        (util/stop e))}
+                    (block-positioned-properties config block :block-left)])
+                 (page-cp config' (if (uuid? uuid-or-title)
+                                    {:block/uuid uuid-or-title}
+                                    {:block/name uuid-or-title}))
+                 (when (and brackets? (not blank-title?))
+                   [:span.text-gray-500.bracket page-ref/right-brackets])]))))))))
 
 (defn- latex-environment-content
   [name option content]
@@ -2654,13 +2642,7 @@
         selection-blocks (state/get-selection-blocks)
         starting-block (state/get-selection-start-block-or-first)
         mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
-        block-dom-element (util/rec-get-node target "ls-block")
-        cursor-range (if (util/ios?)
-                       (:block/title block)
-                       (some-> block-dom-element
-                               (dom/by-class "block-content-inner")
-                               first
-                               util/caret-range))]
+        block-dom-element (util/rec-get-node target "ls-block")]
 
     (if mobile-selection?
       (let [ids (set (state/get-selection-block-ids))]
@@ -2721,7 +2703,13 @@
                                           (->> title
                                                (property-file/remove-built-in-properties-when-file-based
                                                 (state/get-current-repo) format)
-                                               (drawer/remove-logbook)))]
+                                               (drawer/remove-logbook)))
+                                cursor-range (if (util/ios?)
+                                               (:block/title block)
+                                               (some-> block-dom-element
+                                                       (dom/by-class "block-content-inner")
+                                                       first
+                                                       util/caret-range))]
                             (state/set-editing!
                              edit-input-id
                              content
@@ -2844,10 +2832,7 @@
                       (:block/tags block)
                       (remove (fn [t]
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
-                                    (if (contains? t :logseq.property.class/hide-from-node)
-                                      (:logseq.property.class/hide-from-node t)
-                                      ;; Mobile app hides by default while everything else doesn't
-                                      (if (util/capacitor-new?) true false))
+                                    (:logseq.property.class/hide-from-node t)
                                     (contains? hidden-internal-tags (:db/ident t))
                                     (and (util/mobile?) (= (:db/ident t) :logseq.class/Task))))))
           popup-opts {:align :end
