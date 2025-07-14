@@ -1,6 +1,7 @@
 (ns mobile.components.demos
   (:require [logseq.shui.ui :as shui]
             [rum.core :as rum]
+            [mobile.components.ui-silk :as ui-silk]
             [logseq.shui.silkhq :as silkhq]))
 
 (rum/defc depth-view-example
@@ -43,96 +44,95 @@
            (silkhq/stacking-sheet-portal
              (stacking-view-example {:nested? false}))))])))
 
-(rum/defc parallax-page-view-example
+(rum/defc page-view-example
   []
-  (silkhq/parallax-page-view-portal
-    (silkhq/parallax-page-view
-      (silkhq/parallax-page-backdrop)
-      (silkhq/parallax-page-content
-        [:h2.text-lg.font-medium.my-4.bg-green-100 "parallax page"])
-      (silkhq/parallax-page-topbar-portal
-        (silkhq/parallax-page-topbar-title "New page title"))
-      )))
+  (silkhq/page-portal
+    (silkhq/page-view
+      (silkhq/page-backdrop)
+      (silkhq/page-content
+        (silkhq/scroll {:as-child true}
+          (silkhq/scroll-view
+            {:class "h-full"}
+            (silkhq/scroll-content {:as-child true}
+              [:article.p-6
+               (for [_ (range 80)]
+                 [:h2.text-lg.font-medium.my-4.bg-green-100
+                  "inner page"])])))))))
 
 (rum/defc silkhq-demos-page
   []
   (silkhq/depth-sheet-stack {:as-child true}
     (silkhq/depth-sheet-scenery-outlets
-      ;; as root page
-      (silkhq/parallax-page-stack {:as-child true}
-        (silkhq/parallax-page-stack-scenery-outlet {:as-child true}
-          (silkhq/scroll {:as-child true}
-            (silkhq/scroll-view
-              {:safeArea "none"
-               :pageScroll true
-               :nativePageScrollReplacement true}
-              (silkhq/scroll-content {:class "app-silk-index-scroll-content"}
-                [:div.app-silk-index-container
-                 [:h2.text-xl.font-semibold.pt-4 "Silk sheets demos"]
+      (silkhq/scroll {:as-child true}
+        (silkhq/scroll-view
+          {:safeArea "none"
+           :pageScroll true
+           :nativePageScrollReplacement true}
+          (silkhq/scroll-content {:class "app-silk-index-scroll-content"}
+            [:div.app-silk-index-container
+             [:h2.text-xl.font-semibold.pt-2 "Silk sheets demos"]
 
-                 ;; Bottom Sheet case
-                 (silkhq/bottom-sheet
-                   (silkhq/bottom-sheet-trigger
-                     {:class "w-full"}
-                     (shui/button {:variant :secondary :class "w-full"} "0. Static Bottom Sheet"))
-                   (silkhq/bottom-sheet-portal
-                     (silkhq/bottom-sheet-view
-                       (silkhq/bottom-sheet-backdrop)
-                       (silkhq/bottom-sheet-content
-                         {:class "flex flex-col items-center p-2"}
-                         (silkhq/bottom-sheet-handle)
-                         [:div.py-60.flex
-                          [:h1.my-4.text-2xl "hello silkhq"]]))))
+             ;; Bottom Sheet case
+             (silkhq/bottom-sheet
+               (silkhq/bottom-sheet-trigger
+                 {:class "w-full"}
+                 (shui/button {:variant :secondary :class "w-full"} "0. Static Bottom Sheet"))
+               (silkhq/bottom-sheet-portal
+                 (silkhq/bottom-sheet-view
+                   (silkhq/bottom-sheet-backdrop)
+                   (silkhq/bottom-sheet-content
+                     {:class "flex flex-col items-center p-2"}
+                     (silkhq/bottom-sheet-handle)
+                     [:div.py-60.flex
+                      [:h1.my-4.text-2xl "hello silkhq"]]))))
 
-                 ;; Detent Sheet case
-                 (silkhq/detent-sheet
-                   (silkhq/detent-sheet-trigger
-                     {:class "w-full"}
-                     (shui/button {:variant :secondary :class "w-full"} "1. Detent Bottom Sheet"))
-                   (silkhq/detent-sheet-portal
-                     (silkhq/detent-sheet-view
-                       (silkhq/detent-sheet-backdrop)
-                       (silkhq/detent-sheet-content
-                         {:class "flex flex-col items-center p-2"}
-                         (silkhq/detent-sheet-handle)
-                         [:div.py-60.flex
-                          [:h1.my-4.text-2xl "hello silkhq"]]))))
+             ;; Detent Sheet case
+             (silkhq/detent-sheet
+               (silkhq/detent-sheet-trigger
+                 {:class "w-full"}
+                 (shui/button {:variant :secondary :class "w-full"} "1. Detent Bottom Sheet"))
+               (silkhq/detent-sheet-portal
+                 (silkhq/detent-sheet-view
+                   (silkhq/detent-sheet-backdrop)
+                   (silkhq/detent-sheet-content
+                     {:class "flex flex-col items-center p-2"}
+                     (silkhq/detent-sheet-handle)
+                     [:div.py-60.flex
+                      [:h1.my-4.text-2xl "hello silkhq"]]))))
 
-                 ;; Depth Sheet case
-                 (silkhq/depth-sheet
-                   (silkhq/depth-sheet-trigger
-                     {:class "w-full"}
-                     (shui/button {:variant :secondary :class "w-full"} "2. Depth Bottom Sheet"))
-                   (silkhq/depth-sheet-portal
-                     (depth-view-example {:nested? false})))
+             ;; Depth Sheet case
+             (silkhq/depth-sheet
+               (silkhq/depth-sheet-trigger
+                 {:class "w-full"}
+                 (shui/button {:variant :secondary :class "w-full"} "2. Depth Bottom Sheet"))
+               (silkhq/depth-sheet-portal
+                 (depth-view-example {:nested? false})))
 
-                 ;; Stacking depth sheet case
-                 (silkhq/stacking-sheet-stack
-                   {:as-child true}
-                   (silkhq/stacking-sheet
-                     (silkhq/stacking-sheet-trigger
-                       {:class "w-full"}
-                       (shui/button {:variant :secondary :class "w-full"} "3. Stacking Bottom Sheet"))
+             ;; Stacking depth sheet case
+             (silkhq/stacking-sheet-stack
+               {:as-child true}
+               (silkhq/stacking-sheet
+                 (silkhq/stacking-sheet-trigger
+                   {:class "w-full"}
+                   (shui/button {:variant :secondary :class "w-full"} "3. Stacking Bottom Sheet"))
 
-                     (silkhq/stacking-sheet-portal
-                       (stacking-view-example {:nested? false}))))
+                 (silkhq/stacking-sheet-portal
+                   (stacking-view-example {:nested? false}))))
 
-                 ;; parallax page
-                 (silkhq/parallax-page
-                   (silkhq/parallax-page-trigger
-                     {:class "w-full"}
-                     (shui/button {:variant :secondary :class "w-full"} "4. Parallax page"))
-                   (parallax-page-view-example))
-                 ]))))
+             ;; parallax page
+             (silkhq/page
+               (silkhq/page-trigger
+                 {:class "w-full"}
+                 (shui/button {:variant :secondary :class "w-full"} "4. Single page"))
+               (page-view-example))])))
 
-        ;; top bar
-        ;(silkhq/parallax-page-stack-island {:as-child true}
-          ;(silkhq/fixed
-          ;  (silkhq/parallax-page-stack-island-content
-          ;    (silkhq/fixed-content {:as-child true :class "flex justify-center items-center"}
-          ;      [:div.app-silk-topbar-title.text-semibold
-          ;       (silkhq/parallax-page-stack-topbar-title-outlet "Silk demos")
-          ;       (silkhq/parallax-page-stack-topbar-title-container)
-          ;       ])))
-          ;)
-        ))))
+      (ui-silk/app-silk-topbar
+        {:title "Silk Demos "
+         :left-render (shui/button {:variant :icon :size :sm}
+                        (shui/tabler-icon "chevron-left" {:size 22}))
+         :right-render [:<>
+                        (shui/button {:variant :icon :size :sm}
+                          (shui/tabler-icon "plus" {:size 22}))
+                        (shui/button {:variant :icon :size :sm}
+                          (shui/tabler-icon "dots" {:size 22}))]})
+      )))
