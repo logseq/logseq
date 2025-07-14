@@ -35,8 +35,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
-            [promesa.core :as p]
-            [logseq.graph-parser.utf8 :as utf8]))
+            [logseq.graph-parser.utf8 :as utf8]
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1008,7 +1008,7 @@
 
 (defn- build-annotation-tx
   "Creates annotations for a pdf asset given the asset's edn file"
-  [asset-edn-map new-asset {:keys [log-fn] :or {log-fn prn}}]
+  [asset-edn-map parent-asset image-asset-name-to-uuids {:keys [log-fn] :or {log-fn prn}}]
   (let [color-text-idents
         (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
              (map (juxt :value :db-ident))
@@ -1019,7 +1019,14 @@
                   :block/title (get-in % [:content :text])}
                  _ (when (some (comp nil? val) user-attributes)
                      (log-fn :missing-annotation-attributes "Annotation is missing some attributes so set reasonable defaults for them"
-                             {:annotation user-attributes :asset (:block/title new-asset)}))
+                             {:annotation user-attributes :asset (:block/title parent-asset)}))
+                 asset-image-uuid (some (fn [[asset-name image-uuid]]
+                                          (when (string/includes? asset-name
+                                                                  (str (:id %)
+                                                                       (when (get-in % [:content :image])
+                                                                         (str "_" (get-in % [:content :image])))))
+                                            image-uuid))
+                                        image-asset-name-to-uuids)
                  annotation (merge
                              ;; Reasonable defaults for user attributes
                              {:logseq.property.pdf/hl-color :logseq.property/color.yellow
@@ -1030,13 +1037,45 @@
                               :block/order (db-order/gen-key)
                               :logseq.property/ls-type :annotation
                               :logseq.property.pdf/hl-value (dissoc % :id)
-                              :logseq.property/asset [:block/uuid (:block/uuid new-asset)]
+                              :logseq.property/asset [:block/uuid (:block/uuid parent-asset)]
                               :block/tags [:logseq.class/Pdf-annotation]
-                              :block/parent [:block/uuid (:block/uuid new-asset)]
-                              :block/page :logseq.class/Asset})]
+                              :block/parent [:block/uuid (:block/uuid parent-asset)]
+                              :block/page :logseq.class/Asset}
+                             (when asset-image-uuid
+                               {:logseq.property.pdf/hl-image [:block/uuid asset-image-uuid]
+                                :logseq.property.pdf/hl-type :area}))]
              (prn :annotation-added! user-attributes)
-             (add-missing-timestamps annotation))
+             (sqlite-util/block-with-timestamps annotation))
           (get-in asset-edn-map [:edn-content :highlights]))))
+
+(defn- build-new-asset [asset-data]
+  (merge (sqlite-util/block-with-timestamps
+          {:block/uuid (d/squuid)
+           :block/order (db-order/gen-key)
+           :block/page :logseq.class/Asset
+           :block/parent :logseq.class/Asset})
+         {:block/tags [:logseq.class/Asset]
+          :logseq.property.asset/type (:type asset-data)
+          :logseq.property.asset/checksum (:checksum asset-data)
+          :logseq.property.asset/size (:size asset-data)}))
+
+(defn- build-annotation-images
+  "Builds tx for annotation images and provides a map for mapping image asset names
+   to their new uuids"
+  [parent-asset-path assets]
+  (let [image-dir (string/replace-first parent-asset-path #"(?i)\.pdf$" "")
+        image-paths (filter #(= image-dir (node-path/dirname %)) (keys @assets))
+        txs (mapv #(let [new-asset (merge (build-new-asset (get @assets %))
+                                          {:block/title "pdf area highlight"})]
+                    ;;  (prn :add-image % (get @assets %))
+                     (swap! assets assoc-in [% :block/uuid] (:block/uuid new-asset))
+                     new-asset)
+                  image-paths)]
+    {:txs txs
+     :image-asset-name-to-uuids
+     (->> (map (fn [image-path tx]
+                 [(node-path/basename image-path) (:block/uuid tx)]) image-paths txs)
+          (into {}))}))
 
 (defn- handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
@@ -1049,17 +1088,8 @@
                (if-let [asset-data (and asset-name (get @assets asset-name))]
                  (if (:block/uuid asset-data)
                    {:asset-name-uuid [asset-name (:block/uuid asset-data)]}
-                   (let [new-block (sqlite-util/block-with-timestamps
-                                    {:block/uuid (d/squuid)
-                                     :block/order (db-order/gen-key)
-                                     :block/page :logseq.class/Asset
-                                     :block/parent :logseq.class/Asset})
-                         new-asset (merge new-block
-                                          {:block/tags [:logseq.class/Asset]
-                                           :logseq.property.asset/type (:type asset-data)
-                                           :logseq.property.asset/checksum (:checksum asset-data)
-                                           :logseq.property.asset/size (:size asset-data)
-                                           :block/title (db-asset/asset-name->title (node-path/basename asset-name))}
+                   (let [new-asset (merge (build-new-asset asset-data)
+                                          {:block/title (db-asset/asset-name->title (node-path/basename asset-name))}
                                           (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                                             {:logseq.property.asset/resize-metadata metadata}))
                          asset-edn-path (when (= "pdf" (path/file-ext asset-name)) (string/replace-first asset-name #"(?i)\.pdf$" ".edn"))
@@ -1068,10 +1098,12 @@
                              (swap! assets assoc-in [asset-edn-path :pdf-annotation?] true))
                          asset-tx (concat [new-asset]
                                           (when-let [asset-edn-map (get @assets asset-edn-path)]
-                                            (build-annotation-tx asset-edn-map new-asset opts)))]
+                                            (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images asset-name assets)]
+                                              (concat txs
+                                                      (build-annotation-tx asset-edn-map new-asset image-asset-name-to-uuids opts)))))]
                      (prn :asset-added! (node-path/basename asset-name))
                       ;;  (cljs.pprint/pprint asset-link)
-                     (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-block))
+                     (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-asset))
                      {:asset-name-uuid [asset-name (:block/uuid new-asset)]
                       :asset-tx asset-tx}))
                  (do
