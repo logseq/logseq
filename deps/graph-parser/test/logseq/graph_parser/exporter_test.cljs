@@ -210,7 +210,7 @@
       ;; Includes journals as property values e.g. :logseq.property/deadline
       (is (= 28 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
-      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
+      (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
@@ -430,6 +430,19 @@
              (dissoc (db-test/readable-properties (db-test/find-block-by-content @conn "Duke School"))
                      :logseq.property.pdf/hl-value :logseq.property/ls-type))
           "Pdf text highlight has correct properties")
+      (is (= {:logseq.property.pdf/hl-color :logseq.property/color.yellow
+              :logseq.property.pdf/hl-page 1
+              :block/tags [:logseq.class/Pdf-annotation]
+              :logseq.property/asset "Sina_de_Capoeria_Batizado_2025_-_Program_Itinerary_1752179325104_0"
+              :logseq.property.pdf/hl-image "pdf area highlight"
+              :logseq.property.pdf/hl-type :area}
+             (dissoc (->> (d/q '[:find [?b ...]
+                                 :where [?b :block/tags :logseq.class/Pdf-annotation] [?b :block/title ""]] @conn)
+                          first
+                          (d/entity @conn)
+                          db-test/readable-properties)
+                     :logseq.property.pdf/hl-value :logseq.property/ls-type))
+          "Pdf area highlight has correct properties")
 
       ;; Quotes
       (is (= {:block/tags [:logseq.class/Quote-block]
