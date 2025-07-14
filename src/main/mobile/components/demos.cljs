@@ -126,6 +126,7 @@
                  (shui/button {:variant :secondary :class "w-full"} "4. Single page"))
                (page-view-example))])))
 
+      ;; app topbar
       (ui-silk/app-silk-topbar
         {:title "Silk Demos "
          :left-render (shui/button {:variant :icon :size :sm}
@@ -135,4 +136,6 @@
                           (shui/tabler-icon "plus" {:size 22}))
                         (shui/button {:variant :icon :size :sm}
                           (shui/tabler-icon "dots" {:size 22}))]})
+      ;; app tabs
+      (ui-silk/app-silk-tabs)
       )))
