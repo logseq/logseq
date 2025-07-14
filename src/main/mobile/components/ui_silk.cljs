@@ -1,5 +1,6 @@
 (ns mobile.components.ui-silk
-  (:require [rum.core :as rum]))
+  (:require [logseq.shui.ui :as shui]
+            [rum.core :as rum]))
 
 (rum/defc app-silk-topbar
   [{:keys [left-render right-render title]}]
@@ -12,4 +13,23 @@
 
 (rum/defc app-silk-tabs []
   [:div.app-silk-tabs
-   "app tabs"])
+   [:span.as-item.active
+    (shui/button {:variant :icon}
+      (shui/tabler-icon "home" {:size 23}))
+    [:small "Journals"]]
+   [:span.as-item
+    (shui/button {:variant :icon}
+      (shui/tabler-icon "search" {:size 23}))
+    [:small "Search"]]
+   [:span.as-item
+    (shui/button {:variant :icon}
+      (shui/tabler-icon "plus" {:size 23}))
+    [:small "Quick add"]]
+   [:span.as-item
+    (shui/button {:variant :icon}
+      (shui/tabler-icon "settings" {:size 23}))
+    [:small "Settings"]]
+   [:span.as-item
+    (shui/button {:variant :icon}
+      (shui/tabler-icon "bug" {:size 23}))
+    [:small "Demos"]]])

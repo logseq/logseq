@@ -388,3 +388,27 @@ html[data-color=logseq] {
     block text-center;
   }
 }
+
+.app-silk-tabs {
+  @apply flex items-center h-[54px] border-t overflow-hidden
+  bg-gray-02 fixed left-0 bottom-0 w-full z-10 dark:bg-gray-01;
+
+  bottom: 0;
+
+  > .as-item {
+    @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
+    @apply opacity-40 active:opacity-70;
+
+    &.active {
+      @apply text-accent-10 opacity-100;
+
+      > small {
+        @apply font-semibold;
+      }
+    }
+
+    > small {
+      @apply text-[9px] -mt-2;
+    }
+  }
+}
