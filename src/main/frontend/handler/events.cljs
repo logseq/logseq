@@ -188,9 +188,10 @@
        (state/pub-event! [:mobile/post-init]))
      ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
-     (if db-based?
-       (export/auto-db-backup! repo {:backup-now? true})
-       (fs-watcher/load-graph-files! repo)))))
+     (when-not config/publishing?
+       (if db-based?
+         (export/auto-db-backup! repo {:backup-now? true})
+         (fs-watcher/load-graph-files! repo))))))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))

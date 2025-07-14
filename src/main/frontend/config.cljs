@@ -424,7 +424,8 @@
 
     ;; nfs, browser-fs-access
     ;; Format: logseq_local_{dir-name}
-        (local-file-based-graph? repo-url)
+        (or (local-file-based-graph? repo-url)
+            (and publishing? (not db-based?)))
         (string/replace-first repo-url local-db-prefix "")
 
      ;; unit test
