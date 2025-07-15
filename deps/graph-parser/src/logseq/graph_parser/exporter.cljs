@@ -1097,7 +1097,6 @@
                                                 :block %)
                                         nil))
                                  md-children-blocks*)]
-    ;; (prn :descendants md-children-blocks)
     (into annotation-blocks md-children-blocks)))
 
 (defn- build-new-asset [asset-data]
@@ -1119,7 +1118,6 @@
         image-paths (filter #(= image-dir (node-path/dirname %)) (keys @assets))
         txs (mapv #(let [new-asset (merge (build-new-asset (get @assets %))
                                           {:block/title "pdf area highlight"})]
-                    ;;  (prn :add-image % (get @assets %))
                      (swap! assets assoc-in [% :block/uuid] (:block/uuid new-asset))
                      new-asset)
                   image-paths)]
@@ -2058,10 +2056,11 @@
                        (set/rename-keys {:<save-config-file :<save-file})))]
      (let [files (common-config/remove-hidden-files *files config rpath-key)
            logseq-file? #(string/starts-with? (get % rpath-key) "logseq/")
+           asset-file? #(string/starts-with? (get % rpath-key) "assets/")
            doc-files (->> files
-                          (remove logseq-file?)
+                          (remove #(or (logseq-file? %) (asset-file? %)))
                           (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
-           asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
+           asset-files (filter asset-file? files)
            doc-options (build-doc-options config options)]
        (log-fn "Importing" (count doc-files) "files ...")
        ;; These export* fns are all the major export/import steps
@@ -2070,7 +2069,7 @@
                              (-> (select-keys options [:notify-user :<save-logseq-file])
                                  (set/rename-keys {:<save-logseq-file :<save-file})))
         ;; Assets are read first as doc-files need data from them to make Asset blocks.
-        ;; Assets are copied after after doc-files as they need block/uuid's from them to name assets
+        ;; Assets are copied after doc-files as they need block/uuid's from them to name assets
         (read-asset-files asset-files <read-asset (merge (select-keys options [:notify-user :set-ui-state])
                                                          {:assets (get-in doc-options [:import-state :assets])}))
         (export-doc-files conn doc-files <read-file doc-options)
