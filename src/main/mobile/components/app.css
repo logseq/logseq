@@ -1,5 +1,6 @@
 :root {
   --ls-page-title-size: 26px;
+  --silk-topbar-height: 48px;
 }
 
 html.is-native-ios {
@@ -334,7 +335,7 @@ html[data-color=logseq] {
 
 /* silk styles */
 .app-silk-index-scroll-content {
-  @apply bg-white min-h-[100svh];
+  @apply bg-gray-01 min-h-[100svh];
 }
 
 .app-silk-scroll-view {
@@ -356,6 +357,58 @@ html[data-color=logseq] {
 .app-silk-index-container {
   @apply p-4 flex flex-col gap-3;
 
-  padding-top: var(--safe-area-inset-top);
+  padding-top: calc(var(--safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
 }
 
+.app-silk-topbar {
+  @apply fixed top-0 left-0 w-full border-b bg-gray-02 justify-between
+  items-center overflow-hidden px-2 grid grid-cols-8 gap-4;
+
+  padding-bottom: 10px;
+  padding-top: calc(var(--safe-area-inset-top, 0px) + 10px);
+
+  > .as-left, .as-right {
+    @apply flex items-center col-span-2 gap-2;
+
+    .ui__button {
+      @apply opacity-50 px-1;
+
+      &:active {
+        @apply opacity-80;
+      }
+    }
+  }
+
+  > .as-right {
+    @apply justify-end px-1;
+  }
+
+  > .title {
+    @apply font-semibold overflow-hidden text-ellipsis whitespace-nowrap col-span-4
+    block text-center;
+  }
+}
+
+.app-silk-tabs {
+  @apply flex items-center h-[54px] border-t overflow-hidden
+  bg-gray-02 fixed left-0 bottom-0 w-full z-10 dark:bg-gray-01;
+
+  bottom: 0;
+
+  > .as-item {
+    @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
+    @apply opacity-40 active:opacity-70;
+
+    &.active {
+      @apply text-accent-10 opacity-100;
+
+      > small {
+        @apply font-semibold;
+      }
+    }
+
+    > small {
+      @apply text-[9px] -mt-2;
+    }
+  }
+}
