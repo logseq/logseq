@@ -1048,7 +1048,7 @@
                     {:block/uuid (:id m)
                      :block/order (db-order/gen-key)
                      :logseq.property/ls-type :annotation
-                     :logseq.property.pdf/hl-value (dissoc m :id)
+                     :logseq.property.pdf/hl-value m
                      :logseq.property/asset [:block/uuid (:block/uuid parent-asset)]
                      :block/tags [:logseq.class/Pdf-annotation]
                      :block/parent [:block/uuid (:block/uuid parent-asset)]
