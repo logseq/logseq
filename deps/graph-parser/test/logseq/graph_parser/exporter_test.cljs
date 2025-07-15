@@ -422,14 +422,18 @@
       (is (= (d/entity @conn :logseq.class/Asset)
              (:block/page (db-test/find-block-by-content @conn "greg-popovich-thumbs-up_1704749687791_0")))
           "Imported into Asset page")
+
       ;; Annotations
       (is (= {:logseq.property.pdf/hl-color :logseq.property/color.blue
               :logseq.property.pdf/hl-page 8
               :block/tags [:logseq.class/Pdf-annotation]
               :logseq.property/asset "Sina_de_Capoeria_Batizado_2025_-_Program_Itinerary_1752179325104_0"}
-             (dissoc (db-test/readable-properties (db-test/find-block-by-content @conn "Duke School"))
+             (dissoc (db-test/readable-properties (db-test/find-block-by-content @conn #"Duke School - modified"))
                      :logseq.property.pdf/hl-value :logseq.property/ls-type))
           "Pdf text highlight has correct properties")
+      (is (= ["note about duke" "sub note"]
+             (mapv :block/title (rest (ldb/get-block-and-children @conn (:block/uuid (db-test/find-block-by-content @conn #"Duke School - modified"))))))
+          "Pdf text highlight has correct children blocks")
       (is (= {:logseq.property.pdf/hl-color :logseq.property/color.yellow
               :logseq.property.pdf/hl-page 1
               :block/tags [:logseq.class/Pdf-annotation]
