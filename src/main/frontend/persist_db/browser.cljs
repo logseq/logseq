@@ -93,8 +93,12 @@
                            (p/let [result (.remoteInvoke ^js wrapped-worker*
                                                          (str (namespace qkw) "/" (name qkw))
                                                          direct-pass?
-                                                         (if direct-pass?
-                                                           args
+                                                         (cond
+                                                           (= qkw :thread-api/set-infer-worker-proxy)
+                                                           (first args)
+                                                           direct-pass?
+                                                           (into-array args)
+                                                           :else
                                                            (ldb/write-transit-str args)))]
                              (if direct-pass?
                                result
@@ -144,8 +148,8 @@
 
 (defn <connect-db-worker-and-infer-worker!
   []
-  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy
-                                       (Comlink/proxy @state/*infer-worker)))
+  (assert (and @state/*infer-worker @state/*db-worker))
+  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy (Comlink/proxy @state/*infer-worker)))
 
 (defn <export-db!
   [repo data]
