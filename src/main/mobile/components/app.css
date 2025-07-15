@@ -355,7 +355,7 @@ html[data-color=logseq] {
 }
 
 .app-silk-index-container {
-  @apply p-4 flex flex-col gap-3;
+  @apply p-4 flex flex-col gap-3 bg-gray-01;
 
   padding-top: calc(var(--safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
 }
@@ -366,6 +366,11 @@ html[data-color=logseq] {
 
   padding-bottom: 10px;
   padding-top: calc(var(--safe-area-inset-top, 0px) + 10px);
+  height: 48px;
+
+  &.search {
+    @apply hidden;
+  }
 
   > .as-left, .as-right {
     @apply flex items-center col-span-2 gap-2;
@@ -391,9 +396,7 @@ html[data-color=logseq] {
 
 .app-silk-tabs {
   @apply flex items-center h-[54px] border-t overflow-hidden
-  bg-gray-02 fixed left-0 bottom-0 w-full z-10 dark:bg-gray-01;
-
-  bottom: 0;
+  bg-gray-02 fixed left-0 bottom-0 w-full z-[1] dark:bg-gray-01;
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
