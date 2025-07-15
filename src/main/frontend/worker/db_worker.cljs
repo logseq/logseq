@@ -377,8 +377,14 @@
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+(def-thread-api :thread-api/set-infer-worker-proxy
+  [infer-worker-proxy]
+  (reset! worker-state/*infer-worker infer-worker-proxy)
+  nil)
+
 ;; [graph service]
 (defonce *service (atom []))
+
 (defonce fns {"remoteInvoke" thread-api/remote-function})
 
 (defn- start-db!
@@ -713,10 +719,6 @@
       (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
       nil)))
 
-(def-thread-api :thread-api/set-infer-worker-proxy
-  [infer-worker-proxy]
-  (reset! worker-state/*infer-worker infer-worker-proxy))
-
 (def-thread-api :thread-api/vec-search-embedding-model-info
   [repo]
   (embedding/task--embedding-model-info repo))
@@ -855,8 +857,9 @@
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
-                                (or (contains? #{:thread-api/sync-app-state} method-k)
-                                    (nil? service))
+                                (or
+                                 (contains? #{:thread-api/set-infer-worker-proxy :thread-api/sync-app-state} method-k)
+                                 (nil? service))
                                 ;; only proceed down this branch before shared-service is initialized
                                 (apply f args)
 
