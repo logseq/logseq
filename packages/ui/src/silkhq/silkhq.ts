@@ -7,6 +7,7 @@ import { SheetWithStacking, SheetWithStackingStack } from './SheetWithStacking'
 import { ParallaxPage, ParallaxPageStack } from './ParallaxPage'
 import { Toast } from './Toast'
 import { Card } from './Card'
+import { Page } from './Page'
 
 declare global {
   var LSSilkhq: any
@@ -18,7 +19,7 @@ const silkhq = {
   SheetWithStacking, SheetWithDetent,
   SheetWithStackingStack,
   ParallaxPage, ParallaxPageStack,
-  Toast, CardSheet: Card,
+  Toast, CardSheet: Card, Page
 }
 
 window.LSSilkhq = silkhq
