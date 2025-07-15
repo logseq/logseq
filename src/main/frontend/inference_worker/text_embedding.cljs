@@ -97,12 +97,12 @@
     (when (model-loaded?)
       (let [hnsw (or (get-hnsw-index repo) (new-hnsw-index! repo))
             {:keys [data _type dims _size]} (worker-util/profile :<text-embedding
-                                              (c.m/<? (<text-embedding text-array)))
+                                                                 (c.m/<? (<text-embedding text-array)))
             data-coll (split-into-chunks data (last dims))
             _ (assert (= (count text-array) (count data-coll)))]
         (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
         (worker-util/profile (keyword "add-items" (str (alength data-coll)))
-          (add-items hnsw data-coll replace-deleted?))))))
+                             (add-items hnsw data-coll replace-deleted?))))))
 
 (def ^:private write-index-wait-delays-flow
   (m/ap
@@ -172,7 +172,9 @@
   {"Xenova/all-MiniLM-L6-v2" {:tf-config {:dtype "fp32"}
                               :hnsw-config {:dims 384}}
    "Xenova/jina-embeddings-v2-base-zh" {:tf-config {:dtype "fp32"}
-                                        :hnsw-config {:dims 768}}})
+                                        :hnsw-config {:dims 768}}
+   "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp32"}
+                                               :hnsw-config {:dims 384}}})
 
 (def ^:private *load-model-progress (atom nil))
 
