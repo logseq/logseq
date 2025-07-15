@@ -178,16 +178,18 @@
   [repo]
   (when-not (indexing? repo)
     (let [canceler (c.m/run-task
-                    (task--embedding-stale-blocks! repo)
-                    :embedding-stale-blocks! :succ (constantly nil))]
+                     :embedding-stale-blocks!
+                     (task--embedding-stale-blocks! repo)
+                     :succ (constantly nil))]
       (reset-*vector-search-state! repo :canceler canceler))))
 
 (defn re-embedding-graph-data!
   [repo]
   (when-not (indexing? repo)
     (let [canceler (c.m/run-task
-                    (task--re-embedding-graph-data! repo)
-                    :re-embedding-graph-data! :succ (constantly nil))]
+                     :re-embedding-graph-data!
+                     (task--re-embedding-graph-data! repo)
+                     :succ (constantly nil))]
       (reset-*vector-search-state! repo :canceler canceler))))
 
 (defn task--embedding-model-info
@@ -236,7 +238,7 @@
         (when-let [conn (worker-state/get-datascript-conn repo)]
           (let [{:keys [distances neighbors] :as r}
                 (worker-util/profile (str "search: '" query-string "'")
-                  (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
+                                     (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
                 labels (->> (map vector distances neighbors)
                             (keep (fn [[distance label]] (when-not (js/isNaN distance) label))))
                 datoms (map (fn [label]

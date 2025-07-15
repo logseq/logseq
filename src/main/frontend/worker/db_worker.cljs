@@ -713,6 +713,10 @@
       (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
       nil)))
 
+(def-thread-api :thread-api/set-infer-worker-proxy
+  [infer-worker-proxy]
+  (reset! worker-state/*infer-worker infer-worker-proxy))
+
 (def-thread-api :thread-api/vec-search-embedding-model-info
   [repo]
   (embedding/task--embedding-model-info repo))

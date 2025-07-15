@@ -21,42 +21,46 @@
     (hooks/use-effect!
      (fn []
        (c.m/run-task
+         ::update-vec-search-state
          (m/reduce
-          (fn [_ v] (set-vec-search-state v))
+          (fn [_ v]
+            (set-vec-search-state v))
           (m/ap
             (m/?> vector-search-flows/infer-worker-ready-flow)
             (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-update-index-info repo))
             (m/?> vector-search-flows/vector-search-state-flow)))
-         ::update-vec-search-state :succ (constantly nil)))
+         :succ (constantly nil)))
      [])
     (hooks/use-effect!
      (fn []
        (c.m/run-task
+         ::update-load-model-progress
          (m/reduce
           (fn [_ v] (set-load-model-progress v))
           vector-search-flows/load-model-progress-flow)
-         ::update-load-model-progress :succ (constantly nil)))
+         :succ (constantly nil)))
      [])
     (hooks/use-effect!
      (fn []
        (c.m/run-task
+         ::fetch-model-info
          (m/reduce
           (constantly nil)
           (m/ap
             (m/?> vector-search-flows/infer-worker-ready-flow)
-            (let [model-info (state/<invoke-db-worker :thread-api/vec-search-embedding-model-info repo)]
-              (prn :model-info model-info)
+            (let [model-info (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-model-info repo))]
               (set-model-info model-info))))
-         ::fetch-model-info :succ (constantly nil)))
+         :succ (constantly nil)))
      [])
     (hooks/use-effect!
      (fn []
        (c.m/run-task
+         :update-search-result
          (m/sp
            (-> (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-search repo query-string 10))
                ldb/read-transit-str
                set-result))
-         :update-search-result :succ (constantly nil)))
+         :succ (constantly nil)))
      [(hooks/use-debounced-value query-string 200)])
     [:div
      [:b "State"]
@@ -92,10 +96,11 @@
      (shui/select
       {:on-value-change (fn [model-name]
                           (c.m/run-task
+                            ::load-model
                             (m/sp
                               (c.m/<?
                                (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name)))
-                            ::load-model :succ (constantly nil)))}
+                            :succ (constantly nil)))}
       (shui/select-trigger
        (shui/select-value
         {:placeholder "Select a model(need force-embedding-all-graph-blocks again)"}))

@@ -94,7 +94,7 @@
                                                          (str (namespace qkw) "/" (name qkw))
                                                          direct-pass?
                                                          (if direct-pass?
-                                                           (into-array args)
+                                                           args
                                                            (ldb/write-transit-str args)))]
                              (if direct-pass?
                                result
@@ -144,10 +144,8 @@
 
 (defn <connect-db-worker-and-infer-worker!
   []
-  (assert (and @state/*infer-worker @state/*db-worker))
-  (p/do!
-   (.set-db-worker-proxy ^js @state/*infer-worker (Comlink/proxy @state/*db-worker))
-   (.set-infer-worker-proxy ^js @state/*db-worker (Comlink/proxy @state/*infer-worker))))
+  (state/<invoke-db-worker-direct-pass :thread-api/set-infer-worker-proxy
+                                       (Comlink/proxy @state/*infer-worker)))
 
 (defn <export-db!
   [repo data]
