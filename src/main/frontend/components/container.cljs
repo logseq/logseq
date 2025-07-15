@@ -466,7 +466,8 @@
       [:div.wrap
        [:div.sidebar-header-container
         ;; sidebar graphs
-        (sidebar-graphs)
+        (when (not config/publishing?)
+         (sidebar-graphs))
 
         ;; sidebar sticky navigations
         (sidebar-navigations
