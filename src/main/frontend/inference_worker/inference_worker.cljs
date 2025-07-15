@@ -28,11 +28,6 @@
    [_]
    (clj->js (keys infer-worker.text-embedding/available-embedding-models)))
 
-  (set-db-worker-proxy
-   [_this proxy]
-   (reset! infer-worker.state/*db-worker proxy)
-   (log/info :set-db-worker-proxy :done))
-
   (text-embedding
    [_this text-coll]
    (p/chain
@@ -60,7 +55,7 @@
 
   (search
    [_this repo query-string nums-neighbors]
-    (infer-worker.text-embedding/<search-knn repo query-string nums-neighbors))
+   (infer-worker.text-embedding/<search-knn repo query-string nums-neighbors))
 
   (index-info
    [_this repo]
