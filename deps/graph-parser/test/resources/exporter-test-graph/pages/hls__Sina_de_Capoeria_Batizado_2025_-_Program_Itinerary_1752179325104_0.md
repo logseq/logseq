@@ -7,8 +7,10 @@ file-path:: ../assets/Sina_de_Capoeria_Batizado_2025_-_Program_Itinerary_1752179
   hl-color:: yellow
   hl-type:: area
   hl-stamp:: 1752179374600
-- Duke School
+- Duke School - modified
   hl-page:: 8
   ls-type:: annotation
   id:: 68702394-3613-4bac-85a7-28643d58237f
   hl-color:: blue
+	- note about duke
+		- sub note
