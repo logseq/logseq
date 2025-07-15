@@ -238,7 +238,6 @@
       (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (= 1 (count @(:ignored-files import-state))) "Ignore .edn for now")
-      ;; (cljs.pprint/pprint @(:ignored-files import-state))
       (is (= 5 (count @assets))))
 
     (testing "logseq files"
