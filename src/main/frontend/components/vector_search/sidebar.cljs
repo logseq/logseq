@@ -1,10 +1,10 @@
 (ns frontend.components.vector-search.sidebar
-  (:require [fipp.edn :as fipp]
+  (:require [clojure.string :as string]
+            [fipp.edn :as fipp]
             [frontend.common.missionary :as c.m]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -54,13 +54,13 @@
      [])
     (hooks/use-effect!
      (fn []
-       (c.m/run-task
-         :update-search-result
-         (m/sp
-           (-> (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-search repo query-string 10))
-               ldb/read-transit-str
-               set-result))
-         :succ (constantly nil)))
+       (when-not (string/blank? query-string)
+         (c.m/run-task
+           :update-search-result
+           (m/sp
+             (-> (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-search repo query-string 10))
+                 set-result))
+           :succ (constantly nil))))
      [(hooks/use-debounced-value query-string 200)])
     [:div
      [:b "State"]

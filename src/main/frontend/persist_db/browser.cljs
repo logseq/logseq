@@ -8,6 +8,7 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
@@ -143,7 +144,9 @@
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! state/*infer-worker wrapped-worker)
       (p/do!
-       (.init wrapped-worker)
+       (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
+         (prn :debug :embedding-model-name embedding-model-name)
+         (.init wrapped-worker embedding-model-name))
        (log/info "init infer-worker spent:" (str  (- (util/time-ms) t1) "ms"))))))
 
 (defn <connect-db-worker-and-infer-worker!
