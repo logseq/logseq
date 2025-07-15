@@ -125,7 +125,7 @@
         "@excalidraw/excalidraw": "0.16.1",
         "@glidejs/glide": "^3.6.0",
         "@highlightjs/cdn-assets": "10.4.1",
-        "@huggingface/transformers": "^3.4.0",
+        "@huggingface/transformers": "^3.6.3",
         "@ionic/core": "^8.5.4",
         "@ionic/react": "^8.5.4",
         "@isomorphic-git/lightning-fs": "^4.6.0",
