@@ -1045,7 +1045,7 @@
                      :logseq.property.pdf/hl-page 1
                      :block/title ""}
                     user-attributes
-                    {:block/uuid (d/squuid)
+                    {:block/uuid (:id m)
                      :block/order (db-order/gen-key)
                      :logseq.property/ls-type :annotation
                      :logseq.property.pdf/hl-value (dissoc m :id)
@@ -1062,7 +1062,7 @@
 
 (defn- build-pdf-annotations-tx*
   "Creates annotations for a pdf asset given the asset's edn map and parsed markdown file"
-  [asset-edn-map parsed-md parent-asset image-asset-name-to-uuids {:keys [log-fn] :or {log-fn prn} :as opts}]
+  [asset-edn-map parsed-md parent-asset image-asset-name-to-uuids opts]
   (let [color-text-idents
         (->> (get-in db-property/built-in-properties [:logseq.property.pdf/hl-color :closed-values])
              (map (juxt :value :db-ident))
@@ -1078,24 +1078,8 @@
         (mapv #(build-annotation-block % color-text-idents parent-asset image-asset-name-to-uuids md-blocks opts)
               (get-in asset-edn-map [:edn-content :highlights]))
         md-children-blocks*
-        (mapv #(assoc %
-                      :block/uuid (d/squuid)
-                      :old-uuid (:block/uuid %))
-              (find-annotation-children-blocks (vals md-blocks) (set (map :id (get-in asset-edn-map [:edn-content :highlights])))))
-        old-to-new-annotation-uuids
-        (->> (map (fn [old-annotation new-block]
-                    [(:id old-annotation) (:block/uuid new-block)])
-                  (get-in asset-edn-map [:edn-content :highlights]) annotation-blocks)
-             (into {})
-             (merge (into {} (map (juxt :old-uuid :block/uuid)) md-children-blocks*)))
-        md-children-blocks (keep #(if-let [parent-uuid (get old-to-new-annotation-uuids (second (:block/parent %)))]
-                                    (sqlite-util/block-with-timestamps
-                                     (merge (select-keys % [:block/uuid :block/title :block/order])
-                                            {:block/parent [:block/uuid parent-uuid]
-                                             :block/page :logseq.class/Asset}))
-                                    (do (log-fn :invalid-md-annotation-block "Ignore md annotation block because it has no valid :block/parent"
-                                                :block %)
-                                        nil))
+        (find-annotation-children-blocks (vals md-blocks) (set (map :id (get-in asset-edn-map [:edn-content :highlights]))))
+        md-children-blocks (keep #(sqlite-util/block-with-timestamps (merge % {:block/page :logseq.class/Asset}))
                                  md-children-blocks*)]
     (into annotation-blocks md-children-blocks)))
 
@@ -1241,7 +1225,7 @@
                    add-missing-timestamps
                    ;; old whiteboards may have :block/left
                    (dissoc :block/left :block/format :block.temp/ast-blocks)
-                  ;;  ((fn [x] (prn :block-out x) x))
+                  ;;  ((fn [x] (prn ::block-out x) x))
                    )]
     ;; Order matters as previous txs are referenced in block
     (concat properties-tx deadline-properties-tx asset-blocks-tx [block'])))
