@@ -93,6 +93,7 @@
 (defn task--text-embedding&store!
   "return labels(js-array)"
   [repo text-array delete-labels replace-deleted?]
+  (prn :debug :text-array text-array)
   (m/sp
     (when (model-loaded?)
       (let [hnsw (or (get-hnsw-index repo) (new-hnsw-index! repo))
@@ -173,29 +174,33 @@
                               :hnsw-config {:dims 384}}
    "Xenova/jina-embeddings-v2-base-zh" {:tf-config {:dtype "fp32"}
                                         :hnsw-config {:dims 768}}
-   "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp32"}
-                                               :hnsw-config {:dims 384}}})
+   "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp16"}
+                                               :hnsw-config {:dims 1024}}})
 
 (def ^:private *load-model-progress (atom nil))
 
 (defn <load-model
   [model-name]
-  (when-let [config (get available-embedding-models model-name)]
-    (p/let [extractor (pipeline "feature-extraction" model-name
-                                (clj->js (-> (:tf-config config)
-                                             (assoc "device" "webgpu")
-                                             (assoc "progress_callback" #(reset! *load-model-progress %)))))]
-      (reset! infer-worker.state/*extractor extractor)
-      (reset! infer-worker.state/*model-name+config [model-name config])
-      true)))
+  (if (= model-name (first @infer-worker.state/*model-name+config))
+    true
+    (when-let [config (get available-embedding-models model-name)]
+      (p/let [extractor (pipeline "feature-extraction" model-name
+                                  (clj->js
+                                   (-> (:tf-config config)
+                                       (assoc "device" "webgpu")
+                                       (assoc "progress_callback" #(reset! *load-model-progress %)))))]
+        (reset! infer-worker.state/*extractor extractor)
+        (reset! infer-worker.state/*model-name+config [model-name config])
+        true))))
 
 (defn <init
-  []
-  (p/do!
-   (p/let [hnswlib (loadHnswlib)]
-     (reset! infer-worker.state/*hnswlib hnswlib)
-     (.setDebugLogs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) true)
-     (log/info :loaded :hnswlib))))
+  [model-name]
+  (p/let [hnswlib (loadHnswlib)]
+    (reset! infer-worker.state/*hnswlib hnswlib)
+    (.setDebugLogs (.-EmscriptenFileSystemManager ^js @infer-worker.state/*hnswlib) true)
+    (log/info :loaded :hnswlib)
+    (when model-name
+      (<load-model model-name))))
 
 (when-not common-config/PUBLISHING
   (c.m/run-background-task

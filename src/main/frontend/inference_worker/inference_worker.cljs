@@ -17,8 +17,8 @@
 
   Object
   (init
-   [_this]
-   (infer-worker.text-embedding/<init))
+   [_this model-name]
+   (infer-worker.text-embedding/<init model-name))
 
   (load-model
    [_this model-name]
