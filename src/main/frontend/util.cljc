@@ -94,12 +94,15 @@
 #?(:cljs
    (defn current-page-scroll
      []
-     (some-> (or
-              (js/document.querySelector "ion-modal.show-modal")
-              (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
-             (.querySelector "ion-content.scrolling")
-             (.-shadowRoot)
-             (.querySelector "[part=scroll]"))))
+     (or
+       (some-> (or (js/document.querySelector ".app-silk-index-scroll-content"))
+         (.-parentNode))
+       (some-> (or
+                 (js/document.querySelector "ion-modal.show-modal")
+                 (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
+         (.querySelector "ion-content.scrolling")
+         (.-shadowRoot)
+         (.querySelector "[part=scroll]")))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
