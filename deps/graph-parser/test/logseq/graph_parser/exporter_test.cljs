@@ -192,7 +192,7 @@
                 (remove #(= [{:db/ident :logseq.class/Tag}] (:block/tags %)))))
         "All classes only have :logseq.class/Tag as their tag (and don't have Page)")))
 
-(deftest-async ^:focus export-basic-graph-with-convert-all-tags
+(deftest-async export-basic-graph-with-convert-all-tags
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
@@ -208,7 +208,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.property/deadline
-      (is (= 28 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
+      (is (= 29 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Journal]] @conn))))
 
       (is (= 5 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Asset]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
