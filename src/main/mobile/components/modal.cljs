@@ -11,7 +11,6 @@
             [logseq.shui.ui :as shui]
             [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [logseq.shui.silkhq :as silkhq]
             [rum.core :as rum]))
@@ -50,7 +49,7 @@
                    [:div.flex.justify-between.items-center.block-modal-page-header
                     [:a.opacity-40.active:opacity-60.px-2
                      {:on-pointer-down close!}
-                     (ion/tabler-icon "chevron-down" {:size 18 :stroke 3})]
+                     (shui/tabler-icon "chevron-down" {:size 18 :stroke 3})]
                     [:a.opacity-40.active:opacity-60.px-2
                      {:on-pointer-down (fn []
                                          (mobile-ui/open-popup!
@@ -78,13 +77,13 @@
                                                                           {:text "Ok"
                                                                            :role "confirm"}]}))}
                                                 [:span.text-lg.flex.gap-2.items-center
-                                                 (ion/tabler-icon "trash" {:class "opacity-80" :size 18})
+                                                 (shui/tabler-icon "trash" {:class "opacity-80" :size 18})
                                                  "Delete"])
 
                                               (ui/menu-link
                                                 {:on-click #(mobile-ui/close-popup!)}
                                                 [:span.text-lg.flex.gap-2.items-center
-                                                 (ion/tabler-icon "copy" {:class "opacity-80" :size 18})
+                                                 (shui/tabler-icon "copy" {:class "opacity-80" :size 18})
                                                  "Copy"])])
                                            {:title "Actions"
                                             :modal-props {:initialBreakpoint 0.3}}))}

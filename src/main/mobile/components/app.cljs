@@ -34,7 +34,6 @@
             [mobile.components.demos :as demos]
             [mobile.components.ui :as ui-component]
             [mobile.components.ui-silk :as ui-silk]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -82,29 +81,6 @@
         [:strong.overflow-hidden.text-ellipsis.block.font-normal
          {:style {:max-width "40vw"}}
          short-repo-name]])]))
-
-(rum/defc bottom-tabs
-  []
-  (ion/tab-bar
-    {:slot "bottom"}
-    (ion/tab-button
-      {:tab "home"}
-      (ion/tabler-icon "home" {:size 22}) "Journals")
-    (ion/tab-button
-      {:tab "search"}
-      (ion/tabler-icon "search" {:size 22}) "Search")
-    (ion/tab-button
-      {:tab "quick-add"
-       :on-pointer-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/show-quick-add))}
-      (ion/tabler-icon "plus" {:size 22}) "Quick add")
-    (ion/tab-button
-      {:tab "settings"}
-      (ion/tabler-icon "settings" {:size 22}) "Settings")
-    (ion/tab-button
-      {:tab "demos"}
-      (ion/tabler-icon "bug" {:size 22}) "Demos")))
 
 (rum/defc keep-keyboard-open
   []
@@ -166,55 +142,6 @@
     (fn []
       (some-> js/window.externalsjs (.settleStatusBar)))
     [current-repo]))
-
-(rum/defc tabs
-  [current-repo]
-  (let [[current-tab _] (mobile-state/use-tab)
-        *home-page (hooks/use-ref nil)
-        *search-page (hooks/use-ref nil)
-        [presenting-element set-presenting-element!] (hooks/use-state nil)]
-    (use-theme-effects! current-repo)
-    (hooks/use-effect!
-      (fn []
-        (case current-tab
-          "home"
-          (set-presenting-element! (rum/deref *home-page))
-          "search"
-          (set-presenting-element! (rum/deref *search-page))
-          nil))
-      [current-tab])
-    (ion/tabs
-      {:id "app-ion-tabs"
-       :onIonTabsDidChange (fn [^js e]
-                             (mobile-state/set-tab! (.-tab (.-detail e))))}
-      (ion/tab
-        {:tab "home"}
-        (ion/content
-          (home *home-page current-tab)))
-      (ion/tab
-        {:tab "search"}
-        (ion/content
-          (search/search *search-page)))
-      (ion/tab
-        {:tab "settings"}
-        (ion/content
-          (settings/page)))
-      (ion/tab
-        {:tab "demos"}
-        (ion/content
-          (demos/silkhq-demos-page)))
-
-      (bottom-tabs)
-
-      (keep-keyboard-open)
-      (ui-component/install-notifications)
-      (ui-component/install-modals)
-
-      (shui-toaster/install-toaster)
-      (shui-dialog/install-modals)
-      (shui-popup/install-popups)
-      (modal/block-modal)
-      (popup/popup))))
 
 (rum/defc journal-calendar-btn
   []

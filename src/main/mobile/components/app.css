@@ -337,6 +337,13 @@ html[data-color=logseq] {
 
 .app-silk-sheet-scroll-content {
   @apply flex flex-col items-center;
+
+
+}
+
+.BottomSheet-bleedingBackground,
+.SheetWithDepth-bleedingBackground {
+  @apply bg-gray-01;
 }
 
 .app-silk-scroll-view {
