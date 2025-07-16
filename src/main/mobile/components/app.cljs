@@ -214,7 +214,7 @@
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
-      (modal/block-modal presenting-element)
+      (modal/block-modal)
       (popup/popup))))
 
 (rum/defc journal-calendar-btn
@@ -303,6 +303,8 @@
         (shui-toaster/install-toaster)
         (shui-dialog/install-modals)
         (shui-popup/install-popups)
+        (modal/block-modal)
+        (popup/popup)
         ))))
 
 (rum/defc main < rum/reactive

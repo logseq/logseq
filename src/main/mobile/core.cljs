@@ -52,7 +52,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[capacitor-new] init!")
-  ;(set-router!)
+  (set-router!)
   (init/init!)
   (fhandler/start! render!))
 
