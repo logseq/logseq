@@ -1,7 +1,7 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
+            [clojure.walk :as walk]
             [electron.ipc :as ipc]
-            [fipp.edn :as fipp]
             [frontend.colors :as colors]
             [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
@@ -1197,9 +1197,9 @@
   []
   (let [[model-info set-model-info] (hooks/use-state nil)
         [load-model-progress set-load-model-progress] (hooks/use-state nil)
+        {:keys [status]} load-model-progress
         repo (state/get-current-repo)
-        current-model (:graph-text-embedding-model-name model-info)
-        model-ready? (= "ready" (get load-model-progress "status"))]
+        current-model (:graph-text-embedding-model-name model-info)]
     (hooks/use-effect!
      (fn []
        (c.m/run-task
@@ -1217,7 +1217,7 @@
        (c.m/run-task
          ::update-load-model-progress
          (m/reduce
-          (fn [_ v] (set-load-model-progress v))
+          (fn [_ v] (set-load-model-progress (walk/keywordize-keys v)))
           vector-search-flows/load-model-progress-flow)
          :succ (constantly nil)))
      [])
@@ -1230,15 +1230,17 @@
        [:div.rounded-md.sm:max-w-tss.sm:col-span-2
         [:div.flex.flex-col.gap-2
          (shui/select
-          {:on-value-change (fn [model-name]
-                              (c.m/run-task
-                                ::load-model
-                                (m/sp
-                                  (c.m/<?
-                                   (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
-                                  (set-model-info (assoc model-info :graph-text-embedding-model-name model-name)))
-                                :succ (constantly nil)))
-           :value current-model}
+          (cond->
+           {:on-value-change (fn [model-name]
+                               (c.m/run-task
+                                 ::load-model
+                                 (m/sp
+                                   (c.m/<?
+                                    (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
+                                   (set-model-info (assoc model-info :graph-text-embedding-model-name model-name)))
+                                 :succ (constantly nil)))}
+            current-model
+            (assoc :value current-model))
           (shui/select-trigger
            {:class "h-8"}
            (shui/select-value
@@ -1249,13 +1251,21 @@
             (for [model-name (:available-model-names model-info)]
               (shui/select-item {:value model-name} model-name)))))
 
-         [:div.text-muted-foreground.text-sm
-          (str "Model is "
-               (case (get load-model-progress "status")
-                 ("initiate" "progress") "loading"
-                 "ready" "ready"
-                 "not ready")
-               (when model-ready? " 🚀"))]]]]]]))
+         (when status
+           [:div.text-muted-foreground.text-sm
+            (let [{:keys [file progress loaded total]} load-model-progress]
+              (case status
+                ("progress" "download" "initiate")
+                (str "Downloading " file
+                     (when progress
+                       (util/format " %dm/%dm"
+                                    (int (/ loaded 1024 1024))
+                                    (int (/ total 1024 1024)))))
+                "done"
+                (str "Downloaded " file)
+                "ready"
+                "Model is ready  🚀"
+                nil))])]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
