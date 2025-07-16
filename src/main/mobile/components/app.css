@@ -173,7 +173,7 @@ ion-buttons {
 
   z-index: 9999;
 
-  & -content {
+  &-content {
     @apply inset-0 flex items-end justify-center px-4 py-2
     pointer-events-none sm:px-6 sm:py-2 sm:items-start sm:justify-end;
   }
@@ -187,12 +187,13 @@ ion-buttons {
 
 .block-modal-page {
   &-header {
-    @apply pt-5 pb-1 px-4 flex justify-between bg-white/10;
+    @apply pt-5 pb-1 px-4 flex justify-between bg-gray-01
+    sticky top-0 left-0 w-full z-[1];
   }
 
   &-content {
     #app-container-wrapper {
-      @apply relative px-4;
+      @apply relative px-6;
     }
 
     .ls-view-body {
@@ -330,18 +331,22 @@ html[data-color=logseq] {
   @apply bg-gray-01 min-h-[100svh];
 }
 
+.app-silk-sheet-scroll-content {
+  @apply flex flex-col items-center;
+}
+
 .app-silk-scroll-view {
   grid-area: 1 / 1;
   min-height: 0;
   width: 100%;
   overflow: clip;
   border-radius: 24px 24px 0 0;
+  position: relative;
 }
 
 .app-silk-scroll-content {
   overflow: hidden;
   overflow: clip;
-  padding: 20px;
   position: relative;
   display: grid;
 }
