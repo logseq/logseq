@@ -186,13 +186,13 @@ ion-buttons {
 }
 
 .block-modal-page {
-  > ion-header {
+  &-header {
     @apply pt-5 pb-1 px-4 flex justify-between bg-white/10;
   }
 
-  > ion-content {
+  &-content {
     #app-container-wrapper {
-      @apply relative -top-6;
+      @apply relative px-4;
     }
 
     .ls-view-body {
@@ -226,7 +226,7 @@ ion-modal {
   }
 }
 
-ion-content {
+.blocks-container {
   .block-main-container {
     &[data-has-heading] {
       > .block-control-wrap {
@@ -245,14 +245,6 @@ ion-content {
         @apply mt-3;
       }
     }
-  }
-
-  &::part(background) {
-    @apply !bg-transparent;
-  }
-
-  .ion-page {
-    @apply bg-gray-01;
   }
 }
 
@@ -361,8 +353,8 @@ html[data-color=logseq] {
 }
 
 .app-silk-topbar {
-  @apply fixed top-0 left-0 w-full border-b bg-gray-02 justify-between
-  items-center overflow-hidden px-2 grid grid-cols-8 gap-4;
+  @apply fixed top-0 left-0 w-full border-b bg-gray-02 dark:bg-gray-01
+  justify-between items-center overflow-hidden px-2 grid grid-cols-8 gap-4;
 
   padding-bottom: 10px;
   padding-top: calc(var(--safe-area-inset-top, 0px) + 10px);
