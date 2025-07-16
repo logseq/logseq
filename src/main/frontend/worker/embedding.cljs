@@ -51,20 +51,20 @@
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
   [reset?]
-  (let [preds (cond-> [(fn [b]
-                         (let [db-ident (:db/ident b)
-                               title (:block/title b)]
-                           (and (or (nil? db-ident)
-                                    (not (string/starts-with? (namespace db-ident) "logseq.")))
-                                (not (string/blank? title))
-                                (not (ldb/hidden? title))
-                                (nil? (:logseq.property/view-for b))
-                                (not (keyword-identical?
-                                      :logseq.property/description
-                                      (:db/ident (:logseq.property/created-from-property b)))))))]
+  (let [preds (cond->> (list (fn [b]
+                               (let [db-ident (:db/ident b)
+                                     title (:block/title b)]
+                                 (and (or (nil? db-ident)
+                                          (not (string/starts-with? (namespace db-ident) "logseq.")))
+                                      (not (string/blank? title))
+                                      (not (ldb/hidden? title))
+                                      (nil? (:logseq.property/view-for b))
+                                      (not (keyword-identical?
+                                            :logseq.property/description
+                                            (:db/ident (:logseq.property/created-from-property b))))))))
 
                 (not reset?)
-                (conj (fn [b]
+                (cons (fn [b]
                         (let [block-updated-at (:block/updated-at b)
                               hnsw-label-updated-at (:logseq.property.embedding/hnsw-label-updated-at b)]
                           (or (nil? hnsw-label-updated-at)
