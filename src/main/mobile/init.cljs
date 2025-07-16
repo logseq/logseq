@@ -48,7 +48,7 @@
                            (not-empty (cc-ui/get-modal))
                            (cc-ui/close-modal!)
 
-                           (not-empty @mobile-state/*modal-data)
+                           (not-empty @mobile-state/*singleton-modal)
                            :skip
 
                            (not-empty (state/get-selection-blocks))
