@@ -219,11 +219,15 @@ ion-tab-bar {
   }
 }
 
-ion-modal {
+.app-silk-popup-sheet-view {
   .property-select {
     .cp__select-main {
       @apply w-auto;
     }
+  }
+
+  .cp__emoji-icon-picker {
+    @apply w-full;
   }
 }
 

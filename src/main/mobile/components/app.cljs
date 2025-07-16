@@ -186,8 +186,7 @@
     (ion/tabs
       {:id "app-ion-tabs"
        :onIonTabsDidChange (fn [^js e]
-                             (mobile-state/set-tab! (.-tab (.-detail e))
-                               (.-target e)))}
+                             (mobile-state/set-tab! (.-tab (.-detail e))))}
       (ion/tab
         {:tab "home"}
         (ion/content

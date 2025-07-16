@@ -3,17 +3,11 @@
   (:require [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))
-(defonce *tabs-el (atom nil))
-(defn set-tab!
-  [tab ^js tabs]
-  (reset! *tab tab)
-  (reset! *tabs-el tabs))
+(defn set-tab! [tab] (reset! *tab tab))
 (defn use-tab [] (r/use-atom *tab))
 
 (defonce *singleton-modal (atom nil))
-(defn set-singleton-modal!
-  [data]
-  (reset! *singleton-modal data))
+(defn set-singleton-modal! [data] (reset! *singleton-modal data))
 (defn open-block-modal!
   [block]
   (set-singleton-modal! {:open? true
@@ -26,4 +20,4 @@
   (reset! *popup-data data))
 
 (defn redirect-to-tab! [name]
-  (some-> @*tabs-el (.select name)))
+  (set-tab! (str name)))
