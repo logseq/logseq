@@ -38,7 +38,7 @@
        (let [id-str (get-in route [:path-params :name])]
          (when (util/uuid-string? id-str)
            (let [page-uuid (uuid id-str)]
-             (state/set-modal! {:open? true
+             (state/set-singleton-modal! {:open? true
                                 :block {:block/uuid page-uuid}}))))
        :user-login
        nil

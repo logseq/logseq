@@ -10,14 +10,15 @@
   (reset! *tabs-el tabs))
 (defn use-tab [] (r/use-atom *tab))
 
-(defonce *modal-data (atom nil))
-(defn set-modal!
+(defonce *singleton-modal (atom nil))
+(defn set-singleton-modal!
   [data]
-  (reset! *modal-data data))
+  (reset! *singleton-modal data))
 (defn open-block-modal!
   [block]
-  (set-modal! {:open? true
-               :block block}))
+  (set-singleton-modal! {:open? true
+                         :block block}))
+(defn use-singleton-modal [] (r/use-atom *singleton-modal))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
