@@ -220,9 +220,17 @@ ion-tab-bar {
 }
 
 .app-silk-popup-sheet-view {
-  .property-select {
+  .ls-property-dialog {
+    .ls-property-input, .property-key {
+      @apply w-full;
+    }
+  }
+
+  .property-select, .ls-property-key {
+    @apply w-full;
+
     .cp__select-main {
-      @apply w-auto;
+      @apply w-full;
     }
   }
 
