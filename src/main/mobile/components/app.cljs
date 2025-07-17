@@ -179,8 +179,7 @@
       (silkhq/depth-sheet-scenery-outlets
         (silkhq/scroll {:as-child true}
           (silkhq/scroll-view
-            {:safeArea "none"
-             :class "silk-scroll-view"
+            {:class "silk-scroll-view"
              :pageScroll true
              :nativePageScrollReplacement true}
             (silkhq/scroll-content {:class "app-silk-index-scroll-content"}

@@ -23,27 +23,27 @@
       {:class (when (= current-tab "home") "active")
        :data-tab "home"}
       (shui/button {:variant :icon}
-        (shui/tabler-icon "home" {:size 23}))
+        (shui/tabler-icon "home" {:size 24}))
       [:small "Journals"]]
      [:span.as-item
       {:class (when (= current-tab "search") "active")
        :data-tab "search"}
       (shui/button {:variant :icon}
-        (shui/tabler-icon "search" {:size 23}))
+        (shui/tabler-icon "search" {:size 24}))
       [:small "Search"]]
      [:span.as-item
       (shui/button {:variant :icon}
-        (shui/tabler-icon "plus" {:size 23}))
+        (shui/tabler-icon "plus" {:size 24}))
       [:small "Quick add"]]
      [:span.as-item
       {:class (when (= current-tab "settings") "active")
        :data-tab "settings"}
       (shui/button {:variant :icon}
-        (shui/tabler-icon "settings" {:size 23}))
+        (shui/tabler-icon "settings" {:size 24}))
       [:small "Settings"]]
      [:span.as-item
       {:class (when (= current-tab "demos") "active")
        :data-tab "demos"}
       (shui/button {:variant :icon}
-        (shui/tabler-icon "bug" {:size 23}))
+        (shui/tabler-icon "bug" {:size 24}))
       [:small "Demos"]]]))

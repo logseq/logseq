@@ -5,8 +5,9 @@
             [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [logseq.shui.ui :as shui]
+            [logseq.shui.silkhq :as silkhq]
             [medley.core :as medley]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [react-transition-group :refer [CSSTransition TransitionGroup]]
             [rum.core :as rum]))
@@ -25,10 +26,11 @@
   []
   [:div.ui__notifications-content
    [:div.pointer-events-auto.notification-clear
-    (ion/button
-     {:on-click (fn []
-                  (notification/clear-all!))}
-     "clear all")]])
+    (shui/button
+      {:size :sm
+       :on-click (fn []
+                   (notification/clear-all!))}
+      "clear all")]])
 
 (rum/defc notification-content
   [state content status uid]
@@ -37,20 +39,20 @@
           (if (keyword? status)
             (case status
               :success
-              (ion/tabler-icon "circle-check" {:class "text-green-600" :size "20"})
+              (shui/tabler-icon "circle-check" {:class "text-green-600" :size "20"})
 
               :warning
-              (ion/tabler-icon "alert-circle" {:class "text-yellow-600" :size "20"})
+              (shui/tabler-icon "alert-circle" {:class "text-yellow-600" :size "20"})
 
               :error
-              (ion/tabler-icon "circle-x" {:class "text-red-600" :size "20"})
+              (shui/tabler-icon "circle-x" {:class "text-red-600" :size "20"})
 
-              (ion/tabler-icon "info-circle" {:class "text-indigo-600" :size "20"}))
+              (shui/tabler-icon "info-circle" {:class "text-indigo-600" :size "20"}))
             status)]
       [:div.ui__notifications-content
        {:style
         (when (or (= state "exiting")
-                  (= state "exited"))
+                (= state "exited"))
           {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
@@ -71,38 +73,37 @@
              content]]
            [:div.flex-shrink-0.flex {:style {:margin-top -9
                                              :margin-right -18}}
-            (ion/button
-             {:fill "clear"
-              :mode "ios"
-              :shape "round"
-              :on-click (fn []
-                          (notification/clear! uid))}
-             [:span {:slot "icon-only"}
-              (ion/tabler-icon "x")])]]]]]])))
+            (shui/button
+              {:variant :icon
+               :size :sm
+               :on-click (fn []
+                           (notification/clear! uid))}
+              [:span {:slot "icon-only"}
+               (shui/tabler-icon "x")])]]]]]])))
 
 (rum/defc install-notifications < rum/reactive
   []
   (let [contents (state/sub :notification/contents)]
     (transition-group
-     {:class-name "notifications ui__notifications"}
-     (let [notifications
-           (map (fn [el]
-                  (let [k (first el)
-                        v (second el)]
-                    (css-transition
-                     {:timeout 100
-                      :key (name k)}
-                     (fn [state]
-                       (notification-content state (:content v) (:status v) k)))))
-                contents)
-           clear-all (when (> (count contents) 3)
-                       (css-transition
-                        {:timeout 100
-                         :k "clear-all"}
-                        (fn [_state]
-                          (notification-clear-all))))
-           items (if clear-all (cons clear-all notifications) notifications)]
-       (doall items)))))
+      {:class-name "notifications ui__notifications"}
+      (let [notifications
+            (map (fn [el]
+                   (let [k (first el)
+                         v (second el)]
+                     (css-transition
+                       {:timeout 100
+                        :key (name k)}
+                       (fn [state]
+                         (notification-content state (:content v) (:status v) k)))))
+              contents)
+            clear-all (when (> (count contents) 3)
+                        (css-transition
+                          {:timeout 100
+                           :k "clear-all"}
+                          (fn [_state]
+                            (notification-clear-all))))
+            items (if clear-all (cons clear-all notifications) notifications)]
+        (doall items)))))
 
 (defonce *modals (atom []))
 (defonce ^:private *id (atom 0))
@@ -113,45 +114,58 @@
   (let [{:keys [class header]} modal-props]
     (case type
       :alert
-      (ion/alert
-       (merge modal-props
-              {:is-open true
-               :header (or title header)
-               :message content
-               :backdropDismiss false
-               :onWillDismiss (fn [^js e]
-                                (when on-action
-                                  (on-action (bean/->clj (.-detail e))))
-                                (close!))
-               :buttons (bean/->js (or buttons (:buttons modal-props)))
-               :inputs (bean/->js (or inputs (:inputs modal-props) []))}))
+      (js/alert
+        (pr-str
+          (merge modal-props
+            {:is-open true
+             :header (or title header)
+             :message content
+             :backdropDismiss false
+             :onWillDismiss (fn [^js e]
+                              (when on-action
+                                (on-action (bean/->clj (.-detail e))))
+                              (close!))
+             :buttons (bean/->js (or buttons (:buttons modal-props)))
+             :inputs (bean/->js (or inputs (:inputs modal-props) []))})))
 
       :action-sheet
-      (ion/action-sheet
-       (merge modal-props
-              {:is-open true
-               :header (or content title header)
-               :onWillDismiss (fn [^js e]
-                                (when on-action
-                                  (on-action (bean/->clj (.-detail e))))
-                                (close!))
-               :buttons (bean/->js (or buttons (:buttons modal-props)))}))
+      (silkhq/bottom-sheet
+        (merge modal-props
+          {:presented true
+           :header (or content title header)
+           ;:onPresentedChange (fn [v?]
+           ;                     (when on-action
+           ;                       (on-action (bean/->clj (.-detail e))))
+           ;                     (close!))
+           ;:buttons (bean/->js (or buttons (:buttons modal-props)))
+           })
+        (silkhq/bottom-sheet-portal
+          (silkhq/bottom-sheet-view {:as-child true})
+          (silkhq/bottom-sheet-content
+            (some-> (or title header) (silkhq/bottom-sheet-title))
+            (silkhq/bottom-sheet-content
+              (if (fn? content)
+                (content) content))
+            )))
 
       ;; default
-      (ion/modal
-       (merge modal-props
-              {:is-open true
-               :onWillDismiss (fn [] (close!))
-               :class (str class (when (not (true? as-page?)) " ion-datetime-button-overlay"))})
-       (if (fn? content)
-         (content) content)))))
+      (silkhq/bottom-sheet
+        (merge modal-props
+          {:presented true
+           :onPresentedChange (fn [v?] (when (false? v?) (close!)))})
+        (silkhq/bottom-sheet-portal
+          (silkhq/bottom-sheet-view {:as-child true}
+            (silkhq/bottom-sheet-backdrop)
+            (silkhq/bottom-sheet-content
+              (if (fn? content)
+                (content) content))))))))
 
 (defn get-modal
   ([] (some-> @*modals last))
   ([id]
    (when id
      (some->> (medley/indexed @*modals)
-              (filter #(= id (:id (second %)))) (first)))))
+       (filter #(= id (:id (second %)))) (first)))))
 
 (defn- upsert-modal!
   [config]
@@ -168,11 +182,11 @@
 (defn open-modal!
   [content & {:keys [id type] :as props}]
   (upsert-modal!
-   (merge props
-          {:id (or id (gen-id))
-           :type (or type :default)                             ;; :alert :confirm :page
-           :as-page? (= type :page)
-           :content content})))
+    (merge props
+      {:id (or id (gen-id))
+       :type (or type :default)                             ;; :alert :confirm :page
+       :as-page? (= type :page)
+       :content content})))
 
 (defn close-modal!
   ([] (some-> @*modals (last) :id (close-modal!)))
@@ -181,13 +195,13 @@
 (defn open-popup!
   [content-fn opts]
   (mobile-state/set-popup!
-   {:open? true
-    :content-fn content-fn
-    :opts opts}))
+    {:open? true
+     :content-fn content-fn
+     :opts opts}))
 
 (defn close-popup! []
   (some-> mobile-state/*popup-data
-          (swap! assoc :open? false)))
+    (swap! assoc :open? false)))
 
 (rum/defc install-modals []
   (let [_ (r/use-atom *modals)]
@@ -196,4 +210,4 @@
            :let [close! #(close-modal! id)
                  props' (assoc props :close! close!)]]
        (x-modal props'
-                (if (fn? content) (content props') content)))]))
+         (if (fn? content) (content props') content)))]))
