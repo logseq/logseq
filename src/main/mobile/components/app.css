@@ -423,3 +423,31 @@ html[data-color=logseq] {
     }
   }
 }
+
+.app-silk-search-page {
+  > .hd {
+    @apply relative;
+
+    .ls-icon-search {
+      @apply absolute left-3 top-3 opacity-60;
+    }
+
+    .ui__input {
+      @apply border-none bg-gray-04 pl-10 outline-none ring-0;
+
+      outline-offset: 0;
+      box-shadow: none;
+    }
+
+    > .x {
+      @apply absolute top-3 right-2.5 w-[18px] h-[18px] bg-gray-10 overflow-hidden
+      rounded-full flex items-center justify-center text-gray-02 opacity-80;
+    }
+  }
+
+  > .bd {
+    @apply -mx-4 pt-2;
+  }
+}
+
+
