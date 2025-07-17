@@ -1,3 +1,8 @@
+* {
+  -webkit-tap-highlight-color: transparent; /* Removes the grey highlight on clickable elements on iOS */
+  -webkit-text-size-adjust: 100%; /* Prevent adjustments of font size after orientation changes in iOS */
+}
+
 :root {
   --ls-page-title-size: 26px;
   --silk-topbar-height: 48px;
@@ -9,38 +14,6 @@ html.is-native-ios {
 }
 
 html.is-native-android {
-  --safe-area-inset-top: 46px;
-  --safe-area-inset-bottom: 16px;
-}
-
-html.plt-capacitor.plt-android {
-  --ion-safe-area-top: 42px;
-  --ion-safe-area-bottom: 16px;
-
-  ion-button, ion-tab-button {
-    --ripple-color: rgba(0, 0, 0, .3); /* 设置涟漪颜色为透明 */
-  }
-
-  ion-app {
-    margin-top: 0;
-  }
-
-  .header-md {
-    box-shadow: 0 2px 8px #eee;
-    border-bottom: .5px solid rgba(0, 0, 0, .15);
-  }
-
-  .searchbar-input.sc-ion-searchbar-md {
-    @apply shadow-none;
-  }
-
-  ion-modal {
-    ion-content {
-      #app-container-wrapper {
-        @apply pt-0;
-      }
-    }
-  }
 
   .pswp__top-bar {
     @apply relative top-8;
@@ -373,23 +346,23 @@ html[data-color=logseq] {
 .app-silk-index-container {
   @apply p-4 flex flex-col gap-3 bg-gray-01;
 
-  padding-top: calc(var(--safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
 }
 
 .app-silk-topbar {
   @apply fixed top-0 left-0 w-full border-b bg-gray-02 dark:bg-gray-01
-  justify-between items-center overflow-hidden px-2 grid grid-cols-8 gap-4;
+  justify-between items-center overflow-hidden grid grid-cols-8 gap-4;
 
-  padding-bottom: 10px;
-  padding-top: calc(var(--safe-area-inset-top, 0px) + 10px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
   height: 48px;
+  box-sizing: content-box;
 
   &.search {
     @apply hidden;
   }
 
   > .as-left, .as-right {
-    @apply flex items-center col-span-2 gap-2;
+    @apply flex items-center col-span-2 gap-2 px-2;
 
     .ui__button {
       @apply opacity-50 px-1;
@@ -401,7 +374,7 @@ html[data-color=logseq] {
   }
 
   > .as-right {
-    @apply justify-end px-1;
+    @apply justify-end;
   }
 
   > .title {
@@ -411,8 +384,11 @@ html[data-color=logseq] {
 }
 
 .app-silk-tabs {
-  @apply flex items-center h-[54px] border-t overflow-hidden
+  @apply flex border-t overflow-hidden
   bg-gray-02 fixed left-0 bottom-0 w-full z-[1] dark:bg-gray-01;
+
+  padding-top: 4px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;

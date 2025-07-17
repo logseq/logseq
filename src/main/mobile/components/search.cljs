@@ -12,7 +12,6 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -107,29 +106,29 @@
                            (set-recents! nil))}
               "Clear all")]]
 
-          (ion/list
-            (for [item recents]
-              (ion/item
-                {:on-click #(set-input! item)}
-                [:div.flex.flex-row.items-center.gap-1
-                 (ui/icon "search" {:size 15
-                                    :class "text-muted-foreground"})
-                 item])))]
+          [:ul.px-3
+           (for [item recents]
+             [:li.flex.gap-1
+              {:on-click #(set-input! item)}
+              [:div.flex.flex-row.items-center.gap-1
+               (ui/icon "search" {:size 15
+                                  :class "text-muted-foreground"})
+               item]])]]
 
          [:div.px-4.py-2.text-sm.text-muted-foreground.border-b
           "Recent updates"]])
 
-      (ion/list
-        (for [{:keys [icon text header source-page source-block]} result]
-          (let [block (or source-page source-block)]
-            (ion/item
-              {:on-click (fn []
-                           (mobile-state/open-block-modal! block))}
-              [:div.flex.flex-col.gap-1.py-1
-               (when header
-                 [:div.opacity-50.text-sm
-                  header])
-               [:div.flex.flex-row.items-start.gap-1
-                (when icon (ui/icon icon {:size 15
-                                          :class "text-muted-foreground mt-1"}))
-                [:div text]]]))))]]))
+      [:ul.px-3
+       (for [{:keys [icon text header source-page source-block]} result]
+         (let [block (or source-page source-block)]
+           [:li.flex.gap-1
+            {:on-click (fn []
+                         (mobile-state/open-block-modal! block))}
+            [:div.flex.flex-col.gap-1.py-1
+             (when header
+               [:div.opacity-50.text-sm
+                header])
+             [:div.flex.flex-row.items-start.gap-1
+              (when icon (ui/icon icon {:size 15
+                                        :class "text-muted-foreground mt-1"}))
+              [:div text]]]]))]]]))
