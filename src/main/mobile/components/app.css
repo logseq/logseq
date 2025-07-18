@@ -14,24 +14,23 @@ html.is-native-ios {
 }
 
 html.is-native-android {
-
   .pswp__top-bar {
     @apply relative top-8;
   }
 }
 
-html.plt-mobile {
-  button {
-    /* fix ionic default style */
-    border-style: solid;
-  }
+#mobile-editor-toolbar {
+  @apply opacity-0 delay-100;
+  bottom: calc(var(--safe-area-inset-bottom) - 2px);
 }
 
 html.has-mobile-keyboard {
-  .ion-page:not(.ion-page-hidden) {
-    & > ion-content::part(scroll) {
-      padding-bottom: 512px !important;
-    }
+  .app-silk-tabs {
+    display: none;
+  }
+
+  #mobile-editor-toolbar {
+    @apply opacity-100;
   }
 }
 
@@ -39,45 +38,13 @@ html {
   &[data-theme=dark] {
     &[data-color=logseq] {
       --background: var(--ls-primary-background-color);
-      --ion-item-background: var(--ls-primary-background-color);
-      --ion-text-color: var(--ls-primary-text-color);
-      --ion-toolbar-color: var(--ls-link-text-color);
-      --ion-item-color: var(--ls-primary-text-color);
-      --ion-item-border-color: var(--ls-border-color);
 
       input, textarea {
         caret-color: var(--ls-primary-text-color);
       }
 
-      ion-toolbar::part(background), ion-tab-bar,
-      ion-tab-button, ion-header {
-        background-color: var(--lx-gray-01);
-      }
-
-      ion-modal {
-        --background: var(--lx-gray-01);
-        --backdrop-color: var(--ls-secondary-background-color);
-      }
-
       #mobile-editor-toolbar {
         background: var(--ls-secondary-background-color);
-      }
-
-      .action-sheet-group.sc-ion-action-sheet-ios,
-      .alert-wrapper.sc-ion-alert-ios {
-        --background: var(--ls-primary-background-color);
-        --button-background: var(--ls-primary-background-color);
-        --button-color: var(--ls-primary-text-color);
-      }
-
-      .header-md {
-        box-shadow: 0 2px 8px var(--ls-secondary-background-color);
-      }
-
-      .sc-ion-buttons-ios, .sc-ion-buttons-md {
-        &.text-muted-foreground {
-          color: var(--lx-gray-02);
-        }
       }
     }
   }
@@ -95,17 +62,6 @@ ul {
   @apply bg-gray-01;
 }
 
-ion-textarea {
-  textarea {
-    @apply !p-1 min-h-[120px];
-  }
-}
-
-ion-buttons {
-  &:has(.app-graph-select) {
-    @apply max-w-[60%] overflow-hidden;
-  }
-}
 
 .pswp__top-bar {
   @apply top-8;
@@ -120,20 +76,6 @@ ion-buttons {
     .ls-block .block-control {
       @apply !right-5 !top-1;
     }
-  }
-}
-
-.app-graph-select {
-  ion-button {
-    &::part(native) {
-      @apply whitespace-nowrap overflow-hidden font-semibold active:opacity-80 pr-8;
-    }
-  }
-}
-
-.sc-ion-buttons-md {
-  &.text-muted-foreground {
-    @apply text-gray-600;
   }
 }
 
@@ -177,19 +119,6 @@ ion-buttons {
 
 .block-content-or-editor-inner {
   @apply min-h-[25px];
-}
-
-ion-tab-bar {
-  box-shadow: 0 0 1px #999999;
-  padding-top: 4px;
-
-  ion-tab-button {
-    @apply opacity-70;
-
-    &.tab-selected {
-      @apply opacity-100 text-accent-11 font-semibold;
-    }
-  }
 }
 
 .app-silk-popup-sheet-view {
@@ -244,13 +173,6 @@ ion-tab-bar {
   }
 }
 
-[type='text']:focus, [type='email']:focus, [type='url']:focus,
-[type='password']:focus, [type='number']:focus, [type='date']:focus, [type='datetime-local']:focus,
-[type='month']:focus, [type='search']:focus, [type='tel']:focus, [type='time']:focus, [type='week']:focus,
-[multiple]:focus, textarea:focus, select:focus {
-  box-shadow: none;
-}
-
 .ui__popover-content, .ui__dropdown-menu-content {
   &[data-editor-popup-ref=page-search],
   &[data-editor-popup-ref=page-search-hashtag],
@@ -268,16 +190,6 @@ ion-tab-bar {
   }
 }
 
-html[data-color=logseq] {
-  &[data-theme=light] {
-    --ion-color-primary: var(--rx-logseq-11);
-  }
-}
-
-.graph-switcher .action-sheet-button {
-  font-size: 1.125em;
-}
-
 @container ls-block (max-width: 430px) {
   .block-modal-page .ls-properties-area {
     display: initial;
@@ -285,11 +197,11 @@ html[data-color=logseq] {
 }
 
 .property-key {
-  min-width: 0px;
+  min-width: 0;
 }
 
 .property-block-container {
-  margin-left: 0px;
+  margin-left: 0;
 }
 
 .ls-page-title .ls-page-icon svg, .ls-page-title .ls-page-icon button {
@@ -346,6 +258,10 @@ html[data-color=logseq] {
 .app-silk-index-container {
   @apply p-4 flex flex-col gap-3 bg-gray-01;
 
+  &[data-tab=search] {
+    --silk-topbar-height: 8px;
+  }
+
   padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
 }
 
@@ -365,7 +281,7 @@ html[data-color=logseq] {
     @apply flex items-center col-span-2 gap-2 px-2;
 
     .ui__button {
-      @apply opacity-50 px-1;
+      @apply opacity-70 px-1;
 
       &:active {
         @apply opacity-80;
@@ -379,7 +295,7 @@ html[data-color=logseq] {
 
   > .title {
     @apply font-semibold overflow-hidden text-ellipsis whitespace-nowrap col-span-4
-    block text-center;
+    block text-center text-lg;
   }
 }
 
@@ -392,7 +308,7 @@ html[data-color=logseq] {
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
-    @apply opacity-40 active:opacity-70;
+    @apply opacity-50 active:opacity-70;
 
     &.active {
       @apply text-accent-10 opacity-100;
@@ -433,5 +349,3 @@ html[data-color=logseq] {
     @apply -mx-4 pt-2;
   }
 }
-
-

@@ -132,8 +132,7 @@ const common = {
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
-        'packages/ui/dist/ionic/*.js',
-        'packages/ui/dist/silkhq/*'
+        'packages/ui/dist/silkhq/*',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile'))),
     )(...params)
   },
@@ -206,20 +205,22 @@ const common = {
     cb()
   },
 
-  switchReactDevelopmentMode(cb) {
+  switchReactDevelopmentMode (cb) {
     try {
-      const reactFrom = path.join(outputPath, 'js', 'react.development.js');
-      const reactTo = path.join(outputPath, 'js', 'react.production.min.js');
-      fs.renameSync(reactFrom, reactTo);
+      const reactFrom = path.join(outputPath, 'js', 'react.development.js')
+      const reactTo = path.join(outputPath, 'js', 'react.production.min.js')
+      fs.renameSync(reactFrom, reactTo)
 
-      const reactDomFrom = path.join(outputPath, 'js', 'react-dom.development.js');
-      const reactDomTo = path.join(outputPath, 'js', 'react-dom.production.min.js');
-      fs.renameSync(reactDomFrom, reactDomTo);
+      const reactDomFrom = path.join(outputPath, 'js',
+        'react-dom.development.js')
+      const reactDomTo = path.join(outputPath, 'js',
+        'react-dom.production.min.js')
+      fs.renameSync(reactDomFrom, reactDomTo)
 
-      cb();
+      cb()
     } catch (err) {
-      console.error("Error during switchReactDevelopmentMode:", err);
-      cb(err);
+      console.error('Error during switchReactDevelopmentMode:', err)
+      cb(err)
     }
   },
 }

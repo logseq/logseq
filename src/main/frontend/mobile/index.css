@@ -29,10 +29,12 @@
   @apply fixed -bottom-1 left-0 w-full z-[99999] flex justify-between bg-gray-100 border-t border-gray-200
   dark:border-gray-800 dark:bg-[#222];
 
+  /*
   will-change: transform;
   transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
   opacity: var(--ls-native-toolbar-opacity, 0);
   transition: transform 250ms ease-out, opacity 50ms ease-out;
+   */
 
   button {
     @apply flex items-center py-2 px-2 opacity-95;
