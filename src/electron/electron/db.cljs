@@ -3,6 +3,7 @@
   (:require ["electron" :refer [app]]
             ["fs-extra" :as fs]
             ["path" :as node-path]
+            [logseq.common.config :as common-config]
             [logseq.db.common.sqlite :as common-sqlite]))
 
 (defn get-graphs-dir
@@ -33,13 +34,11 @@
     (when (fs/existsSync db-path)
       (fs/readFileSync db-path))))
 
-(def unlinked-graphs-dir "Unlinked graphs")
-
 (defn unlink-graph!
   [repo]
   (let [db-name (common-sqlite/sanitize-db-name repo)
         path (node-path/join (get-graphs-dir) db-name)
-        unlinked (node-path/join (get-graphs-dir) unlinked-graphs-dir)
+        unlinked (node-path/join (get-graphs-dir) common-config/unlinked-graphs-dir)
         new-path (node-path/join unlinked db-name)
         new-path-exists? (fs/existsSync new-path)
         new-path' (if new-path-exists?

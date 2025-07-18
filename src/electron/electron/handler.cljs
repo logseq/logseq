@@ -30,6 +30,7 @@
             [electron.utils :as utils]
             [electron.window :as win]
             [goog.functions :refer [debounce]]
+            [logseq.cli.common.graph :as cli-common-graph]
             [logseq.common.graph :as common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -203,51 +204,28 @@
     (bean/->js {:path path
                 :files files})))
 
-(defn- graph-name->path
-  [graph-name]
-  (when graph-name
-    (-> graph-name
-        (string/replace "+3A+" ":")
-        (string/replace "++" "/"))))
-
-(defn- get-graphs-dir
+(defn- get-file-graphs-dir
+  "Get cache directory for file graphs"
   []
   (let [dir (if utils/ci?
               (.resolve node-path js/__dirname "../tmp/graphs")
-              (.join node-path (.homedir os) ".logseq" "graphs"))]
+              (node-path/join (os/homedir) ".logseq" "graphs"))]
     (fs-extra/ensureDirSync dir)
     dir))
 
-(defn- get-db-based-graphs-dir
-  []
-  (let [dir (.join node-path (.homedir os) "logseq" "graphs")]
-    (fs-extra/ensureDirSync dir)
-    dir))
-
-(defn- get-file-based-graphs
+(defn get-file-based-graphs
   "Returns all graph names in the cache directory (starting with `logseq_local_`)"
   []
-  (let [dir (get-graphs-dir)]
+  (let [dir (get-file-graphs-dir)]
     (->> (common-graph/readdir dir)
          (remove #{dir})
          (map #(node-path/basename % ".transit"))
-         (map graph-name->path))))
+         (map cli-common-graph/graph-name->path))))
 
-(defn- get-db-based-graphs
-  []
-  (let [dir (get-db-based-graphs-dir)]
-    (->> (common-graph/read-directories dir)
-         (remove (fn [s] (= s db/unlinked-graphs-dir)))
-         (map graph-name->path)
-         (map (fn [s]
-                (if (string/starts-with? s common-sqlite/file-version-prefix)
-                  s
-                  (str sqlite-util/db-version-prefix s)))))))
-
-(defn- get-graphs
+(defn get-graphs
   "Returns all graph names"
   []
-  (let [db-graphs (get-db-based-graphs)
+  (let [db-graphs (cli-common-graph/get-db-based-graphs)
         file-graphs (get-file-based-graphs)]
     (distinct (concat db-graphs file-graphs))))
 
@@ -294,7 +272,7 @@
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
     (db/unlink-graph! graph)
-    (let [old-transit-path (node-path/join (get-graphs-dir) (str (common-sqlite/sanitize-db-name graph) ".transit"))]
+    (let [old-transit-path (node-path/join (get-file-graphs-dir) (str (common-sqlite/sanitize-db-name graph) ".transit"))]
       (when (fs/existsSync old-transit-path)
         (fs/unlinkSync old-transit-path)))))
 
@@ -311,7 +289,7 @@
 
 (defn clear-cache!
   [window]
-  (let [graphs-dir (get-graphs-dir)]
+  (let [graphs-dir (get-file-graphs-dir)]
     (fs-extra/removeSync graphs-dir))
 
   (let [path (.getPath ^object app "userData")]
