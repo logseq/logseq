@@ -37,6 +37,7 @@
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
   logseq/outliner                       {:local/root "deps/outliner"}
   logseq/publishing                     {:local/root "deps/publishing"}
+  logseq/cli                            {:local/root "deps/cli"}
   logseq/shui                           {:local/root "deps/shui"}
   metosin/malli                         {:mvn/version "0.16.1"}
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
