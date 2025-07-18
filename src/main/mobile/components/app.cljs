@@ -56,7 +56,7 @@
      (shui/button
        {:variant :text
         :size :sm
-        :class "ml-1 text-primary !font-semibold !opacity-80"
+        :class "ml-1 text-primary !font-semibold !opacity-90 text-base"
         :on-click (fn []
                     (let [buttons (concat
                                     (->>
@@ -182,8 +182,10 @@
             {:class "silk-scroll-view"
              :pageScroll true
              :nativePageScrollReplacement true}
-            (silkhq/scroll-content {:class "app-silk-index-scroll-content"}
+            (silkhq/scroll-content
+              {:class "app-silk-index-scroll-content"}
               [:div.app-silk-index-container
+               {:data-tab (str tab)}
                (case (keyword tab)
                  :home
                  (home *home tab)
