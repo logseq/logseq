@@ -360,7 +360,7 @@
 (defonce idb-db-prefix "logseq-db/")
 (defonce local-db-prefix "logseq_local_")
 (defonce local-handle "handle")
-(defonce db-version-prefix sqlite-util/db-version-prefix)
+(defonce db-version-prefix common-config/db-version-prefix)
 
 (defn db-graph-name
   [repo-with-prefix]

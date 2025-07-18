@@ -30,7 +30,11 @@
 
 (defonce asset-protocol "assets://")
 
+(defonce db-version-prefix "logseq_db_")
+(defonce file-version-prefix "logseq_local_")
+
 (defonce local-assets-dir "assets")
+(defonce unlinked-graphs-dir "Unlinked graphs")
 
 (defonce favorites-page-name "$$$favorites")
 (defonce views-page-name "$$$views")

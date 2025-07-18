@@ -1,0 +1,14 @@
+{
+  "name": "@logseq/cli",
+  "version": "0.1.0",
+  "description": "Logseq CLI",
+  "bin": {
+    "logseq": "cli.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v24",
+    "better-sqlite3": "11.10.0",
+    "fs-extra": "^11.3.0"
+  }
+}
