@@ -21,6 +21,10 @@
   []
   (get-in @state [:config :git/auto-commit-seconds] 60))
 
+(defn get-git-path
+  []
+  (get-in @state [:config :git/path]))
+
 (defn git-auto-commit-enabled?
   []
   ;; For backward compatibility, use negative logic
