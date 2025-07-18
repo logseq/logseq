@@ -19,11 +19,6 @@
 
 (defonce prod? (= js/process.env.NODE_ENV "production"))
 
-;; Under e2e testing?
-(defonce ci? (let [v js/process.env.CI]
-               (or (true? v)
-                   (= v "true"))))
-
 (defonce dev? (not prod?))
 (defonce *fetchAgent (atom nil))
 
