@@ -207,9 +207,7 @@
 (defn- get-file-graphs-dir
   "Get cache directory for file graphs"
   []
-  (let [dir (if utils/ci?
-              (.resolve node-path js/__dirname "../tmp/graphs")
-              (node-path/join (os/homedir) ".logseq" "graphs"))]
+  (let [dir (node-path/join (os/homedir) ".logseq" "graphs")]
     (fs-extra/ensureDirSync dir)
     dir))
 
