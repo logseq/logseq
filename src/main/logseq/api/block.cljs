@@ -34,7 +34,9 @@
     (-> k (string/trim)
       (string/replace " " "")
       (string/replace #"^[:_\s]+" "")
-      (string/lower-case))
+      (#(cond-> %
+          (not (string/includes? % "/"))
+          (string/lower-case))))
     k))
 
 (defn resolve-property-prefix-for-db
