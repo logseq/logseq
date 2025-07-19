@@ -4,7 +4,8 @@
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.common.config :as common-config]))
 
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
@@ -17,16 +18,14 @@
   (or (d/restore-conn storage)
       (d/create-conn schema {:storage storage})))
 
-(defonce file-version-prefix "logseq_local_")
-
 (defn local-file-based-graph?
   [s]
   (and (string? s)
-       (string/starts-with? s file-version-prefix)))
+       (string/starts-with? s common-config/file-version-prefix)))
 
 (defn sanitize-db-name
   [db-name]
-  (if (string/starts-with? db-name file-version-prefix)
+  (if (string/starts-with? db-name common-config/file-version-prefix)
     (-> db-name
         (string/replace ":" "+3A+")
         (string/replace "/" "++"))
