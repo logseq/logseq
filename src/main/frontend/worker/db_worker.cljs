@@ -739,6 +739,10 @@
   [repo]
   (embedding/re-embedding-graph-data! repo))
 
+(def-thread-api :thread-api/vec-search-embedding-graph
+  [repo]
+  (embedding/embedding-graph! repo))
+
 (def-thread-api :thread-api/vec-search-search
   [repo query-string nums-neighbors]
   (embedding/task--search repo query-string nums-neighbors))
