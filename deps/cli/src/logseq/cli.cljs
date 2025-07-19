@@ -4,10 +4,6 @@
             [clojure.string :as string]
             [logseq.cli.commands.graph :as cli-graph]))
 
-;; TODO
-(defn- query [m]
-  (prn (assoc m :fn :query)))
-
 (defn- format-commands [{:keys [table]}]
   (let [table (mapv (fn [{:keys [cmds desc]}]
                       (cond-> [(string/join " " cmds)]
@@ -21,8 +17,8 @@
   (println (format-commands {:table table})))
 
 (def table
-  [{:cmds ["list"]   :fn cli-graph/list-graphs   :desc "List graphs"}
-   {:cmds ["query"] :fn query :args->opts [:graph] :desc "Query graph"}
+  [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
+   {:cmds ["show"] :fn cli-graph/show-graph :args->opts [:graph] :desc "Show graph info"}
    {:cmds []         :fn help}])
 
 (defn -main [& args]
