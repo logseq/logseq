@@ -93,7 +93,6 @@
 (defn task--text-embedding&store!
   "return labels(js-array)"
   [repo text-array delete-labels replace-deleted?]
-  (prn :debug :text-array text-array)
   (m/sp
     (when (model-loaded?)
       (let [hnsw (or (get-hnsw-index repo) (new-hnsw-index! repo))
