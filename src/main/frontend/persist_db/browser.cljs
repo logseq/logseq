@@ -135,9 +135,7 @@
 (defn start-inference-worker!
   []
   (when-not util/node-test?
-    (let [worker-url (if (util/electron?)
-                       "js/inference-worker.js"
-                       "static/js/inference-worker.js")
+    (let [worker-url "js/inference-worker.js"
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
           wrapped-worker (Comlink/wrap worker)
           t1 (util/time-ms)]
@@ -145,7 +143,6 @@
       (reset! state/*infer-worker wrapped-worker)
       (p/do!
        (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
-         (prn :debug :embedding-model-name embedding-model-name)
          (.init wrapped-worker embedding-model-name))
        (log/info "init infer-worker spent:" (str  (- (util/time-ms) t1) "ms"))))))
 
