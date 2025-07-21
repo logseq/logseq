@@ -41,8 +41,7 @@
             {:class "app-silk-sheet-scroll-content"}
             (silkhq/scroll {:as-child true}
               (silkhq/scroll-view
-                {:class "app-silk-scroll-view"
-                 :scrollGestureTrap {:yEnd true}}
+                {:class "app-silk-scroll-view"}
                 (silkhq/scroll-content
                   {:class "app-silk-scroll-content"}
                   [:div.app-silk-scroll-content-inner
