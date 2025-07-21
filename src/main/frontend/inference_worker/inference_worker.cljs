@@ -36,9 +36,9 @@
 
   (text-embedding+store!
    ;; return labels(js array)
-   [_this repo text-array delete-labels replace-deleted?]
+   [_this repo text-array labels replace-deleted?]
    (p/chain
-    (js/Promise. (infer-worker.text-embedding/task--text-embedding&store! repo text-array delete-labels replace-deleted?))
+    (js/Promise. (infer-worker.text-embedding/task--text-embedding&store! repo text-array labels replace-deleted?))
     clj->js))
 
   (delete-labels

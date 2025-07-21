@@ -99,18 +99,16 @@
                (vswap! *partition-index inc))))))))
 
 (defn- labels-update-tx-data
-  [db e+updated-at-coll added-labels]
-  (assert (= (count e+updated-at-coll) (count added-labels)) [e+updated-at-coll added-labels])
+  [db e+updated-at-coll]
   (let [es (map first e+updated-at-coll)
         exist-es (set (keep
                        (fn [b] (when (:block/uuid b) (:db/id b)))
                        (d/pull-many db [:block/uuid :db/id] es)))]
-    (mapcat
-     (fn [[e updated-at] label]
+    (keep
+     (fn [[e updated-at]]
        (when (contains? exist-es e)
-         [[:db/add e :logseq.property.embedding/hnsw-label label]
-          [:db/add e :logseq.property.embedding/hnsw-label-updated-at updated-at]]))
-     e+updated-at-coll added-labels)))
+         [:db/add e :logseq.property.embedding/hnsw-label-updated-at updated-at]))
+     e+updated-at-coll)))
 
 (defn- task--update-index-info!*
   ([repo ^js infer-worker]
@@ -156,12 +154,14 @@
             (m/? (task--update-index-info!* repo infer-worker true))
             (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
-                    delete-labels (into-array (keep :logseq.property.embedding/hnsw-label stale-block-chunk))
-                    added-labels (c.m/<?
-                                  (.text-embedding+store!
-                                   infer-worker repo (into-array (map :block.temp/text-to-embedding stale-block-chunk))
-                                   delete-labels false))
-                    tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
+                    _ (c.m/<?
+                       (.text-embedding+store!
+                        infer-worker
+                        repo
+                        (into-array (map :block.temp/text-to-embedding stale-block-chunk))
+                        (into-array (map :db/id stale-block-chunk))
+                        false))
+                    tx-data (labels-update-tx-data @conn e+updated-at-coll)]
                 (d/transact! conn tx-data {:skip-refresh? true})
                 (m/? (task--update-index-info!* repo infer-worker true))))
             (c.m/<? (.write-index! infer-worker repo))
@@ -178,11 +178,13 @@
         (let [all-blocks (stale-block-lazy-seq @conn true)]
           (doseq [block-chunk (sequence (partition-by-text-size (get-partition-size repo)) all-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
-                  added-labels (c.m/<?
-                                (.text-embedding+store!
-                                 infer-worker repo (into-array (map :block.temp/text-to-embedding block-chunk))
-                                 nil false))
-                  tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
+                  _ (c.m/<?
+                     (.text-embedding+store!
+                      infer-worker repo
+                      (into-array (map :block.temp/text-to-embedding block-chunk))
+                      (into-array (map :db/id block-chunk))
+                      false))
+                  tx-data (labels-update-tx-data @conn e+updated-at-coll)]
               (d/transact! conn tx-data {:skip-refresh? true})
               (m/? (task--update-index-info!* repo infer-worker true)))))
         (c.m/<? (.write-index! infer-worker repo))
@@ -242,18 +244,6 @@
           (d/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
           (log/info :loaded-model model-name))))))
 
-(defn- remove-outdated-hnsw-label!
-  [conn es]
-  (when (seq es)
-    (d/transact!
-     conn
-     (mapcat
-      (fn [e]
-        [[:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label]
-         [:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label-updated-at]])
-      es)
-     {:skip-refresh? true})))
-
 (defn task--search
   [repo query-string nums-neighbors]
   (m/sp
@@ -265,27 +255,19 @@
                                      (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
                 labels (->> (map vector distances neighbors)
                             (keep (fn [[distance label]]
-                                    (when-not (or (js/isNaN distance) (> distance 0.3))
+                                    (when-not (or (js/isNaN distance) (> distance 0.65))
                                       label))))
-                datoms (map (fn [label]
-                              (->> label
-                                   (d/datoms @conn :avet :logseq.property.embedding/hnsw-label)
-                                   (sort-by :tx >))) labels)
-                result-es (keep (comp :e first) datoms)
-                es-with-outdated-hnsw-label (map :e (mapcat next datoms))
-                blocks (map #(d/entity @conn %) result-es)]
-            (remove-outdated-hnsw-label! conn es-with-outdated-hnsw-label)
-            (pp/print-table ["id" "hnsw-label" "title"] (map #(-> %
-                                                                  (update-keys name)
-                                                                  (update-vals (fn [v]
-                                                                                 (if (and (string? v) (> (count v) 60))
-                                                                                   (str (subs v 0 60) "[TRUNCATED]")
-                                                                                   v))))
-                                                             (map #(select-keys %
-                                                                                [:db/id
-                                                                                 :block/title
-                                                                                 :logseq.property.embedding/hnsw-label])
-                                                                  blocks)))
+                blocks (map #(d/entity @conn %) labels)]
+            (pp/print-table ["id" "title"] (map #(-> %
+                                                     (update-keys name)
+                                                     (update-vals (fn [v]
+                                                                    (if (and (string? v) (> (count v) 60))
+                                                                      (str (subs v 0 60) "[TRUNCATED]")
+                                                                      v))))
+                                                (map #(select-keys %
+                                                                   [:db/id
+                                                                    :block/title])
+                                                     blocks)))
             blocks))))))
 
 (def ^:private vector-search-state-flow
