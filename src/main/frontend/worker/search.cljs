@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.worker.embedding :as embedding]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
@@ -13,7 +14,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [missionary.core :as m]))
 
 (def fuse (aget Fuse "default"))
 
@@ -292,66 +294,85 @@ DROP TRIGGER IF EXISTS blocks_au;
   [repo conn search-db q {:keys [limit page enable-snippet? built-in? dev? page-only? library-page-search?]
                           :as option
                           :or {enable-snippet? true}}]
-  (when-not (string/blank? q)
-    (let [match-input (get-match-input q)
-          page-count (count (d/datoms @conn :avet :block/name))
-          large-graph? (> page-count 2500)
-          non-match-input (when (<= (count q) 2)
-                            (str "%" (string/replace q #"\s+" "%") "%"))
-          limit  (or limit 100)
+  (m/sp
+    (when-not (string/blank? q)
+      (let [match-input (get-match-input q)
+            page-count (count (d/datoms @conn :avet :block/name))
+            large-graph? (> page-count 2500)
+            non-match-input (when (<= (count q) 2)
+                              (str "%" (string/replace q #"\s+" "%") "%"))
+            limit  (or limit 100)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in blocks_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
-          snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
-          select (if enable-snippet?
-                   (str "select id, page, title, " snippet-aux " from blocks_fts where ")
-                   "select id, page, title from blocks_fts where ")
-          pg-sql (if page "page = ? and" "")
-          match-sql (if (ns-util/namespace-page? q)
-                      (str select pg-sql " title match ? or title match ? order by rank limit ?")
-                      (str select pg-sql " title match ? order by rank limit ?"))
-          non-match-sql (str select pg-sql " title like ? limit ?")
-          matched-result (when-not page-only?
-                           (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
-          non-match-result (when (and (not page-only?) non-match-input)
-                             (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
+            snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
+            select (if enable-snippet?
+                     (str "select id, page, title, " snippet-aux " from blocks_fts where ")
+                     "select id, page, title from blocks_fts where ")
+            pg-sql (if page "page = ? and" "")
+            match-sql (if (ns-util/namespace-page? q)
+                        (str select pg-sql " title match ? or title match ? order by rank limit ?")
+                        (str select pg-sql " title match ? order by rank limit ?"))
+            non-match-sql (str select pg-sql " title like ? limit ?")
+            matched-result (when-not page-only?
+                             (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
+            non-match-result (when (and (not page-only?) non-match-input)
+                               (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
            ;; fuzzy is too slow for large graphs
-          fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
-          result (->> (concat fuzzy-result matched-result non-match-result)
-                      (common-util/distinct-by :id)
-                      (keep (fn [result]
-                              (let [{:keys [id page title snippet]} result
-                                    block-id (uuid id)]
-                                (when-let [block (d/entity @conn [:block/uuid block-id])]
-                                  (when-not (and library-page-search?
-                                                 (or (:block/parent block)
-                                                     (not (ldb/internal-page? block)))) ; remove pages that already have parents
-                                    (when (if dev?
-                                            true
-                                            (if built-in?
-                                              (or (not (ldb/built-in? block))
-                                                  (not (ldb/private-built-in-page? block))
-                                                  (ldb/class? block))
-                                              (or (not (ldb/built-in? block))
-                                                  (ldb/class? block))))
-                                      {:db/id (:db/id block)
-                                       :block/uuid block-id
-                                       :block/title (if (ldb/page? block)
-                                                      (ldb/get-title-with-parents block)
-                                                      (or snippet title))
-                                       :block/page (if (common-util/uuid-string? page)
-                                                     (uuid page)
-                                                     nil)
-                                       :block/tags (seq (map :db/id (:block/tags block)))
-                                       :page? (ldb/page? block)
-                                       :alias (some-> (first (:block/_alias block))
-                                                      (select-keys [:block/uuid :block/title]))})))))))
-          page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
-      (->>
-       (concat page-or-object-result
-               (remove (fn [b] (or (:page? b) (:block/tags result))) result))
-       (common-util/distinct-by :block/uuid)))))
+            fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
+            semantic-search-result* (m/? (embedding/task--search repo q 20))
+            semantic-search-result (->> semantic-search-result*
+                                        (map (fn [b]
+                                               (let [page-id (when-let [id (:block/uuid (:block/page b))] (str id))]
+                                                 (cond->
+                                                  {:id (str (:block/uuid b))
+                                                   :title (:block/title b)
+                                                   :semantic-search? true}
+                                                   page-id
+                                                   (assoc :page page-id))))))
+            result (->> (concat fuzzy-result
+                                matched-result
+                                non-match-result
+                                semantic-search-result)
+                        (common-util/distinct-by :id)
+                        (keep (fn [result]
+                                (let [{:keys [id page title snippet semantic-search?]} result
+                                      block-id (uuid id)]
+                                  (when-let [block (d/entity @conn [:block/uuid block-id])]
+                                    (when-not (and library-page-search?
+                                                   (or (:block/parent block)
+                                                       (not (ldb/internal-page? block)))) ; remove pages that already have parents
+                                      (when (if dev?
+                                              true
+                                              (if built-in?
+                                                (or (not (ldb/built-in? block))
+                                                    (not (ldb/private-built-in-page? block))
+                                                    (ldb/class? block))
+                                                (or (not (ldb/built-in? block))
+                                                    (ldb/class? block))))
+                                        {:db/id (:db/id block)
+                                         :block/uuid (:block/uuid block)
+                                         :block/title (if (ldb/page? block)
+                                                        (ldb/get-title-with-parents block)
+                                                        (or snippet title))
+                                         :block/page (or
+                                                      (:block/uuid (:block/page block))
+                                                      (when page
+                                                        (if (common-util/uuid-string? page)
+                                                          (uuid page)
+                                                          nil)))
+                                         :block/tags (seq (map :db/id (:block/tags block)))
+                                         :page? (ldb/page? block)
+                                         :alias (some-> (first (:block/_alias block))
+                                                        (select-keys [:block/uuid :block/title]))
+                                         :semantic-search? semantic-search?})))))))
+            filter-pred (fn [b] (and (or (:page? b) (:block/tags result)) (not (:semantic-search? b))))
+            page-or-object-result (filter filter-pred result)]
+        (->>
+         (concat page-or-object-result
+                 (remove filter-pred result))
+         (common-util/distinct-by :block/uuid))))))
 
 (defn truncate-table!
   [db]

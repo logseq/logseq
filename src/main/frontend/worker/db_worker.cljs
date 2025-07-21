@@ -453,24 +453,25 @@
 
 (defn- search-blocks
   [repo q option]
-  (p/let [search-db (get-search-db repo)
-          conn (worker-state/get-datascript-conn repo)]
+  (let [search-db (get-search-db repo)
+        conn (worker-state/get-datascript-conn repo)]
     (search/search-blocks repo conn search-db q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          block (d/entity db id)]
-      (if unlinked?
-        (p/let [title (string/lower-case (:block/title block))
-                result (search-blocks repo title {:limit 100})]
-          (boolean (some (fn [b]
-                           (let [block (d/entity db (:db/id b))]
-                             (and (not= id (:db/id block))
-                                  (not ((set (map :db/id (:block/refs block))) id))
-                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
+  (m/sp
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (let [db @conn
+            block (d/entity db id)]
+        (if unlinked?
+          (let [title (string/lower-case (:block/title block))
+                result (m/? (search-blocks repo title {:limit 100}))]
+            (boolean (some (fn [b]
+                             (let [block (d/entity db (:db/id b))]
+                               (and (not= id (:db/id block))
+                                    (not ((set (map :db/id (:block/refs block))) id))
+                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]

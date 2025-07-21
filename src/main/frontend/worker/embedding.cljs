@@ -245,7 +245,7 @@
     (when-not (indexing? repo)
       (when-let [^js infer-worker @worker-state/*infer-worker]
         (when-let [conn (worker-state/get-datascript-conn repo)]
-          (let [{:keys [distances neighbors] :as r}
+          (let [{:keys [distances neighbors]}
                 (worker-util/profile (str "search: '" query-string "'")
                                      (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
                 labels (->> (map vector distances neighbors)
@@ -256,17 +256,19 @@
                                    (sort-by :tx >))) labels)
                 result-es (keep (comp :e first) datoms)
                 es-with-outdated-hnsw-label (map :e (mapcat next datoms))
-                blocks (map #(select-keys (assoc (d/entity @conn %) :block.temp/search? true)
-                                          [:db/id :block/title :logseq.property.embedding/hnsw-label]) result-es)]
+                blocks (map #(d/entity @conn %) result-es)]
             (remove-outdated-hnsw-label! conn es-with-outdated-hnsw-label)
-            (prn :query-result r)
             (pp/print-table ["id" "hnsw-label" "title"] (map #(-> %
                                                                   (update-keys name)
                                                                   (update-vals (fn [v]
                                                                                  (if (and (string? v) (> (count v) 60))
                                                                                    (str (subs v 0 60) "[TRUNCATED]")
                                                                                    v))))
-                                                             blocks))
+                                                             (map #(select-keys %
+                                                                                [:db/id
+                                                                                 :block/title
+                                                                                 :logseq.property.embedding/hnsw-label])
+                                                                  blocks)))
             blocks))))))
 
 (def ^:private vector-search-state-flow
