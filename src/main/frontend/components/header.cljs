@@ -365,7 +365,7 @@
        {:class   "opacity-50"
         :variant :ghost
         :size    :sm}
-       "Embeddding..."))))
+       "Embedding..."))))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]

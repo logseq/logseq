@@ -132,6 +132,18 @@
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (m/? (task--update-index-info!* repo infer-worker)))))
 
+(defn- get-partition-size
+  [repo]
+  (let [conn (worker-state/get-datascript-conn repo)
+        embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
+    (case embedding-model-name
+      "Xenova/all-MiniLM-L6-v2"
+      2000
+      "Xenova/jina-embeddings-v2-base-zh"
+      500
+      "onnx-community/Qwen3-Embedding-0.6B-ONNX"
+      100)))
+
 (defn- task--embedding-stale-blocks!
   "embedding outdated block-data
   outdate rule: block/updated-at > :logseq.property.embedding/hnsw-label-updated-at"
@@ -142,7 +154,7 @@
         (let [stale-blocks (stale-block-lazy-seq @conn false)]
           (when (seq stale-blocks)
             (m/? (task--update-index-info!* repo infer-worker true))
-            (doseq [stale-block-chunk (sequence (partition-by-text-size 2000) stale-blocks)]
+            (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
                     delete-labels (into-array (keep :logseq.property.embedding/hnsw-label stale-block-chunk))
                     added-labels (c.m/<?
@@ -164,7 +176,7 @@
         (m/? (task--update-index-info!* repo infer-worker true))
         (c.m/<? (.force-reset-index! infer-worker repo))
         (let [all-blocks (stale-block-lazy-seq @conn true)]
-          (doseq [block-chunk (sequence (partition-by-text-size 2000) all-blocks)]
+          (doseq [block-chunk (sequence (partition-by-text-size (get-partition-size repo)) all-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
                   added-labels (c.m/<?
                                 (.text-embedding+store!
