@@ -116,7 +116,8 @@
 
 (defn- fail-case-default-handler
   [e]
-  (when-not (instance? Cancelled e)
+  (if (instance? Cancelled e)
+    (log/warn :run-task*-cancelled e)
     (log/error :run-task*-failed e)))
 
 (defn run-task
