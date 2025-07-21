@@ -143,6 +143,17 @@
       (some-> js/window.externalsjs (.settleStatusBar)))
     [current-repo]))
 
+(defn use-screen-size-effects!
+  []
+  (hooks/use-effect!
+    (fn []
+      (let [handle-size! (fn []
+                           (.setProperty (.-style js/document.body) "--ls-full-screen-height" (str js/window.screen.height "px")))]
+        (handle-size!)
+        (.addEventListener js/window "orientationchange" handle-size!)
+        #(.removeEventListener js/window "orientationchange" handle-size!)))
+    []))
+
 (rum/defc journal-calendar-btn
   []
   (shui/button
@@ -174,14 +185,15 @@
   (let [[tab] (mobile-state/use-tab)
         *home (rum/use-ref nil)
         *search-page (rum/use-ref nil)]
+    (use-screen-size-effects!)
     (use-theme-effects! current-repo)
     (silkhq/depth-sheet-stack {:as-child true}
       (silkhq/depth-sheet-scenery-outlets
         (silkhq/scroll {:as-child true}
           (silkhq/scroll-view
-            {:class "silk-scroll-view"
+            {:class "app-silk-index-scroll-view"
              :pageScroll true
-             :nativePageScrollReplacement true}
+             :nativePageScrollReplacement false}
             (silkhq/scroll-content
               {:class "app-silk-index-scroll-content"}
               [:div.app-silk-index-container

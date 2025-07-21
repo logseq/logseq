@@ -18,6 +18,7 @@
             {:class "app-silk-scroll-content"}
             [:div.app-silk-scroll-content-inner
              [:h1.my-4.text-3xl.font-semibold "hello silk depth view"]
+             (shui/input)
              (when (not nested?)
                (silkhq/depth-sheet
                  (silkhq/depth-sheet-trigger
