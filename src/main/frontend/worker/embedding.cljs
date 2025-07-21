@@ -1,7 +1,6 @@
 (ns frontend.worker.embedding
   "Fns about text-embedding, add/delete/search items in hnsw"
-  (:require [cljs.pprint :as pp]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.worker-common.util :as worker-util]
@@ -253,23 +252,13 @@
         (when-let [conn (worker-state/get-datascript-conn repo)]
           (let [{:keys [distances neighbors]}
                 (worker-util/profile (str "search: '" query-string "'")
-                                     (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
-                labels (->> (map vector distances neighbors)
-                            (keep (fn [[distance label]]
-                                    (when-not (or (js/isNaN distance) (> distance 0.65))
-                                      label))))
-                blocks (keep #(d/entity @conn %) labels)]
-            (pp/print-table ["id" "title"] (map #(-> %
-                                                     (update-keys name)
-                                                     (update-vals (fn [v]
-                                                                    (if (and (string? v) (> (count v) 60))
-                                                                      (str (subs v 0 60) "[TRUNCATED]")
-                                                                      v))))
-                                                (map #(select-keys %
-                                                                   [:db/id
-                                                                    :block/title])
-                                                     blocks)))
-            blocks))))))
+                                     (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))]
+            (->> (map vector distances neighbors)
+                 (keep (fn [[distance label]]
+                         (when-not (or (js/isNaN distance) (> distance 0.5))
+                           (when-let [block (d/entity @conn label)]
+                             {:block block
+                              :distance distance})))))))))))
 
 (def ^:private vector-search-state-flow
   (m/eduction
