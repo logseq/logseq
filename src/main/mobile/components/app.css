@@ -356,3 +356,19 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply -mx-4 pt-2;
   }
 }
+
+.app-silk-action-sheet-modal {
+  &-content {
+    > h2 {
+      @apply leading-tight opacity-40 w-full py-2 px-4;
+    }
+
+    > .as-list-container {
+      @apply w-full max-h-[420px] overflow-auto px-4 pb-3;
+
+      a.as-item-btn {
+        @apply select-none py-2 flex justify-start w-full text-lg;
+      }
+    }
+  }
+}
