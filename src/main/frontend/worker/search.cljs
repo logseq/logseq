@@ -23,6 +23,18 @@
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
 (defonce fuzzy-search-indices (atom {}))
 
+;; Configuration for re-ranking
+(def config
+  {:keyword-weight 0.4
+   :semantic-weight 0.6})
+
+;; Normalize scores to [0, 1] range using min-max normalization
+(defn normalize-score [score min-score max-score]
+  (if (= min-score max-score)
+    0.0
+    (let [normalized (/ (- score min-score) (- max-score min-score))]
+      (max 0.0 (min 1.0 normalized)))))
+
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
   [db]
@@ -173,10 +185,11 @@ DROP TRIGGER IF EXISTS blocks_au;
                              :rowMode "array"}))
           blocks (bean/->clj result)]
       (map (fn [block]
-             (let [[id page title snippet] (if enable-snippet?
-                                             (update block 3 get-snippet-result)
-                                             block)]
+             (let [[id page title rank snippet] (if enable-snippet?
+                                                  (update block 4 get-snippet-result)
+                                                  block)]
                {:id id
+                :keyword-score (when rank (Math/abs rank))
                 :page page
                 :title title
                 :snippet snippet})) blocks))
@@ -285,6 +298,39 @@ DROP TRIGGER IF EXISTS blocks_au;
                (filter (fn [{:keys [title]}]
                          (exact-matched? q title)))))))))
 
+;; Combine and re-rank results
+(defn combine-results [keyword-results semantic-results]
+  (let [;; Extract score ranges for normalization
+        keyword-scores (map :keyword-score keyword-results)
+        semantic-scores (map :semantic-score semantic-results)
+        k-min (if (seq keyword-scores) (apply min keyword-scores) 0.0)
+        k-max (if (seq keyword-scores) (apply max keyword-scores) 1.0)
+        s-min (if (seq semantic-scores) (apply min semantic-scores) 0.0)
+        s-max (if (seq semantic-scores) (apply max semantic-scores) 1.0)
+        ;; Merge results by ID
+        all-ids (set/union (set (map :id keyword-results))
+                           (set (map :id semantic-results)))
+        merged (map (fn [id]
+                      (let [k-result (first (filter #(= (:id %) id) keyword-results))
+                            s-result (first (filter #(= (:id %) id) semantic-results))
+                            k-score (or (:keyword-score k-result) 0.0)
+                            s-score (or (:semantic-score s-result) 0.0)
+                            norm-k-score (normalize-score k-score k-min k-max)
+                            norm-s-score (normalize-score s-score s-min s-max)
+                            ;; Weighted combination
+                            combined-score (+ (* (:keyword-weight config) norm-k-score)
+                                              (* (:semantic-weight config) norm-s-score))]
+                        (merge k-result
+                               s-result
+                               {:id id
+                                :combined-score combined-score
+                                :keyword-score k-score
+                                :semantic-score s-score})))
+                    all-ids)]
+    ;; Sort by combined score
+    (prn :debug :merged (sort-by :combined-score #(compare %2 %1) merged))
+    (sort-by :combined-score #(compare %2 %1) merged)))
+
 (defn search-blocks
   "Options:
    * :page - the page to specifically search on
@@ -308,8 +354,8 @@ DROP TRIGGER IF EXISTS blocks_au;
             ;; highlight and snippet only works for some matching with high rank
             snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 256)"
             select (if enable-snippet?
-                     (str "select id, page, title, " snippet-aux " from blocks_fts where ")
-                     "select id, page, title from blocks_fts where ")
+                     (str "select id, page, title, rank, " snippet-aux " from blocks_fts where ")
+                     "select id, page, title, rank from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
             match-sql (if (ns-util/namespace-page? q)
                         (str select pg-sql " title match ? or title match ? order by rank limit ?")
@@ -321,23 +367,22 @@ DROP TRIGGER IF EXISTS blocks_au;
                                (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
            ;; fuzzy is too slow for large graphs
             fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
-            semantic-search-result* (m/? (embedding/task--search repo q 20))
+            semantic-search-result* (m/? (embedding/task--search repo q 10))
             semantic-search-result (->> semantic-search-result*
-                                        (map (fn [b]
-                                               (let [page-id (when-let [id (:block/uuid (:block/page b))] (str id))]
+                                        (map (fn [{:keys [block distance]}]
+                                               (let [page-id (when-let [id (:block/uuid (:block/page block))] (str id))]
                                                  (cond->
-                                                  {:id (str (:block/uuid b))
-                                                   :title (:block/title b)
-                                                   :semantic-search? true}
+                                                  {:id (str (:block/uuid block))
+                                                   :title (:block/title block)
+                                                   :semantic-score (/ 1.0 (+ 1.0 distance))}
                                                    page-id
                                                    (assoc :page page-id))))))
-            result (->> (concat fuzzy-result
-                                matched-result
-                                non-match-result
-                                semantic-search-result)
+            combined-result (combine-results (concat fuzzy-result matched-result) semantic-search-result)
+            result (->> (concat combined-result
+                                non-match-result)
                         (common-util/distinct-by :id)
                         (keep (fn [result]
-                                (let [{:keys [id page title snippet semantic-search?]} result
+                                (let [{:keys [id page title snippet]} result
                                       block-id (uuid id)]
                                   (when-let [block (d/entity @conn [:block/uuid block-id])]
                                     (when-not (and library-page-search?
@@ -365,14 +410,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                          :block/tags (seq (map :db/id (:block/tags block)))
                                          :page? (ldb/page? block)
                                          :alias (some-> (first (:block/_alias block))
-                                                        (select-keys [:block/uuid :block/title]))
-                                         :semantic-search? semantic-search?})))))))
-            filter-pred (fn [b] (and (or (:page? b) (:block/tags result)) (not (:semantic-search? b))))
-            page-or-object-result (filter filter-pred result)]
-        (->>
-         (concat page-or-object-result
-                 (remove filter-pred result))
-         (common-util/distinct-by :block/uuid))))))
+                                                        (select-keys [:block/uuid :block/title]))})))))))]
+        (common-util/distinct-by :block/uuid result)))))
 
 (defn truncate-table!
   [db]
