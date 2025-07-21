@@ -1237,7 +1237,9 @@
                                  (m/sp
                                    (c.m/<?
                                     (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
-                                   (set-model-info (assoc model-info :graph-text-embedding-model-name model-name)))
+                                   (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
+                                   (c.m/<?
+                                    (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo)))
                                  :succ (constantly nil)))}
             current-model
             (assoc :value current-model))
