@@ -6,11 +6,11 @@
 :root {
   --ls-page-title-size: 26px;
   --silk-topbar-height: 48px;
+  --silk-tabbar-bottom-paddding: 12px;
 }
 
 html.is-native-ios {
-  --safe-area-inset-top: 59px;
-  --safe-area-inset-bottom: 16px;
+  --silk-tabbar-bottom-paddding: 2px;
 }
 
 html.is-native-android {
@@ -269,6 +269,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 
   padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
+  padding-bottom: 120px;
 }
 
 .app-silk-topbar {
@@ -310,7 +311,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   bg-gray-02 absolute left-0 -bottom-0 w-full z-[1] dark:bg-gray-01;
 
   padding-top: 6px;
-  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
