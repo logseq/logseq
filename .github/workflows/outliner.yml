@@ -7,17 +7,22 @@ on:
     branches: [master]
     paths:
       - 'deps/outliner/**'
-      # db is a local dep that could break functionality in this lib and should trigger this
-      - 'deps/db/**'
       - '.github/workflows/outliner.yml'
       - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
+      - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
       - 'deps/outliner/**'
-      - 'deps/db/**'
       - '.github/workflows/outliner.yml'
       - '!deps/outliner/**.md'
+      # Deps that logseq/outliner depends on should trigger this workflow
+      - 'deps/graph-parser/**'
+      - 'deps/db/**'
+      - 'deps/common/**'
 
 defaults:
   run:
