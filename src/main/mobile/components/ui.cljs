@@ -132,21 +132,24 @@
       (silkhq/bottom-sheet
         (merge modal-props
           {:presented true
-           :header (or content title header)
-           ;:onPresentedChange (fn [v?]
-           ;                     (when on-action
-           ;                       (on-action (bean/->clj (.-detail e))))
-           ;                     (close!))
-           ;:buttons (bean/->js (or buttons (:buttons modal-props)))
-           })
-        (silkhq/bottom-sheet-portal
-          (silkhq/bottom-sheet-view {:as-child true})
-          (silkhq/bottom-sheet-content
-            (some-> (or title header) (silkhq/bottom-sheet-title))
-            (silkhq/bottom-sheet-content
-              (if (fn? content)
-                (content) content))
-            )))
+           :onPresentedChange (fn [v?] (when (false? v?)
+                                         (js/setTimeout #(close!) 200)))})
+        (let [title (or title header content)
+              content (for [{:keys [role text] :as item} buttons]
+                        [:a.as-item-btn
+                         {:data-role role
+                          :on-pointer-down (fn []
+                                             (some-> on-action (apply [item]))
+                                             (close!))}
+                         text])]
+          (silkhq/bottom-sheet-portal
+            (silkhq/bottom-sheet-view {:as-child true}
+              (silkhq/bottom-sheet-backdrop)
+              (silkhq/bottom-sheet-content
+                [:div.flex.flex-col.items-center.gap-2.app-silk-action-sheet-modal-content
+                 (silkhq/bottom-sheet-handle {:class "my-2"})
+                 (some-> title (silkhq/bottom-sheet-title))
+                 [:div.as-list-container content]])))))
 
       ;; default
       (silkhq/bottom-sheet
