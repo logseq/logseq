@@ -16,13 +16,13 @@
   (println "Usage: logseq [command] [options]\n\nCommands:")
   (println (format-commands {:table table})))
 
-(def table
+(def ^:private table
   [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
    {:cmds ["show"] :fn cli-graph/show-graph :args->opts [:graphs] :desc "Show graph(s) info"
     :coerce {:graphs []}}
    {:cmds []         :fn help}])
 
-(defn -main [& args]
+(defn ^:api -main [& args]
   (cli/dispatch table args {:coerce {:depth :long}}))
 
 #js {:main -main}
