@@ -162,7 +162,7 @@
                                    infer-worker repo (into-array (map :block.temp/text-to-embedding stale-block-chunk))
                                    delete-labels false))
                     tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
-                (d/transact! conn tx-data)
+                (d/transact! conn tx-data {:skip-refresh? true})
                 (m/? (task--update-index-info!* repo infer-worker true))))
             (c.m/<? (.write-index! infer-worker repo))
             (m/? (task--update-index-info!* repo infer-worker false))))))))
@@ -183,7 +183,7 @@
                                  infer-worker repo (into-array (map :block.temp/text-to-embedding block-chunk))
                                  nil false))
                   tx-data (labels-update-tx-data @conn e+updated-at-coll added-labels)]
-              (d/transact! conn tx-data)
+              (d/transact! conn tx-data {:skip-refresh? true})
               (m/? (task--update-index-info!* repo infer-worker true)))))
         (c.m/<? (.write-index! infer-worker repo))
         (m/? (task--update-index-info!* repo infer-worker false))))))
@@ -246,11 +246,13 @@
   [conn es]
   (when (seq es)
     (d/transact!
-     conn (mapcat
-           (fn [e]
-             [[:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label]
-              [:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label-updated-at]])
-           es))))
+     conn
+     (mapcat
+      (fn [e]
+        [[:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label]
+         [:db.fn/retractAttribute e :logseq.property.embedding/hnsw-label-updated-at]])
+      es)
+     {:skip-refresh? true})))
 
 (defn task--search
   [repo query-string nums-neighbors]
