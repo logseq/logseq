@@ -264,7 +264,9 @@
                 (worker-util/profile (str "search: '" query-string "'")
                                      (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))
                 labels (->> (map vector distances neighbors)
-                            (keep (fn [[distance label]] (when-not (js/isNaN distance) label))))
+                            (keep (fn [[distance label]]
+                                    (when-not (or (js/isNaN distance) (> distance 0.3))
+                                      label))))
                 datoms (map (fn [label]
                               (->> label
                                    (d/datoms @conn :avet :logseq.property.embedding/hnsw-label)
