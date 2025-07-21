@@ -7,7 +7,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]))
 
-(defn graph-name->path
+(defn- graph-name->path
   [graph-name]
   (when graph-name
     (-> graph-name
