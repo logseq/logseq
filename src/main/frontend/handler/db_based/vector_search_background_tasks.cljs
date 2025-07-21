@@ -5,26 +5,24 @@
             [frontend.flows :as flows]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.state :as state]
-            [missionary.core :as m]))
+            [missionary.core :as m])
+  (:import [missionary Cancelled]))
 
 (defn- run-background-task-when-not-publishing
   [key' task]
   (when-not config/publishing?
     (c.m/run-background-task key' task)))
 
-(defonce *indexing-interval (atom nil))
 (run-background-task-when-not-publishing
  ::init-load-model-when-switch-graph
  (m/reduce
   (constantly nil)
   (m/ap
-    (m/?> vector-search-flows/infer-worker-ready-flow)
+    (m/?< vector-search-flows/infer-worker-ready-flow)
     (when-let [repo (m/?< flows/current-repo-flow)]
-      (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-init-embedding-model repo))
-      (when-let [i @*indexing-interval]
-        (js/clearInterval i))
-      (let [interval (js/setInterval
-                      (fn []
-                        (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo))
-                      (* 5 1000))]
-        (reset! *indexing-interval interval))))))
+      (try
+        (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-init-embedding-model repo))
+        (m/?< (c.m/clock (* 30 1000)))
+        (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo))
+        (catch Cancelled _
+          (m/amb)))))))
