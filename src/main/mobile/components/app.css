@@ -20,15 +20,9 @@ html.is-native-android {
 }
 
 #mobile-editor-toolbar {
-  @apply opacity-0 delay-100;
-  bottom: calc(var(--safe-area-inset-bottom) - 2px);
 }
 
 html.has-mobile-keyboard {
-  .app-silk-tabs {
-    display: none;
-  }
-
   #mobile-editor-toolbar {
     @apply opacity-100;
   }
@@ -50,6 +44,14 @@ html {
   }
 }
 
+body {
+  position: relative;
+
+  .SheetWithDepth-stackSceneryContainer, > .SheetWithDepth-view {
+    height: var(--ls-full-screen-height, "auto");
+  }
+}
+
 ul {
   @apply !list-disc ml-1 mt-2 list-inside;
 
@@ -61,7 +63,6 @@ ul {
 .bg-background {
   @apply bg-gray-01;
 }
-
 
 .pswp__top-bar {
   @apply top-8;
@@ -230,8 +231,6 @@ ul {
 
 .app-silk-sheet-scroll-content {
   @apply flex flex-col items-center;
-
-
 }
 
 .BottomSheet-bleedingBackground,
@@ -253,6 +252,13 @@ ul {
   overflow: clip;
   position: relative;
   display: grid;
+}
+
+html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
+  & > div:first-child {
+    height: var(--ls-full-screen-height, "auto") !important;
+    overflow-y: auto !important;
+  }
 }
 
 .app-silk-index-container {
@@ -300,11 +306,11 @@ ul {
 }
 
 .app-silk-tabs {
-  @apply flex border-t overflow-hidden
-  bg-gray-02 fixed left-0 bottom-0 w-full z-[1] dark:bg-gray-01;
+  @apply flex border-t overflow-hidden select-none
+  bg-gray-02 absolute left-0 -bottom-0 w-full z-[1] dark:bg-gray-01;
 
-  padding-top: 4px;
-  padding-bottom: calc(env(safe-area-inset-bottom) + 20px);
+  padding-top: 6px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
