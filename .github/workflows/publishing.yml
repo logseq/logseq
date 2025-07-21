@@ -7,17 +7,20 @@ on:
     branches: [master]
     paths:
       - 'deps/publishing/**'
-      # db is a local dep that could break functionality in this lib and should trigger this
-      - 'deps/db/**'
       - '.github/workflows/publishing.yml'
       - '!deps/publishing/**.md'
+      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/db/**'
+      - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
       - 'deps/publishing/**'
-      - 'deps/db/**'
       - '.github/workflows/publishing.yml'
       - '!deps/publishing/**.md'
+      # Deps that logseq/publishing depends on should trigger this workflow
+      - 'deps/db/**'
+      - 'deps/common/**'
 
 defaults:
   run:
