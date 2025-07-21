@@ -1222,54 +1222,57 @@
          :succ (constantly nil)))
      [])
     [:div.panel-wrap
-     [:div.flex.flex-col.gap-2
-      [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-       [:label.block.text-sm.font-medium.leading-8.opacity-70
-        {:for "local-embedding-model"}
-        "Local embedding model"]
-       [:div.rounded-md.sm:max-w-tss.sm:col-span-2
-        [:div.flex.flex-col.gap-2
-         (shui/select
-          (cond->
-           {:on-value-change (fn [model-name]
-                               (c.m/run-task
-                                 ::load-model
-                                 (m/sp
-                                   (c.m/<?
-                                    (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
-                                   (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
-                                   (c.m/<?
-                                    (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
-                                   (c.m/<?
-                                    (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
-                                 :succ (constantly nil)))}
-            current-model
-            (assoc :value current-model))
-          (shui/select-trigger
-           {:class "h-8"}
-           (shui/select-value
-            {:placeholder "Select a model"}))
+     [:div.flex.flex-col.gap-2.mt-4
+      [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
 
-          (shui/select-content
-           (shui/select-group
-            (for [model-name (:available-model-names model-info)]
-              (shui/select-item {:value model-name} model-name)))))
+      [:div.flex.flex-col.gap-2
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-8.opacity-70
+         {:for "local-embedding-model"}
+         "Local embedding model"]
+        [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+         [:div.flex.flex-col.gap-2
+          (shui/select
+           (cond->
+            {:on-value-change (fn [model-name]
+                                (c.m/run-task
+                                  ::load-model
+                                  (m/sp
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
+                                    (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
+                                  :succ (constantly nil)))}
+             current-model
+             (assoc :value current-model))
+           (shui/select-trigger
+            {:class "h-8"}
+            (shui/select-value
+             {:placeholder "Select a model"}))
 
-         (when status
-           [:div.text-muted-foreground.text-sm
-            (let [{:keys [file progress loaded total]} load-model-progress]
-              (case status
-                ("progress" "download" "initiate")
-                (str "Downloading " file
-                     (when progress
-                       (util/format " %dm/%dm"
-                                    (int (/ loaded 1024 1024))
-                                    (int (/ total 1024 1024)))))
-                "done"
-                (str "Downloaded " file)
-                "ready"
-                "Model is ready  🚀"
-                nil))])]]]]]))
+           (shui/select-content
+            (shui/select-group
+             (for [model-name (:available-model-names model-info)]
+               (shui/select-item {:value model-name} model-name)))))
+
+          (when status
+            [:div.text-muted-foreground.text-sm
+             (let [{:keys [file progress loaded total]} load-model-progress]
+               (case status
+                 ("progress" "download" "initiate")
+                 (str "Downloading " file
+                      (when progress
+                        (util/format " %d/%dm"
+                                     (int (/ loaded 1024 1024))
+                                     (int (/ total 1024 1024)))))
+                 "done"
+                 (str "Downloaded " file)
+                 "ready"
+                 "Model is ready  🚀"
+                 nil))])]]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
