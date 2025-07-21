@@ -64,12 +64,11 @@
                                         {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
                                          :role (:url repo)})
                                       (remove (fn [{:keys [text]}] (string/blank? text))))
-                                    [{:text "Add new graph"
+                                    [{:text [:span.text-gray-09 "+ Add new graph"]
                                       :role "add-new-graph"}])]
                       (ui-component/open-modal! "Switch graph"
                         {:type :action-sheet
                          :buttons buttons
-                         :inputs []
                          :on-action (fn [e]
                                       (when-let [role (:role e)]
                                         (if (= "add-new-graph" role)
