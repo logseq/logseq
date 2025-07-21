@@ -355,7 +355,7 @@
    ["65.5" {:fix remove-block-order-for-tags}]
    ["65.6" {:fix update-extends-to-cardinality-many}]
    ["65.7" {:fix add-quick-add-page}]
-   ["65.8" {:properties [:logseq.property.embedding/hnsw-label :logseq.property.embedding/hnsw-label-updated-at]}]])
+   ["65.8" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

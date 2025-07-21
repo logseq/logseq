@@ -74,7 +74,7 @@
      :size (.-size r)}))
 
 (defn- add-items
-  [^js hnsw data-coll replace-deleted?]
+  [^js hnsw data-coll labels replace-deleted?]
   (let [max-elems (.getMaxElements hnsw)
         current-count (.getCurrentCount hnsw)
         add-count (count data-coll)]
@@ -82,7 +82,15 @@
       (let [new-size (+ current-count (max (* 2 add-count) current-count))]
         (log/info :hnsw-resize {:from current-count :to new-size})
         (.resizeIndex hnsw new-size)))
-    (.addItems hnsw data-coll replace-deleted?)))
+    ;; (.addItems hnsw data-coll labels replace-deleted?)
+    (dorun
+     (mapcat
+      (fn [embedding label]
+        (assert (and embedding label) {:embedding embedding
+                                       :label label})
+        (.addPoint hnsw embedding label replace-deleted?))
+      data-coll
+      labels))))
 
 (defn delete-items
   [repo labels]
@@ -91,7 +99,7 @@
 
 (defn task--text-embedding&store!
   "return labels(js-array)"
-  [repo text-array delete-labels replace-deleted?]
+  [repo text-array labels replace-deleted?]
   (m/sp
     (when (model-loaded?)
       (let [hnsw (or (get-hnsw-index repo) (new-hnsw-index! repo))
@@ -99,9 +107,8 @@
                                                                  (c.m/<? (<text-embedding text-array)))
             data-coll (split-into-chunks data (last dims))
             _ (assert (= (count text-array) (count data-coll)))]
-        (when (seq delete-labels) (.markDeleteItems hnsw (into-array delete-labels)))
         (worker-util/profile (keyword "add-items" (str (alength data-coll)))
-                             (add-items hnsw data-coll replace-deleted?))))))
+                             (add-items hnsw data-coll labels replace-deleted?))))))
 
 (def ^:private write-index-wait-delays-flow
   (m/ap

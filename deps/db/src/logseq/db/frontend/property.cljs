@@ -560,13 +560,6 @@
                                                     :cardinality :many
                                                     :public? true}
                                            :queryable? true}
-     :logseq.property.embedding/hnsw-label {:title "HNSW label"
-                                            :schema {:type :raw-number
-                                                     :public? false
-                                                     :hide? true}
-                                            :rtc {:rtc/ignore-attr-when-init-upload true
-                                                  :rtc/ignore-attr-when-init-download true
-                                                  :rtc/ignore-attr-when-syncing true}}
      :logseq.property.embedding/hnsw-label-updated-at {:title "HNSW label updated-at"
                                                        :schema {:type :datetime
                                                                 :public? false
