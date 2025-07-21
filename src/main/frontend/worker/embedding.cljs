@@ -42,7 +42,8 @@
   (when-let [canceler (get-in @*vector-search-state [:repo->canceler repo])]
     (canceler)
     (swap! *vector-search-state assoc-in [:repo->canceler repo] nil)
-    (swap! *vector-search-state assoc-in [:repo->index-info repo :indexing?] false)))
+    (swap! *vector-search-state assoc-in [:repo->index-info repo :indexing?] false)
+    nil))
 
 (defn- indexing?
   [repo]
