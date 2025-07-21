@@ -12,7 +12,7 @@
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
-(defn ms->journal-title
+(defn- ms->journal-title
   [ms]
   (date-time-util/format (tc/from-long ms) "MMM do, yyyy"))
 
