@@ -140,7 +140,8 @@
       "Xenova/jina-embeddings-v2-base-zh"
       500
       "onnx-community/Qwen3-Embedding-0.6B-ONNX"
-      100)))
+      100
+      500)))
 
 (defn- task--embedding-stale-blocks!
   "embedding outdated block-data
@@ -257,7 +258,7 @@
                             (keep (fn [[distance label]]
                                     (when-not (or (js/isNaN distance) (> distance 0.65))
                                       label))))
-                blocks (map #(d/entity @conn %) labels)]
+                blocks (keep #(d/entity @conn %) labels)]
             (pp/print-table ["id" "title"] (map #(-> %
                                                      (update-keys name)
                                                      (update-vals (fn [v]
