@@ -18,7 +18,8 @@
 
 (def table
   [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
-   {:cmds ["show"] :fn cli-graph/show-graph :args->opts [:graph] :desc "Show graph info"}
+   {:cmds ["show"] :fn cli-graph/show-graph :args->opts [:graphs] :desc "Show graph(s) info"
+    :coerce {:graphs []}}
    {:cmds []         :fn help}])
 
 (defn -main [& args]
