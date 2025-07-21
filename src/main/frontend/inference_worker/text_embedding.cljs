@@ -36,8 +36,7 @@
 (defn- init-index!
   [^js hnsw]
   (.initIndex hnsw init-max-elems 16 200 100)
-  (.setEfSearch hnsw 64 ;;default 32
-                ))
+  (.setEfSearch hnsw 32))
 
 (defn- ^js get-hnsw-index
   [repo]
