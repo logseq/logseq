@@ -7,17 +7,20 @@ on:
     branches: [master]
     paths:
       - 'deps/graph-parser/**'
-      # db is a local dep that could break functionality in this lib and should trigger this
-      - 'deps/db/**'
       - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
+      # Deps that logseq/graph-parser depends on should trigger this workflow
+      - 'deps/db/**'
+      - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
       - 'deps/graph-parser/**'
-      - 'deps/db/**'
       - '.github/workflows/graph-parser.yml'
       - '!deps/graph-parser/**.md'
+      # Deps that logseq/graph-parser depends on should trigger this workflow
+      - 'deps/db/**'
+      - 'deps/common/**'
 
 defaults:
   run:

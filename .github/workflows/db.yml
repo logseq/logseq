@@ -8,12 +8,16 @@ on:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
+      # Deps that logseq/db depends on should trigger this workflow
+      - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
+      # Deps that logseq/db depends on should trigger this workflow
+      - 'deps/common/**'
 
 defaults:
   run:
