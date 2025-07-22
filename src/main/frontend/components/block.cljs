@@ -2641,9 +2641,9 @@
   (let [target (.-target e)
         selection-blocks (state/get-selection-blocks)
         starting-block (state/get-selection-start-block-or-first)
-        mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
+        mobile? (util/mobile?)
+        mobile-selection? (and mobile? (seq selection-blocks))
         block-dom-element (util/rec-get-node target "ls-block")]
-
     (if mobile-selection?
       (let [ids (set (state/get-selection-block-ids))]
         (if (contains? ids (:block/uuid block))
@@ -2659,7 +2659,13 @@
               button (gobj/get e "buttons")
               shift? (gobj/get e "shiftKey")
               meta? (util/meta-key? e)
-              forbidden-edit? (target-forbidden-edit? target)]
+              forbidden-edit? (target-forbidden-edit? target)
+              get-cursor-range #(some-> block-dom-element
+                                        (dom/by-class "block-content-inner")
+                                        first
+                                        util/caret-range)
+              mobile-range (when mobile? (get-cursor-range))]
+          (util/mobile-keep-keyboard-open false)
           (when (and (not forbidden-edit?) (contains? #{1 0} button))
             (cond
               (and meta? shift?)
@@ -2690,40 +2696,34 @@
 
               :else
               (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
-                (util/mobile-keep-keyboard-open false)
                 (editor-handler/clear-selection!)
                 (editor-handler/unhighlight-blocks!)
-                (let [f #(p/do!
-                          (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-                            (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
-                          (let [block (db/entity (:db/id block))
-                                {:block/keys [title format]} block
-                                content (if (config/db-based-graph? (state/get-current-repo))
-                                          (:block/title block)
-                                          (->> title
-                                               (property-file/remove-built-in-properties-when-file-based
-                                                (state/get-current-repo) format)
-                                               (drawer/remove-logbook)))
-                                cursor-range (if (util/ios?)
-                                               (:block/title block)
-                                               (some-> block-dom-element
-                                                       (dom/by-class "block-content-inner")
-                                                       first
-                                                       util/caret-range))]
-                            (state/set-editing!
-                             edit-input-id
-                             content
-                             block
-                             cursor-range
-                             {:db (db/get-db)
-                              :move-cursor? false
-                              :container-id (:container-id config)})))]
-                    ;; wait a while for the value of the caret range
-                  (p/do!
-                   (state/pub-event! [:editor/save-code-editor])
-                   (f))
+                (p/do!
+                 (state/pub-event! [:editor/save-code-editor])
 
-                  (state/set-selection-start-block! block-dom-element))))))))))
+                 (when-not (:block.temp/load-status (db/entity (:db/id block)))
+                   (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+
+                 (let [cursor-range (if mobile? mobile-range (get-cursor-range))
+                       block (db/entity (:db/id block))
+                       {:block/keys [title format]} block
+                       content (if (config/db-based-graph? (state/get-current-repo))
+                                 (:block/title block)
+                                 (->> title
+                                      (property-file/remove-built-in-properties-when-file-based
+                                       (state/get-current-repo) format)
+                                      (drawer/remove-logbook)))]
+
+                   (state/set-editing!
+                    edit-input-id
+                    content
+                    block
+                    cursor-range
+                    {:db (db/get-db)
+                     :move-cursor? false
+                     :container-id (:container-id config)}))
+
+                 (state/set-selection-start-block! block-dom-element))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id top?]
