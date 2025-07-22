@@ -29,7 +29,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.graph-parser.text :as text]))
 
 (defn get-in-repo-assets-full-filename
   [url]
@@ -52,7 +53,7 @@
                       (some-> url (js/decodeURIComponent)
                               (get-in-repo-assets-full-filename)
                               (string/replace '"/" "_")))
-        filekey   (util/safe-sanitize-file-name
+        filekey   (text/safe-sanitize-file-name
                    (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
