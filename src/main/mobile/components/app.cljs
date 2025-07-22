@@ -223,13 +223,11 @@
 
             (= tab "settings")
             (assoc
-              :left-render (shui/button {:variant :icon :size :sm}
-                             (shui/tabler-icon "chevron-left" {:size 22}))
               :right-render [:<>
                              (shui/button {:variant :icon :size :sm}
-                               (shui/tabler-icon "plus" {:size 22}))
+                               (shui/tabler-icon "plus" {:size 23}))
                              (shui/button {:variant :icon :size :sm}
-                               (shui/tabler-icon "dots" {:size 22}))])))
+                               (shui/tabler-icon "dots" {:size 23}))])))
 
         ;; app tabs
         (ui-silk/app-silk-tabs)
