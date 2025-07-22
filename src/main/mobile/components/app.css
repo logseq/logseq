@@ -23,8 +23,18 @@ html.is-native-android {
 }
 
 html.has-mobile-keyboard {
+  body {
+    @apply overflow-hidden
+  }
+
   #mobile-editor-toolbar {
     @apply opacity-100;
+  }
+
+  .block-modal-page {
+    .app-silk-scroll-content-inner {
+      padding-bottom: calc(var(--ls-native-kb-height, 0px) + 64px);
+    }
   }
 }
 
