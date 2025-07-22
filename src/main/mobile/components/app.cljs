@@ -101,7 +101,7 @@
 
    ;; main content
    (if db-restoring?
-     [:div.space-y-2.my-2.mx-2
+     [:div.space-y-2.my-4.mx-0
       (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
       (shui/skeleton {:class "h-6 w-full bg-gray-200"})
       (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
