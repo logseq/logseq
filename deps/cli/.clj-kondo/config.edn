@@ -1,0 +1,20 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+  :shadowed-var {:level :warning}
+
+  :consistent-alias
+  {:aliases {"fs" fs
+             "node-path" path
+             clojure.pprint pprint
+             clojure.string string
+             datascript.core d
+             logseq.cli.commands.graph cli-graph
+             logseq.cli.common.graph cli-common-graph
+             logseq.common.config common-config
+             logseq.common.graph common-graph
+             logseq.common.util.date-time date-time-util
+             logseq.db.common.sqlite common-sqlite}}}
+ :skip-comments true
+ :output {:progress true}}
