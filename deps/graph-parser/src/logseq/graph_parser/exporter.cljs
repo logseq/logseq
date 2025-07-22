@@ -36,7 +36,8 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.graph-parser.text :as text]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1114,8 +1115,11 @@
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
   [parent-asset-path assets parent-asset pdf-annotation-pages opts]
-  (let [asset-edn-path (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn")
-        asset-md-name (str "hls__" (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md")))]
+  (let [asset-edn-path (node-path/join common-config/local-assets-dir
+                                       (text/safe-sanitize-file-name
+                                        (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
+        asset-md-name (str "hls__" (text/safe-sanitize-file-name
+                                    (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
       ;; Mark edn asset so it isn't treated like a normal asset later
       (swap! assets assoc-in [asset-edn-path :pdf-annotation?] true)
