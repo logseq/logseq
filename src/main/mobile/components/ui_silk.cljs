@@ -4,11 +4,16 @@
             [rum.core :as rum]))
 
 (rum/defc app-silk-topbar
-  [{:keys [left-render right-render title props]}]
-  [:div.app-silk-topbar props
-   [:div.as-left (if (fn? left-render)
-                   (left-render) left-render)]
-   [:strong.title title]
+  [{:keys [left-render right-render title props center-title?]}]
+  [:div.app-silk-topbar
+   (cond-> props
+     (boolean center-title?)
+     (assoc :data-center-title true))
+   [:div.as-left
+    (if (fn? left-render)
+      (left-render) left-render)
+    (when (not center-title?) [:span.title title])]
+   (when center-title? [:span.title title])
    [:div.as-right (if (fn? right-render)
                     (right-render) right-render)]])
 

@@ -274,7 +274,15 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 .app-silk-topbar {
   @apply fixed top-0 left-0 w-full border-b bg-gray-02 dark:bg-gray-01
-  justify-between items-center overflow-hidden grid grid-cols-8 gap-4;
+  flex justify-between items-center overflow-hidden;
+
+  &[data-center-title] {
+    @apply grid grid-cols-8 gap-4;
+
+    > .as-left, .as-right {
+      @apply col-span-2;
+    }
+  }
 
   padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
   height: 48px;
@@ -285,7 +293,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 
   > .as-left, .as-right {
-    @apply flex items-center col-span-2 gap-2 px-2;
+    @apply flex items-center gap-2 px-2;
 
     .ui__button {
       @apply opacity-70 px-1;
@@ -300,9 +308,9 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply justify-end;
   }
 
-  > .title {
+  .title {
     @apply font-semibold overflow-hidden text-ellipsis whitespace-nowrap col-span-4
-    block text-center text-lg;
+    block text-center text-lg pl-1 opacity-90 tracking-wide;
   }
 }
 
