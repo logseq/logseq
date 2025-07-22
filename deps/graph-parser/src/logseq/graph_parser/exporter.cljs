@@ -2,6 +2,7 @@
   "Exports a file graph to DB graph. Used by the File to DB graph importer and
   by nbb-logseq CLIs"
   (:require ["path" :as node-path]
+            ["sanitize-filename" :as sanitizeFilename]
             [borkdude.rewrite-edn :as rewrite]
             [cljs-time.coerce :as tc]
             [cljs.pprint]
@@ -36,8 +37,7 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.utf8 :as utf8]
-            [promesa.core :as p]
-            [logseq.graph-parser.text :as text]))
+            [promesa.core :as p]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -1112,13 +1112,21 @@
                  [(node-path/basename image-path) (:block/uuid tx)]) image-paths txs)
           (into {}))}))
 
+;; Reference same default class in cljs + nbb without needing .cljc
+(def sanitizeFilename' (if (find-ns 'nbb.core) (aget sanitizeFilename "default") sanitizeFilename))
+
+(defn safe-sanitize-file-name
+  "Sanitizes filenames for pdf assets"
+  [s]
+  (sanitizeFilename' (str s)))
+
 (defn- build-pdf-annotations-tx
   "Builds tx for pdf annotations when a pdf has an annotations EDN file under assets/"
   [parent-asset-path assets parent-asset pdf-annotation-pages opts]
   (let [asset-edn-path (node-path/join common-config/local-assets-dir
-                                       (text/safe-sanitize-file-name
+                                       (safe-sanitize-file-name
                                         (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".edn"))))
-        asset-md-name (str "hls__" (text/safe-sanitize-file-name
+        asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
       ;; Mark edn asset so it isn't treated like a normal asset later
