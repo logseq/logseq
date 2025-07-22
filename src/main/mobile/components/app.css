@@ -39,6 +39,8 @@ html.has-mobile-keyboard {
 }
 
 html {
+  @apply h-full overflow-hidden;
+
   &[data-theme=dark] {
     &[data-color=logseq] {
       --background: var(--ls-primary-background-color);
@@ -55,7 +57,7 @@ html {
 }
 
 body {
-  position: relative;
+  @apply relative;
 
   .SheetWithDepth-stackSceneryContainer, > .SheetWithDepth-view {
     height: var(--ls-full-screen-height, "auto");
