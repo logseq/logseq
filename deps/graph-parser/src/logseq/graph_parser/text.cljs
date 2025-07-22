@@ -1,7 +1,6 @@
 (ns logseq.graph-parser.text
   "Miscellaneous text util fns for the parser. Used by file and DB graphs"
-  (:require ["sanitize-filename" :as sanitizeFilename]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
             [goog.string :as gstring]
             [logseq.common.util :as common-util]
@@ -153,11 +152,3 @@
 
 (def namespace-page? ns-util/namespace-page?)
 (def get-namespace-last-part ns-util/get-last-part)
-
-;; Reference same default class in cljs + nbb without needing .cljc
-(def sanitizeFilename' (if (find-ns 'nbb.core) (aget sanitizeFilename "default") sanitizeFilename))
-
-(defn safe-sanitize-file-name
-  "Sanitizes filenames for pdf assets"
-  [s]
-  (sanitizeFilename' (str s)))
