@@ -13,6 +13,7 @@
             [mobile.init :as init]
             [mobile.state :as mobile-state]
             [logseq.shui.silkhq :as silkhq]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (rum/defc block-modal
@@ -55,26 +56,20 @@
                                            (fn []
                                              [:div.-mx-2
                                               (ui/menu-link
-                                                {:on-click (fn []
-                                                             (mobile-ui/open-modal!
-                                                               (str "⚠️ Are you sure you want to delete this "
-                                                                 (if (entity-util/page? block) "page" "block")
-                                                                 "?")
-                                                               {:type :alert
-                                                                :on-action (fn [{:keys [role]}]
-                                                                             (when (not= role "cancel")
-                                                                               (mobile-ui/close-popup!)
-                                                                               (some->
-                                                                                 (:block/uuid block)
-                                                                                 (page-handler/<delete!
-                                                                                   (fn [] (close!))
-                                                                                   {:error-handler
-                                                                                    (fn [{:keys [msg]}]
-                                                                                      (notification/show! msg :warning))}))))
-                                                                :buttons [{:text "Cancel"
-                                                                           :role "cancel"}
-                                                                          {:text "Ok"
-                                                                           :role "confirm"}]}))}
+                                                {:on-click #(-> (shui/dialog-confirm!
+                                                                  (str "⚠️ Are you sure you want to delete this "
+                                                                    (if (entity-util/page? block) "page" "block")
+                                                                    "?"))
+                                                              (p/then
+                                                                (fn []
+                                                                  (mobile-ui/close-popup!)
+                                                                  (some->
+                                                                    (:block/uuid block)
+                                                                    (page-handler/<delete!
+                                                                      (fn [] (close!))
+                                                                      {:error-handler
+                                                                       (fn [{:keys [msg]}]
+                                                                         (notification/show! msg :warning))})))))}
                                                 [:span.text-lg.flex.gap-2.items-center
                                                  (shui/tabler-icon "trash" {:class "opacity-80" :size 18})
                                                  "Delete"])
