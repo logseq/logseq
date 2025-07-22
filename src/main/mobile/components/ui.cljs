@@ -110,24 +110,9 @@
 (defonce ^:private gen-id #(reset! *id (inc @*id)))
 
 (rum/defc x-modal
-  [{:keys [close! as-page? type on-action title buttons inputs modal-props]} content]
+  [{:keys [close! _as-page? type on-action title buttons _inputs modal-props]} content]
   (let [{:keys [class header]} modal-props]
     (case type
-      :alert
-      (js/alert
-        (pr-str
-          (merge modal-props
-            {:is-open true
-             :header (or title header)
-             :message content
-             :backdropDismiss false
-             :onWillDismiss (fn [^js e]
-                              (when on-action
-                                (on-action (bean/->clj (.-detail e))))
-                              (close!))
-             :buttons (bean/->js (or buttons (:buttons modal-props)))
-             :inputs (bean/->js (or inputs (:inputs modal-props) []))})))
-
       :action-sheet
       (silkhq/bottom-sheet
         (merge modal-props
