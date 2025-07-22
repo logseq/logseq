@@ -5,7 +5,8 @@
             [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.commands.graph :as cli-graph]
-            [logseq.cli.common.graph :as cli-common-graph]))
+            [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.cli.commands.query :as cli-query]))
 
 (defn- format-commands [{:keys [table]}]
   (let [table (mapv (fn [{:keys [cmds desc]}]
@@ -35,8 +36,11 @@
 
 (def ^:private table
   [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
-   {:cmds ["show"] :fn cli-graph/show-graph :args->opts [:graphs] :desc "Show DB graph(s) info"
-    :coerce {:graphs []}}
+   {:cmds ["show"] :fn cli-graph/show-graph :desc "Show DB graph(s) info"
+    :args->opts [:graphs] :coerce {:graphs []}}
+   {:cmds ["query"] :fn cli-query/query :desc "Query DB graph(s)"
+    :args->opts [:graph :queries] :coerce {:queries []} :no-keyword-opts true
+    :spec cli-query/spec}
    {:cmds []
     :spec default-spec
     :fn default-command}])
