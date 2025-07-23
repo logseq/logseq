@@ -17,5 +17,6 @@
              logseq.common.graph common-graph
              logseq.common.util.date-time date-time-util
              logseq.db.common.sqlite common-sqlite}}}
+ :lint-as {promesa.core/let clojure.core/let}
  :skip-comments true
  :output {:progress true}}
