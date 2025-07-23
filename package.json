@@ -39,7 +39,7 @@
         "process": "^0.11.10",
         "purgecss": "4.0.2",
         "semver": "7.5.2",
-        "shadow-cljs": "2.28.21",
+        "shadow-cljs": "^3.1.7",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "3.3.5",
