@@ -299,37 +299,39 @@ DROP TRIGGER IF EXISTS blocks_au;
                          (exact-matched? q title)))))))))
 
 ;; Combine and re-rank results
-(defn combine-results [keyword-results semantic-results]
+(defn combine-results
+  [db keyword-results semantic-results]
   (let [;; Extract score ranges for normalization
         keyword-scores (map :keyword-score keyword-results)
-        semantic-scores (map :semantic-score semantic-results)
         k-min (if (seq keyword-scores) (apply min keyword-scores) 0.0)
         k-max (if (seq keyword-scores) (apply max keyword-scores) 1.0)
-        s-min (if (seq semantic-scores) (apply min semantic-scores) 0.0)
-        s-max (if (seq semantic-scores) (apply max semantic-scores) 1.0)
-        ;; Merge results by ID
         all-ids (set/union (set (map :id keyword-results))
                            (set (map :id semantic-results)))
         merged (map (fn [id]
-                      (let [k-result (first (filter #(= (:id %) id) keyword-results))
+                      (let [block (when id (d/entity db [:block/uuid (uuid id)]))
+                            k-result (first (filter #(= (:id %) id) keyword-results))
                             s-result (first (filter #(= (:id %) id) semantic-results))
+                            result (merge s-result k-result)
                             k-score (or (:keyword-score k-result) 0.0)
                             s-score (or (:semantic-score s-result) 0.0)
                             norm-k-score (normalize-score k-score k-min k-max)
-                            norm-s-score (normalize-score s-score s-min s-max)
                             ;; Weighted combination
                             combined-score (+ (* (:keyword-weight config) norm-k-score)
-                                              (* (:semantic-weight config) norm-s-score))]
-                        (merge k-result
-                               s-result
-                               {:id id
-                                :combined-score combined-score
+                                              (* (:semantic-weight config) s-score)
+                                              (cond
+                                                (ldb/page? block)
+                                                1
+                                                (:block/tags block)
+                                                0.02
+                                                :else
+                                                0))]
+                        (merge result
+                               {:combined-score combined-score
                                 :keyword-score k-score
                                 :semantic-score s-score})))
-                    all-ids)]
-    ;; Sort by combined score
-    (prn :debug :merged (sort-by :combined-score #(compare %2 %1) merged))
-    (sort-by :combined-score #(compare %2 %1) merged)))
+                    all-ids)
+        sorted-result (sort-by :combined-score #(compare %2 %1) merged)]
+    sorted-result))
 
 (defn search-blocks
   "Options:
@@ -365,7 +367,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                              (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
             non-match-result (when (and (not page-only?) non-match-input)
                                (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
-           ;; fuzzy is too slow for large graphs
+            ;; fuzzy is too slow for large graphs
             fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
             semantic-search-result* (m/? (embedding/task--search repo q 10))
             semantic-search-result (->> semantic-search-result*
@@ -377,7 +379,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                    :semantic-score (/ 1.0 (+ 1.0 distance))}
                                                    page-id
                                                    (assoc :page page-id))))))
-            combined-result (combine-results (concat fuzzy-result matched-result) semantic-search-result)
+            combined-result (combine-results @conn (concat fuzzy-result matched-result) semantic-search-result)
             result (->> (concat combined-result
                                 non-match-result)
                         (common-util/distinct-by :id)
