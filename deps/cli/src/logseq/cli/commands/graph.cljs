@@ -7,9 +7,9 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.cli.common.graph :as cli-common-graph]
+            [logseq.cli.util :as cli-util]
             [logseq.common.config :as common-config]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.sqlite-cli :as sqlite-cli]))
 
 (defn- ms->journal-title
@@ -19,9 +19,9 @@
 (defn show-graph
   [{{:keys [graphs]} :opts}]
   (doseq [graph graphs]
-    (let [graph-dir (node-path/join (cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph))]
+    (let [graph-dir (cli-util/get-graph-dir graph)]
       (if (fs/existsSync graph-dir)
-        (let [conn (sqlite-cli/open-db! (cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph))
+        (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
               kv-value #(:kv/value (d/entity @conn %))]
           (pprint/print-table
            (map #(array-map "Name" (first %) "Value" (second %))
