@@ -346,7 +346,7 @@
 (rum/defc semantic-search-progressing
   [repo]
   (let [[vec-search-state set-vec-search-state] (hooks/use-state nil)
-        indexing? (get-in vec-search-state [:repo->index-info repo :indexing?])]
+        {:keys [indexing?] :as status} (get-in vec-search-state [:repo->index-info repo])]
     (hooks/use-effect!
      (fn []
        (c.m/run-task
