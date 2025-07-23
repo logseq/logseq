@@ -219,7 +219,7 @@
    (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
            :when (not= group :shortcut.handler/misc)]
      (if dispose?
-       (.dispose handler)
+       (.dispose ^js handler)
        (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
 
 (defn listen-all! []
