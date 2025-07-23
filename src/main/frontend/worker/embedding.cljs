@@ -212,9 +212,10 @@
   [repo]
   (when-not (indexing? repo)
     (when-let [conn (worker-state/get-datascript-conn repo)]
-      (if (first (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)) ; embedding exists
-        (embedding-stale-blocks! repo)
-        (re-embedding-graph-data! repo)))))
+      (when (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)
+        (if (first (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)) ; embedding exists
+          (embedding-stale-blocks! repo)
+          (re-embedding-graph-data! repo))))))
 
 (defn task--embedding-model-info
   [repo]
