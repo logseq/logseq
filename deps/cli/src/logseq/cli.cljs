@@ -5,8 +5,9 @@
             [babashka.cli :as cli]
             [clojure.string :as string]
             [logseq.cli.commands.graph :as cli-graph]
+            [logseq.cli.commands.query :as cli-query]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.cli.commands.query :as cli-query]))
+            [nbb.error :as error]))
 
 (defn- format-commands [{:keys [table]}]
   (let [table (mapv (fn [{:keys [cmds desc]}]
@@ -54,6 +55,9 @@
 (defn ^:api -main [& args]
   (when-not (contains? #{nil "-h" "--help"} (first args))
     (error-if-db-version-not-installed))
-  (cli/dispatch table args {:coerce {:depth :long}}))
+  (try
+    (cli/dispatch table args {:coerce {:depth :long}})
+    (catch ^:sci/error js/Error e
+      (error/print-error-report e))))
 
 #js {:main -main}
