@@ -61,7 +61,7 @@
 (defn- validate-worker-not-in-frontend
   []
   (let [res (shell {:out :string :continue true}
-                   "grep -r --exclude-dir=worker" "\\[frontend.worker.*:" "src/main/frontend")
+                   "grep -r --exclude-dir=worker --exclude-dir=inference_worker" "\\[frontend.worker.*:" "src/main/frontend")
         ;; allow reset-file b/c it's only affects tests
         allowed-exceptions #{"src/main/frontend/handler/file_based/file.cljs:            [frontend.worker.file.reset :as file-reset]"}
         invalid-lines (when (= 0 (:exit res))
@@ -79,4 +79,3 @@
   []
   (validate-frontend-not-in-worker)
   (validate-worker-not-in-frontend))
-

@@ -1,9 +1,7 @@
 (ns frontend.inference-worker.inference-worker
   "Worker used for text embedding and vector-db"
   (:require ["comlink" :as Comlink]
-            [frontend.inference-worker.state :as infer-worker.state]
             [frontend.inference-worker.text-embedding :as infer-worker.text-embedding]
-            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
