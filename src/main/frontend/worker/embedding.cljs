@@ -79,14 +79,16 @@
               (filter (stale-block-filter-preds reset?))
               (map (fn [b]
                      (assoc b :block.temp/text-to-embedding
-                            (str (db-content/recur-replace-uuid-in-block-title b)
-                                 (let [tags (->> (:block/tags b)
-                                                 (map :block/title))]
-                                   (when (seq tags)
-                                     (str " tags: " (string/join ", " tags))))
-                                 (when-let [desc (:block/title (:logseq.property/description b))]
-                                   (str " description: " desc))))))))))
-
+                            (db-content/recur-replace-uuid-in-block-title b)
+                            ;; FIXME: tags and properties can affect sorting
+                            ;; (str (db-content/recur-replace-uuid-in-block-title b)
+                            ;;      (let [tags (->> (:block/tags b)
+                            ;;                      (map :block/title))]
+                            ;;        (when (seq tags)
+                            ;;          (str " " (string/join ", " (map (fn [t] (str "#" t)) tags)))))
+                            ;;      (when-let [desc (:block/title (:logseq.property/description b))]
+                            ;;        (str "\nDescription: " desc)))
+                            )))))))
 (defn- partition-by-text-size
   [text-size]
   (let [*current-size (volatile! 0)

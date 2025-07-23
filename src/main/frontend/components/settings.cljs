@@ -1258,7 +1258,7 @@
              (for [model-name (:available-model-names model-info)]
                (shui/select-item {:value model-name} model-name)))))
 
-          (when status
+          (when (and status current-model)
             [:div.text-muted-foreground.text-sm
              (let [{:keys [file progress loaded total]} load-model-progress]
                (case status
