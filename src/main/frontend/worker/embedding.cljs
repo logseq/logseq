@@ -12,10 +12,9 @@
 
 ;;; TODOs:
 ;;; - [x] add :logseq.property/description into text-to-embedding
-;;; - [ ] add tags to text-to-embedding
+;;; - [x] add tags to text-to-embedding
 ;;; - [x] check webgpu available, transformers.js is slow without webgpu(the difference is ~70 times)
 ;;; - [x] expose index-state to ui
-;;; - [ ] show progress when loading/downloading models
 
 (def ^:private empty-vector-search-state
   {:repo->index-info {} ;; repo->index-info
@@ -75,14 +74,17 @@
   [db reset?]
   (->> (rseq (d/index-range db :block/updated-at nil nil))
        (sequence
-        ;; NOTE: assoc :block.temp/search?, so uuid in :block/title will be replaced by content
-        (comp (map #(assoc (d/entity db (:e %)) :block.temp/search? true))
+        (comp (map #(d/entity db (:e %)))
               (filter (stale-block-filter-preds reset?))
               (map (fn [b]
                      (assoc b :block.temp/text-to-embedding
-                            (if-let [desc (:block/title (:logseq.property/description b))]
-                              (str (:block/title b) ": " desc)
-                              (:block/title b)))))))))
+                            (str (:block/title b)
+                                 (let [tags (->> (:block/tags b)
+                                                 (map :block/title))]
+                                   (when (seq tags)
+                                     (str " tags: " (string/join ", " tags))))
+                                 (when-let [desc (:block/title (:logseq.property/description b))]
+                                   (str " description: " desc))))))))))
 
 (defn- partition-by-text-size
   [text-size]
