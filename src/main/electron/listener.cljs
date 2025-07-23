@@ -141,7 +141,7 @@
                            (throw (js/Error. (str "MethodNotExist: " method))))
                          (-> (p/promise (apply js-invoke methodTarget method' args))
                              (p/then #(ret-fn! %))
-                             (p/catch #(ret-fn! {:error %}))))
+                             (p/catch #(ret-fn! {:error (.-message %)}))))
                        (catch js/Error e
                          (ret-fn! {:error (.-message e)}))))))
 
