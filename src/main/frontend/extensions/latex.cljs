@@ -37,10 +37,11 @@
     (when-not @*loading?
       (reset! *loading? true)
       (loader/load
-       (config/asset-uri "/js/katex.min.js")
+       ;; FIXME: use /js instead of /static/js after deploying to asset.logseq.com
+       (config/asset-uri "/static/js/katex.min.js")
        (fn []
          (loader/load
-          (config/asset-uri "/js/mhchem.min.js")
+          (config/asset-uri "/static/js/mhchem.min.js")
           (fn []
             (-> (when-let [enhancers (and config/lsp-enabled?
                                           (seq (hook-extensions-enhancers-by-key :katex)))]
