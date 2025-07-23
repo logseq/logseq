@@ -23,7 +23,7 @@
                         :resolve {"react" {:target :global
                                            :global "React"}
                                   "react-dom" {:target :global
-                                               :global "ReactDOM"}}} ;; handle `require(xxx.css)`
+                                               :global "ReactDOM"}}}
         :modules       {:main
                         {:init-fn frontend.core/init}
                         :code-editor
@@ -40,7 +40,7 @@
         :asset-path       "/static/js"
         :release          {:asset-path "https://asset.logseq.com/static/js"}
         :compiler-options {:infer-externs      false
-                           :output-feature-set :es-next-in
+                           :output-feature-set :es2020
                            :source-map true
                            :externs ["datascript/externs.js"
                                      "externs.js"]
@@ -77,23 +77,23 @@
                             :external-index-format :esm
                             :entry-keys ["module" "browser" "main"]
                             :export-conditions ["module" "import", "browser" "require" "default"]}
-            :modules       {:shared {:entries []}
+            :modules       {:workers-shared {:entries []}
                             :db-worker
                             {:init-fn frontend.worker.db-worker/init
                              :web-worker true
-                             :prepend "importScripts('workers-bundle.js');\n"
-                             :depends-on #{:shared}}
+                             ;; :prepend "importScripts('workers-bundle.js');\n"
+                             :depends-on #{:workers-shared}}
                             :inference-worker
                             {:init-fn frontend.inference-worker.inference-worker/init
                              :web-worker true
-                             :prepend "importScripts('workers-bundle.js');\n"
-                             :depends-on #{:shared}}}
+                             ;; :prepend "importScripts('workers-bundle.js');\n"
+                             :depends-on #{:workers-shared}}}
 
             :output-dir       "./static/js"
             :asset-path       "/static/js"
             :release          {:asset-path "https://asset.logseq.com/static/js"}
             :compiler-options {:infer-externs      :auto
-                               :output-feature-set :es-next-in
+                               :output-feature-set :es2020
                                :source-map true
                                :externs ["datascript/externs.js"
                                          "externs.js"]
@@ -131,7 +131,7 @@
            :asset-path       "./js"
            :release          {:asset-path "http://localhost"}
            :compiler-options {:infer-externs      :auto
-                              :output-feature-set :es-next-in
+                              :output-feature-set :es-2020
                               :source-map true
                               :externs ["datascript/externs.js"
                                         "externs.js"]
@@ -220,7 +220,7 @@
                :closure-defines {logseq.common.config/PUBLISHING true
                                  goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs :auto
-                                  :output-feature-set :es-next
+                                  :output-feature-set :es-2020
                                   :source-map true
                                   :externs ["datascript/externs.js"
                                             "externs.js"]
