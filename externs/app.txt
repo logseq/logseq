@@ -83,3 +83,4 @@ getLine
 setOption
 string
 dispose
+path
