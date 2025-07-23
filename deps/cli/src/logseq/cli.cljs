@@ -4,6 +4,7 @@
             ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.string :as string]
+            [logseq.cli.commands.export-edn :as cli-export-edn]
             [logseq.cli.commands.graph :as cli-graph]
             [logseq.cli.commands.query :as cli-query]
             [logseq.cli.common.graph :as cli-common-graph]
@@ -42,6 +43,8 @@
    {:cmds ["query"] :fn cli-query/query :desc "Query DB graph(s)"
     :args->opts [:graph :queries] :coerce {:queries []} :no-keyword-opts true
     :spec cli-query/spec}
+   {:cmds ["export-edn"] :fn cli-export-edn/export :desc "Export DB graph as EDN"
+    :args->opts [:graph] :spec cli-export-edn/spec}
    {:cmds []
     :spec default-spec
     :fn default-command}])
