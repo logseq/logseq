@@ -8,6 +8,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [missionary.core :as m]))
 
 ;;; TODOs:
@@ -78,7 +79,7 @@
               (filter (stale-block-filter-preds reset?))
               (map (fn [b]
                      (assoc b :block.temp/text-to-embedding
-                            (str (:block/title b)
+                            (str (db-content/recur-replace-uuid-in-block-title b)
                                  (let [tags (->> (:block/tags b)
                                                  (map :block/title))]
                                    (when (seq tags)
@@ -136,10 +137,6 @@
   (let [conn (worker-state/get-datascript-conn repo)
         embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
     (case embedding-model-name
-      "Xenova/all-MiniLM-L6-v2"
-      2000
-      "Xenova/jina-embeddings-v2-base-zh"
-      500
       "onnx-community/Qwen3-Embedding-0.6B-ONNX"
       100
       500)))
