@@ -11,19 +11,22 @@
             [nbb.error :as error]))
 
 (defn- format-commands [{:keys [table]}]
-  (let [table (mapv (fn [{:keys [cmds desc]}]
-                      (cond-> [(string/join " " cmds)]
+  (let [table (mapv (fn [{:keys [cmds desc spec]}]
+                      (cond-> [(str (string/join " " cmds)
+                                    (when spec " [options]"))]
                         desc (conj desc)))
                     (filter (comp seq :cmds) table))]
     (cli/format-table {:rows table})))
 
 (def ^:private default-spec
-  {:version {:coerce :boolean :alias :v}})
+  {:version {:coerce :boolean
+             :alias :v
+             :desc "Print version"}})
 
 (declare table)
 (defn- help [_m]
-  (println "Usage: logseq [command] [options]\n\nOptions:\n"
-           (cli/format-opts {:spec default-spec}))
+  (println (str "Usage: logseq [command] [options]\n\nOptions:\n"
+                (cli/format-opts {:spec default-spec})))
   (println (str "\nCommands:\n" (format-commands {:table table}))))
 
 (defn- default-command
@@ -36,6 +39,17 @@
                      (aget "version")))))
     (help m)))
 
+(defn- command-help [{{:keys [command]} :opts}]
+  (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
+    (println (str "Usage: logseq " command
+                  (when (:args->opts cmd-map)
+                    (str " " (string/join " "
+                                          (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
+                  (when (:spec cmd-map)
+                    (str " [options]\n\nOptions:\n"
+                         (cli/format-opts {:spec (:spec cmd-map)})))))
+    (println "Command" (pr-str command) "does not exist")))
+
 (def ^:private table
   [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
    {:cmds ["show"] :fn cli-graph/show-graph :desc "Show DB graph(s) info"
@@ -45,6 +59,8 @@
     :spec cli-query/spec}
    {:cmds ["export-edn"] :fn cli-export-edn/export :desc "Export DB graph as EDN"
     :args->opts [:graph] :spec cli-export-edn/spec}
+   {:cmds ["help"] :fn command-help :desc "Print a command's help"
+    :args->opts [:command]}
    {:cmds []
     :spec default-spec
     :fn default-command}])
