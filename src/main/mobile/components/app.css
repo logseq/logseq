@@ -36,6 +36,10 @@ html.has-mobile-keyboard {
       padding-bottom: calc(var(--ls-native-kb-height, 0px) + 64px);
     }
   }
+
+  .app-silk-popup-content-inner {
+    padding-bottom: calc(var(--ls-native-kb-height, 0px) + 24px);
+  }
 }
 
 html {
@@ -236,8 +240,11 @@ ul {
   }
 }
 
-.ls-quick-add {
-  @apply pb-[340px] min-h-[80vh] max-h-[90vh] overflow-y-auto;
+
+.app-silk-popup-content-inner {
+  &:has(.ls-quick-add) {
+    @apply min-h-[80vh] max-h-[90vh] overflow-y-auto;
+  }
 }
 
 /* silk styles */
