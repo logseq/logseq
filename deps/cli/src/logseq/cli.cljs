@@ -7,6 +7,7 @@
             [logseq.cli.commands.export-edn :as cli-export-edn]
             [logseq.cli.commands.graph :as cli-graph]
             [logseq.cli.commands.query :as cli-query]
+            [logseq.cli.commands.search :as cli-search]
             [logseq.cli.common.graph :as cli-common-graph]
             [nbb.error :as error]))
 
@@ -54,6 +55,9 @@
   [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
    {:cmds ["show"] :fn cli-graph/show-graph :desc "Show DB graph(s) info"
     :args->opts [:graphs] :coerce {:graphs []}}
+   {:cmds ["search"] :fn cli-search/search :desc "Search current DB graph"
+    :args->opts [:search-terms] :coerce {:search-terms []}
+    :spec cli-search/spec}
    {:cmds ["query"] :fn cli-query/query :desc "Query DB graph(s)"
     :args->opts [:graph :queries] :coerce {:queries []} :no-keyword-opts true
     :spec cli-query/spec}
@@ -75,7 +79,14 @@
   (when-not (contains? #{nil "-h" "--help"} (first args))
     (error-if-db-version-not-installed))
   (try
-    (cli/dispatch table args {:coerce {:depth :long}})
+    (cli/dispatch table
+                  args
+                  {:error-fn (fn [{:keys [cause msg option] type' :type :as data}]
+                               (if (and (= :org.babashka/cli type')
+                                        (= :require cause))
+                                 (println "Error: Command missing required option" option)
+                                 (throw (ex-info msg data)))
+                               (js/process.exit 1))})
     (catch ^:sci/error js/Error e
       (error/print-error-report e))))
 
