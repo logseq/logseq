@@ -1,6 +1,8 @@
 (ns mobile.components.ui-silk
-  (:require [logseq.shui.ui :as shui]
+  (:require [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [mobile.state :as mobile-state]
+            [frontend.handler.editor :as editor-handler]
             [rum.core :as rum]))
 
 (rum/defc app-silk-topbar
@@ -37,7 +39,11 @@
         (shui/tabler-icon "search" {:size 24}))
       [:small "Search"]]
      [:span.as-item
-      (shui/button {:variant :icon}
+      (shui/button
+        {:variant :icon
+         :on-click (fn [^js e]
+                     (util/stop e)
+                     (editor-handler/show-quick-add))}
         (shui/tabler-icon "plus" {:size 24}))
       [:small "Quick add"]]
      [:span.as-item
