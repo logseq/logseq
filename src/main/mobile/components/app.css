@@ -236,6 +236,10 @@ ul {
   }
 }
 
+.ls-quick-add {
+  @apply pb-[340px] min-h-[80vh] max-h-[90vh] overflow-y-auto;
+}
+
 /* silk styles */
 .app-silk-index-scroll-content {
   @apply bg-gray-01 min-h-[100svh];
