@@ -26,32 +26,8 @@
 
 (rum/defc page < rum/reactive
   []
-  (let [login? (and (state/sub :auth/id-token) (user-handler/logged-in?))]
-    ;(let [buttons (->> [(when login?
-    ;                      {:text "Logout" :role "logout"})
-    ;                    {:text "Report bug" :role "report-bug"}]
-    ;                (remove nil?))]
-    ;  (ion/buttons {:slot "end"}
-    ;    (ion/button
-    ;      {:size "small"
-    ;       :fill "clear"
-    ;       :on-click (fn [_e]
-    ;                   (ui-component/open-modal! "Settings"
-    ;                     {:type :action-sheet
-    ;                      :buttons buttons
-    ;                      :inputs []
-    ;                      :on-action (fn [e]
-    ;                                   (when-let [role (:role e)]
-    ;                                     (case role
-    ;                                       "logout"
-    ;                                       (user-handler/logout)
-    ;                                       "report-bug"
-    ;                                       (js/window.open "https://github.com/logseq/db-test/issues" "_blank")
-    ;                                       nil)))
-    ;                      :modal-props {:class "graph-switcher"}}))}
-    ;      [:span.text-muted-foreground {:slot "icon-only"}
-    ;       (ion/tabler-icon "dots" {:size 20})])))
-
+  (let [login? (and (state/sub :auth/id-token)
+                 (user-handler/logged-in?))]
     [:div.app-index-settings
      (user-profile login?)
      [:div.mt-8

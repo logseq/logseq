@@ -223,11 +223,24 @@
 
             (= tab "settings")
             (assoc
-              :right-render [:<>
-                             (shui/button {:variant :icon :size :sm}
-                               (shui/tabler-icon "plus" {:size 23}))
-                             (shui/button {:variant :icon :size :sm}
-                               (shui/tabler-icon "dots" {:size 23}))])))
+              :right-render
+              [:<>
+               (shui/button
+                 {:variant :icon :size :sm
+                  :on-click (fn []
+                              (ui-component/open-popup!
+                                (fn []
+                                  [:div.-mx-2
+                                   (ui/menu-link {:on-click #(user-handler/logout)}
+                                     [:span.text-lg.flex.gap-2.items-center.text-red-700
+                                      (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
+                                      "Logout"])
+                                   (ui/menu-link {:on-click #(js/window.open "https://github.com/logseq/db-test/issues")}
+                                     [:span.text-lg.flex.gap-2.items-center
+                                      (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
+                                      "Report bug"])])
+                                {:title "Actions"}))}
+                 (shui/tabler-icon "dots" {:size 23}))])))
 
         ;; app tabs
         (ui-silk/app-silk-tabs)
