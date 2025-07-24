@@ -63,7 +63,7 @@
        (mapv (fn [[k v]]
                [k
                 (cond
-                  (= :block/tags k)
+                  (#{:block/tags :logseq.property.class/extends} k)
                   (mapv :db/ident v)
                   (and (set? v) (every? de/entity? v))
                   (set (map db-property/property-value-content v))
