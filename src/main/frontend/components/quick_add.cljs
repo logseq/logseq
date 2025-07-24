@@ -12,6 +12,18 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
+(rum/defc page-blocks
+  [page]
+  (let [[scroll-container set-scroll-container] (rum/use-state nil)
+        *ref (rum/use-ref nil)]
+    (rum/use-effect!
+      #(set-scroll-container (rum/deref *ref))
+      [])
+    [:div.content-inner
+     {:ref *ref}
+     (when scroll-container
+       (page/page-blocks-cp page {:scroll-container scroll-container}))]))
+
 (rum/defc quick-add <
   {:will-mount (fn [state]
                  (state/clear-selection!)
@@ -45,5 +57,5 @@
           {:class (if mobile?
                     "flex flex-1 flex-col w-full"
                     "block -ml-6")}
-          (page/page-blocks-cp add-page {})]
+          (page-blocks add-page)]
          (when-not mobile? add-button)]))))
