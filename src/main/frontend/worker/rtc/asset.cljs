@@ -79,33 +79,6 @@
              (not-empty (remote-block-ops=>remote-asset-ops db-before db-after remove-ops update-ops))]
     (reset! *remote-asset-updates asset-update-ops)))
 
-(defn new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-  "deprecated"
-  [repo db push-asset-upload-updates-message]
-  (m/sp
-    (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
-      (when-let [asset-update-ops
-                 (->> uploaded-assets
-                      (map
-                       (fn [[asset-uuid remote-metadata]]
-                         (m/sp
-                           (let [ent (d/entity db [:block/uuid asset-uuid])
-                                 asset-type (:logseq.property.asset/type ent)
-                                 local-checksum (:logseq.property.asset/checksum ent)
-                                 remote-checksum (get remote-metadata "checksum")]
-                             (when (or (and local-checksum remote-checksum
-                                            (not= local-checksum remote-checksum))
-                                       (and asset-type
-                                            (nil? (m/? (new-task--get-asset-file-metadata
-                                                        repo asset-uuid asset-type)))))
-                               {:op :update-asset
-                                :block/uuid asset-uuid})))))
-                      (apply m/join vector)
-                      m/?
-                      (remove nil?)
-                      not-empty)]
-        (reset! *remote-asset-updates asset-update-ops)))))
-
 (defn- create-mixed-flow
   "Return a flow that emits different events:
   - `:local-update-check`: event to notify check if there're some new local-updates on assets
