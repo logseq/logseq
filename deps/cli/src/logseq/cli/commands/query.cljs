@@ -20,24 +20,30 @@
 
 (defn- api-query
   [query token]
-  (-> (p/let [resp (js/fetch "http://127.0.0.1:12315/api"
-                             (clj->js {:method "POST"
-                                       :headers {"Authorization" (str "Bearer " token)
-                                                 "Content-Type" "application/json"}
-                                       :body (js/JSON.stringify
-                                              #js {:method (if (string/starts-with? query "[")
-                                                             "logseq.app.datascript_query"
-                                                             "logseq.app.q")
-                                                   :args #js [query]})}))]
-        (if (= 200 (.-status resp))
-          (p/let [body (.json resp)]
-            (js/console.log body))
-          (do (js/console.error "Error: API Server responded with status" (.-status resp)
-                                (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
-              (js/process.exit 1))))
-      (p/catch (fn [err]
-                 (js/console.error "Error:" err)
-                 (js/process.exit 1)))))
+  (let [datalog-query? (string/starts-with? query "[")]
+    (-> (p/let [resp (js/fetch "http://127.0.0.1:12315/api"
+                              (clj->js {:method "POST"
+                                        :headers {"Authorization" (str "Bearer " token)
+                                                  "Content-Type" "application/json"}
+                                        :body (js/JSON.stringify
+                                               #js {:method (if datalog-query?
+                                                              "logseq.app.datascript_query"
+                                                              "logseq.app.q")
+                                                    :args #js [query]})}))]
+         (if (= 200 (.-status resp))
+           (p/let [body (.json resp)]
+             (let [res (js->clj body :keywordize-keys true)
+                   results (if datalog-query?
+                            ;; Remove nesting for most queries which just have one :find binding
+                             (if (= 1 (count (first res))) (mapv first res) res)
+                             res)]
+               (pprint/pprint results)))
+           (do (js/console.error "Error: API Server responded with status" (.-status resp)
+                                 (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
+               (js/process.exit 1))))
+       (p/catch (fn [err]
+                  (js/console.error "Error:" err)
+                  (js/process.exit 1))))))
 
 (defn query
   [{{:keys [graph queries graphs api-query-token]} :opts}]
