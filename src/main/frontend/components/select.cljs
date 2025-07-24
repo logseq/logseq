@@ -61,15 +61,15 @@
 
     [:div.input-wrap
      [:input.cp__select-input.w-full
-      (merge {:type        "text"
+      (merge {:type "text"
               :class "!p-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
-              :auto-focus  true
-              :value       input
-              :on-change   (fn [e]
-                             (let [v (util/evalue e)]
-                               (set-input! v)))}
-             input-opts)]]))
+              :auto-focus (not (util/mobile?))
+              :value input
+              :on-change (fn [e]
+                           (let [v (util/evalue e)]
+                             (set-input! v)))}
+        input-opts)]]))
 
 ;; TODO: rewrite using hooks
 (rum/defcs ^:large-vars/cleanup-todo select
