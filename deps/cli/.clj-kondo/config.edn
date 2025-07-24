@@ -13,6 +13,7 @@
              logseq.cli.commands.graph cli-graph
              logseq.cli.common.graph cli-common-graph
              logseq.cli.util cli-util
+             logseq.cli.text-util cli-text-util
              logseq.common.config common-config
              logseq.common.graph common-graph
              logseq.common.util.date-time date-time-util

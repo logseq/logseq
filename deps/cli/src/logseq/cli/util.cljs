@@ -1,4 +1,4 @@
-(ns logseq.cli.util
+(ns ^:node-only logseq.cli.util
   "Util fns"
   (:require ["path" :as node-path]
             [logseq.cli.common.graph :as cli-common-graph]
