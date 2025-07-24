@@ -70,17 +70,16 @@
                                                                       {:error-handler
                                                                        (fn [{:keys [msg]}]
                                                                          (notification/show! msg :warning))})))))}
-                                                [:span.text-lg.flex.gap-2.items-center
-                                                 (shui/tabler-icon "trash" {:class "opacity-80" :size 18})
+                                                [:span.text-lg.flex.gap-2.items-center.text-red-700
+                                                 (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
                                                  "Delete"])
 
                                               (ui/menu-link
                                                 {:on-click #(mobile-ui/close-popup!)}
                                                 [:span.text-lg.flex.gap-2.items-center
-                                                 (shui/tabler-icon "copy" {:class "opacity-80" :size 18})
+                                                 (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
                                                  "Copy"])])
-                                           {:title "Actions"
-                                            :modal-props {:initialBreakpoint 0.3}}))}
+                                           {:title "Actions"}))}
                      (shui/tabler-icon "dots-vertical" {:size 18 :stroke 2})]]
 
                    ;; block page content
