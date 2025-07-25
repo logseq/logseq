@@ -50,48 +50,34 @@
                                        repo (str block-uuid) asset-type))))
 
 (defn- remote-block-ops=>remote-asset-ops
-  [db-before remove-ops]
-  (keep
-   (fn [remove-op]
-     (let [block-uuid (:block-uuid remove-op)]
-       (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
-         (when-let [asset-type (:logseq.property.asset/type ent)]
-           {:op :remove-asset
-            :block/uuid block-uuid
-            :logseq.property.asset/type asset-type}))))
-   remove-ops))
+  [db-before db-after remove-ops update-ops]
+  (concat
+   (keep
+    (fn [remove-op]
+      (let [block-uuid (:block-uuid remove-op)]
+        (when-let [ent (d/entity db-before [:block/uuid block-uuid])]
+          (when-let [asset-type (:logseq.property.asset/type ent)]
+            {:op :remove-asset
+             :block/uuid block-uuid
+             :logseq.property.asset/type asset-type}))))
+    remove-ops)
+   (keep
+    (fn [update-op]
+      (let [block-uuid (:self update-op)]
+        (when-let [ent (d/entity db-after [:block/uuid block-uuid])]
+          (let [remote-metadata (:logseq.property.asset/remote-metadata ent)
+                checksum (:logseq.property.asset/checksum ent)
+                asset-type (:logseq.property.asset/type ent)]
+            (when (and remote-metadata checksum asset-type)
+              {:op :update-asset
+               :block/uuid block-uuid})))))
+    update-ops)))
 
 (defn emit-remote-asset-updates-from-block-ops
-  [db-before remove-ops]
+  [db-before db-after remove-ops update-ops]
   (when-let [asset-update-ops
-             (not-empty (remote-block-ops=>remote-asset-ops db-before remove-ops))]
+             (not-empty (remote-block-ops=>remote-asset-ops db-before db-after remove-ops update-ops))]
     (reset! *remote-asset-updates asset-update-ops)))
-
-(defn new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-  [repo db push-asset-upload-updates-message]
-  (m/sp
-    (let [{:keys [uploaded-assets]} push-asset-upload-updates-message]
-      (when-let [asset-update-ops
-                 (->> uploaded-assets
-                      (map
-                       (fn [[asset-uuid remote-metadata]]
-                         (m/sp
-                           (let [ent (d/entity db [:block/uuid asset-uuid])
-                                 asset-type (:logseq.property.asset/type ent)
-                                 local-checksum (:logseq.property.asset/checksum ent)
-                                 remote-checksum (get remote-metadata "checksum")]
-                             (when (or (and local-checksum remote-checksum
-                                            (not= local-checksum remote-checksum))
-                                       (and asset-type
-                                            (nil? (m/? (new-task--get-asset-file-metadata
-                                                        repo asset-uuid asset-type)))))
-                               {:op :update-asset
-                                :block/uuid asset-uuid})))))
-                      (apply m/join vector)
-                      m/?
-                      (remove nil?)
-                      not-empty)]
-        (reset! *remote-asset-updates asset-update-ops)))))
 
 (defn- create-mixed-flow
   "Return a flow that emits different events:
@@ -228,16 +214,25 @@
                   asset-update-ops)
             asset-uuid->asset-type (into {}
                                          (keep (fn [asset-uuid]
-                                                 (when-let [tp (:logseq.property.asset/type
-                                                                (d/entity @conn [:block/uuid asset-uuid]))]
-                                                   [asset-uuid tp])))
+                                                 (when-let [ent (d/entity @conn [:block/uuid asset-uuid])]
+                                                   (let [asset-type (:logseq.property.asset/type ent)]
+                                                     [asset-uuid asset-type]))))
                                          update-asset-uuids)
             asset-uuid->url
-            (when (seq asset-uuid->asset-type)
+            (when-let [asset-uuids
+                       (->> asset-uuid->asset-type
+                            (map
+                             (fn [[asset-uuid asset-type]]
+                               (m/sp
+                                 (when (nil? (m/? (new-task--get-asset-file-metadata repo asset-uuid asset-type)))
+                                   asset-uuid))))
+                            (apply m/join vector)
+                            m/?
+                            (remove nil?))]
               (->> (m/? (ws-util/send&recv get-ws-create-task
                                            {:action "get-assets-download-urls"
                                             :graph-uuid graph-uuid
-                                            :asset-uuids (keys asset-uuid->asset-type)}))
+                                            :asset-uuids asset-uuids}))
                    :asset-uuid->url))]
         (doseq [[asset-uuid asset-type] remove-asset-uuid->asset-type]
           (c.m/<? (worker-state/<invoke-main-thread :thread-api/unlink-asset

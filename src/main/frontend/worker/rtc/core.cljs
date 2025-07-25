@@ -41,7 +41,8 @@
   and filter messages with :req-id=
   - `push-updates`
   - `online-users-updated`.
-  - `push-asset-upload-updates`"
+  - `push-asset-upload-updates`
+  - `push-asset-block-updates`"
   [get-ws-create-task]
   (m/ap
     (loop []
@@ -52,7 +53,8 @@
                                  (contains?
                                   #{"online-users-updated"
                                     "push-updates"
-                                    "push-asset-upload-updates"}
+                                    "push-asset-upload-updates"
+                                    "push-asset-block-updates"}
                                   (:req-id data))))
                        (ws/recv-flow ws)))
                 (catch js/CloseEvent _
@@ -134,7 +136,9 @@
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
                                       "online-users-updated" {:type :online-users-updated :value data}
-                                      "push-asset-upload-updates" {:type :remote-asset-update :value data})))
+                                      ;; TODO: push-asset-upload-updates is deprecated, del it later
+                                      "push-asset-upload-updates" {:type :remote-asset-update :value data}
+                                      "push-asset-block-updates" {:type :remote-asset-block-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
@@ -259,15 +263,16 @@
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
-               :remote-update
+               (:remote-update :remote-asset-block-update)
                (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
                     (catch :default e
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
                               repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
                :remote-asset-update
-               (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-                     repo @conn (:value event)))
+               nil
+               ;; (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
+               ;;       repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
