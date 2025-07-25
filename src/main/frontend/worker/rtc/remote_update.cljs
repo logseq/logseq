@@ -610,7 +610,8 @@ so need to pull earlier remote-data from websocket."})
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           ;; wait all remote-ops transacted into db,
           ;; then start to check any asset-updates in remote
-          (r.asset/emit-remote-asset-updates-from-block-ops db-before remove-ops)
+          (let [db-after @conn]
+            (r.asset/emit-remote-asset-updates-from-block-ops db-before db-after remove-ops update-ops))
           (js/console.groupEnd)
 
           (client-op/update-local-tx repo remote-t)
