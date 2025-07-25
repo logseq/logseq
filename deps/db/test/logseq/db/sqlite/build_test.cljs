@@ -3,10 +3,10 @@
             [datascript.core :as d]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.build :as sqlite-build]
-            [logseq.db.test.helper :as db-test]
-            [logseq.db.frontend.entity-util :as entity-util]))
+            [logseq.db.test.helper :as db-test]))
 
 (deftest build-tags
   (let [conn (db-test/create-conn)

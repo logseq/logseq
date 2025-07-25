@@ -124,7 +124,6 @@ necessary db filtering"
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
-            [:script {:src "static/js/shared.js"}]
             [:script {:src "static/js/main.js"}]
             ;; Deferring scripts above results in errors
             [:script {:defer true :src "static/js/interact.min.js"}]

@@ -1,6 +1,6 @@
-(ns frontend.worker.util
+(ns frontend.worker-common.util
   "Worker utils"
-  #?(:cljs (:require-macros [frontend.worker.util]))
+  #?(:cljs (:require-macros [frontend.worker-common.util]))
   #?(:cljs (:refer-clojure :exclude [format]))
   #?(:cljs (:require [clojure.string :as string]
                      [goog.crypt :as crypt]

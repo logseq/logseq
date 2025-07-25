@@ -3,12 +3,12 @@
             ["electron" :refer [app BrowserWindow]]
             ["fs-extra" :as fs]
             ["path" :as node-path]
+            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.configs :as cfgs]
+            [electron.db :as db]
             [electron.logger :as logger]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs-bean.core :as bean]
-            [electron.db :as db]
             [promesa.core :as p]))
 
 (defonce *win (atom nil)) ;; The main window

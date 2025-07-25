@@ -4,6 +4,7 @@
             [logseq.common.util :as common-util]))
 
 (defonce *main-thread (atom nil))
+(defonce *infer-worker (atom nil))
 
 (defn- <invoke-main-thread*
   [qkw direct-pass? args-list]

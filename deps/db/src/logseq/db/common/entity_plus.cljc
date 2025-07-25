@@ -95,8 +95,8 @@
        (get (.-kv e) k)
        (if db-based?
          (let [result (lookup-entity e k default-value)
-             ;; Replace title for pages only, otherwise it'll recursively
-             ;; replace block id refs if there're cycle references of blocks
+               ;; Replace title for pages only, otherwise it'll recursively
+               ;; replace block id refs if there're cycle references of blocks
                refs (:block/refs e)
                result' (if (and (string? result) refs)
                          (db-content/id-ref->title-ref result refs)

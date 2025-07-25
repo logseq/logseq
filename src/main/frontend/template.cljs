@@ -4,8 +4,8 @@
             [frontend.date :as date]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
-            [frontend.util.ref :as ref]
             [frontend.state :as state]
+            [frontend.util.ref :as ref]
             [logseq.db :as ldb]))
 
 (defn- variable-rules

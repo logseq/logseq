@@ -371,6 +371,9 @@
                       (db/entity [:block/uuid (:block/uuid block)])))]
        (js/setTimeout #(editor-handler/edit-block! block :max) 100)))))
 
+(defmethod handle :vector-search/sync-state [[_ state]]
+  (state/set-state! :vector-search/state state))
+
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
@@ -432,6 +435,9 @@
     (p/all (map (fn [id]
                   (db-async/<get-block (state/get-current-repo) id
                                        {:skip-refresh? false})) ids))))
+
+(defmethod handle :vector-search/load-model-progress [[_ data]]
+  (state/set-state! :vector-search/load-model-progress data))
 
 (defn run!
   []

@@ -9,6 +9,7 @@
             [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.db-based.vector-search-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.log]
@@ -17,7 +18,7 @@
             [frontend.spec]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
-            [malli.dev.cljs :as md]
+            ;; [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
@@ -52,8 +53,8 @@
 (defonce root (rdc/createRoot (.getElementById js/document "root")))
 
 (defn ^:export start []
-  (when config/dev?
-    (md/start!))
+  ;; (when config/dev?
+  ;;   (md/start!))
   (set-router!)
 
   (.render ^js root (page/current-page))
