@@ -4,10 +4,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
-            [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -56,8 +55,7 @@
     (= :download-rtc-graph (first args))
     (do
       (mobile-state/set-popup! nil)
-      (js/setTimeout
-       #(.select (dom/sel1 "ion-tabs") "home") 1000))
+      (mobile-state/redirect-to-tab! "home"))
 
     :else
     (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))
@@ -69,32 +67,33 @@
 
 (rum/defc popup < rum/reactive
   []
-  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
-        [initial-breakpoint breakpoints] (if (= (:id opts) :ls-quick-add)
-                                           [1 #js [0 1]]
-                                           [0.75 #js [0 0.75 1]])]
+  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)]
+
     (when open?
       (state/clear-edit!)
       (init/keyboard-hide))
-    (ion/modal
-     (merge
-      {:isOpen (boolean open?)
-       :initialBreakpoint initial-breakpoint
-       :onDidPresent (fn []
-                       (when (= :ls-quick-add (:id opts))
-                         (editor-handler/quick-add-open-last-block!)))
-       :breakpoints breakpoints
-       :onDidDismiss (fn []
-                       (mobile-state/set-popup! nil)
-                       (state/clear-edit!)
-                       (state/pub-event! [:mobile/keyboard-will-hide]))
-       :expand "block"}
-      (:modal-props opts))
-     (ion/content
-      {:class "ion-padding scrolling"}
-      [:<>
-       (when-let [title (:title opts)]
-         [:h2.py-2.opacity-40 title])
-       (when content-fn
-         (mobile-ui/classic-app-container-wrap
-          (if (fn? content-fn) (content-fn) content-fn)))]))))
+
+    (when open?
+      (silkhq/bottom-sheet
+       (merge
+        {:presented (boolean open?)
+         :onPresentedChange (fn [v?]
+                              (if (false? v?)
+                                (do
+                                  (mobile-state/set-popup! nil)
+                                  (state/clear-edit!)
+                                  (state/pub-event! [:mobile/keyboard-will-hide]))
+                                (when (= :ls-quick-add (:id opts))
+                                  (editor-handler/quick-add-open-last-block!))))}
+        (:modal-props opts))
+       (silkhq/bottom-sheet-portal
+        (silkhq/bottom-sheet-view
+         {:class "app-silk-popup-sheet-view"}
+         (silkhq/bottom-sheet-backdrop)
+         (silkhq/bottom-sheet-content
+          {:class "flex flex-col items-center p-2"}
+          (silkhq/bottom-sheet-handle)
+          [:div.w-full.app-silk-popup-content-inner.p-2
+           (when-let [title (:title opts)]
+             [:h2.py-2.opacity-40 title])
+           (if (fn? content-fn) (content-fn) content-fn)])))))))
