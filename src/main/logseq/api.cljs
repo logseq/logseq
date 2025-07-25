@@ -1106,7 +1106,7 @@
     (p/let [result (query-dsl/query repo query-string
                                     {:disable-reactive? true
                                      :return-promise? true})]
-      (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result))))))
+      (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result))))))
 
 (defn ^:export datascript_query
   [query & inputs]
