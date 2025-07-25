@@ -130,7 +130,7 @@
                          method' (last ns-method)
                          args    (.-args data)
                          ret-fn! #(ipc/invoke (str :electron.server/sync! sync-id) %)
-                         app? (contains? #{"app" "editor"} ns')
+                         app? (contains? #{"app" "editor" "db"} ns')
                          ^js sdk1 (aget js/window.logseq "api")
                          ^js sdk2 (aget js/window.logseq "sdk")]
 
