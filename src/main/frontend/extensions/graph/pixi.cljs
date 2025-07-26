@@ -86,7 +86,8 @@
                     (.strength charge-strength)))
         (.force "collision"
                 (-> (forceCollide)
-                    (.radius (+ 8 18))
+                    (.radius (fn [d]
+                             (+ (or (.-size d) 8) 18)))
                     (.iterations 2)))
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceY 0) (.strength 0.02)))
