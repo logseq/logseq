@@ -58,7 +58,8 @@
                      color (if (contains? tags (:db/id p))
                              (if dark? "orange" "green")
                              color)
-                     n (get page-links page-title 1)
+                     node-id (str (:db/id p))
+                     n (get page-links node-id 1)
                      size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                  (cond->
                   {:id (str (:db/id p))
