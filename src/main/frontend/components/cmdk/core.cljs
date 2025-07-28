@@ -660,8 +660,7 @@
 
          [:div {:class "flex-1"}]
 
-         (when (and (= group highlighted-group)
-                    (or can-show-more? can-show-less?)
+         (when (and (or can-show-more? can-show-less?)
                     (empty? filter')
                     (not sidebar?))
            [:a.text-link.select-node.opacity-50.hover:opacity-90
