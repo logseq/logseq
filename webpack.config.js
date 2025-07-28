@@ -42,7 +42,7 @@ var AppConfig = Object.assign({}, config, {
 });
 
 var MobileConfig = Object.assign({}, config, {
-  name: "app",
+  name: "mobile",
   entry: {
     main : "./target/mobile.js",
     workers : "./target/workers.js",
