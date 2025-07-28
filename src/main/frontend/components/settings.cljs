@@ -1315,7 +1315,7 @@
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
                (when db-based?
-                 [:ai "AI" (t :settings-page/ai) (ui/icon "wand")])
+                 [:ai (t :settings-page/tabs-ai) (t :settings-page/ai) (ui/icon "wand")])
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
