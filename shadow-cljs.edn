@@ -131,7 +131,7 @@
            :asset-path       "./js"
            :release          {:asset-path "http://localhost"}
            :compiler-options {:infer-externs      :auto
-                              :output-feature-set :es-2020
+                              :output-feature-set :es-next-in
                               :source-map true
                               :externs ["datascript/externs.js"
                                         "externs.js"]
@@ -220,7 +220,7 @@
                :closure-defines {logseq.common.config/PUBLISHING true
                                  goog.debug.LOGGING_ENABLED true}
                :compiler-options {:infer-externs :auto
-                                  :output-feature-set :es-2020
+                                  :output-feature-set :es-next-in
                                   :source-map true
                                   :externs ["datascript/externs.js"
                                             "externs.js"]
