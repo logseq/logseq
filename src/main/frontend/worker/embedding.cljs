@@ -257,10 +257,11 @@
                                      (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))]
             (->> (map vector distances neighbors)
                  (keep (fn [[distance label]]
-                         (when-not (or (js/isNaN distance) (> distance 0.5))
+                         (when-not (or (js/isNaN distance) (> distance 0.35))
                            (when-let [block (d/entity @conn label)]
-                             {:block block
-                              :distance distance})))))))))))
+                             (when (:block/title block)
+                               {:block block
+                                :distance distance}))))))))))))
 
 (def ^:private vector-search-state-flow
   (m/eduction

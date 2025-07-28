@@ -1,8 +1,8 @@
 (ns frontend.common.search-fuzzy
   "fuzzy search. Used by frontend and worker namespaces"
-  (:require [clojure.string :as string]
+  (:require ["remove-accents" :as removeAccents]
             [cljs-bean.core :as bean]
-            ["remove-accents" :as removeAccents]))
+            [clojure.string :as string]))
 
 (def MAX-STRING-LENGTH 1000.0)
 
@@ -28,10 +28,19 @@
                (/ (- maxed mined)
                   maxed)))))
 
+(defn search-normalize
+  "Normalize string for searching (loose)"
+  [s remove-accents?]
+  (when s
+    (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents normalize-str)
+        normalize-str))))
+
 (defn score
   [oquery ostr]
-  (let [query (clean-str oquery)
-        original-s (clean-str ostr)]
+  (let [query (-> (clean-str oquery) (search-normalize true))
+        original-s (-> (clean-str ostr) (search-normalize true))]
     (loop [q (seq (char-array query))
            s (seq (char-array original-s))
            mult 1
@@ -68,24 +77,14 @@
                        (dec idx)
                        (- score' 0.1)))))))
 
-(defn search-normalize
-  "Normalize string for searching (loose)"
-  [s remove-accents?]
-  (when s
-    (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
-      (if remove-accents?
-        (removeAccents normalize-str)
-        normalize-str))))
-
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (search-normalize query true)]
-    (->> (take limit
-               (sort-by :score (comp - compare)
-                        (filter #(< 0 (:score %))
-                                (for [item data]
-                                  (let [s (str (if extract-fn (extract-fn item) item))]
-                                    {:data item
-                                     :score (score query (search-normalize s true))})))))
-         (map :data))))
+  (->> (take limit
+             (sort-by :score (comp - compare)
+                      (filter #(< 0 (:score %))
+                              (for [item data]
+                                (let [s (str (if extract-fn (extract-fn item) item))]
+                                  {:data item
+                                   :score (score query s)})))))
+       (map :data)))
