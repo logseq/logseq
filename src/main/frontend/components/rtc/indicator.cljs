@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.flows :as flows]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -138,7 +139,15 @@
                remote-tx (assoc :remote-tx remote-tx)
                rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
-             with-out-str)]])]))
+             with-out-str)]])
+     (when-not (= rtc-state :open)
+       [:div.mt-4
+        (shui/button {:variant :default
+                      :size :sm
+                      :on-click (fn []
+                                  (rtc-handler/<rtc-start! (state/get-current-repo)
+                                                           {:stop-before-start? true}))}
+                     "Start sync")])]))
 
 (rum/defc indicator
   []

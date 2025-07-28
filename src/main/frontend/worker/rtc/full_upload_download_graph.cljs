@@ -12,6 +12,7 @@
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.db :as rtc-db]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.shared-service :as shared-service]
@@ -119,14 +120,6 @@
                 (cond-> block
                   (:db/ident block) (update :db/ident ldb/read-transit-str)
                   (:block/order block) (update :block/order ldb/read-transit-str)))))))
-
-(defn- remove-rtc-data-in-conn!
-  [repo]
-  (client-op/reset-client-op-conn repo)
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (d/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
-                       [:db/retractEntity :logseq.kv/graph-local-tx]
-                       [:db/retractEntity :logseq.kv/remote-schema-version]])))
 
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version]
@@ -477,7 +470,7 @@
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :fetching-presigned-put-url
                                                       :message "fetching presigned put-url"})
-    (remove-rtc-data-in-conn! repo)
+    (rtc-db/remove-rtc-data-in-conn! repo)
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join

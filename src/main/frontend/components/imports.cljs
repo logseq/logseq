@@ -351,26 +351,27 @@
 (defn- read-asset [file assets]
   (-> (.arrayBuffer (:file-object file))
       (p/then (fn [buffer]
-                (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)]
+                (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+                        byte-array (js/Uint8Array. buffer)]
                   (swap! assets assoc
                          (gp-exporter/asset-path->name (:path file))
                          {:size (.-size (:file-object file))
                           :checksum checksum
                           :type (db-asset/asset-path->type (:path file))
                           :path (:path file)
-                          ;; Save buffer to avoid reading asset twice
-                          ::array-buffer buffer}))))))
+                          ;; Save array to avoid reading asset twice
+                          ::byte-array byte-array})
+                  byte-array)))))
 
 (defn- copy-asset [repo repo-dir asset-m]
-  (-> (::array-buffer asset-m)
-      (p/then (fn [buffer]
-                (let [content (js/Uint8Array. buffer)
-                      assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
+  (-> (::byte-array asset-m)
+      (p/then (fn [content]
+                (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
                   (p/do!
                    (fs/mkdir-if-not-exists assets-dir)
                    (if (:block/uuid asset-m)
                      (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})
-                     (do
+                     (when-not (:pdf-annotation? asset-m)
                        (println "Copied asset" (pr-str (node-path/basename (:path asset-m)))
                                 "by its name since it was unused.")
                        (fs/write-plain-text-file! repo assets-dir (node-path/basename (:path asset-m)) content {:skip-transact? true})))))))))

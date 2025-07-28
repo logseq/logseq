@@ -196,6 +196,7 @@
        [:t :int]
        [:max-remote-schema-version {:optional true} :string]]]
      ["apply-ops" apply-ops-response-schema]
+     ["push-asset-block-updates" apply-ops-response-schema]
      ["branch-graph"
       [:map
        [:graph-uuid :uuid]
