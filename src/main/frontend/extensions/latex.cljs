@@ -36,22 +36,19 @@
       (render! state))
     (when-not @*loading?
       (reset! *loading? true)
-      (loader/load
-       ;; FIXME: use /js instead of /static/js after deploying to asset.logseq.com
-       (config/asset-uri "/static/js/katex.min.js")
-       (fn []
-         (loader/load
-          (config/asset-uri "/static/js/mhchem.min.js")
-          (fn []
-            (-> (when-let [enhancers (and config/lsp-enabled?
-                                          (seq (hook-extensions-enhancers-by-key :katex)))]
-                  (for [{f :enhancer} enhancers]
-                    (when (fn? f) (f js/window.katex))))
-                (p/all)
-                (p/finally (fn []
-                             (reset! *loading? false)
-                             (render! state)))))))
-       state))))
+      (loader/load "/js/katex.min.js"
+                   (fn []
+                     (loader/load "/js/mhchem.min.js"
+                                  (fn []
+                                    (-> (when-let [enhancers (and config/lsp-enabled?
+                                                                  (seq (hook-extensions-enhancers-by-key :katex)))]
+                                          (for [{f :enhancer} enhancers]
+                                            (when (fn? f) (f js/window.katex))))
+                                        (p/all)
+                                        (p/finally (fn []
+                                                     (reset! *loading? false)
+                                                     (render! state)))))))
+                   state))))
 
 (defn- state-&-load-and-render!
   [state]
