@@ -47,7 +47,7 @@
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
+(def ReactTweetEmbed (r/adapt-class (gobj/get react-tweet-embed "default")))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
@@ -810,15 +810,17 @@
       :on-pointer-up #(let [value (util/evalue %)]
                         (on-change value))}]))
 
-(rum/defcs tweet-embed < (rum/local true :loading?)
+(rum/defcs tweet-embed < rum/reactive
+  (rum/local true :loading?)
   [state id]
   (let [*loading? (:loading? state)]
-    [:div [(when @*loading? [:span.flex.items-center [svg/loading " ... loading"]])
-           (ReactTweetEmbed
-            {:id                    id
-             :class                 "contents"
-             :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
-             :on-tweet-load-success #(reset! *loading? false)})]]))
+    [:div
+     (when @*loading? [:span.flex.items-center [svg/loading " loading"]])
+     (ReactTweetEmbed
+      {:id                    id
+       :class                 "contents"
+       :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
+       :on-tweet-load-success #(reset! *loading? false)})]))
 
 (def icon shui.icon.v2/root)
 
