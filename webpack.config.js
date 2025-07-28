@@ -1,23 +1,11 @@
 const path = require('path');
 const webpack = require('webpack');
 
-module.exports = {
+var config = {
   mode: "development",
-  entry: {
-    main : "./target/main.js",
-    workers : "./target/workers.js"
-  },
-
   externals: {
     'react': 'React',
     'react-dom': 'ReactDOM',
-  },
-
-  output: {
-    path: path.resolve(__dirname, 'static/js'),
-    filename: '[name]-bundle.js',
-    clean: false,
-    chunkLoading: false,
   },
   module: {
     rules: [
@@ -37,3 +25,37 @@ module.exports = {
     }),
   ],
 };
+
+var AppConfig = Object.assign({}, config, {
+  name: "app",
+  entry: {
+    main : "./target/main.js",
+    workers : "./target/workers.js",
+  },
+
+  output: {
+    path: path.resolve(__dirname, 'static/js'),
+    filename: '[name]-bundle.js',
+    clean: false,
+    chunkLoading: false,
+  },
+});
+
+var MobileConfig = Object.assign({}, config, {
+  name: "app",
+  entry: {
+    main : "./target/mobile.js",
+    workers : "./target/workers.js",
+  },
+
+  output: {
+    path: path.resolve(__dirname, 'static/mobile/js'),
+    filename: '[name]-bundle.js',
+    clean: false,
+    chunkLoading: false,
+  },
+});
+
+module.exports = [
+  AppConfig, MobileConfig,
+];
