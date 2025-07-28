@@ -15,8 +15,8 @@
 (defn wrap-calc-commands-popup-side
   [pos opts]
   (let [[side mh] (let [[_x y _ height] pos
-                        vh js/window.innerHeight
-                        [th bh] [y (- vh (+ y height) 300)]]
+                        vh (.-clientHeight js/document.body)
+                        [th bh] [y (- vh (+ y height) 310)]]
                     (case (if (> bh 280) "bottom"
                               (if (> (- th bh) 100)
                                 "top" "bottom"))
