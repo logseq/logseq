@@ -13,11 +13,7 @@ html.is-native-ios {
   --silk-tabbar-bottom-paddding: 2px;
 }
 
-html.is-native-android {
-  .pswp__top-bar {
-    @apply relative top-8;
-  }
-}
+html.is-native-android {}
 
 #mobile-editor-toolbar {
 }
@@ -61,7 +57,7 @@ html {
 }
 
 body {
-  @apply relative;
+  @apply relative overflow-hidden;
 
   .SheetWithDepth-stackSceneryContainer, > .SheetWithDepth-view {
     height: var(--ls-full-screen-height, "auto");
@@ -78,10 +74,6 @@ ul {
 
 .bg-background {
   @apply bg-gray-01;
-}
-
-.pswp__top-bar {
-  @apply top-8;
 }
 
 #journals {
@@ -370,7 +362,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   > .hd {
     @apply -mx-4 sticky top-0 left-0 px-4 pb-3 bg-gray-01;
 
-    padding-top: calc(env(safe-area-inset-top, 0px));
+    padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
     margin-top: calc(-10px - env(safe-area-inset-top, 0px));
     z-index: 1;
 
