@@ -41,7 +41,6 @@
   and filter messages with :req-id=
   - `push-updates`
   - `online-users-updated`.
-  - `push-asset-upload-updates`
   - `push-asset-block-updates`"
   [get-ws-create-task]
   (m/ap
@@ -53,7 +52,6 @@
                                  (contains?
                                   #{"online-users-updated"
                                     "push-updates"
-                                    "push-asset-upload-updates"
                                     "push-asset-block-updates"}
                                   (:req-id data))))
                        (ws/recv-flow ws)))
@@ -125,7 +123,7 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
-  `:remote-asset-update`: remote asset-updates from server
+  `:remote-asset-block-update`: remote asset-updates from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates
@@ -136,8 +134,6 @@
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
                                       "online-users-updated" {:type :online-users-updated :value data}
-                                      ;; TODO: push-asset-upload-updates is deprecated, del it later
-                                      "push-asset-upload-updates" {:type :remote-asset-update :value data}
                                       "push-asset-block-updates" {:type :remote-asset-block-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
@@ -269,10 +265,6 @@
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
                               repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
-               :remote-asset-update
-               nil
-               ;; (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-               ;;       repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
