@@ -96,23 +96,6 @@
     "http://localhost:3001"
     (util/format "https://%s.com" app-name)))
 
-(def asset-domain (util/format "https://asset.%s.com"
-                               app-name))
-
-;; TODO: Remove this, switch to lazy loader
-(defn asset-uri
-  [path]
-  (cond
-    publishing?
-    path
-
-    (or (util/file-protocol?) (util/capacitor-new?))
-    (string/replace path "/static/" "./")
-
-    :else
-    (if dev? path
-        (str asset-domain path))))
-
 (def markup-formats
   #{:org :md :markdown :asciidoc :adoc :rst})
 
