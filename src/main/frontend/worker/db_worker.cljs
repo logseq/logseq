@@ -875,6 +875,7 @@
                       (into {})
                       bean/->js)]
     (glogi-console/install!)
+    (log/set-levels {:glogi/root :info})
     (check-worker-scope!)
     (outliner-register-op-handlers!)
     (<ratelimit-file-writes!)

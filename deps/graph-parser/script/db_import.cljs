@@ -57,14 +57,15 @@
            {:size (.-length buffer)
             :checksum checksum
             :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})))
+            :path (:path file)})
+    buffer))
 
 (defn- <copy-asset-file [asset-m db-graph-dir]
   (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
           _ (fsp/mkdir parent-dir #js {:recursive true})]
     (if (:block/uuid asset-m)
       (fsp/copyFile (:path asset-m) (node-path/join parent-dir (str (:block/uuid asset-m) "." (:type asset-m))))
-      (do
+      (when-not (:pdf-annotation? asset-m)
         (println "[INFO]" "Copied asset" (pr-str (node-path/basename (:path asset-m)))
                  "by its name since it was unused.")
         (fsp/copyFile (:path asset-m) (node-path/join parent-dir (node-path/basename (:path asset-m))))))))

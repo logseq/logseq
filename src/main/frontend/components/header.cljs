@@ -169,7 +169,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  (when-not login?
+                  (when-not (or config/publishing? login?)
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})

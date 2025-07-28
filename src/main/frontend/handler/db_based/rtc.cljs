@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.handler.db-based.rtc-flows :as rtc-flows]
             [frontend.handler.notification :as notification]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -145,7 +146,8 @@
                                   :GraphUUID (:graph-uuid graph)
                                   :rtc-graph? true})
                                (dissoc graph :graph-uuid :graph-name)))))]
-    (state/set-state! :rtc/graphs result)))
+    (state/set-state! :rtc/graphs result)
+    (repo-handler/refresh-repos!)))
 
 (defn <rtc-get-users-info
   []

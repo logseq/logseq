@@ -8,12 +8,16 @@ on:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
+      # Deps that logseq/db depends on should trigger this workflow
+      - 'deps/common/**'
   pull_request:
     branches: [master]
     paths:
       - 'deps/db/**'
       - '.github/workflows/db.yml'
       - '!deps/db/**.md'
+      # Deps that logseq/db depends on should trigger this workflow
+      - 'deps/common/**'
 
 defaults:
   run:
@@ -32,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v3
@@ -68,7 +72,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v3

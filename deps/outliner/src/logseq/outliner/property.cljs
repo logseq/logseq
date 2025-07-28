@@ -411,7 +411,9 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
-    (validate-batch-deletion-of-property [block] property-id)
+    ;; Can skip for extends b/c below tx ensures it has a default value
+    (when-not (= :logseq.property.class/extends property-id)
+      (validate-batch-deletion-of-property [block] property-id))
     (when block
       (cond
         (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
