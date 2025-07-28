@@ -155,6 +155,8 @@
             (m/? (task--update-index-info!* repo infer-worker true))
             (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
+                    _ (when (some (fn [id] (> id 2147483647)) (map :db/id stale-block-chunk))
+                        (throw (ex-info "Wrong db/id" {:data (filter (fn [item] (> (:db/id item) 2147483647)) stale-block-chunk)})))
                     _ (c.m/<?
                        (.text-embedding+store!
                         infer-worker
@@ -179,6 +181,8 @@
         (let [all-blocks (stale-block-lazy-seq @conn true)]
           (doseq [block-chunk (sequence (partition-by-text-size (get-partition-size repo)) all-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
+                  _ (when (some (fn [id] (> id 2147483647)) (map :db/id block-chunk))
+                      (throw (ex-info "Wrong db/id" {:data (filter (fn [item] (> (:db/id item) 2147483647)) block-chunk)})))
                   _ (c.m/<?
                      (.text-embedding+store!
                       infer-worker repo
@@ -257,7 +261,11 @@
                                      (js->clj (c.m/<? (.search infer-worker repo query-string nums-neighbors)) :keywordize-keys true))]
             (->> (map vector distances neighbors)
                  (keep (fn [[distance label]]
-                         (when-not (or (js/isNaN distance) (> distance 0.35))
+                         ;; (prn :debug :semantic-search-result
+                         ;;      :block (:block/title (d/entity @conn label))
+                         ;;      :distance distance)
+                         (when-not (or (js/isNaN distance) (>= distance 0.3)
+                                       (> label 2147483647))
                            (when-let [block (d/entity @conn label)]
                              (when (:block/title block)
                                {:block block
