@@ -328,9 +328,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                                               (* (:semantic-weight config) s-score)
                                               (cond
                                                 (ldb/page? block)
-                                                0.001
+                                                0.02
                                                 (:block/tags block)
-                                                0.0005
+                                                0.01
                                                 :else
                                                 0))]
                         (merge result
@@ -374,7 +374,9 @@ DROP TRIGGER IF EXISTS blocks_au;
             matched-result (when-not page-only?
                              (search-blocks-aux search-db match-sql q match-input page limit enable-snippet?))
             non-match-result (when (and (not page-only?) non-match-input)
-                               (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
+                               (->> (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?)
+                                    (map (fn [result]
+                                           (assoc result :keyword-score (fuzzy/score q (:title result)))))))
             ;; fuzzy is too slow for large graphs
             fuzzy-result (when-not (or page large-graph?)
                            (->> (fuzzy-search repo @conn q option)
@@ -394,9 +396,8 @@ DROP TRIGGER IF EXISTS blocks_au;
             ;;     (prn :debug :keyword-search-result item))
             ;; _ (doseq [item semantic-search-result]
             ;;     (prn :debug :semantic-search-item item))
-            combined-result (combine-results @conn (concat fuzzy-result matched-result) semantic-search-result)
-            result (->> (concat combined-result
-                                non-match-result)
+            combined-result (combine-results @conn (concat fuzzy-result matched-result non-match-result) semantic-search-result)
+            result (->> combined-result
                         (common-util/distinct-by :id)
                         (keep (fn [result]
                                 (let [{:keys [id page title snippet]} result

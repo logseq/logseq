@@ -264,7 +264,7 @@
                          ;; (prn :debug :semantic-search-result
                          ;;      :block (:block/title (d/entity @conn label))
                          ;;      :distance distance)
-                         (when-not (or (js/isNaN distance) (>= distance 0.3)
+                         (when-not (or (js/isNaN distance) (>= distance 0.45)
                                        (> label 2147483647))
                            (when-let [block (d/entity @conn label)]
                              (when (:block/title block)
