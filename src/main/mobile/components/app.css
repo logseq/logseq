@@ -253,7 +253,7 @@ ul {
 
 /* silk styles */
 .app-silk-index-scroll-content {
-  @apply bg-gray-01 min-h-[100svh];
+  @apply bg-gray-01 min-h-[100svh] overflow-x-hidden;
 }
 
 .app-silk-sheet-scroll-content {
