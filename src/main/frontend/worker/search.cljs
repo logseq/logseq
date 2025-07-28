@@ -390,6 +390,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                                    :semantic-score (/ 1.0 (+ 1.0 distance))}
                                                    page-id
                                                    (assoc :page page-id))))))
+            ;; _ (doseq [item (concat fuzzy-result matched-result)]
+            ;;     (prn :debug :keyword-search-result item))
+            ;; _ (doseq [item semantic-search-result]
+            ;;     (prn :debug :semantic-search-item item))
             combined-result (combine-results @conn (concat fuzzy-result matched-result) semantic-search-result)
             result (->> (concat combined-result
                                 non-match-result)

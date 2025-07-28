@@ -71,7 +71,7 @@
    :commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :nodes         {:status :success :show :less :items nil}
+   :nodes          {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
