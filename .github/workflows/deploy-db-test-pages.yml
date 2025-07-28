@@ -42,7 +42,7 @@ jobs:
 
       - name: Build Released-Web
         run: |
-          yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && yarn webpack-build
+          yarn gulp:build && clojure -M:cljs release app workers  --config-merge '{:compiler-options {:source-map true :source-map-include-sources-content true :source-map-detail-level :symbols}}' && yarn webpack-build
           rsync -avz --exclude node_modules --exclude android --exclude ios ./static/ ./public/
           ls -lR ./public && mkdir r2 && mv ./public/js/main.js.map ./r2/db-test.main.js.map
           sed -i 's/=main.js.map/=https:\/\/assets.logseq.io\/db-test.main.js.map/g' ./public/js/main.js
