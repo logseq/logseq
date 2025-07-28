@@ -4569,7 +4569,9 @@
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             scroll-container (or (:scroll-container config)
-                                 (util/app-scroll-container-node))]
+                                 (util/app-scroll-container-node))
+            scroll-container (if (fn? scroll-container)
+                               (scroll-container) scroll-container)]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]

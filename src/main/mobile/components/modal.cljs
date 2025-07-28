@@ -27,18 +27,18 @@
       (state/clear-edit!)
       (init/keyboard-hide))
 
-    (silkhq/depth-sheet
+    (silkhq/bottom-sheet
       {:presented (boolean open?)
        :onPresentedChange (fn [v?]
                             (when (false? v?)
                               (mobile-state/set-singleton-modal! nil)
                               (state/clear-edit!)
                               (state/pub-event! [:mobile/keyboard-will-hide])))}
-      (silkhq/depth-sheet-portal
-        (silkhq/depth-sheet-view
+      (silkhq/bottom-sheet-portal
+        (silkhq/bottom-sheet-view
           {:class "block-modal-page"}
-          (silkhq/depth-sheet-backdrop)
-          (silkhq/depth-sheet-content
+          (silkhq/bottom-sheet-backdrop)
+          (silkhq/bottom-sheet-content
             {:class "app-silk-sheet-scroll-content"}
             (silkhq/scroll {:as-child true}
               (silkhq/scroll-view

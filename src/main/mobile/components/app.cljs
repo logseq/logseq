@@ -31,7 +31,6 @@
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.settings :as settings]
-            [mobile.components.demos :as demos]
             [mobile.components.ui :as ui-component]
             [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
@@ -180,7 +179,7 @@
        (rtc-indicator/indicator))]))
 
 (rum/defc app
-  [current-repo]
+  [current-repo {:keys [login?]}]
   (let [[tab] (mobile-state/use-tab)
         *home (rum/use-ref nil)
         *search-page (rum/use-ref nil)]
@@ -204,8 +203,8 @@
                  (settings/page)
                  :search
                  (search/search *search-page)
-                 :demos
-                 (demos/demos-inner)
+                 ;:demos
+                 ;(demos/demos-inner)
                  "Not Found")
                ])))
 
@@ -231,10 +230,11 @@
                               (ui-component/open-popup!
                                 (fn []
                                   [:div.-mx-2
-                                   (ui/menu-link {:on-click #(user-handler/logout)}
-                                     [:span.text-lg.flex.gap-2.items-center.text-red-700
-                                      (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
-                                      "Logout"])
+                                   (when login?
+                                     (ui/menu-link {:on-click #(user-handler/logout)}
+                                       [:span.text-lg.flex.gap-2.items-center.text-red-700
+                                        (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
+                                        "Logout"]))
                                    (ui/menu-link {:on-click #(js/window.open "https://github.com/logseq/db-test/issues")}
                                      [:span.text-lg.flex.gap-2.items-center
                                       (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
@@ -259,9 +259,11 @@
 (rum/defc main < rum/reactive
   []
   (let [current-repo (state/sub :git/current-repo)
+        login? (and (state/sub :auth/id-token)
+                 (user-handler/logged-in?))
         show-action-bar? (state/sub :mobile/show-action-bar?)]
     [:<>
-     (app current-repo)
+     (app current-repo {:login? login?})
      (editor-toolbar/mobile-bar)
      (when show-action-bar?
        (selection-toolbar/action-bar))]))
