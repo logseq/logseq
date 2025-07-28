@@ -132,6 +132,10 @@ ul {
       @apply max-w-[90vw];
     }
   }
+
+  .app-silk-sheet-scroll-content {
+    height: 92vh;
+  }
 }
 
 .block-content-or-editor-inner {
