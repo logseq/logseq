@@ -965,7 +965,7 @@
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
-            key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
+            key (if key-ns? key (if (keyword? key) (name key) key))
             key (if (and db? (not key-ns?))
                   (api-block/get-db-ident-for-user-property-name
                     key (api-block/resolve-property-prefix-for-db this))
@@ -982,7 +982,7 @@
       (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
         (when (seq properties)
           (let [key (api-block/sanitize-user-property-name key)
-                property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+                property-name (if (keyword? key) (name key) key)
                 ident (api-block/get-db-ident-for-user-property-name
                         property-name (api-block/resolve-property-prefix-for-db this))
                 property-value (or (get properties key)
@@ -1106,7 +1106,7 @@
     (p/let [result (query-dsl/query repo query-string
                                     {:disable-reactive? true
                                      :return-promise? true})]
-      (bean/->js (sdk-utils/normalize-keyword-for-json (flatten @result))))))
+      (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result))))))
 
 (defn ^:export datascript_query
   [query & inputs]
