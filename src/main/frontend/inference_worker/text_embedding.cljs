@@ -177,8 +177,6 @@
 (def available-embedding-models
   {"Xenova/all-MiniLM-L6-v2" {:tf-config {:dtype "fp32"}
                               :hnsw-config {:dims 384}}
-   "Xenova/jina-embeddings-v2-base-zh" {:tf-config {:dtype "fp32"}
-                                        :hnsw-config {:dims 768}}
    "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp16"}
                                                :hnsw-config {:dims 1024}}})
 
