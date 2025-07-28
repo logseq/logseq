@@ -25,14 +25,21 @@
 
 ;; Configuration for re-ranking
 (def config
-  {:keyword-weight 0.4
-   :semantic-weight 0.6})
+  {:keyword-weight 0.9
+   :semantic-weight 0.1})
+
+(defn- log-score
+  [score]
+  (if (> score 2)
+    (js/Math.log score)
+    score))
 
 ;; Normalize scores to [0, 1] range using min-max normalization
 (defn normalize-score [score min-score max-score]
   (if (= min-score max-score)
     0.0
-    (let [normalized (/ (- score min-score) (- max-score min-score))]
+    (let [normalized (/ (log-score (- score min-score))
+                        (log-score (- max-score min-score)))]
       (max 0.0 (min 1.0 normalized)))))
 
 (defn- add-blocks-fts-triggers!
@@ -184,15 +191,16 @@ DROP TRIGGER IF EXISTS blocks_au;
                              :bind bind
                              :rowMode "array"}))
           blocks (bean/->clj result)]
-      (map (fn [block]
-             (let [[id page title rank snippet] (if enable-snippet?
-                                                  (update block 4 get-snippet-result)
-                                                  block)]
-               {:id id
-                :keyword-score (when rank (Math/abs rank))
-                :page page
-                :title title
-                :snippet snippet})) blocks))
+      (keep (fn [block]
+              (let [[id page title rank snippet] (if enable-snippet?
+                                                   (update block 4 get-snippet-result)
+                                                   block)]
+                (when title
+                  {:id id
+                   :keyword-score (+ (fuzzy/score q title) (js/Math.abs rank))
+                   :page page
+                   :title title
+                   :snippet snippet}))) blocks))
     (catch :default e
       (prn :debug "Search blocks failed: ")
       (js/console.error e))))
@@ -320,9 +328,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                                               (* (:semantic-weight config) s-score)
                                               (cond
                                                 (ldb/page? block)
-                                                1
+                                                0.001
                                                 (:block/tags block)
-                                                0.02
+                                                0.0005
                                                 :else
                                                 0))]
                         (merge result
@@ -368,7 +376,10 @@ DROP TRIGGER IF EXISTS blocks_au;
             non-match-result (when (and (not page-only?) non-match-input)
                                (search-blocks-aux search-db non-match-sql q non-match-input page limit enable-snippet?))
             ;; fuzzy is too slow for large graphs
-            fuzzy-result (when-not (or page large-graph?) (fuzzy-search repo @conn q option))
+            fuzzy-result (when-not (or page large-graph?)
+                           (->> (fuzzy-search repo @conn q option)
+                                (map (fn [result]
+                                       (assoc result :keyword-score (fuzzy/score q (:title result)))))))
             semantic-search-result* (m/? (embedding/task--search repo q 10))
             semantic-search-result (->> semantic-search-result*
                                         (map (fn [{:keys [block distance]}]
