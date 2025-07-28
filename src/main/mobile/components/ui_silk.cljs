@@ -51,10 +51,4 @@
        :data-tab "settings"}
       (shui/button {:variant :icon}
         (shui/tabler-icon "settings" {:size 24}))
-      [:small "Settings"]]
-     [:span.as-item
-      {:class (when (= current-tab "demos") "active")
-       :data-tab "demos"}
-      (shui/button {:variant :icon}
-        (shui/tabler-icon "bug" {:size 24}))
-      [:small "Demos"]]]))
+      [:small "Settings"]]]))
