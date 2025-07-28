@@ -44,7 +44,7 @@
       recent-pages)))
 
 (rum/defc search
-  [*page]
+  []
   (let [*ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
@@ -75,15 +75,16 @@
 
     [:div.app-silk-search-page
      [:div.hd
-      (shui/tabler-icon "search")
-      (shui/input
-        {:ref *ref
-         :placeholder "Search"
-         :value input
-         :on-change (fn [^js e]
-                      (let [input (.-value (.-target e))]
-                        (set-input! input)
-                        (set-last-input-at! (util/time-ms))))})
+      [:div.relative
+       (shui/tabler-icon "search")
+       (shui/input
+         {:ref *ref
+          :placeholder "Search"
+          :value input
+          :on-change (fn [^js e]
+                       (let [input (.-value (.-target e))]
+                         (set-input! input)
+                         (set-last-input-at! (util/time-ms))))})]
       (when-not (string/blank? input)
         [:a.x {:on-click (fn []
                            (set-input! "")
