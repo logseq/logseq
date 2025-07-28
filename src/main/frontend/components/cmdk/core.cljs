@@ -630,7 +630,6 @@
   [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
-        highlighted-group @(::highlighted-group state)
         *mouse-active? (::mouse-active? state')
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
