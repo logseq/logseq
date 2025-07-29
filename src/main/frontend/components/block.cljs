@@ -4396,7 +4396,8 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (not (or (and (:journals? config) (< (count blocks) 50))
+  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc_test=true")
+                                                 (and (:journals? config) (< (count blocks) 50))
                                                  (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
                                                  (:block-children? config))))
         render-item (fn [idx]
