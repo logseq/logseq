@@ -9,7 +9,21 @@
  {clj-kondo/clj-kondo {:version "2024.09.27"}}
 
  :tasks
- {test:load-all-namespaces-with-nbb
+ {build:vendor-nbb-deps
+  {:doc "Copy over latest nbb deps to vendor/ and make CLI independent of nbb.edn"
+   :requires ([babashka.fs :as fs])
+   :task (do
+           (shell "yarn nbb-logseq -e :load-deps")
+           (let [nbb-cache-dir (or (first (fs/list-dir ".nbb/.cache"))
+                                   (throw (ex-info "No nbb cache directory found" {})))]
+             (fs/delete-tree "vendor/src")
+             (fs/copy-tree (fs/path nbb-cache-dir "nbb-deps/logseq") "vendor/src/logseq")
+             (fs/copy-tree (fs/path nbb-cache-dir "nbb-deps/malli") "vendor/src/malli")
+             (fs/copy-tree (fs/path nbb-cache-dir "nbb-deps/borkdude") "vendor/src/borkdude")
+             (fs/copy-tree (fs/path nbb-cache-dir "nbb-deps/medley") "vendor/src/medley"))
+           (fs/delete-if-exists "nbb.edn")
+           (println "Done!"))}
+  test:load-all-namespaces-with-nbb
   logseq.bb-tasks.nbb.test/load-all-namespaces
 
   lint:large-vars
