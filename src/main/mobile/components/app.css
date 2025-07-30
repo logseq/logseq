@@ -239,7 +239,7 @@ ul {
 
 .app-silk-popup-content-inner {
   &:has(.ls-quick-add) {
-    @apply min-h-[80vh] max-h-[90vh] overflow-y-auto;
+    @apply min-h-[80vh] max-h-[90vh] overflow-y-auto overflow-x-hidden;
   }
 }
 
