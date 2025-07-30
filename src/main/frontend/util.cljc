@@ -164,10 +164,6 @@
                     (not (mobile-util/native-platform?))))
      (def web-platform? nfs?)
      (def plugin-platform? (or (and web-platform? (not common-config/PUBLISHING)) (electron?)))))
-#?(:cljs
-   (defn file-protocol?
-     []
-     (string/starts-with? js/window.location.href "file://")))
 
 #?(:cljs
    (def format common-util/format))

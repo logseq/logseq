@@ -40,7 +40,6 @@
 
         :output-dir       "./static/js"
         :asset-path       "/static/js"
-        :release          {:asset-path "https://asset.logseq.com/static/js"}
         :compiler-options {:infer-externs      :auto
                            :output-feature-set :es-next-in
                            :source-map true
@@ -60,10 +59,6 @@
                           frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
 
-        ;; NOTE: electron, browser/mobile-app use different asset-paths.
-        ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
-        ;;   For electron devs, assets are located in ./js(via relative path).
-        ;; :dev      {:asset-path "./js"}
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
                    :watch-path "/static"

@@ -1533,7 +1533,7 @@
     (show-link? config metadata s full_text)
     (media-link config url s label metadata full_text)
 
-    (or (util/electron?) (config/db-based-graph? (state/get-current-repo)))
+    (util/electron?)
     (let [path (cond
                  (string/starts-with? s "file://")
                  (string/replace s "file://" "")
@@ -1591,7 +1591,7 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol path] (or (and (= "Complex" (first url)) url)
+            [protocol path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
                                 (and (= "File" (first url)) ["file" (second url)]))]
         (cond
           (and (= (get-in config [:block :block/format] :markdown) :org)
@@ -1609,36 +1609,23 @@
           (= protocol "file")
           (if (show-link? config metadata href full_text)
             (media-link config url href label metadata full_text)
-            (let [redirect-page-name (when (string? path) (text/get-page-name path))
-                  config (assoc config :redirect-page-name redirect-page-name)
-                  label-text (get-label-text label)
-                  page (if (string/blank? label-text)
-                         {:block/name (file-model/get-file-page (string/replace href "file:" "") false)}
-                         (get-page label))
-                  show-brackets? (state/show-brackets?)]
-              (if (and page
-                       (when-let [ext (util/get-file-ext href)]
-                         (common-config/mldoc-support? ext)))
-                [:span.page-reference
-                 (when show-brackets? [:span.text-gray-500 page-ref/left-brackets])
-                 (page-cp config page)
-                 (when show-brackets? [:span.text-gray-500 page-ref/right-brackets])]
-
-                (let [href* (if (util/electron?)
-                              (relative-assets-path->absolute-path href)
-                              href)]
-                  (->elem
-                   :a
-                   (cond-> (if (util/electron?)
-                             {:on-click (fn [e]
-                                          (util/stop e)
-                                          (js/window.apis.openPath path))
-                              :data-href href*}
-                             {:href      (path/path-join "file://" href*)
-                              :data-href href*
-                              :target    "_blank"})
-                     title (assoc :title title))
-                   (map-inline config label))))))
+            (let [href* (if (util/electron?)
+                          (relative-assets-path->absolute-path href)
+                          href)]
+              [:div.flex.flex-row.items-center
+               (ui/icon "file" {:class "opacity-50"})
+               (->elem
+                :a
+                (cond-> (if (util/electron?)
+                          {:on-click (fn [e]
+                                       (util/stop e)
+                                       (js/window.apis.openPath path))
+                           :data-href href*}
+                          {:href      (path/path-join "file://" href*)
+                           :data-href href*
+                           :target    "_blank"})
+                  title (assoc :title title))
+                (map-inline config label))]))
 
           (show-link? config metadata href full_text)
           (media-link config url href label metadata full_text)
@@ -4396,7 +4383,8 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (not (or (and (:journals? config) (< (count blocks) 50))
+  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
+                                                 (and (:journals? config) (< (count blocks) 50))
                                                  (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
                                                  (:block-children? config))))
         render-item (fn [idx]
