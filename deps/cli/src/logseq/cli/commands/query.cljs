@@ -21,7 +21,7 @@
 (defn- api-query
   [query token]
   (let [datalog-query? (string/starts-with? query "[")
-        method (if datalog-query?  "logseq.app.datascript_query" "logseq.app.q")]
+        method (if datalog-query?  "logseq.db.datascript_query" "logseq.db.q")]
     (-> (p/let [resp (cli-util/api-fetch token method [query])]
           (if (= 200 (.-status resp))
             (p/let [body (.json resp)]

@@ -119,12 +119,7 @@ First install the following dependencies:
 * Run `yarn install` to install npm dependencies.
 * Install [babashka](https://github.com/babashka/babashka).
 
-To install the CLI locally, `npm i -g`.
-
-To run linters and tests, you'll want to install yarn dependencies once:
-```
-yarn install
-```
+To install the CLI locally, `yarn link`.
 
 ### Testing
 
