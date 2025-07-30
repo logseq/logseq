@@ -4396,7 +4396,7 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc_test=true")
+  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
                                                  (and (:journals? config) (< (count blocks) 50))
                                                  (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
                                                  (:block-children? config))))
