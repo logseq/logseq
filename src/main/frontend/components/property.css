@@ -431,7 +431,8 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] p-0;
+  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
+  max-height: 100vh;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];
