@@ -420,7 +420,10 @@
     :else
     (let [view (d/entity db view-id)
           group-by-property (:logseq.property.view/group-by-property view)
-          list-view? (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
+          db-based? (entity-plus/db-based-graph? db)
+          list-view? (or (= :logseq.property.view/type.list (:db/ident (:logseq.property.view/type view)))
+                         (and (not db-based?)
+                              (contains? #{:linked-references :unlinked-references} view-feature-type)))
           group-by-property-ident (or (:db/ident group-by-property) group-by-property-ident)
           group-by-closed-values? (some? (:property/closed-values group-by-property))
           ref-property? (= (:db/valueType group-by-property) :db.type/ref)
