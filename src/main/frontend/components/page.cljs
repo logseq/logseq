@@ -646,7 +646,7 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
-            (when (and block? (util/capacitor-new?))
+            (when block?
               (component-block/breadcrumb {} repo (:block/uuid page) {}))
 
             (when (and db-based? (ldb/library? page))
