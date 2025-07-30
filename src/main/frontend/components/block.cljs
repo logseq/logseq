@@ -308,6 +308,10 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [*el-ref (rum/use-ref nil)
         image-src (fs/asset-path-normalize src)
+        src' (if (or (string/starts-with? src "/")
+                     (string/starts-with? src "~"))
+               (str "file://" src)
+               src)
         get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
     [:div.asset-container
      {:key "resize-asset-container"
@@ -321,7 +325,7 @@
       (merge
        {:loading "lazy"
         :referrerPolicy "no-referrer"
-        :src src
+        :src src'
         :title title}
        metadata)]
      (when (and (not breadcrumb?)
@@ -598,6 +602,9 @@
        (asset-link config title href metadata full_text)
        (let [href (cond
                     (util/starts-with? href "http")
+                    href
+
+                    (or (util/starts-with? href "/") (util/starts-with? href "~"))
                     href
 
                     config/publishing?
