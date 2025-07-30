@@ -356,7 +356,7 @@
   [repo]
   (and (sqlite-util/db-based-graph? repo)
        (or (exists? js/process)
-           (some? (get-local-tx repo)))))
+           (some? (get-graph-uuid repo)))))
 
 (defn create-pending-block-ops-count-flow
   [repo]
