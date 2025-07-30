@@ -50,7 +50,7 @@
                     [:a.opacity-40.active:opacity-60.px-2
                      {:on-pointer-down close!}
                      (shui/tabler-icon "chevron-down" {:size 18 :stroke 3})]
-                    [:a.opacity-40.active:opacity-60.px-2
+                    [:a.opacity-40.active:opacity-60.pr-1
                      {:on-pointer-down (fn []
                                          (mobile-ui/open-popup!
                                            (fn []
