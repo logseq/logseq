@@ -1257,11 +1257,6 @@
              (string? (last (first label))))
     (common-util/safe-decode-uri-component (last (first label)))))
 
-(defn- get-page
-  [label]
-  (when-let [label-text (get-label-text label)]
-    (db/get-page label-text)))
-
 (defn- macro->text
   [name arguments]
   (if (and (seq arguments)
