@@ -1042,17 +1042,20 @@
         (when (util/electron?)
           (find-in-page/search))
 
-        (main {:route-match route-match
-               :margin-less-pages? margin-less-pages?
-               :logged? logged?
-               :home? home?
-               :route-name route-name
-               :indexeddb-support? indexeddb-support?
-               :light? light?
-               :db-restoring? db-restoring?
-               :main-content main-content'
-               :show-action-bar? show-action-bar?
-               :show-recording-bar? show-recording-bar?})]
+        (if (state/sub :rtc/uploading?)
+          [:div.flex.items-center.justify-center.full-height-without-header
+           (ui/loading "Creating remote graph...")]
+          (main {:route-match route-match
+                 :margin-less-pages? margin-less-pages?
+                 :logged? logged?
+                 :home? home?
+                 :route-name route-name
+                 :indexeddb-support? indexeddb-support?
+                 :light? light?
+                 :db-restoring? db-restoring?
+                 :main-content main-content'
+                 :show-action-bar? show-action-bar?
+                 :show-recording-bar? show-recording-bar?}))]
 
        (when window-controls?
          (window-controls/container))
