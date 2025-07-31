@@ -241,7 +241,6 @@
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data this
-          _ (prn :debug :data data)
           db-based? (sqlite-util/db-based-graph? repo)
           data' (cond->
                  (if (de/entity? data)
