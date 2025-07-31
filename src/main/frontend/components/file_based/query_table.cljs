@@ -173,7 +173,7 @@
     ;; string values will attempt to be rendered as pages, falling back to
     ;; inline-text when no page entity is found
     (string? value) (if-let [page (and (string? value) (db/get-page value))]
-                      (page-cp {} page)
+                      (page-cp {:stop-event-propagation? true} page)
                       (inline-text row-block row-format value))
     ;; anything else should just be rendered as provided
     :else value))
@@ -223,7 +223,7 @@
                                      (state/sidebar-add-block!
                                       (state/get-current-repo)
                                       (:db/id row)
-                                      :block-ref)
+                                      :block)
                                      (reset! *mouse-down? false)))}
                  (when (some? value)
                    (render-column-value {:row-block row
