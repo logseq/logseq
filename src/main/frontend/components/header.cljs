@@ -333,15 +333,15 @@
 
 (rum/defc block-breadcrumb
   [page-name]
-  [:div.ls-block-breadcrumb
-   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                     (db/entity [:block/uuid (uuid page-name)]))]
-     (when (:block/parent page)
+  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                    (db/entity [:block/uuid (uuid page-name)]))]
+    (when (and (ldb/page? page) (:block/parent page))
+      [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
-                                    {:header? true})]))])
+                                    {:header? true})]])))
 
 (rum/defc semantic-search-progressing
   [repo]

@@ -524,6 +524,8 @@
 (defn- get-target-block-page
   [target-block]
   (or
+   (when (ldb/page? target-block)
+     (:db/id target-block))
    (:db/id (:block/page target-block))
    ;; target parent is a page
    (when-let [parent (:block/parent target-block)]

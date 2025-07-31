@@ -4,6 +4,10 @@
             [logseq.e2e.config :as config]
             [wally.main :as w]))
 
+(defn get-test-url
+  [port]
+  (str "http://localhost:" (or port @config/*port) "?rtc-test=true"))
+
 (defn get-pages
   [pw-ctx]
   (.pages pw-ctx))
@@ -11,7 +15,7 @@
 (defn open-pages
   "Pages in same pw-ctx share cookies and storages"
   [pw-ctx n]
-  (let [url (str "http://localhost:" @config/*port)]
+  (let [url (get-test-url nil)]
     (dotimes [_i n]
       (let [page (.newPage pw-ctx)]
         (.navigate page url)
