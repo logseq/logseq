@@ -412,6 +412,12 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (apply d/q (first inputs) @conn (rest inputs))))
 
+(def-thread-api :thread-api/datoms
+  [repo & args]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [result (apply d/datoms @conn args)]
+      (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]) result))))
+
 (def-thread-api :thread-api/pull
   [repo selector id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
