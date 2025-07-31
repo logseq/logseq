@@ -135,13 +135,15 @@
       (m/? (task--update-index-info!* repo infer-worker)))))
 
 (defn- get-partition-size
-  [repo]
-  (let [conn (worker-state/get-datascript-conn repo)
-        embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
-    (case embedding-model-name
-      "onnx-community/Qwen3-Embedding-0.6B-ONNX"
-      100
-      500)))
+  [_repo]
+  500
+  ;; (let [conn (worker-state/get-datascript-conn repo)
+  ;;       embedding-model-name (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)]
+  ;;   (case embedding-model-name
+  ;;     "onnx-community/Qwen3-Embedding-0.6B-ONNX"
+  ;;     100
+  ;;     500))
+  )
 
 (defn- task--embedding-stale-blocks!
   "embedding outdated block-data
