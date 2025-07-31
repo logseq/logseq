@@ -19,6 +19,8 @@
                    (log/info :delete-hnsw-index repo)
                    (.delete hnsw-index))))))
 
+(defonce *port (atom nil))
+
 (def ^:private embedding-opts #js{"pooling" "mean" "normalize" true})
 
 (def ^:private init-max-elems 100)
@@ -181,7 +183,7 @@
    ;;                                             :hnsw-config {:dims 1024}}
    })
 
-(def ^:private *load-model-progress (atom nil))
+(defonce ^:private *load-model-progress (atom nil))
 
 (defn <load-model
   [model-name]
@@ -210,7 +212,9 @@
   (c.m/run-background-task
    ::push-load-model-progress
    (m/reduce
-    (fn [_ v] (worker-util/post-message :vector-search/load-model-progress v))
+    (fn [_ v]
+      (when-let [port @*port]
+        (worker-util/post-message :vector-search/load-model-progress v {:port port})))
     (c.m/throttle 500 (m/watch *load-model-progress)))))
 
 (comment
