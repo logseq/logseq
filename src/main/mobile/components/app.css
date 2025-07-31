@@ -13,7 +13,8 @@ html.is-native-ios {
   --silk-tabbar-bottom-paddding: 2px;
 }
 
-html.is-native-android {}
+html.is-native-android {
+}
 
 #mobile-editor-toolbar {
 }
@@ -36,6 +37,10 @@ html.has-mobile-keyboard {
   .app-silk-popup-content-inner {
     padding-bottom: calc(var(--ls-native-kb-height, 0px) + 24px);
   }
+}
+
+html, body {
+  overscroll-behavior: none;
 }
 
 html {
