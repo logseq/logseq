@@ -181,8 +181,7 @@
 (rum/defc app
   [current-repo {:keys [login?]}]
   (let [[tab] (mobile-state/use-tab)
-        *home (rum/use-ref nil)
-        *search-page (rum/use-ref nil)]
+        *home (rum/use-ref nil)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo)
     (silkhq/depth-sheet-stack {:as-child true}
@@ -202,7 +201,7 @@
                  :settings
                  (settings/page)
                  :search
-                 (search/search *search-page)
+                 (search/search)
                  ;:demos
                  ;(demos/demos-inner)
                  "Not Found")
