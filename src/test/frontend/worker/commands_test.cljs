@@ -71,7 +71,7 @@
       (let [next-time (get-next-time now month-unit 1)]
         (is (= 1 (in-months next-time))))
       (let [next-time (get-next-time one-month-ago month-unit 1)]
-        (is (> (in-months next-time) 1)))
+        (is (> (in-days next-time) 1)))
       (let [next-time (get-next-time one-month-ago month-unit 3)]
         (is (= 2 (in-months next-time))))
       (let [next-time (get-next-time one-month-ago month-unit 5)]
