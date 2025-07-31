@@ -3884,9 +3884,11 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        config' (if-let [container-id (::container-id state)]
-                  (assoc config :container-id container-id)
-                  config)]
+        config' (->
+                 (if-let [container-id (::container-id state)]
+                   (assoc config :container-id container-id)
+                   config)
+                 (assoc :block/uuid (:block/uuid block)))]
     (when (:block/uuid block)
       (rum/with-key
         (block-container-inner state repo config' block
@@ -4372,7 +4374,6 @@
         item (or (if loop-linked? item linked-block) item)
         item (dissoc item :block/meta)
         config' (assoc config
-                       :block/uuid (:block/uuid item)
                        :loop-linked? loop-linked?)]
     (when-not (and loop-linked? (:block/name linked-block))
       (rum/with-key (block-container config' item
