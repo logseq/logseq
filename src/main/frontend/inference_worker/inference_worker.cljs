@@ -60,7 +60,11 @@
    (clj->js (infer-worker.text-embedding/index-info repo))))
 
 (defn init
-  []
-  (glogi-console/install!)
-  (let [^js obj #_{:clj-kondo/ignore [:unresolved-symbol]} (InferenceWorker.)]
-    (Comlink/expose obj)))
+  [])
+
+(.addEventListener js/self "connect"
+                   (fn [^js e]
+                     (glogi-console/install!)
+                     (let [port (first (.-ports e))
+                           ^js obj #_{:clj-kondo/ignore [:unresolved-symbol]} (InferenceWorker.)]
+                       (Comlink/expose obj port))))
