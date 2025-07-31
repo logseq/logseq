@@ -709,7 +709,7 @@
    All page-names are sanitized except page-name-in-block"
   [state
    {:keys [contents-page? whiteboard-page? other-position? show-unique-title?
-           on-context-menu with-parent?]
+           on-context-menu with-parent? stop-event-propagation?]
     :or {with-parent? true}
     :as config}
    page-entity children label]
@@ -734,6 +734,8 @@
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
        :on-pointer-down (fn [^js e]
+                          (when stop-event-propagation?
+                            (util/stop-propagation e))
                           (cond
                             (util/link? (.-target e))
                             nil
