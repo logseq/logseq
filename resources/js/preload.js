@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
@@ -86,8 +87,11 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openExternal(url, options)
   },
 
-  async openPath (path) {
-    await shell.openPath(path)
+  async openPath (relativePath) {
+    const absolutePath = path.resolve(
+      relativePath.startsWith('~') ? path.join(os.homedir(), relativePath.slice(1)) : relativePath
+    );
+    await shell.openPath(absolutePath)
   },
 
   /**
