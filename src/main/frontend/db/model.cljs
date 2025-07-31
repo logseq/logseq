@@ -99,8 +99,7 @@ independent of format as format specific heading characters are stripped"
                 (fn content-matches? [block-content external-content block-id]
                   (let [block (db-utils/entity repo block-id)
                         ref-tags (distinct (concat (:block/tags block) (:block/refs block)))]
-                    (= (-> block-content
-                           (db-content/id-ref->title-ref ref-tags)
+                    (= (-> (db-content/id-ref->title-ref block-content ref-tags)
                            (db-content/content-id-ref->page ref-tags)
                            heading-content->route-name)
                        (string/lower-case external-content))))
