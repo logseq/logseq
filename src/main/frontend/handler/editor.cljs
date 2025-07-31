@@ -330,9 +330,13 @@
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
+        library? (:library? config)
         sibling? (cond
                    ref-query-top-block?
                    false
+
+                   (and library? (ldb/page? current-block))
+                   true
 
                    (boolean? sibling?)
                    sibling?
@@ -342,7 +346,6 @@
 
                    :else
                    (not has-children?))
-        library? (:library? config)
         new-block' (if library?
                      (-> new-block
                          (-> (assoc :block/tags #{:logseq.class/Page}

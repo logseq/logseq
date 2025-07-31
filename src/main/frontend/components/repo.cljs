@@ -127,6 +127,7 @@
                                            (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))))))}
               "Delete local graph"))
            (when (and db-based? root
+                      (user-handler/logged-in?)
                       (not remote?)
                       (= url (state/get-current-repo)))
              (shui/dropdown-menu-item
@@ -151,7 +152,7 @@
                                   (p/do!
                                    (rtc-flows/trigger-rtc-start repo)
                                    (rtc-handler/<get-remote-graphs)))))))}
-              "Use Logseq sync (Beta testing)"))
+              "Use Logseq sync (Alpha testing)"))
            (when (and remote? (or (and db-based? manager?) (not db-based?)))
              (shui/dropdown-menu-item
               {:key "delete-remotely"

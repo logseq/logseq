@@ -476,8 +476,8 @@ so need to pull earlier remote-data from websocket."})
 
 (defn- remote-op-value->schema-tx-data
   [block-uuid op-value]
-  (when-let [schema-map (some-> op-value :client/schema ldb/read-transit-str)]
-    (when-let [db-ident (:db/ident op-value)]
+  (when-let [db-ident (:db/ident op-value)]
+    (let [schema-map (some-> op-value :client/schema ldb/read-transit-str)]
       [(merge {:block/uuid block-uuid :db/ident db-ident} schema-map)])))
 
 (defn- update-block-order

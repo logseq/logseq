@@ -1236,12 +1236,16 @@
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
                               (p/do!
-                               (when (and (not (string/blank? value))
-                                          (not= (string/trim (str number-value))
-                                                (string/trim (str value))))
-                                 (db-property-handler/set-block-property! (:db/id block)
-                                                                          (:db/ident property)
-                                                                          value))
+                               (if (string/blank? value)
+                                 (db-property-handler/remove-block-property! (:db/id block) (:db/ident property))
+                                 (when (not= (string/trim (str number-value))
+                                             (string/trim (str value)))
+                                   (db-property-handler/set-block-property! (:db/id block)
+                                                                            (:db/ident property)
+                                                                            value)))
+
+                               (set-value! (str (db-property/property-value-content
+                                                 (get (db/entity (:db/id block)) (:db/ident property)))))
 
                                (when exit-editing?
                                  (set-editing! false))))]
@@ -1266,9 +1270,7 @@
                       (reset! *value (util/evalue e)))
          :on-blur (fn [_e]
                     (p/do!
-                     (set-property-value! value)
-                     (when (not= value (db-property/property-value-content (db/entity (:db/id value-block))))
-                       (set-value! (db-property/property-value-content value-block)))))
+                     (set-property-value! value)))
          :on-key-down (fn [e]
                         (let [input (rum/deref *input-ref)
                               pos (cursor/pos input)
