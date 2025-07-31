@@ -10,6 +10,7 @@
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -44,15 +45,21 @@
                            (js/document.querySelector ".pswp")
                            (some-> js/window.photoLightbox (.destroy))
 
-                ;; TODO: move ui-related code to mobile events
-                           (not-empty (cc-ui/get-modal))
-                           (cc-ui/close-modal!)
+                           (shui-dialog/has-modal?)
+                           (shui-dialog/close!)
 
-                           (not-empty @mobile-state/*singleton-modal)
-                           :skip
+                           (not-empty @mobile-state/*popup-data)
+                           (mobile-state/set-popup! nil)
 
                            (not-empty (state/get-selection-blocks))
                            (editor-handler/clear-selection!)
+
+                           (not-empty @mobile-state/*singleton-modal)
+                           (mobile-state/set-singleton-modal! nil)
+
+                           ;; TODO: move ui-related code to mobile events
+                           (not-empty (cc-ui/get-modal))
+                           (cc-ui/close-modal!)
 
                            (state/editing?)
                            (editor-handler/escape-editing)
