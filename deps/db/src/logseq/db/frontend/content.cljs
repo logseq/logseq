@@ -116,7 +116,9 @@
                    (remove (fn [ref]
                              ;; remove uuid references since they're introduced to detect multiple pages
                              ;; that have the same name
-                             (and (map? ref) (common-util/uuid-string? (:block.temp/original-page-name ref)))))
+                             (and (map? ref)
+                                  (:block.temp/original-page-name ref)
+                                  (common-util/uuid-string? (:block.temp/original-page-name ref)))))
                    (map
                     (fn [ref]
                       (if (and (vector? ref) (= :block/uuid (first ref)))
