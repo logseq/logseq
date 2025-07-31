@@ -114,6 +114,8 @@
   (assert (string? title))
   (let [refs' (->> refs
                    (remove (fn [ref]
+                             ;; remove uuid references since they're introduced to detect multiple pages
+                             ;; that have the same name
                              (and (map? ref) (common-util/uuid-string? (:block.temp/original-page-name ref)))))
                    (map
                     (fn [ref]
