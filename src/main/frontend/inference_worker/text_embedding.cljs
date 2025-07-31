@@ -177,8 +177,9 @@
 (def available-embedding-models
   {"Xenova/all-MiniLM-L6-v2" {:tf-config {:dtype "fp32"}
                               :hnsw-config {:dims 384}}
-   "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp16"}
-                                               :hnsw-config {:dims 1024}}})
+   ;; "onnx-community/Qwen3-Embedding-0.6B-ONNX" {:tf-config {:dtype "fp16"}
+   ;;                                             :hnsw-config {:dims 1024}}
+   })
 
 (def ^:private *load-model-progress (atom nil))
 
