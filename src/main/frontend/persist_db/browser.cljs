@@ -136,10 +136,11 @@
   []
   (when-not util/node-test?
     (let [worker-url "js/inference-worker.js"
-          worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker (Comlink/wrap worker)
+          ^js worker (js/SharedWorker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+          ^js port (.-port worker)
+          wrapped-worker (Comlink/wrap port)
           t1 (util/time-ms)]
-      (worker-handler/handle-message! worker wrapped-worker)
+      (worker-handler/handle-message! port wrapped-worker)
       (reset! state/*infer-worker wrapped-worker)
       (p/do!
        (let [embedding-model-name (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)]
