@@ -167,7 +167,7 @@
 
         (util/electron?)
         ;; fullpath will be encoded
-        (path/prepend-protocol "assets:" full-path)
+        (path/prepend-protocol "file:" full-path)
 
         ;(mobile-util/native-platform?)
         ;(mobile-util/convert-file-src full-path)
