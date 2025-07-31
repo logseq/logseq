@@ -308,6 +308,10 @@
   [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}]
   (let [*el-ref (rum/use-ref nil)
         image-src (fs/asset-path-normalize src)
+        src' (if (or (string/starts-with? src "/")
+                     (string/starts-with? src "~"))
+               (str "file://" src)
+               src)
         get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
     [:div.asset-container
      {:key "resize-asset-container"
@@ -321,7 +325,7 @@
       (merge
        {:loading "lazy"
         :referrerPolicy "no-referrer"
-        :src src
+        :src src'
         :title title}
        metadata)]
      (when (and (not breadcrumb?)
@@ -598,6 +602,9 @@
        (asset-link config title href metadata full_text)
        (let [href (cond
                     (util/starts-with? href "http")
+                    href
+
+                    (or (util/starts-with? href "/") (util/starts-with? href "~"))
                     href
 
                     config/publishing?
@@ -1249,11 +1256,6 @@
   (when (and (= 1 (count label))
              (string? (last (first label))))
     (common-util/safe-decode-uri-component (last (first label)))))
-
-(defn- get-page
-  [label]
-  (when-let [label-text (get-label-text label)]
-    (db/get-page label-text)))
 
 (defn- macro->text
   [name arguments]
@@ -3291,7 +3293,8 @@
 (rum/defc breadcrumb
   [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block]
                          :as opts}]
-  (let [[block set-block!] (hooks/use-state nil)]
+  (let [[block set-block!] (hooks/use-state (when (uuid? block-id)
+                                              (db/entity [:block/uuid block-id])))]
     (hooks/use-effect!
      (fn []
        (p/let [block (db-async/<get-block (state/get-current-repo)

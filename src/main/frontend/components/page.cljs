@@ -8,6 +8,7 @@
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.file-based.hierarchy :as hierarchy]
+            [frontend.components.icon :as icon-component]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
@@ -342,6 +343,9 @@
                                         (not (ldb/built-in? page)))
                                (reset! *input-value (if untitled? "" old-name))
                                (reset! *edit? true)))))}
+            (when-not (config/db-based-graph?)
+              (when (get-in page [:block/properties :icon])
+                (icon-component/get-node-icon-cp page {})))
 
             (if @*edit?
               (page-title-editor page {:*title-value *title-value
@@ -642,7 +646,7 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
-            (when (and block? (util/capacitor-new?))
+            (when block?
               (component-block/breadcrumb {} repo (:block/uuid page) {}))
 
             (when (and db-based? (ldb/library? page))
