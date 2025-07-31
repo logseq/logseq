@@ -293,7 +293,8 @@
         (let [render (fn [block]
                        [:div
                         (inline-title
-                         {:table? true}
+                         {:table? true
+                          :block/uuid (:block/uuid block)}
                          (some->> (:block/title block)
                                   string/trim
                                   string/split-lines
