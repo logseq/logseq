@@ -386,7 +386,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       @apply absolute right-6 w-[18px] h-[18px] bg-gray-10 overflow-hidden
       rounded-full flex items-center justify-center text-gray-02 opacity-80;
 
-      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      bottom: 22px;
     }
   }
 
