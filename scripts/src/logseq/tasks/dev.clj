@@ -87,7 +87,7 @@
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell "clojure -M:cljs watch publishing"))
+  (shell "npx shadow-cljs watch publishing"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"
