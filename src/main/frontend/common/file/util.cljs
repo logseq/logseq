@@ -76,13 +76,13 @@
 ;; A fast pprint alternative.
 (defn print-prefix-map* [prefix m print-one writer opts]
   (pr-sequential-writer
-    writer
-    (fn [e w opts]
-      (print-one (key e) w opts)
-      (-write w \space)
-      (print-one (val e) w opts))
-    (str prefix "\n{") \newline "}"
-    opts (seq m)))
+   writer
+   (fn [e w opts]
+     (print-one (key e) w opts)
+     (-write w \space)
+     (print-one (val e) w opts))
+   (str prefix "\n{") \newline "}"
+   opts (seq m)))
 
 (defn ugly-pr-str
   "Ugly printing fast, with newlines so that git diffs are smaller"
@@ -91,6 +91,6 @@
     (pr-str x)))
 
 (defn post-message
-  [type data]
-  (when (exists? js/self)
-    (.postMessage js/self (ldb/write-transit-str [type data]))))
+  [type data & {:keys [port]}]
+  (when-let [worker (or port js/self)]
+    (.postMessage worker (ldb/write-transit-str [type data]))))

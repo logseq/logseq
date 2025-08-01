@@ -9,7 +9,8 @@
 (defn detach
   "Detach all event listeners."
   [state]
-  (some-> state ::event-handler .removeAll))
+  (when-let [^EventHandler handler (some-> state ::event-handler)]
+    (.removeAll handler)))
 
 (defn listen
   "Register an event `handler` for events of `type` on `target`."

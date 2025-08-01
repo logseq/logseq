@@ -1,17 +1,17 @@
 (ns logseq.tasks.dev
   "Tasks for general development. For desktop or mobile development see their
   namespaces"
-  (:require [babashka.process :refer [shell]]
+  (:require [babashka.cli :as cli]
             [babashka.fs :as fs]
-            [babashka.cli :as cli]
-            [logseq.tasks.util :as task-util]
-            [logseq.tasks.dev.lint :as dev-lint]
+            [babashka.process :refer [shell]]
+            [clojure.core.async :as async]
+            [clojure.data :as data]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
-            [clojure.edn :as edn]
-            [clojure.data :as data]
-            [clojure.core.async :as async]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.tasks.dev.lint :as dev-lint]
+            [logseq.tasks.util :as task-util]))
 
 (defn test
   "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
@@ -75,7 +75,7 @@
                                                     (fs/glob "." "{src/main,deps/graph-parser/src}/**")))))]
     (do
       (println "Building publishing js asset...")
-      (shell "clojure -M:cljs release publishing"))
+      (shell "clojure -M:cljs release publishing workers"))
     (println "Publishing js asset is up to date")))
 
 (defn publishing-backend
@@ -87,7 +87,7 @@
 
 (defn watch-publishing-frontend
   [& _args]
-  (shell "clojure -M:cljs watch publishing"))
+  (shell "npx shadow-cljs watch publishing"))
 
 (defn watch-publishing-backend
   "Builds publishing backend once watch-publishing-frontend has built initial frontend"

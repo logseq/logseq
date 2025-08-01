@@ -512,25 +512,25 @@
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
-   :export-blocks-as-markdown
-   (try
-     (let [content
-           (cond
+    :export-blocks-as-markdown
+    (try
+      (let [content
+            (cond
              ;; page
-             (and (= 1 (count root-block-uuids-or-page-uuid))
-                  (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
-             (common/get-page-content (first root-block-uuids-or-page-uuid))
-             (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
-             (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
-                  (string/join "\n"))
-             :else
-             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
-           first-block (and (coll? root-block-uuids-or-page-uuid)
-                            (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-           format (get first-block :block/format :markdown)]
-       (export-helper content format options))
-     (catch :default e
-       (js/console.error e)))))
+              (and (= 1 (count root-block-uuids-or-page-uuid))
+                   (ldb/page? (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])))
+              (common/get-page-content (first root-block-uuids-or-page-uuid))
+              (and (coll? root-block-uuids-or-page-uuid) (every? #(ldb/page? (db/entity [:block/uuid %])) root-block-uuids-or-page-uuid))
+              (->> (mapv (fn [id] (:block/title (db/entity [:block/uuid id]))) root-block-uuids-or-page-uuid)
+                   (string/join "\n"))
+              :else
+              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+            first-block (and (coll? root-block-uuids-or-page-uuid)
+                             (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+            format (get first-block :block/format :markdown)]
+        (export-helper content format options))
+      (catch :default e
+        (js/console.error e)))))
 
 (defn export-files-as-markdown
   "options see also `export-blocks-as-markdown`"
@@ -538,7 +538,7 @@
   (mapv
    (fn [{:keys [path title content]}]
      (util/profile (print-str :export-files-as-markdown title)
-                   [(or path title) (export-helper content :markdown options)]))
+       [(or path title) (export-helper content :markdown options)]))
    files))
 
 (defn export-repo-as-markdown!

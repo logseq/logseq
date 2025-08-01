@@ -86,7 +86,8 @@
                 (state/set-state! :editor/edit-block-fn nil)
                 (when delete-blocks?
                   (util/mobile-keep-keyboard-open))
-                (react/refresh! repo affected-keys)
+                (when-not (:skip-refresh? tx-meta)
+                  (react/refresh! repo affected-keys))
                 (when edit-block-f
                   (util/schedule edit-block-f)))
 

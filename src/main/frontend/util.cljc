@@ -1100,7 +1100,7 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-;; FIXME: drain-chan was copied from frontend.worker.util due to shadow-cljs compile bug
+;; FIXME: drain-chan was copied from frontend.worker-common.util due to shadow-cljs compile bug
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
