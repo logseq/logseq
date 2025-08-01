@@ -43,13 +43,14 @@
           (when (pos? (:exit res)) (System/exit (:exit res)))))
       (println "No clj* files have changed to lint."))))
 
-(defn- validate-frontend-not-in-worker
+(defn- validate-frontend-not-in-workers
   []
   (let [res (shell {:out :string}
-                   "git grep -h" "\\[frontend.*:as" "src/main/frontend/worker")
+                   "git grep -h" "\\[frontend.*:as"
+                   "src/main/frontend/worker" "src/main/frontend/worker_common" "src/main/frontend/inference_worker")
         req-lines (->> (:out res)
                        string/split-lines
-                       (remove #(re-find #"frontend\.worker|frontend\.common" %)))]
+                       (remove #(re-find #"frontend\.worker|frontend\.common|frontend\.inference-worker" %)))]
 
     (if (seq req-lines)
       (do
@@ -58,7 +59,7 @@
         (System/exit 1))
       (println "Valid worker namespaces!"))))
 
-(defn- validate-worker-not-in-frontend
+(defn- validate-workers-not-in-frontend
   []
   (let [res (shell {:out :string :continue true}
                    "grep -r --exclude-dir=worker --exclude-dir=inference_worker" "\\[frontend.worker.*:" "src/main/frontend")
@@ -75,7 +76,7 @@
       (println "Valid frontend namespaces!"))))
 
 (defn worker-and-frontend-separate
-  "Ensures worker is independent of frontend"
+  "Ensures workers are independent of frontend"
   []
-  (validate-frontend-not-in-worker)
-  (validate-worker-not-in-frontend))
+  (validate-frontend-not-in-workers)
+  (validate-workers-not-in-frontend))
