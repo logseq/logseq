@@ -780,6 +780,7 @@
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
+(defonce *tags? (atom nil))
 (defonce *show-journals-in-page-graph? (atom nil))
 (defonce *created-at-filter (atom nil))
 (defonce *link-dist (atom 70))
@@ -803,10 +804,11 @@
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
-  (let [{:keys [journal? orphan-pages? builtin-pages? excluded-pages?]
+  (let [{:keys [journal? tags? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
         {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
+        tags?' (rum/react *tags?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
@@ -814,6 +816,7 @@
         charge-strength'  (rum/react *charge-strength)
         charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
+        tags? (if (nil? tags?') tags? tags?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
@@ -870,6 +873,15 @@
                              (let [value (not journal?)]
                                (reset! *journal? value)
                                (set-setting! :journal? value)))
+                           true)]]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Tags"]
+               [:div.mt-1
+                (ui/toggle tags?
+                           (fn []
+                             (let [value (not tags?)]
+                               (reset! *tags? value)
+                               (set-setting! :tags? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
                [:span "Orphan pages"]
@@ -933,7 +945,9 @@
                                                       (reset! *focus-nodes [])
                                                       (reset! *n-hops nil)
                                                       (reset! *created-at-filter nil)
+                                                      (reset! *tags? nil)
                                                       (set-setting! :created-at-filter nil)
+                                                      (set-setting! :tags? nil)
                                                       (state/clear-search-filters!))}
                "Reset Graph"]]]))
          {})
