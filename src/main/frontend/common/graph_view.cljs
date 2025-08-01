@@ -94,7 +94,12 @@
           (not journal?)
           (remove ldb/journal?)
           (not tags?)
-          (remove ldb/class?)
+          (remove (fn [p]
+                    (if db-based?
+                      ;; For DB-based graphs, use the class? function
+                      (ldb/class? p)
+                      ;; For file-based graphs, check if the page is in the tags set
+                      (contains? tags (:db/id p)))))
           (not properties?)
           (remove ldb/property?)
           (not excluded-pages?)
