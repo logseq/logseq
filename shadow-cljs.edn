@@ -219,10 +219,7 @@
                                   :externs ["datascript/externs.js"
                                             "externs.js"]
                                   :warnings {:fn-deprecated false
-                                             :redef false}
-                                  ;; https://github.com/thheller/shadow-cljs/issues/611#issuecomment-620845276
-                                  ;; fixes cljs.spec bug with code splitting
-                                  :cross-chunk-method-motion false}
+                                             :redef false} }
                :devtools {:before-load frontend.core/stop
                           :after-load frontend.core/start
                           :preloads [devtools.preload]}}
