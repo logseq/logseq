@@ -777,10 +777,11 @@
 (defonce *graph-reset? (atom false))
 (defonce *graph-forcereset? (atom false))
 (defonce *journal? (atom nil))
+(defonce *tags? (atom nil))
+(defonce *properties? (atom nil))
 (defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 (defonce *excluded-pages? (atom true))
-(defonce *tags? (atom nil))
 (defonce *show-journals-in-page-graph? (atom nil))
 (defonce *created-at-filter (atom nil))
 (defonce *link-dist (atom 70))
@@ -804,11 +805,12 @@
 
 (rum/defc ^:large-vars/cleanup-todo graph-filters < rum/reactive
   [graph settings forcesettings n-hops]
-  (let [{:keys [journal? tags? orphan-pages? builtin-pages? excluded-pages?]
+  (let [{:keys [journal? tags? properties? orphan-pages? builtin-pages? excluded-pages?]
          :or {orphan-pages? true}} settings
         {:keys [link-dist charge-strength charge-range]} forcesettings
         journal?' (rum/react *journal?)
         tags?' (rum/react *tags?)
+        properties?' (rum/react *properties?)
         orphan-pages?' (rum/react *orphan-pages?)
         builtin-pages?' (rum/react *builtin-pages?)
         excluded-pages?' (rum/react *excluded-pages?)
@@ -817,6 +819,7 @@
         charge-range'  (rum/react *charge-range)
         journal? (if (nil? journal?') journal? journal?')
         tags? (if (nil? tags?') tags? tags?')
+        properties? (if (nil? properties?') properties? properties?')
         orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
         builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         excluded-pages? (if (nil? excluded-pages?') excluded-pages? excluded-pages?')
@@ -884,6 +887,15 @@
                                (set-setting! :tags? value)))
                            true)]]
               [:div.flex.items-center.justify-between.mb-2
+               [:span "Properties"]
+               [:div.mt-1
+                (ui/toggle properties?
+                           (fn []
+                             (let [value (not properties?)]
+                               (reset! *properties? value)
+                               (set-setting! :properties? value)))
+                           true)]]
+              [:div.flex.items-center.justify-between.mb-2
                [:span "Orphan pages"]
                [:div.mt-1
                 (ui/toggle orphan-pages?
@@ -946,8 +958,10 @@
                                                       (reset! *n-hops nil)
                                                       (reset! *created-at-filter nil)
                                                       (reset! *tags? nil)
+                                                      (reset! *properties? nil)
                                                       (set-setting! :created-at-filter nil)
                                                       (set-setting! :tags? nil)
+                                                      (set-setting! :properties? nil)
                                                       (state/clear-search-filters!))}
                "Reset Graph"]]]))
          {})

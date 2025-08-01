@@ -76,7 +76,7 @@
      :links links}))
 
 (defn- build-global-graph
-  [db {:keys [theme journal? tags? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
+  [db {:keys [theme journal? tags? properties? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [dark? (= "dark" theme)
         relation (ldb/get-pages-relation db journal?)
         tagged-pages (ldb/get-all-tagged-pages db)
@@ -95,6 +95,8 @@
           (remove ldb/journal?)
           (not tags?)
           (remove ldb/class?)
+          (not properties?)
+          (remove ldb/property?)
           (not excluded-pages?)
           (remove (fn [p] (true?
                            (if db-based?
