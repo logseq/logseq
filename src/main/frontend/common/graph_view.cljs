@@ -6,6 +6,8 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]))
 
@@ -115,16 +117,16 @@
           (not tags?)
           (remove (fn [p]
                     (if db-based?
-                      ;; For DB-based graphs, use the class? function
+                      ;; For DB graphs, use the class? function
                       (ldb/class? p)
-                      ;; For file-based graphs, check if the page is in the tags set
+                      ;; For file graphs, check if the page is in the tags set
                       (contains? tags (:db/id p)))))
           (not properties?)
           (remove (fn [p]
                     (if db-based?
-                      ;; For DB-based graphs, use the property? function
+                      ;; For DB graphs, use the property? function
                       (ldb/property? p)
-                      ;; For file-based graphs, check if the page name matches any property
+                      ;; For file graphs, check if the page name matches any property
                       (let [page-name (:block/name p)]
                         (and page-name
                              (contains? file-property-pages page-name))))))
@@ -135,7 +137,14 @@
                              (get-in p [:block/properties :exclude-from-graph-view]))))))
         links (concat relation tagged-pages namespaces)
         linked (set (mapcat identity links))
-        build-in-pages (->> (if db-based? sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
+        build-in-pages (->> (if db-based?
+                               ;; For DB graphs, collect built-ins from static definitions
+                              (concat
+                               sqlite-create-graph/built-in-pages-names
+                               (map :title (vals db-class/built-in-classes))
+                               (keep :title (vals db-property/built-in-properties)))
+                               ;; For file graphs, simply use predefined names
+                              gp-db/built-in-pages-names)
                             (map string/lower-case)
                             set)
         nodes (cond->> full-pages'
