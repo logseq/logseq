@@ -15,7 +15,6 @@
 @import "codemirror/theme/solarized.css";
 @import "resources/css/tabler-extension.css";
 @import "@tabler/icons-webfont/tabler-icons.min.css";
-@import "node_modules/@ionic/react/css/palettes/dark.class.css";
 @import "src/main/frontend/animations.css";
 @import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";
