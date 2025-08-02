@@ -956,12 +956,22 @@
                                                       (swap! *graph-reset? not)
                                                       (reset! *focus-nodes [])
                                                       (reset! *n-hops nil)
-                                                      (reset! *created-at-filter nil)
-                                                      (reset! *tags? nil)
+                                                      (reset! *journal? false)
+                                                      (reset! *tags? false)
                                                       (reset! *properties? nil)
-                                                      (set-setting! :created-at-filter nil)
-                                                      (set-setting! :tags? nil)
-                                                      (set-setting! :properties? nil)
+                                                      (reset! *orphan-pages? true)
+                                                      (reset! *builtin-pages? false)
+                                                      (reset! *excluded-pages? false)
+                                                      (reset! *created-at-filter nil)
+                                                      ;; Update all graph settings at once
+                                                      (let [new-settings {:journal? false
+                                                                          :tags? false
+                                                                          :properties? false
+                                                                          :orphan-pages? true
+                                                                          :builtin-pages? false
+                                                                          :excluded-pages? false
+                                                                          :created-at-filter nil}]
+                                                        (config-handler/set-config! :graph/settings new-settings))
                                                       (state/clear-search-filters!))}
                "Reset Graph"]]]))
          {})
