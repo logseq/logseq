@@ -709,7 +709,7 @@
    All page-names are sanitized except page-name-in-block"
   [state
    {:keys [contents-page? whiteboard-page? other-position? show-unique-title?
-           on-context-menu with-parent?]
+           on-context-menu with-parent? stop-event-propagation?]
     :or {with-parent? true}
     :as config}
    page-entity children label]
@@ -734,6 +734,8 @@
        :on-drag-start (fn [e]
                         (editor-handler/block->data-transfer! page-name e true))
        :on-pointer-down (fn [^js e]
+                          (when stop-event-propagation?
+                            (util/stop-propagation e))
                           (cond
                             (util/link? (.-target e))
                             nil
@@ -2823,7 +2825,7 @@
                                 (or (ldb/inline-tag? (:block/raw-title block) t)
                                     (:logseq.property.class/hide-from-node t)
                                     (contains? hidden-internal-tags (:db/ident t))
-                                    (and (util/mobile?) (= (:db/ident t) :logseq.class/Task))))))
+                                    (and (util/mobile?) (contains? #{:logseq.class/Task :logseq.class/Journal} (:db/ident t)))))))
           popup-opts {:align :end
                       :content-props {:on-click (fn [] (shui/popup-hide!))
                                       :class "w-60"}}
@@ -3882,9 +3884,11 @@
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
         navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
-        config' (if-let [container-id (::container-id state)]
-                  (assoc config :container-id container-id)
-                  config)]
+        config' (->
+                 (if-let [container-id (::container-id state)]
+                   (assoc config :container-id container-id)
+                   config)
+                 (assoc :block/uuid (:block/uuid block)))]
     (when (:block/uuid block)
       (rum/with-key
         (block-container-inner state repo config' block
@@ -4370,7 +4374,6 @@
         item (or (if loop-linked? item linked-block) item)
         item (dissoc item :block/meta)
         config' (assoc config
-                       :block/uuid (:block/uuid item)
                        :loop-linked? loop-linked?)]
     (when-not (and loop-linked? (:block/name linked-block))
       (rum/with-key (block-container config' item
