@@ -1048,7 +1048,11 @@
                             (swap! *graph-forcereset? not)
                             (reset! *link-dist 70)
                             (reset! *charge-strength -600)
-                            (reset! *charge-range 600))}
+                            (reset! *charge-range 600)
+                            (let [new-forcesettings {:link-dist 70
+                                                     :charge-strength -600
+                                                     :charge-range 600}]
+                              (config-handler/set-config! :graph/forcesettings new-forcesettings)))}
                "Reset Forces"]]]))
          {})
         (graph-filter-section
