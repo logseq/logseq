@@ -99,7 +99,9 @@
              ;; replace block id refs if there're cycle references of blocks
                refs (:block/refs e)
                result' (if (and (string? result) refs)
-                         (db-content/id-ref->title-ref result refs)
+                         (db-content/id-ref->title-ref result refs
+                                                       {:db db
+                                                        :replace-pages-with-same-name? false})
                          result)]
            (or result' default-value))
          (lookup-entity e k default-value))))))
@@ -160,14 +162,8 @@
            :block.temp/property-keys
            (get-property-keys e)
 
-           ;; cache :block/title
            :block/title
-           (or
-            (:block.temp/cached-title @(.-cache e))
-            (let [title (get-block-title e k default-value)]
-              (vreset! (.-cache e) (assoc @(.-cache e)
-                                          :block.temp/cached-title title))
-              title))
+           (get-block-title e k default-value)
 
            :block/_parent
            (->> (lookup-entity e k default-value)
@@ -188,12 +184,8 @@
 
 (defn- cache-with-kv
   [^js this]
-  (let [v @(.-cache this)
-        v' (if (:block/title v)
-             (assoc v :block/title
-                    (db-content/id-ref->title-ref (:block/title v) (:block/refs this)))
-             v)]
-    (concat (seq v')
+  (let [v @(.-cache this)]
+    (concat (seq v)
             (seq (.-kv this)))))
 
 #?(:org.babashka/nbb

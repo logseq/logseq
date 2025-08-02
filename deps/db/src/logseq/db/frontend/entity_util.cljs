@@ -1,8 +1,10 @@
 (ns logseq.db.frontend.entity-util
   "Lower level entity util fns for DB graphs"
   (:require [clojure.string :as string]
+            [datascript.core :as d]
             [datascript.db]
-            [datascript.impl.entity :as de])
+            [datascript.impl.entity :as de]
+            [logseq.common.util :as common-util])
   (:refer-clojure :exclude [object?]))
 
 (defn- has-tag?
@@ -86,3 +88,7 @@
   "Built-in page or block"
   [entity]
   (:logseq.property/built-in? entity))
+
+(defn get-pages-by-name
+  [db page-name]
+  (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))

@@ -273,7 +273,7 @@
                                    (not= block-title (:block/title block-entity)))
           _ (when (and db-based? page? block-title)
               (outliner-validate/validate-page-title-characters block-title {:node m*}))
-          m* (if (and db-based? page-title-changed? (not (and page? (:block/parent block-entity))))
+          m* (if (and db-based? page-title-changed?)
                (let [_ (outliner-validate/validate-page-title (:block/title m*) {:node m*})
                      page-name (common-util/page-name-sanity-lc (:block/title m*))]
                  (assoc m* :block/name page-name))
@@ -524,6 +524,8 @@
 (defn- get-target-block-page
   [target-block]
   (or
+   (when (ldb/page? target-block)
+     (:db/id target-block))
    (:db/id (:block/page target-block))
    ;; target parent is a page
    (when-let [parent (:block/parent target-block)]
