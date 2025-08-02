@@ -75,6 +75,23 @@
     {:nodes nodes'
      :links links}))
 
+(defn- get-file-graph-property-pages
+  "Get all property pages for file graphs using database query"
+  [db]
+  (let [;; Query all properties from the database synchronously
+        properties (d/q '[:find ?p
+                          :where
+                          [_ :block/properties ?p]]
+                        db)]
+    (->> properties
+         (map first)
+         (remove empty?)
+         (map keys)
+         (apply concat)
+         distinct
+         (map name)  ;; Convert keywords to strings
+         set)))
+
 (defn- build-global-graph
   [db {:keys [theme journal? tags? properties? orphan-pages? builtin-pages? excluded-pages? created-at-filter]}]
   (let [dark? (= "dark" theme)
@@ -85,6 +102,8 @@
         full-pages (ldb/get-all-pages db)
         db-based? (entity-plus/db-based-graph? db)
         created-ats (map :block/created-at full-pages)
+        file-property-pages (when (not db-based?)
+                              (get-file-graph-property-pages db))
 
         ;; build up nodes
         full-pages'
@@ -101,7 +120,14 @@
                       ;; For file-based graphs, check if the page is in the tags set
                       (contains? tags (:db/id p)))))
           (not properties?)
-          (remove ldb/property?)
+          (remove (fn [p]
+                    (if db-based?
+                      ;; For DB-based graphs, use the property? function
+                      (ldb/property? p)
+                      ;; For file-based graphs, check if the page name matches any property
+                      (let [page-name (:block/name p)]
+                        (and page-name
+                             (contains? file-property-pages page-name))))))
           (not excluded-pages?)
           (remove (fn [p] (true?
                            (if db-based?
