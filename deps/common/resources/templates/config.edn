@@ -333,7 +333,9 @@
  ;; {:orphan-pages?   true   ; Default value: true
  ;;  :builtin-pages?  false  ; Default value: false
  ;;  :excluded-pages? false  ; Default value: false
- ;;  :journal?        false} ; Default value: false
+ ;;  :journal?        false  ; Default value: false
+ ;;  :tags?           false  ; Default value: false
+ ;;  :properties?}    false  ; Default value: false
 
  ;; Graph view configuration.
  ;; Example usage:
