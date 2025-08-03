@@ -958,7 +958,7 @@
                                                       (reset! *n-hops nil)
                                                       (reset! *journal? false)
                                                       (reset! *tags? false)
-                                                      (reset! *properties? nil)
+                                                      (reset! *properties? false)
                                                       (reset! *orphan-pages? true)
                                                       (reset! *builtin-pages? false)
                                                       (reset! *excluded-pages? false)
