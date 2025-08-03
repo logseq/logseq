@@ -5,7 +5,6 @@
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.config :as common-config]
@@ -168,10 +167,10 @@
 
         (util/electron?)
         ;; fullpath will be encoded
-        (path/prepend-protocol "assets:" full-path)
+        (path/prepend-protocol "file:" full-path)
 
-        (mobile-util/native-platform?)
-        (mobile-util/convert-file-src full-path)
+        ;(mobile-util/native-platform?)
+        ;(mobile-util/convert-file-src full-path)
 
         (config/db-based-graph? (state/get-current-repo)) ; memory fs
         (p/let [binary (fs/read-file repo-dir path {})

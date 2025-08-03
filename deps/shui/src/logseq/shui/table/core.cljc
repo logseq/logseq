@@ -2,17 +2,16 @@
   "Table"
   (:require [clojure.set :as set]
             [dommy.core :refer-macros [sel1]]
+            [goog.object :as gobj]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.table.impl :as impl]
             [rum.core :as rum]))
 
 (defn- get-head-container
   []
-  (sel1 "#head"))
-
-(defn- get-main-scroll-container
-  []
-  (sel1 "#main-content-container"))
+  (if (and js/window (gobj/get js/window "isCapacitorNew"))
+    (sel1 "ion-header")
+    (sel1 "#head")))
 
 (defn- row-selected?
   [row row-selection]
@@ -145,58 +144,16 @@
                  prop)
      children]))
 
-;; FIXME: ux
-(defn- use-sticky-element!
-  [^js/HTMLElement container target-ref]
-  (hooks/use-effect!
-   (fn []
-     (let [^js el (rum/deref target-ref)
-           ^js cls (.-classList el)
-           *ticking? (volatile! false)
-           el-top (-> el (.getBoundingClientRect) (.-top))
-           head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
-           translate (fn [offset]
-                       (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
-                       (if (zero? offset)
-                         (.remove cls "translated")
-                         (.add cls "translated")))
-           *last-offset (volatile! 0)
-           handle (fn []
-                    (let [scroll-top (js/parseInt (.-scrollTop container))
-                          offset (if (> (+ scroll-top head-top) el-top)
-                                   (+ (- scroll-top el-top) head-top 1) 0)
-                          offset (js/parseInt offset)
-                          last-offset @*last-offset]
-                      (if (and (not (zero? last-offset))
-                               (not= offset last-offset))
-                        (let [dir (if (neg? (- offset last-offset)) -1 1)]
-                          (loop [offset' (+ last-offset dir)]
-                            (translate offset')
-                            (if (and (not= offset offset')
-                                     (< (abs (- offset offset')) 100))
-                              (recur (+ offset' dir))
-                              (translate offset))))
-                        (translate offset))
-                      (vreset! *last-offset offset)))
-           handler (fn [^js e]
-                     (when (not @*ticking?)
-                       (js/window.requestAnimationFrame
-                        #(do (handle) (vreset! *ticking? false)))
-                       (vreset! *ticking? true)))]
-       (.addEventListener container "scroll" handler)
-       #(.removeEventListener container "scroll" handler)))
-   []))
-
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
-  [^js/HTMLDivElement target-ref]
+  [^js/HTMLDivElement target-ref container]
   (hooks/use-effect!
    (fn []
      (let [^js target (rum/deref target-ref)
-           ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
+           ^js container (or (.closest target ".sidebar-item-list") container)
            ^js table (.closest target ".ls-table-rows")
            refs-table? (.closest table ".references")]
-       (when (not refs-table?)
+       (when (and (not refs-table?) container table)
          (let [^js target-cls (.-classList target)
                ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
                ^js page-el (.closest target ".page-inner")
@@ -256,16 +213,21 @@
                 (.disconnect page-resize-observer))))))
    []))
 
+(defn- mobile?
+  []
+  (when-let [user-agent js/navigator.userAgent]
+    (re-find #"Mobi" user-agent)))
+
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)
-        _ (use-sticky-element2! el-ref)]
+        _ (when-not (mobile?) (use-sticky-element2! el-ref (:main-container prop)))]
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref
              :style {:z-index 9}}
-            prop)
+            (dissoc prop :main-container))
      children]))
 
 (rum/defc table-footer

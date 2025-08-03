@@ -22,10 +22,10 @@ env:
 
 jobs:
   build-app:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        uses: actions/checkout@v4
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v3
@@ -69,10 +69,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
 
       - name: Compile CLJS
-        run: yarn install && yarn release-app
-
-      - name: Sync static build files
-        run: rsync -avz --exclude node_modules --exclude '*.js.map' --exclude android ./static/ ./public/static/
+        run: yarn install && yarn release-mobile
 
       - name: Prepare iOS build
         run: npx cap sync ios

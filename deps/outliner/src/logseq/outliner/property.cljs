@@ -45,12 +45,42 @@
      db-property/built-in-properties))
    set))
 
-(defn- throw-error-if-protected-property
+(defn- throw-error-if-deleting-protected-property
   [entity-idents property-ident]
   (when (some #(built-in-class-property->properties [% property-ident]) entity-idents)
-    (throw (ex-info "Protected property shouldn't deleted"
-                    {:entity-idents entity-idents
-                     :property property-ident}))))
+    (throw (ex-info "Property is protected and can't be deleted"
+                    {:type :notification
+                     :payload {:type :error
+                               :message "Property is protected and can't be deleted"
+                               :entity-idents entity-idents
+                               :property property-ident}}))))
+
+(defn- throw-error-if-removing-private-tag
+  [entities]
+  (when-let [private-tags
+             (seq (set/intersection (set (mapcat #(map :db/ident (:block/tags %)) entities))
+                                    ldb/private-tags))]
+    (throw (ex-info "Can't remove private tags"
+                    {:type :notification
+                     :payload {:message (str "Can't remove private tags: " (string/join ", " private-tags))
+                               :type :error}
+                     :property-id :block/tags}))))
+
+(defn- throw-error-if-deleting-required-property
+  [property-ident]
+  (when (contains? db-malli-schema/required-properties property-ident)
+    (throw (ex-info "Can't remove required property"
+                    {:type :notification
+                     :payload {:message "Can't remove required property"
+                               :type :error}
+                     :property-id property-ident}))))
+
+(defn- validate-batch-deletion-of-property
+  "Validates that the given property can be batch deleted from multiple nodes"
+  [entities property-ident]
+  (throw-error-if-deleting-protected-property (map :db/ident entities) property-ident)
+  (when (= :block/tags property-ident) (throw-error-if-removing-private-tag entities))
+  (throw-error-if-deleting-required-property property-ident))
 
 (defn- build-property-value-tx-data
   [conn block property-id value]
@@ -304,7 +334,7 @@
   (let [block-eids (map ->eid block-ids)
         blocks (keep (fn [id] (d/entity @conn id)) block-eids)
         block-id-set (set (map :db/id blocks))]
-    (throw-error-if-protected-property (map :db/ident blocks) property-id)
+    (validate-batch-deletion-of-property blocks property-id)
     (when (seq blocks)
       (when-let [property (d/entity @conn property-id)]
         (let [txs (mapcat
@@ -381,30 +411,38 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
-    (throw-error-if-protected-property [(:db/ident block)] property-id)
-    (cond
-      (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
-      nil
+    ;; Can skip for extends b/c below tx ensures it has a default value
+    (when-not (= :logseq.property.class/extends property-id)
+      (validate-batch-deletion-of-property [block] property-id))
+    (when block
+      (cond
+        (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
+        nil
 
-      (= (:logseq.property/default-value property) (get block property-id))
-      (ldb/transact! conn
-                     [{:db/id (:db/id block)
-                       property-id :logseq.property/empty-placeholder}]
-                     {:outliner-op :save-block})
+        (= :logseq.property/status property-id)
+        (ldb/transact! conn
+                       [[:db/retract (:db/id block) property-id]
+                        [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
+                       {:outliner-op :save-block})
 
-      (and (ldb/class? block) (= property-id :logseq.property.class/extends))
-      (ldb/transact! conn
-                     [[:db/retract (:db/id block) :logseq.property.class/extends]
-                      [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
-                     {:outliner-op :save-block})
+        (= (:logseq.property/default-value property) (get block property-id))
+        (ldb/transact! conn
+                       [{:db/id (:db/id block)
+                         property-id :logseq.property/empty-placeholder}]
+                       {:outliner-op :save-block})
 
-      (contains? db-property/db-attribute-properties property-id)
-      (when block
+        (and (ldb/class? block) (= property-id :logseq.property.class/extends))
+        (ldb/transact! conn
+                       [[:db/retract (:db/id block) :logseq.property.class/extends]
+                        [:db/add (:db/id block) :logseq.property.class/extends :logseq.class/Root]]
+                       {:outliner-op :save-block})
+
+        (contains? db-property/db-attribute-properties property-id)
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]]
-                       {:outliner-op :save-block}))
-      :else
-      (batch-remove-property! conn [eid] property-id))))
+                       {:outliner-op :save-block})
+        :else
+        (batch-remove-property! conn [eid] property-id)))))
 
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.  If
@@ -526,8 +564,7 @@
   [db eid]
   (let [block (d/entity db eid)
         classes (->> (:block/tags block)
-                     (sort-by :block/name)
-                     (filter ldb/class?))
+                     (sort-by :block/name))
         class-parents (get-classes-parents classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
@@ -573,11 +610,10 @@
     (->> (:classes-properties (get-block-classes-properties db eid))
          (map :db/ident)
          (concat own-properties)
-         (filter (fn [id] (property-with-position? db id block position)))
          (distinct)
+         (filter (fn [id] (property-with-position? db id block position)))
          (map #(d/entity db %))
-         (ldb/sort-by-order)
-         (map :db/ident))))
+         (ldb/sort-by-order))))
 
 (defn- build-closed-value-tx
   [db property resolved-value {:keys [id icon]}]

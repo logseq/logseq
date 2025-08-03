@@ -337,6 +337,23 @@
   (let [extends (d/entity db :logseq.property.class/extends)]
     [[:db/add (:db/id extends) :db/cardinality :db.cardinality/many]]))
 
+(defn- add-quick-add-page
+  [_db]
+  (let [page (-> (-> (sqlite-util/build-new-page common-config/quick-add-page-name)
+                     sqlite-create-graph/mark-block-as-built-in))]
+    [page]))
+
+(defn- add-missing-page-name
+  [db]
+  (let [pages (d/datoms db :avet :block/name "")]
+    (keep
+     (fn [d]
+       (let [page (d/entity db (:e d))]
+         (when-not (string/blank? (:block/title page))
+           {:db/id (:db/id page)
+            :block/name (common-util/page-name-sanity-lc (:block/title page))})))
+     pages)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -347,7 +364,9 @@
    ["65.3" {:fix add-missing-db-ident-for-tags}]
    ["65.4" {:fix fix-using-properties-as-tags}]
    ["65.5" {:fix remove-block-order-for-tags}]
-   ["65.6" {:fix update-extends-to-cardinality-many}]])
+   ["65.6" {:fix update-extends-to-cardinality-many}]
+   ["65.7" {:fix add-quick-add-page}]
+   ["65.8" {:fix add-missing-page-name}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

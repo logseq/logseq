@@ -8,6 +8,7 @@
             [frontend.components.db-based.page :as db-page]
             [frontend.components.editor :as editor]
             [frontend.components.file-based.hierarchy :as hierarchy]
+            [frontend.components.icon :as icon-component]
             [frontend.components.library :as library]
             [frontend.components.objects :as objects]
             [frontend.components.plugins :as plugins]
@@ -137,7 +138,7 @@
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
-                                         :margin-left 22}}
+                                         :margin-left (if (util/mobile?) 0 22)}}
          [:span.bullet-container
           [:span.bullet]]]]])))
 
@@ -188,7 +189,8 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (add-button block config)])))))
+           (when-not (and (util/capacitor-new?) (seq blocks))
+             (add-button block config))])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -341,6 +343,9 @@
                                         (not (ldb/built-in? page)))
                                (reset! *input-value (if untitled? "" old-name))
                                (reset! *edit? true)))))}
+            (when-not (config/db-based-graph?)
+              (when (get-in page [:block/properties :icon])
+                (icon-component/get-node-icon-cp page {})))
 
             (if @*edit?
               (page-title-editor page {:*title-value *title-value
@@ -392,7 +397,9 @@
                      (fn []
                        [:div.ls-property-dropdown
                         (property-config/property-dropdown page nil {})])
-                     {:align :center})
+                     {:align :center
+                      :as-dropdown? true
+                      :dropdown-menu? true})
                     (let [opts (cond-> {:block page :target (.-target e)}
                                  (ldb/class? page)
                                  (assoc :class-schema? true))]
@@ -419,16 +426,24 @@
                   (when-not (some-> e (.-target) (.closest ".ls-properties-area"))
                     (when-not (= (.-nodeName (.-target e)) "INPUT")
                       (.preventDefault e)
-                      (when (gobj/get e "shiftKey")
+                      (cond
+                        (gobj/get e "shiftKey")
                         (state/sidebar-add-block!
                          (state/get-current-repo)
                          (:db/id page)
-                         :page)))))}
+                         :page)
+                        (util/mobile?)
+                        (route-handler/redirect-to-page! (:block/uuid page))
+                        :else
+                        nil))))}
 
      [:div.w-full.relative
       (component-block/block-container
        {:page-title? true
-        :page-title-actions-cp (when (and with-actions? (not= (:db/id (state/get-edit-block)) (:db/id page))) db-page-title-actions)
+        :page-title-actions-cp (when (and with-actions?
+                                          (not (util/mobile?))
+                                          (not= (:db/id (state/get-edit-block)) (:db/id page)))
+                                 db-page-title-actions)
         :hide-title? sidebar?
         :sidebar? sidebar?
         :tag-dialog? tag-dialog?
@@ -571,6 +586,7 @@
   (let [current-repo (state/sub :git/current-repo)
         *objects-ready? (::objects-ready? state)
         config (assoc config :*objects-ready? *objects-ready?)
+        page (or page (some-> (:db/id option) db/entity))
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
@@ -607,7 +623,7 @@
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-8.page-inner.mb-16
+           [:div.relative.grid.gap-4.sm:gap-8.page-inner.mb-16
             (when-not (or block? sidebar?)
               [:div.flex.flex-row.space-between
                (when (and (or (mobile-util/native-platform?) (util/mobile?)) (not db-based?))
@@ -630,6 +646,9 @@
                                         :preview? preview?})))
                (lsp-pagebar-slot)])
 
+            (when (and block? (not sidebar?))
+              (component-block/breadcrumb {} repo (:block/uuid page) {}))
+
             (when (and db-based? (ldb/library? page))
               (library/add-pages page))
 
@@ -642,8 +661,8 @@
 
             (when (not tag-dialog?)
               [:div.ls-page-blocks
-               {:style {:margin-left (if whiteboard? 0 -20)}
-                :class (when-not sidebar?
+               {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}
+                :class (when-not (or sidebar? (util/capacitor-new?))
                          "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)

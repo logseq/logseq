@@ -35,7 +35,10 @@
                                   opts)]]
 
                (and (= :tabler-icon (:type icon')) (:id icon'))
-               (ui/icon (:id icon') opts))]
+               (ui/icon (:id icon') opts)
+
+               :else
+               icon')]
     (if color?
       [:span.inline-flex.items-center.ls-icon-color-wrap
        {:style {:color (or (some-> icon' :color) "inherit")}} item]
@@ -65,13 +68,18 @@
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
-        node-icon (cond
-                    (:own-icon? opts)
-                    (get node-entity (pu/get-pid :logseq.property/icon))
-                    (:link? opts)
-                    "arrow-narrow-right"
-                    :else
-                    (get-node-icon node-entity))]
+        node-icon* (cond
+                     (:own-icon? opts)
+                     (get node-entity (pu/get-pid :logseq.property/icon))
+                     (:link? opts)
+                     "arrow-narrow-right"
+                     :else
+                     (get-node-icon node-entity))
+        node-icon (if (config/db-based-graph?)
+                    node-icon*
+                    (or (when-let [icon' (get-in node-entity [:block/properties :icon])]
+                          [:span icon'])
+                        node-icon*))]
     (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}

@@ -1,7 +1,9 @@
 (ns frontend.handler.db-based.rtc-flows
   "Flows related to RTC"
   (:require [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [frontend.flows :as flows]
+            [frontend.mobile.flows :as mobile-flows]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [missionary.core :as m])
@@ -93,6 +95,10 @@ conditions:
   (assert (some? repo))
   (reset! *rtc-start-trigger repo))
 
+(def-thread-api :thread-api/rtc-start-request
+  [repo]
+  (trigger-rtc-start repo))
+
 (def ^:private document-visible&rtc-not-running-flow
   (m/ap
     (let [visibility (m/?< flows/document-visibility-state-flow)]
@@ -111,13 +117,25 @@ conditions:
     (let [online? (m/?< flows/network-online-event-flow)]
       (try
         (if online?
-          (let [rtc-lock (:rtc-lock (m/? (c.m/snapshot-of-flow rtc-state-flow)))]
-            (if (not rtc-lock)
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
               :network-online&rtc-not-running
               (m/amb)))
           (m/amb))
         (catch Cancelled _
           (m/amb))))))
+
+(def ^:private mobile-app-active&rtc-not-running-flow
+  (m/ap
+    (let [app-active? (m/?< mobile-flows/mobile-app-state-flow)]
+      (try
+        (if app-active?
+          (let [rtc-running? (m/? (c.m/snapshot-of-flow rtc-running-flow))]
+            (if (not rtc-running?)
+              :mobile-app-active&rtc-not-running
+              (m/amb)))
+          (m/amb))
+        (catch Cancelled _ (m/amb))))))
 
 (def trigger-start-rtc-flow
   (->>
@@ -140,7 +158,11 @@ conditions:
     ;; network online->true
     (m/eduction
      (map vector)
-     network-online&rtc-not-running-flow)]
+     network-online&rtc-not-running-flow)
+    ;; for mobile, app active event + rtc-not-running
+    (m/eduction
+     (map vector)
+     mobile-app-active&rtc-not-running-flow)]
    (apply c.m/mix)
    (m/latest vector flows/current-login-user-flow)
    (m/eduction (keep (fn [[current-user trigger-event]] (when current-user trigger-event))))

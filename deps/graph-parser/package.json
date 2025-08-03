@@ -7,7 +7,8 @@
     "better-sqlite3": "11.10.0"
   },
   "dependencies": {
-    "mldoc": "^1.5.9"
+    "mldoc": "^1.5.9",
+    "sanitize-filename": "1.6.3"
   },
   "scripts": {
     "test": "nbb-logseq -cp test:../outliner/src -m nextjournal.test-runner",

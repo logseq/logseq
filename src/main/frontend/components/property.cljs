@@ -288,6 +288,7 @@
                                                          (when-let [input (state/get-input)]
                                                            (.focus input)))}
                                      :align "start"
+                                     :dropdown-menu? true
                                      :as-dropdown? true})))}
 
    (:block/title property)))
@@ -492,7 +493,7 @@
            [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
 
             (when-not (or block? (and property-desc (:class-schema? opts)))
-              [:div.flex.h-6.items-center
+              [:div.flex.items-center {:style {:height 28}}
                [:div {:class "pl-1.5 -mr-[3px] opacity-60"}
                 [:span.bullet-container [:span.bullet]]]])
             [:div.flex.flex-1

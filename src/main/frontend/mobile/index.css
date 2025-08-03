@@ -1,47 +1,41 @@
-.cp__footer {
-  @apply fixed bottom-0 left-0 px-5 py-2.5 z-10 flex flex-auto whitespace-nowrap h-20 items-start
-  bg-[var(--ls-primary-background-color)];
-
-  .bottom-action {
-    @apply w-6 h-6;
-  }
-
-  .ti, .timer {
-    color: var(--ls-primary-text-color);
-  }
-
-  .timer {
-    @apply absolute left-10;
-  }
-}
-
 .action-bar {
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
-  shadow-md bg-[var(--ls-secondary-background-color)] z-[100];
+  shadow-md bg-[var(--ls-secondary-background-color)] z-[99999];
 
   .action-bar-commands {
-    @apply relative flex justify-around w-[120%];
+    @apply relative flex w-full;
 
 
     .ti, .tie {
-      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-50;
+      @apply text-[var(--ls-primary-text-color)] text-[23px] opacity-75;
     }
 
     .description {
-      @apply text-[var(--ls-primary-text-color)] text-[13px] opacity-60;
+      @apply text-[var(--ls-primary-text-color)] text-[10px] opacity-75;
     }
 
     button {
-      @apply py-1 px-2;
+        flex: 1;
+        display: flex;
+        flex-direction: column;   /* Stack icon and label */
+        align-items: center;      /* Center horizontally */
+        justify-content: center;  /* Center vertically */
+        padding: 12px 4px;
     }
   }
 }
 
 #mobile-editor-toolbar {
-  @apply fixed bottom-0 left-0 w-full z-[9999] flex justify-between;
+  @apply fixed -bottom-1 left-0 w-full z-[99999] flex justify-between bg-gray-100 border-t border-gray-200
+  dark:border-gray-800 dark:bg-[#222];
+
+  will-change: transform;
+  transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
+  opacity: var(--ls-native-toolbar-opacity, 0);
+  transition: transform 250ms ease-out, opacity 50ms ease-out;
 
   button {
-    @apply flex items-center py-2 px-2;
+    @apply flex items-center py-2 px-2 opacity-95;
   }
 
   .submenu {
@@ -54,7 +48,7 @@
   }
 
   .toolbar-commands {
-    @apply flex justify-between items-center w-[95%] overflow-y-hidden overflow-x-auto;
+    @apply flex justify-between items-center overflow-y-hidden overflow-x-auto;
 
     &::-webkit-scrollbar {
       @apply h-1;
@@ -62,22 +56,13 @@
   }
 
   .toolbar-hide-keyboard {
-    border-left: 1px solid;
-    border-color: var(--ls-quaternary-background-color);
+    @apply border-l border-gray-200 dark:border-gray-700;
   }
 }
 
 html.is-native-ipad {
-  .cp__footer {
-    @apply h-[55px] right-0 shadow-none flex-1 z-0;
-  }
-
   .action-bar {
     @apply w-[70%] min-w-[550px];
-
-    .action-bar-commands {
-      @apply w-full;
-    }
 
     @media (orientation: landscape) {
       @apply w-1/2;
@@ -102,10 +87,6 @@ html.is-native-iphone {
       right: 15%;
       width: 70%;
       min-width: 450px;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 }
@@ -128,10 +109,6 @@ html.is-native-android {
       left: 15%;
       right: 15%;
       width: 70%;
-
-      .action-bar-commands {
-        width: 100%;
-      }
     }
   }
 

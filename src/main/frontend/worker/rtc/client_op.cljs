@@ -92,7 +92,6 @@
   [repo graph-uuid]
   {:pre [(some? graph-uuid)]}
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (assert (nil? (first (d/datoms @conn :avet :graph-uuid))))
     (d/transact! conn [[:db/add "e" :graph-uuid graph-uuid]])))
 
 (defn get-graph-uuid
@@ -357,7 +356,7 @@
   [repo]
   (and (sqlite-util/db-based-graph? repo)
        (or (exists? js/process)
-           (some? (get-local-tx repo)))))
+           (some? (get-graph-uuid repo)))))
 
 (defn create-pending-block-ops-count-flow
   [repo]
@@ -456,12 +455,17 @@
       (when-let [e (:db/id ent)]
         (d/transact! conn (map (fn [a] [:db.fn/retractAttribute e a]) asset-op-types))))))
 
-(defn reset-client-op-conn
+(defn create-pending-asset-ops-count-flow
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
-                               (d/datoms @conn :avet :local-tx)
-                               (d/datoms @conn :avet :aes-key-jwk)
-                               (d/datoms @conn :avet :block/uuid))
-                       (map (fn [datom] [:db/retractEntity (:e datom)])))]
-      (d/transact! conn tx-data))))
+    (let [datom-count-fn (fn [db] (count (get-all-asset-ops* db)))
+          db-updated-flow
+          (m/observe
+           (fn ctor [emit!]
+             (d/listen! conn :create-pending-asset-ops-count-flow #(emit! true))
+             (emit! true)
+             (fn dtor []
+               (d/unlisten! conn :create-pending-asset-ops-count-flow))))]
+      (m/ap
+        (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+          (datom-count-fn @conn))))))

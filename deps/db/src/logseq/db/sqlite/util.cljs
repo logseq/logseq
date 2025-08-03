@@ -6,6 +6,7 @@
             [datascript.core]
             [datascript.impl.entity :as de]
             [datascript.transit :as dt]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.common.order :as db-order]
@@ -105,10 +106,13 @@
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
   [title]
   (block-with-timestamps
-   {:block/name (common-util/page-name-sanity-lc title)
-    :block/title title
-    :block/uuid (common-uuid/gen-uuid :builtin-block-uuid title)
-    :block/tags #{:logseq.class/Page}}))
+   (cond->
+    {:block/name (common-util/page-name-sanity-lc title)
+     :block/title title
+     :block/uuid (common-uuid/gen-uuid :builtin-block-uuid title)
+     :block/tags #{:logseq.class/Page}}
+     (contains? #{common-config/quick-add-page-name} title)
+     (assoc :logseq.property/hide? true))))
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under

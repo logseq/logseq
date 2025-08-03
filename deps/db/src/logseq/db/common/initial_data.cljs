@@ -10,18 +10,17 @@
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]))
 
-(defn- get-pages-by-name
-  [db page-name]
-  (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
-
+;; FIXME: For DB graph built-in pages, look up by name -> uuid like
+;; get-built-in-page instead of this approach which is more error prone
 (defn get-first-page-by-name
   "Return the oldest page's db id for :block/name"
   [db page-name]
   (when (and db (string? page-name))
-    (first (sort (map :e (get-pages-by-name db page-name))))))
+    (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))
 
 (defn get-first-page-by-title
   "Return the oldest page's db id for :block/title"
@@ -309,16 +308,17 @@
 
 (defn get-recent-updated-pages
   [db]
-  (some->>
-   (d/datoms db :avet :block/updated-at)
-   rseq
-   (keep (fn [datom]
-           (let [e (d/entity db (:e datom))]
-             (when (and (common-entity-util/page? e)
-                        (not (entity-util/hidden? e))
-                        (not (string/blank? (:block/title e))))
-               e))))
-   (take 30)))
+  (when db
+    (some->>
+     (d/datoms db :avet :block/updated-at)
+     rseq
+     (keep (fn [datom]
+             (let [e (d/entity db (:e datom))]
+               (when (and (common-entity-util/page? e)
+                          (not (entity-util/hidden? e))
+                          (not (string/blank? (:block/title e))))
+                 e))))
+     (take 30))))
 
 (defn- get-all-user-datoms
   [db]
@@ -355,9 +355,10 @@
         user-datoms (get-all-user-datoms db)
         pages-datoms (if db-graph?
                        (let [contents-id (get-first-page-by-title db "Contents")
+                             capture-page-id (:db/id (db-db/get-built-in-page db common-config/quick-add-page-name))
                              views-id (get-first-page-by-title db common-config/views-page-name)]
                          (mapcat #(d/datoms db :eavt %)
-                                 (remove nil? [contents-id views-id])))
+                                 (remove nil? [contents-id capture-page-id views-id])))
                        ;; load all pages for file graphs
                        (->> (d/datoms db :avet :block/name)
                             (mapcat (fn [d] (d/datoms db :eavt (:e d))))))

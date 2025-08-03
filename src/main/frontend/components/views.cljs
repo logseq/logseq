@@ -35,7 +35,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [logseq.common.config :as common-config]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -52,7 +51,7 @@
   [config]
   (if (:sidebar? config)
     (dom/sel1 ".sidebar-item-list")
-    (gdom/getElement "main-content-container")))
+    (util/app-scroll-container-node)))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
@@ -182,6 +181,7 @@
                                           {:id popup-id
                                            :align "start"
                                            :as-dropdown? true
+                                           :dropdown-menu? true
                                            :on-before-hide (fn []
                                                              (reset! *last-header-action-target el)
                                                              (js/setTimeout #(reset! *last-header-action-target nil) 128))})))))}
@@ -252,7 +252,7 @@
                   (p/let [block (or block (and (fn? create-new-block) (create-new-block)))]
                     (when block
                       (cond
-                        (util/meta-key? e)
+                        (or (util/meta-key? e) (util/mobile?))
                         (redirect!)
 
                         (.-shiftKey e)
@@ -293,7 +293,8 @@
         (let [render (fn [block]
                        [:div
                         (inline-title
-                         {:table? true}
+                         {:table? true
+                          :block/uuid (:block/uuid block)}
                          (some->> (:block/title block)
                                   string/trim
                                   string/split-lines
@@ -304,26 +305,27 @@
             (render block*)))]
        [:div])
 
-     (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
-                      "opacity-" opacity)]
-       [:div.absolute.-right-1
-        [:div.flex.flex-row.items-center
-         (shui/button
-          {:variant :ghost
-           :title "Open"
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (redirect!))
-           :class class}
-          (ui/icon "arrow-right"))
-         (shui/button
-          {:variant :ghost
-           :title "Open in sidebar"
-           :class class
-           :on-click (fn [e]
-                       (util/stop-propagation e)
-                       (add-to-sidebar!))}
-          (ui/icon "layout-sidebar-right"))]])]))
+     (when-not (util/mobile?)
+       (let [class (str "h-6 w-6 !p-1 text-muted-foreground transition-opacity duration-100 ease-in bg-gray-01 "
+                        "opacity-" opacity)]
+         [:div.absolute.-right-1
+          [:div.flex.flex-row.items-center
+           (shui/button
+            {:variant :ghost
+             :title "Open"
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (redirect!))
+             :class class}
+            (ui/icon "arrow-right"))
+           (shui/button
+            {:variant :ghost
+             :title "Open in sidebar"
+             :class class
+             :on-click (fn [e]
+                         (util/stop-propagation e)
+                         (add-to-sidebar!))}
+            (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
   [config properties & {:keys [with-object-name? with-id? add-tags-column?]
@@ -703,6 +705,7 @@
                          (mapv build-item unpinned))
         selection-rows-count (count selected-rows)]
     (shui/table-header
+     {:main-container (util/app-scroll-container-node)}
      (when (seq pinned-items)
        [:div.sticky-columns.flex.flex-row
         (dnd/items pinned-items {:vertical? false
@@ -1693,7 +1696,8 @@
     :on-click (fn [e]
                 (shui/popup-show! (.-target e)
                                   (fn [] (view-sorting-config table sorting columns))
-                                  {:align :end}))}
+                                  {:align :end
+                                   :dropdown-menu? true}))}
    (ui/icon "arrows-up-down")))
 
 (defn- view-cp
@@ -1783,6 +1787,7 @@
                                             (shui/popup-hide!))))}
                             "Delete")])
                         {:as-dropdown? true
+                         :dropdown-menu? true
                          :align "start"
                          :content-props {:onClick shui/popup-hide!}})
                        (do
@@ -1961,48 +1966,55 @@
            (if (and group-by-property-ident (not (number? (first (:rows table)))))
              (when (seq (:rows table))
                [:div.flex.flex-col.border-t.pt-2.gap-2
-                (map-indexed
-                 (fn [idx [value group]]
-                   (let [add-new-object! (when (fn? add-new-object!)
-                                           (fn [_]
-                                             (add-new-object! view-entity table
-                                                              {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
-                         table' (shui/table-option (-> table-map
-                                                       (assoc-in [:data-fns :add-new-object!] add-new-object!)
-                                                       (assoc :data group ; data for this group
-                                                              )))
-                         readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
-                                                        (db-property/property-value-content %)
-                                                        (= (:db/ident %) :logseq.property/empty-placeholder)
-                                                        "Empty"
-                                                        :else
-                                                        (str %))
-                         group-by-page? (or (= :block/page group-by-property-ident)
-                                            (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
-                     (rum/with-key
-                       (ui/foldable
-                        [:div
-                         {:class (when-not list-view? "my-4")}
-                         (cond
-                           group-by-page?
-                           (if value
-                             (let [c (state/get-component :block/page-cp)]
-                               (c {:disable-preview? true} value))
-                             [:div.text-muted-foreground.text-sm
-                              "Pages"])
+                (ui/virtualized-list
+                 {:class (when list-view? "group-list-view")
+                  :custom-scroll-parent (util/app-scroll-container-node)
+                  :increase-viewport-by {:top 300 :bottom 300}
+                  :compute-item-key (fn [idx]
+                                      (str "table-group" idx))
+                  :skipAnimationFrameInResizeObserver true
+                  :total-count (count (:rows table))
+                  :item-content (fn [idx]
+                                  (let [[value group] (nth (:rows table) idx)]
+                                    (let [add-new-object! (when (fn? add-new-object!)
+                                                            (fn [_]
+                                                              (add-new-object! view-entity table
+                                                                               {:properties {(:db/ident group-by-property) (or (and (map? value) (:db/id value)) value)}})))
+                                          table' (shui/table-option (-> table-map
+                                                                        (assoc-in [:data-fns :add-new-object!] add-new-object!)
+                                                                        (assoc :data group ; data for this group
+                                                                               )))
+                                          readable-property-value #(cond (and (map? %) (or (:block/title %) (:logseq.property/value %)))
+                                                                         (db-property/property-value-content %)
+                                                                         (= (:db/ident %) :logseq.property/empty-placeholder)
+                                                                         "Empty"
+                                                                         :else
+                                                                         (str %))
+                                          group-by-page? (or (= :block/page group-by-property-ident)
+                                                             (and (not db-based?) (contains? #{:linked-references :unlinked-references} display-type)))]
+                                      (rum/with-key
+                                        (ui/foldable
+                                         [:div
+                                          {:class (when-not list-view? "my-4")}
+                                          (cond
+                                            group-by-page?
+                                            (if value
+                                              (let [c (state/get-component :block/page-cp)]
+                                                (c {:disable-preview? true} value))
+                                              [:div.text-muted-foreground.text-sm
+                                               "Pages"])
 
-                           (some? value)
-                           (let [icon (pu/get-block-property-value value :logseq.property/icon)]
-                             [:div.flex.flex-row.gap-1.items-center
-                              (when icon (icon-component/icon icon {:color? true}))
-                              (readable-property-value value)])
-                           :else
-                           (str "No " (:block/title group-by-property)))]
-                        (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
-                          (if list-view? [:div.-ml-2 render] render))
-                        {:title-trigger? false})
-                       (str (:db/id view-entity) "-group-idx-" idx))))
-                 (:rows table))])
+                                            (some? value)
+                                            (let [icon (pu/get-block-property-value value :logseq.property/icon)]
+                                              [:div.flex.flex-row.gap-1.items-center
+                                               (when icon (icon-component/icon icon {:color? true}))
+                                               (readable-property-value value)])
+                                            :else
+                                            (str "No " (:block/title group-by-property)))]
+                                         (let [render (view-cp view-entity (assoc table' :rows group) option view-opts)]
+                                           (if list-view? [:div.-ml-2 render] render))
+                                         {:title-trigger? false})
+                                        (str (:db/id view-entity) "-group-idx-" idx)))))})])
              (view-cp view-entity table
                       (assoc option :group-by-property-ident group-by-property-ident)
                       view-opts)))])

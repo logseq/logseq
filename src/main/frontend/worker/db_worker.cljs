@@ -33,6 +33,7 @@
             [frontend.worker.thread-atom]
             [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -249,7 +250,7 @@
               (not (number? last-gc-at))
               (> (- (common-util/time-ms) last-gc-at) (* 3 24 3600 1000))) ; 3 days ago
       (println :debug "gc current graph")
-      (doseq [db [sqlite-db client-ops-db]]
+      (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
       (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
@@ -410,6 +411,12 @@
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (apply d/q (first inputs) @conn (rest inputs))))
+
+(def-thread-api :thread-api/datoms
+  [repo & args]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [result (apply d/datoms @conn args)]
+      (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]) result))))
 
 (def-thread-api :thread-api/pull
   [repo selector id]
@@ -841,6 +848,7 @@
                       (into {})
                       bean/->js)]
     (glogi-console/install!)
+    (log/set-levels {:glogi/root :info})
     (check-worker-scope!)
     (outliner-register-op-handlers!)
     (<ratelimit-file-writes!)

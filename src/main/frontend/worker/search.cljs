@@ -7,6 +7,7 @@
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.db :as ldb]
@@ -137,7 +138,9 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (string/replace " | " " OR ")
                         (string/replace " not " " NOT "))]
     (cond
-      (and (re-find #"[^\w\s]" q) (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"])))            ; punctuations
+      (and (re-find #"[^\w\s]" q)
+           (or (not (some #(string/includes? match-input %) ["AND" "OR" "NOT"]))
+               (string/includes? q "/")))            ; punctuations
       (str "\"" match-input "\"*")
       (not= q match-input)
       (string/replace match-input "," "")
@@ -191,11 +194,17 @@ DROP TRIGGER IF EXISTS blocks_au;
       (seq (fuzzy/search-normalize match true))
       (seq (fuzzy/search-normalize q true))))))
 
+(defn- hidden-entity?
+  [entity]
+  (or (ldb/hidden? entity)
+      (let [page (:block/page entity)]
+        (and (ldb/hidden? page)
+             (not= (:block/title page) common-config/quick-add-page-name)))))
+
 (defn- page-or-object?
   [entity]
   (and (or (ldb/page? entity) (ldb/object? entity))
-       (not (ldb/hidden? entity))
-       (not (ldb/hidden? (:block/page entity)))))
+       (not (hidden-entity? entity))))
 
 (defn get-all-fuzzy-supported-blocks
   "Only pages and objects are supported now."
@@ -207,9 +216,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                           (map :e)))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
-    (->> blocks
-         (remove ldb/hidden?)
-         (remove #(ldb/hidden? (:block/page %))))))
+    (remove hidden-entity? blocks)))
 
 (defn- sanitize
   [content]
@@ -359,9 +366,7 @@ DROP TRIGGER IF EXISTS blocks_au;
     (->> (d/datoms db :avet :block/uuid)
          (map :v)
          (keep #(d/entity db [:block/uuid %]))
-         (remove (fn [e]
-                   (or (ldb/hidden? e)
-                       (ldb/hidden? (:block/page e))))))))
+         (remove hidden-entity?))))
 
 (defn build-blocks-indice
   [repo db]
@@ -389,8 +394,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                               (keep #(d/entity db-before %) blocks-to-remove-set))
        :blocks-to-add        (->>
                               (keep #(d/entity db-after %) blocks-to-add-set')
-                              (remove ldb/hidden?)
-                              (remove #(ldb/hidden? (:block/page %))))})))
+                              (remove hidden-entity?))})))
 
 (defn- get-affected-blocks
   [repo tx-report]

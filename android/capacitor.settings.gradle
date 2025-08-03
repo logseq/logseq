@@ -38,11 +38,11 @@ project(':capawesome-capacitor-background-task').projectDir = new File('../node_
 include ':capgo-capacitor-navigation-bar'
 project(':capgo-capacitor-navigation-bar').projectDir = new File('../node_modules/@capgo/capacitor-navigation-bar/android')
 
-include ':logseq-capacitor-file-sync'
-project(':logseq-capacitor-file-sync').projectDir = new File('../node_modules/@logseq/capacitor-file-sync/android')
-
 include ':capacitor-voice-recorder'
 project(':capacitor-voice-recorder').projectDir = new File('../node_modules/capacitor-voice-recorder/android')
 
 include ':send-intent'
 project(':send-intent').projectDir = new File('../node_modules/send-intent/android')
+
+include ':jcesarmobile-ssl-skip'
+project(':jcesarmobile-ssl-skip').projectDir = new File('../node_modules/@jcesarmobile/ssl-skip/android')

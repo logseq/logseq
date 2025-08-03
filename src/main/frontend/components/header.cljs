@@ -26,7 +26,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.version :refer [version]]
@@ -169,11 +168,7 @@
                      :options {:on-click #(state/toggle-theme!)}
                      :icon (ui/icon "bulb")})
 
-                  ;; Disable login on Web until RTC is ready
-                  (when (and (not login?)
-                             (or
-                              (storage/get :login-enabled)
-                              (not util/web-platform?)))
+                  (when-not (or config/publishing? login?)
                     {:title (t :login)
                      :options {:on-click #(state/pub-event! [:user/login])}
                      :icon (ui/icon "user")})
@@ -337,15 +332,15 @@
 
 (rum/defc block-breadcrumb
   [page-name]
-  [:div.ls-block-breadcrumb
-   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
-                     (db/entity [:block/uuid (uuid page-name)]))]
-     (when (:block/parent page)
+  (when-let [page (when (and page-name (common-util/uuid-string? page-name))
+                    (db/entity [:block/uuid (uuid page-name)]))]
+    (when (and (ldb/page? page) (:block/parent page))
+      [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
                                     (state/get-current-repo)
                                     (:block/uuid page)
-                                    {:header? true})]))])
+                                    {:header? true})]])))
 
 (rum/defc ^:large-vars/cleanup-todo header-aux < rum/reactive
   [{:keys [current-repo default-home new-block-mode]}]
@@ -398,7 +393,7 @@
                   (ldb/get-graph-rtc-uuid (db/get-db))
                   (user-handler/logged-in?)
                   (config/db-based-graph? current-repo)
-                  (user-handler/team-member?))
+                  (user-handler/rtc-group?))
          [:<>
           (recent-slider)
           (rum/with-key (rtc-collaborators)

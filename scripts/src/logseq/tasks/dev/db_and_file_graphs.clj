@@ -18,8 +18,10 @@
          "electron.db"
          "frontend.handler.db-based."
          "frontend.worker.handler.page.db-based"
-         "frontend.components.property" "frontend.components.class"
-         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"]))
+         "frontend.components.property" "frontend.components.class" "frontend.components.quick-add"
+         "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
+         "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.ionic" "mobile.state"
+         "mobile.components"]))
 
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
@@ -55,9 +57,11 @@
          "src/main/frontend/components/property.cljs"
          "src/main/frontend/components/property"
          "src/main/frontend/components/objects.cljs"
+         "src/main/frontend/components/quick_add.cljs"
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
-         "src/electron/electron/db.cljs"]))
+         "src/electron/electron/db.cljs"
+         "src/main/mobile"]))
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
@@ -106,7 +110,8 @@
                          ;; Use file-entity-util and entity-util when in a single graph context
                          "ldb/whiteboard\\?" "ldb/journal\\?" "ldb/page\\?"]
         res (grep-many multi-graph-fns (into file-graph-paths db-graph-paths))]
-    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+    (when-not (or (and (= 1 (:exit res)) (= "" (:out res)))
+                  (and (zero? (:exit res)) (string/starts-with? (:out res) "src/main/mobile/components/app.cljs:")))
       (println "The following files should not have fns meant to be used in multi-graph contexts:")
       (println (:out res))
       (System/exit 1))))
@@ -130,13 +135,13 @@
         ;; For now use the whole code line. If this is too brittle can make this smaller
         allowed-exceptions #{":block/pre-block? :block/scheduled :block/deadline :block/type :block/name :block/marker"
                              "(dissoc :block/format))]"
+                             "{:block/name page-title})"
                              ;; TODO: Mv these 2 file-based ns out of db files
                              "(:require [logseq.db.file-based.rules :as file-rules]))"
                              "[logseq.db.file-based.schema :as file-schema]))"
-                             ;; The next 3 are from components.property.value
-                             "{:block/name page-title})"
-                             "(when-not (db/get-page journal)"
-                             "(let [value (if datetime? (tc/to-long d) (db/get-page journal))]"}
+                             ;; :block/name ones from src/main/mobile
+                             "(if-let [journal (db/get-page page-name)]"
+                             "(p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]"}
         res (grep-many file-concepts db-graph-paths)
         invalid-lines (when (= 0 (:exit res))
                         (remove #(some->> (string/split % #":\s+") second string/trim (contains? allowed-exceptions))
@@ -166,7 +171,7 @@
   (let [db-concepts
         ;; from logseq.db.frontend.schema
         ["closed-value" "class/properties" "classes" "property/parent"
-         "logseq.property" "logseq.class" "db-based"]
+         "logseq.property" "logseq.class" "db-based" "library" "quick-add"]
         res (grep-many db-concepts file-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
       (println "The following files should not have contained db specific concepts:")

@@ -7,6 +7,7 @@
             [frontend.components.page :as component-page]
             [frontend.components.plugins :as plugin]
             [frontend.components.property.dialog :as property-dialog]
+            [frontend.components.quick-add :as quick-add]
             [frontend.components.repo :as repo]
             [frontend.components.select :as select]
             [frontend.components.selection :as selection]
@@ -39,6 +40,7 @@
             [goog.dom :as gdom]
             [logseq.common.util :as common-util]
             [logseq.shui.ui :as shui]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
@@ -87,7 +89,9 @@
    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 (defmethod events/handle :redirect-to-home [_]
-  (page-handler/create-today-journal!))
+  (page-handler/create-today-journal!)
+  (when (util/capacitor-new?)
+    (mobile-state/redirect-to-tab! "home")))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]
   (shui/dialog-open!
@@ -246,6 +250,7 @@
    repo/new-db-graph
    {:id :new-db-graph
     :title [:h2 "Create a new graph"]
+    :align (if (util/mobile?) :top :center)
     :style {:max-width "500px"}}))
 
 (defmethod events/handle :dialog-select/graph-open []
@@ -257,11 +262,16 @@
 (defmethod events/handle :dialog-select/db-graph-replace []
   (select/dialog-select! :db-graph-replace))
 
+(defn- hide-action-bar!
+  []
+  (when (editor-handler/popup-exists? :selection-action-bar)
+    (shui/popup-hide! :selection-action-bar)))
+
 (defmethod events/handle :editor/show-action-bar []
   (let [selection (state/get-selection-blocks)
         first-visible-block (some #(when (util/el-visible-in-viewport? % true) %) selection)]
     (when first-visible-block
-      (shui/popup-hide! :selection-action-bar)
+      (hide-action-bar!)
       (shui/popup-show!
        first-visible-block
        (fn []
@@ -275,7 +285,8 @@
         :align :start}))))
 
 (defmethod events/handle :editor/hide-action-bar []
-  (shui/popup-hide! :selection-action-bar))
+  (hide-action-bar!)
+  (state/set-state! :mobile/show-action-bar? false))
 
 (defmethod events/handle :user/logout [[_]]
   (file-sync-handler/reset-session-graphs)
@@ -345,4 +356,13 @@
    {:id :ls-dialog-block
     :align :top
     :content-props {:class "ls-dialog-block"}
+    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
+
+(defmethod events/handle :dialog/quick-add [_]
+  (shui/dialog-open!
+   [:div.w-full.h-full
+    (quick-add/quick-add)]
+   {:id :ls-dialog-quick-add
+    :align :top
+    :content-props {:class "ls-dialog-quick-add"}
     :onEscapeKeyDown (fn [e] (.preventDefault e))}))

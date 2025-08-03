@@ -9,6 +9,7 @@
             [clojure.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [frontend.commands :as commands]
+            [frontend.components.rtc.indicator :as indicator]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -38,7 +39,6 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.outliner.pipeline :as pipeline]
@@ -52,6 +52,7 @@
             [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
@@ -183,13 +184,14 @@
     (p/do!
      (state/pub-event! [:graph/sync-context])
     ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (mobile-util/native-ios?)
-       (js/setTimeout #(mobile/mobile-postinit) 1000))
-    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+     (when (util/mobile?)
+       (state/pub-event! [:mobile/post-init]))
+     ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
-     (if db-based?
-       (export/auto-db-backup! repo {:backup-now? true})
-       (fs-watcher/load-graph-files! repo)))))
+     (when-not config/publishing?
+       (if db-based?
+         (export/auto-db-backup! repo {:backup-now? true})
+         (fs-watcher/load-graph-files! repo))))))
 
 (defmethod handle :instrument [[_ {:keys [type payload] :as opts}]]
   (when-not (empty? (dissoc opts :type :payload))
@@ -220,51 +222,33 @@
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
   (let [main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-tabbar? false)
-    (state/set-state! :mobile/show-toolbar? true)
     (state/set-state! :mobile/show-action-bar? false)
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? true))
+    (when-let [^js html (js/document.querySelector ":root")]
+      (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
+      (.add (.-classList html) "has-mobile-keyboard")
+      (.setProperty (.-style html) "--ls-native-toolbar-opacity" 1))
     (when (mobile-util/native-ios?)
       (reset! util/keyboard-height keyboard-height)
-      (set! (.. main-node -style -marginBottom) (str keyboard-height "px"))
-      (when-let [^js html (js/document.querySelector ":root")]
-        (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
-        (.add (.-classList html) "has-mobile-keyboard"))
-      (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
-        (set! (.. left-sidebar-node -style -bottom) (str keyboard-height "px")))
-      (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) (str (+ 150 keyboard-height) "px")))
-      (when-let [card-preview-el (js/document.querySelector ".cards-review")]
-        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
-        (set! (.. card-preview-el -style -marginBottom) (str keyboard-height "px")))
-      (js/setTimeout (fn []
-                       (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-                         (set! (.. toolbar -style -bottom) (str keyboard-height "px"))))
-                     100))))
+      (set! (.. main-node -style -marginBottom) (str keyboard-height "px")))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-toolbar? false)
-    (state/set-state! :mobile/show-tabbar? true)
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? false))
+    (when-let [^js html (js/document.querySelector ":root")]
+      (.removeProperty (.-style html) "--ls-native-kb-height")
+      (.setProperty (.-style html) "--ls-native-toolbar-opacity" 0)
+      (.remove (.-classList html) "has-mobile-keyboard"))
     (when (mobile-util/native-ios?)
-      (when-let [^js html (js/document.querySelector ":root")]
-        (.removeProperty (.-style html) "--ls-native-kb-height")
-        (.remove (.-classList html) "has-mobile-keyboard"))
       (when-let [card-preview-el (js/document.querySelector ".cards-review")]
-        (set! (.. card-preview-el -style -marginBottom) "0px"))
-      (when-let [card-preview-el (js/document.querySelector ".encryption-password")]
         (set! (.. card-preview-el -style -marginBottom) "0px"))
       (set! (.. main-node -style -marginBottom) "0px")
       (when-let [left-sidebar-node (gdom/getElement "left-sidebar")]
         (set! (.. left-sidebar-node -style -bottom) "0px"))
       (when-let [right-sidebar-node (gdom/getElementByClass "sidebar-item-list")]
-        (set! (.. right-sidebar-node -style -paddingBottom) "150px"))
-      (when-let [toolbar (.querySelector main-node "#mobile-editor-toolbar")]
-        (set! (.. toolbar -style -bottom) 0)))))
+        (set! (.. right-sidebar-node -style -paddingBottom) "150px")))))
 
 (defmethod handle :plugin/hook-db-tx [[_ {:keys [blocks tx-data] :as payload}]]
   (when-let [payload (and (seq blocks)
@@ -284,7 +268,6 @@
 
 (defmethod handle :graph/restored [[_ graph]]
   (when graph (assets-handler/ensure-assets-dir! graph))
-  (mobile/init!)
   (rtc-flows/trigger-rtc-start graph)
   (fsrs/update-due-cards-count)
   (when-not (mobile-util/native-ios?)
@@ -394,6 +377,11 @@
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
+(defmethod handle :rtc/remote-graph-gone [_]
+  (p/do!
+   (notification/show! "This graph has been removed from Logseq Sync." :warning false)
+   (rtc-handler/<get-remote-graphs)))
+
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid graph-schema-version]]
   (assert (= (:major (db-schema/parse-schema-version db-schema/version))
              (:major (db-schema/parse-schema-version graph-schema-version)))
@@ -401,10 +389,25 @@
            :remote-graph graph-schema-version})
   (->
    (p/do!
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000))
+    (when (util/mobile?)
+      (shui/popup-show!
+       nil
+       (fn []
+         [:div.flex.flex-col.items-center.justify-center.mt-8.gap-4
+          [:div (str "Downloading " graph-name " ...")]
+          (indicator/downloading-logs)])
+       {:id :download-rtc-graph}))
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-schema-version 60000)
+    (rtc-handler/<get-remote-graphs)
+    (when (util/mobile?)
+      (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)))))
+              (js/console.error e)
+              (when (util/mobile?)
+                (shui/popup-hide! :download-rtc-graph)
+                ;; TODO: notify error
+                )))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]

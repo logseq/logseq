@@ -681,6 +681,7 @@
   :editor/cut                     "Cut"
   :editor/undo                    "Undo"
   :editor/redo                    "Redo"
+  :editor/quick-add               "Quick add"
   :editor/insert-link             "HTML Link"
   :editor/select-all-blocks       "Select all blocks"
   :editor/select-parent           "Select parent block"

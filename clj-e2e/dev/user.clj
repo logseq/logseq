@@ -79,6 +79,11 @@
   (->> (future (run-tests 'logseq.e2e.editor-basic-test))
        (swap! *futures assoc :editor-basic-test)))
 
+(defn run-tag-basic-test
+  []
+  (->> (future (run-tests 'logseq.e2e.tag-basic-test))
+       (swap! *futures assoc :tag-basic-test)))
+
 (defn run-all-basic-test
   []
   (run-tests 'logseq.e2e.editor-basic-test

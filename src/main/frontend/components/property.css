@@ -136,9 +136,6 @@
   }
 
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -241,9 +238,6 @@ input.simple-input:focus {
 .page-add-tags, .page-tags, .property-select, .ls-property-add,
 .property-configure, .ui__dropdown-menu-content {
   .cp__select-main {
-    width: fit-content;
-    margin: 0;
-
     .ui__dropdown-trigger {
       position: absolute;
 
@@ -437,7 +431,8 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply w-[220px] p-0;
+  @apply w-[220px] px-0 pb-8 overflow-y-scroll;
+  max-height: 100vh;
 
   > ul.choices-list {
     @apply m-0 px-1.5 pt-1 pb-[1px];

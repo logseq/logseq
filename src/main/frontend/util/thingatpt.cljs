@@ -1,14 +1,14 @@
 (ns ^:no-doc frontend.util.thingatpt
-  (:require [clojure.string :as string]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
-            [frontend.config :as config]
-            [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.property :as gp-property]
+            [goog.object :as gobj]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [cljs.reader :as reader]
-            [goog.object :as gobj]))
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.text :as text]))
 
 (defn thing-at-point
   [bounds & [input ignore]]
@@ -17,22 +17,22 @@
         pos (cursor/pos input)
         [left right] (if (coll? bounds) bounds [bounds bounds])]
     (when-not (string/blank? content)
-     (let [start (string/last-index-of
-                  content left (if (= left right) (- pos (count left)) (dec pos)))
-           end (string/index-of
-                content right (if (= left right) pos (inc (- pos (count right)))))
-           end* (+ (count right) end)]
-       (when (and start end (not= start pos))
-         (let [thing (subs content (+ start (count left)) end)]
-           (when (every?
-                  false?
-                  (mapv #(string/includes? thing %)
-                        [left right ignore]))
-             {:full-content (subs content start end*)
-              :raw-content (subs content (+ start (count left)) end)
-              :bounds bounds
-              :start start
-              :end end*})))))))
+      (let [start (string/last-index-of
+                   content left (if (= left right) (- pos (count left)) (dec pos)))
+            end (string/index-of
+                 content right (if (= left right) pos (inc (- pos (count right)))))
+            end* (+ (count right) end)]
+        (when (and start end (not= start pos))
+          (let [thing (subs content (+ start (count left)) end)]
+            (when (every?
+                   false?
+                   (mapv #(string/includes? thing %)
+                         [left right ignore]))
+              {:full-content (subs content start end*)
+               :raw-content (subs content (+ start (count left)) end)
+               :bounds bounds
+               :start start
+               :end end*})))))))
 
 (defn line-at-point [& [input]]
   (let [input (or input (state/get-input))
@@ -60,10 +60,6 @@
            :type "page-ref"
            :link (text/get-page-name
                   (:full-content page-ref)))))
-
-(defn embed-macro-at-point [& [input]]
-  (when-let [macro (thing-at-point ["{{embed" "}}"] input)]
-    (assoc macro :type "macro")))
 
 ;; TODO support markdown YAML front matter
 ;; TODO support using org style properties in markdown
@@ -116,13 +112,13 @@
 
 (defn- get-markup-at-point [& [input]]
   (let [format (state/get-preferred-format)] ;; TODO fix me to block's format
-   (or (thing-at-point (config/get-hr format) input)
-       (thing-at-point (config/get-bold format) input)
-       (thing-at-point (config/get-italic format) input)
-       (thing-at-point (config/get-underline format) input)
-       (thing-at-point (config/get-strike-through format) input)
-       (thing-at-point (config/get-highlight format) input)
-       (thing-at-point (config/get-code format) input))))
+    (or (thing-at-point (config/get-hr format) input)
+        (thing-at-point (config/get-bold format) input)
+        (thing-at-point (config/get-italic format) input)
+        (thing-at-point (config/get-underline format) input)
+        (thing-at-point (config/get-strike-through format) input)
+        (thing-at-point (config/get-highlight format) input)
+        (thing-at-point (config/get-code format) input))))
 
 (defn markup-at-point [& [input]]
   (when-let [markup (get-markup-at-point input)]

@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.git-ref }}
 
@@ -129,10 +129,10 @@ jobs:
       - name: Prepare public Directory
         run: |
           cp -r static public/
-          rm -rvf public/static/js/publishing
-          rm -rvf public/static/js/*.js.map || true
-          rm -rvf public/static/*.*
-          rm -rvf public/static/ios
+          rm -rvf public/js/publishing
+          rm -rvf public/js/*.js.map || true
+          rm -rvf public/*.*
+          rm -rvf public/ios
           rm -rvf android/app/src/main/assets/public || true
 
       - name: Sync public to Android Project

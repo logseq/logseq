@@ -33,9 +33,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.mixins :as mixins]
-            [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
-            [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.modules.shortcut.utils :as shortcut-utils]
@@ -83,101 +81,104 @@
        [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
 
-(rum/defc page-name
-  [page icon recent?]
-  (let [repo (state/get-current-repo)
-        db-based? (config/db-based-graph? repo)
-        title (:block/title page)
-        untitled? (db-model/untitled-page? title)
-        name (:block/name page)
-        file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
-        ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
-        open-in-sidebar #(state/sidebar-add-block!
-                          (state/get-current-repo)
-                          (:db/id page)
-                          :page)
-        x-menu-content (fn []
-                         (let [x-menu-item shui/dropdown-menu-item
-                               x-menu-shortcut shui/dropdown-menu-shortcut]
-                           [:<>
-                            (when-not recent?
-                              (x-menu-item
-                               {:key "unfavorite"
-                                :on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
-                               (ctx-icon "star-off")
-                               (t :page/unfavorite)
-                               (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
-                                                  (some-> binding
-                                                          (first)
-                                                          (shortcut-utils/decorate-binding))))))
-                            (when-let [page-fpath (and (util/electron?) file-rpath
-                                                       (config/get-repo-fpath (state/get-current-repo) file-rpath))]
-                              [:<>
-                               (x-menu-item
-                                {:key "open-in-folder"
-                                 :on-click #(ipc/ipc :openFileInFolder page-fpath)}
-                                (ctx-icon "folder")
-                                (t :page/open-in-finder))
+(rum/defc page-name < rum/reactive db-mixins/query
+  [page recent?]
+  (when-let [id (:db/id page)]
+    (let [page (db/sub-block id)
+          repo (state/get-current-repo)
+          db-based? (config/db-based-graph? repo)
+          icon (icon/get-node-icon-cp page {:size 16})
+          title (:block/title page)
+          untitled? (db-model/untitled-page? title)
+          name (:block/name page)
+          file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
+          ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
+          open-in-sidebar #(state/sidebar-add-block!
+                            (state/get-current-repo)
+                            (:db/id page)
+                            :page)
+          x-menu-content (fn []
+                           (let [x-menu-item shui/dropdown-menu-item
+                                 x-menu-shortcut shui/dropdown-menu-shortcut]
+                             [:<>
+                              (when-not recent?
+                                (x-menu-item
+                                 {:key "unfavorite"
+                                  :on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
+                                 (ctx-icon "star-off")
+                                 (t :page/unfavorite)
+                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                    (some-> binding
+                                                            (first)
+                                                            (shortcut-utils/decorate-binding))))))
+                              (when-let [page-fpath (and (util/electron?) file-rpath
+                                                         (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                                [:<>
+                                 (x-menu-item
+                                  {:key "open-in-folder"
+                                   :on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                  (ctx-icon "folder")
+                                  (t :page/open-in-finder))
 
-                               (x-menu-item
-                                {:key "open with default app"
-                                 :on-click #(js/window.apis.openPath page-fpath)}
-                                (ctx-icon "file")
-                                (t :page/open-with-default-app))])
-                            (x-menu-item
-                             {:key "open in sidebar"
-                              :on-click open-in-sidebar}
-                             (ctx-icon "layout-sidebar-right")
-                             (t :content/open-in-sidebar)
-                             (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
+                                 (x-menu-item
+                                  {:key "open with default app"
+                                   :on-click #(js/window.apis.openPath page-fpath)}
+                                  (ctx-icon "file")
+                                  (t :page/open-with-default-app))])
+                              (x-menu-item
+                               {:key "open in sidebar"
+                                :on-click open-in-sidebar}
+                               (ctx-icon "layout-sidebar-right")
+                               (t :content/open-in-sidebar)
+                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
-    [:a.link-item.group
-     (cond->
-      {:on-click
-       (fn [e]
-         (if (gobj/get e "shiftKey")
-           (open-in-sidebar)
-           (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-       :on-context-menu (fn [^js e]
-                          (shui/popup-show! e (x-menu-content)
-                                            {:as-dropdown? true
-                                             :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                             :class "w-60"}})
-                          (util/stop e))}
-       (ldb/object? page)
-       (assoc :title (block-handler/block-unique-title page)))
-     [:span.page-icon {:key "page-icon"} icon]
-     [:span.page-title {:key "title"
-                        :class (when untitled? "opacity-50")
-                        :style {:display "ruby"}}
-      (cond
-        (not (db/page? page))
-        (block/inline-text :markdown (:block/title page))
-        untitled? (t :untitled)
-        :else (let [title' (pdf-utils/fix-local-asset-pagename title)
-                    parent (:block/parent page)]
-                (if (and parent
-                         (not (or (ldb/class? page)
-                                  (and (:logseq.property/built-in? parent)
-                                       (= (:block/title parent)
-                                          common-config/library-page-name)))))
-                  (str (:block/title parent) ns-util/parent-char title')
-                  title')))]
+      [:a.link-item.group
+       (cond->
+        {:on-click
+         (fn [e]
+           (if (gobj/get e "shiftKey")
+             (open-in-sidebar)
+             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+         :on-context-menu (fn [^js e]
+                            (shui/popup-show! e (x-menu-content)
+                                              {:as-dropdown? true
+                                               :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                               :class "w-60"}})
+                            (util/stop e))}
+         (ldb/object? page)
+         (assoc :title (block-handler/block-unique-title page)))
+       [:span.page-icon {:key "page-icon"} icon]
+       [:span.page-title {:key "title"
+                          :class (when untitled? "opacity-50")
+                          :style {:display "ruby"}}
+        (cond
+          (not (db/page? page))
+          (block/inline-text :markdown (:block/title page))
+          untitled? (t :untitled)
+          :else (let [title' (pdf-utils/fix-local-asset-pagename title)
+                      parent (:block/parent page)]
+                  (if (and parent
+                           (not (or (ldb/class? page)
+                                    (and (:logseq.property/built-in? parent)
+                                         (= (:block/title parent)
+                                            common-config/library-page-name)))))
+                    (str (:block/title parent) ns-util/parent-char title')
+                    title')))]
 
      ;; dots trigger
-     (shui/button
-      {:key "more actions"
-       :size :sm
-       :variant :ghost
-       :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
-       :on-click #(do
-                    (shui/popup-show! (.-target %) (x-menu-content)
-                                      {:as-dropdown? true
-                                       :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                       :class "w-60"}})
-                    (util/stop %))}
-      [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])]))
+       (shui/button
+        {:key "more actions"
+         :size :sm
+         :variant :ghost
+         :class "absolute !bg-transparent right-0 top-0 px-1.5 scale-75 opacity-40 hidden group-hover:block hover:opacity-80 active:opacity-100"
+         :on-click #(do
+                      (shui/popup-show! (.-target %) (x-menu-content)
+                                        {:as-dropdown? true
+                                         :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                         :class "w-60"}})
+                      (util/stop %))}
+        [:i.relative {:style {:top "4px"}} (shui/tabler-icon "dots")])])))
 
 (defn sidebar-item
   [{:keys [on-click-handler class title icon icon-extension? active href shortcut more]}]
@@ -354,10 +355,9 @@
      (when (seq favorite-entities)
        (let [favorite-items (map
                              (fn [e]
-                               (let [icon (icon/get-node-icon-cp e {:size 16})]
-                                 {:id (str (:db/id e))
-                                  :value (:block/uuid e)
-                                  :content [:li.favorite-item.font-medium (page-name e icon false)]}))
+                               {:id (str (:db/id e))
+                                :value (:block/uuid e)
+                                :content [:li.favorite-item.font-medium (page-name e false)]})
                              favorite-entities)]
          (dnd-component/items favorite-items
                               {:on-drag-end (fn [favorites']
@@ -378,7 +378,7 @@
         [:li.recent-item.select-none.font-medium
          {:key (str "recent-" (:db/id page))
           :title (block-handler/block-unique-title page)}
-         (page-name page (icon/get-node-icon-cp page {:size 16}) true)])])))
+         (page-name page true)])])))
 
 (defn get-default-home-if-valid
   []
@@ -468,7 +468,8 @@
       [:div.wrap
        [:div.sidebar-header-container
         ;; sidebar graphs
-        (sidebar-graphs)
+        (when (not config/publishing?)
+          (sidebar-graphs))
 
         ;; sidebar sticky navigations
         (sidebar-navigations
@@ -612,7 +613,7 @@
                    (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-recording-bar?]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -630,9 +631,6 @@
       {:tabIndex "-1"
        :data-is-margin-less-pages margin-less-pages?}
 
-      (when show-action-bar?
-        (action-bar/action-bar))
-
       [:div.cp__sidebar-main-content
        {:data-is-margin-less-pages margin-less-pages?
         :data-is-full-width (or margin-less-pages?
@@ -641,7 +639,6 @@
        (when show-recording-bar?
          (recording-bar))
 
-       (mobile-bar)
        (footer/footer)
 
        (cond
@@ -707,8 +704,6 @@
                                               [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
-           (when (mobile-util/native-platform?)
-             (state/set-state! :mobile/show-tabbar? true))
            state)}
   []
   (let [default-home (get-default-home-if-valid)
@@ -1048,17 +1043,20 @@
         (when (util/electron?)
           (find-in-page/search))
 
-        (main {:route-match route-match
-               :margin-less-pages? margin-less-pages?
-               :logged? logged?
-               :home? home?
-               :route-name route-name
-               :indexeddb-support? indexeddb-support?
-               :light? light?
-               :db-restoring? db-restoring?
-               :main-content main-content'
-               :show-action-bar? show-action-bar?
-               :show-recording-bar? show-recording-bar?})]
+        (if (state/sub :rtc/uploading?)
+          [:div.flex.items-center.justify-center.full-height-without-header
+           (ui/loading "Creating remote graph...")]
+          (main {:route-match route-match
+                 :margin-less-pages? margin-less-pages?
+                 :logged? logged?
+                 :home? home?
+                 :route-name route-name
+                 :indexeddb-support? indexeddb-support?
+                 :light? light?
+                 :db-restoring? db-restoring?
+                 :main-content main-content'
+                 :show-action-bar? show-action-bar?
+                 :show-recording-bar? show-recording-bar?}))]
 
        (when window-controls?
          (window-controls/container))
