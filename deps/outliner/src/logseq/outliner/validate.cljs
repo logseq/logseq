@@ -256,14 +256,18 @@
           (validate-page-title (:block/title block) {:node block})
           (validate-page-title-characters (:block/title block) {:node block})
 
-          ;; Only allow top-level blocks to be pages to guard against invalid pages
+          ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents
-          (when (not= (:block/page block) (:block/parent block))
-            (throw (ex-info "Can't convert this block to page since it is not a top-level block."
-                            {:type :notification
-                             :payload {:message "Can't convert this block to page since it is not a top-level block."
-                                       :type :error
-                                       :block (into {} block)}})))
+          (when (or (not (ldb/page? (:block/parent block)))
+                    (:logseq.property/created-from-property block))
+            (let [message (if (:logseq.property/created-from-property block)
+                            "Can't convert property value to page."
+                            "Can't convert this block to page since its parents is not a page.")]
+              (throw (ex-info message
+                              {:type :notification
+                               :payload {:message message
+                                         :type :error
+                                         :block (into {} block)}}))))
           ;; Guard against classes and properties becoming namespace parents
           (when (or (entity-util/class? (:block/page block)) (entity-util/property? (:block/page block)))
             (throw (ex-info "Can't convert this block to page when block is in a property or tag."
