@@ -522,16 +522,14 @@
      block)))
 
 (defn- get-target-block-page
-  [target-block]
+  [target-block sibling?]
   (or
    (:db/id (:block/page target-block))
    ;; target parent is a page
-   (when-let [parent (:block/parent target-block)]
-     (when (ldb/page? parent)
-       (:db/id parent)))
-
-   (when (ldb/page? target-block)
-     (:db/id target-block))
+   (when sibling?
+     (when-let [parent (:block/parent target-block)]
+       (when (ldb/page? parent)
+         (:db/id parent))))
 
    ;; target-block is a page itself
    (:db/id target-block)))
@@ -539,7 +537,7 @@
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
   (let [block-ids (set (map :block/uuid blocks))
-        target-page (get-target-block-page target-block)
+        target-page (get-target-block-page target-block sibling?)
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
@@ -856,7 +854,7 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         first-block-page (:db/id (:block/page block))
-        target-page (get-target-block-page target-block)
+        target-page (get-target-block-page target-block sibling?)
         not-same-page? (not= first-block-page target-page)
         block-order (if sibling?
                       (db-order/gen-key (:block/order target-block)
