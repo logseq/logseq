@@ -746,22 +746,22 @@
                                     node)
                              id (:db/id node)
                              [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (db-content/recur-replace-uuid-in-block-title node)
-                                                                 (block-handler/block-unique-title node))
-                                                    title (subs node-title 0 256)
-                                                    node (or (db/entity id) node)
-                                                    icon (get-node-icon node)
-                                                    header (when-not (db/page? node)
-                                                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                                                               [:div.text-xs.opacity-70
-                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
-                                                    label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (or (:logseq.property/classes property)
-                                                                         (contains? #{:class :property} (:logseq.property/type property)))
-                                                             (ui/icon icon {:size 14}))
-                                                           [:div title]]]
-                                                [header label])
+                                              (when-let [node-title (if (seq (:logseq.property/classes property))
+                                                                      (db-content/recur-replace-uuid-in-block-title node)
+                                                                      (block-handler/block-unique-title node))]
+                                                (let [title (subs node-title 0 256)
+                                                      node (or (db/entity id) node)
+                                                      icon (get-node-icon node)
+                                                      header (when-not (db/page? node)
+                                                               (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                                                 [:div.text-xs.opacity-70
+                                                                  (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
+                                                      label [:div.flex.flex-row.items-center.gap-1
+                                                             (when-not (or (:logseq.property/classes property)
+                                                                           (contains? #{:class :property} (:logseq.property/type property)))
+                                                               (ui/icon icon {:size 14}))
+                                                             [:div title]]]
+                                                  [header label]))
                                               [nil (:block/title node)])]
                          (assoc node
                                 :header header
@@ -1035,6 +1035,7 @@
              (blocks-container config (ldb/sort-by-order value-block))
              (rum/with-key
                (block-container (assoc config
+                                       :block/uuid (:block/uuid value-block)
                                        :property-default-value? default-value?) value-block)
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 

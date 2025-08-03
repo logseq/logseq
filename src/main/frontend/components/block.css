@@ -542,7 +542,7 @@
 }
 
 @container (max-width: 600px) {
-    .time-spent, .positioned-properties.block-right, .view-actions, .ls-page-title .block-tags {
+    .time-spent, .positioned-properties.block-right, .view-actions {
         display: none;
     }
 
