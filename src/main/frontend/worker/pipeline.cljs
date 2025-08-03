@@ -130,40 +130,53 @@
 (defn- toggle-page-and-block
   [conn {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (:rtc-op? tx-meta)
-    (let [page-tag (d/entity @conn :logseq.class/Page)]
+    (let [page-tag (d/entity @conn :logseq.class/Page)
+          library-page (ldb/get-library-page db-after)]
       (mapcat
        (fn [datom]
-         (when (and (= :block/tags (:a datom))
-                    (= (:db/id page-tag) (:v datom))
-                    (d/entity db-after (:e datom)))
-           (when-let [block (d/entity db-before (:e datom))]
-             (let [id (:db/id block)]
-               (cond
-                 ;; block->page
-                 (and (:added datom) (not (ldb/page? block))) ; block->page
-                 (let [->page-tx [{:db/id id
-                                   :block/name (common-util/page-name-sanity-lc (:block/title block))}
-                                  [:db/retract id :block/page]]
-                       move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
-                                                       block-parent (:block/parent block)]
-                                                   (assert (ldb/page? block-parent))
-                                                   (when (and (nil? (:block/parent block-parent)) block-parent)
-                                                     [{:db/id (:db/id block-parent)
-                                                       :block/parent (:db/id (ldb/get-library-page db-after))
-                                                       :block/order (db-order/gen-key)}]))]
-                   (concat ->page-tx move-parent-to-library-tx))
+         (let [id (:e datom)
+               page-tag-update? (and (= :block/tags (:a datom))
+                                     (= (:db/id page-tag) (:v datom)))
+               move-to-library? (and (= :block/parent (:a datom))
+                                     (= (:db/id library-page) (:v datom))
+                                     (:added datom))]
+           (when (or page-tag-update? move-to-library?)
+             (let [block-before (d/entity db-before id)
+                   block-after (d/entity db-after id)]
+               (when (and block-before block-after)
+                 (cond
+                   ;; move non-page block to Library
+                   (and move-to-library? (not (ldb/page? block-after)))
+                   [{:db/id id
+                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                     :block/tags :logseq.class/Page}
+                    [:db/retract id :block/page]]
 
-                 ;; page->block
-                 (and (not (:added datom)) (ldb/internal-page? block))
-                 (let [parent (:block/parent block)
-                       parent-page (when parent
-                                     (loop [parent parent]
-                                       (if (ldb/page? parent)
-                                         parent
-                                         (recur (:block/parent parent)))))]
-                   (when parent-page
-                     [[:db/retract id :block/name]
-                      [:db/add id :block/page (:db/id parent-page)]])))))))
+                   ;; block->page
+                   (and (:added datom) (not (ldb/page? block-before))) ; block->page
+                   (let [->page-tx [{:db/id id
+                                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
+                                    [:db/retract id :block/page]]
+                         move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
+                                                         block-parent (:block/parent block)]
+                                                     (assert (ldb/page? block-parent))
+                                                     (when (and (nil? (:block/parent block-parent)) block-parent)
+                                                       [{:db/id (:db/id block-parent)
+                                                         :block/parent (:db/id (ldb/get-library-page db-after))
+                                                         :block/order (db-order/gen-key)}]))]
+                     (concat ->page-tx move-parent-to-library-tx))
+
+                   ;; page->block
+                   (and (not (:added datom)) (ldb/internal-page? block-before))
+                   (let [parent (:block/parent block-before)
+                         parent-page (when parent
+                                       (loop [parent parent]
+                                         (if (ldb/page? parent)
+                                           parent
+                                           (recur (:block/parent parent)))))]
+                     (when parent-page
+                       [[:db/retract id :block/name]
+                        [:db/add id :block/page (:db/id parent-page)]]))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
@@ -288,12 +301,12 @@
   ;; Notice: don't catch `undo-tx-data-if-disallowed!` since we want it failed immediately
   (undo-tx-data-if-disallowed! conn tx-report)
   (try
-    (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
-                           (compute-extra-tx-data repo conn tx-report))
-          tx-report* (if (seq tx-before-refs)
-                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
-                                                                        :outliner-op :pre-hook-invoke
-                                                                        :skip-store? true})]
+    (let [extra-tx-data (when (sqlite-util/db-based-graph? repo)
+                          (compute-extra-tx-data repo conn tx-report))
+          tx-report* (if (seq extra-tx-data)
+                       (let [result (ldb/transact! conn extra-tx-data {:pipeline-replace? true
+                                                                       :outliner-op :pre-hook-invoke
+                                                                       :skip-store? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
