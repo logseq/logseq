@@ -524,13 +524,15 @@
 (defn- get-target-block-page
   [target-block]
   (or
-   (when (ldb/page? target-block)
-     (:db/id target-block))
    (:db/id (:block/page target-block))
    ;; target parent is a page
    (when-let [parent (:block/parent target-block)]
      (when (ldb/page? parent)
        (:db/id parent)))
+
+   (when (ldb/page? target-block)
+     (:db/id target-block))
+
    ;; target-block is a page itself
    (:db/id target-block)))
 

@@ -12,6 +12,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -138,10 +139,19 @@
            (when-let [block (d/entity db-before (:e datom))]
              (let [id (:db/id block)]
                (cond
+                 ;; block->page
                  (and (:added datom) (not (ldb/page? block))) ; block->page
-                 [{:db/id id
-                   :block/name (common-util/page-name-sanity-lc (:block/title block))}
-                  [:db/retract id :block/page]]
+                 (let [->page-tx [{:db/id id
+                                   :block/name (common-util/page-name-sanity-lc (:block/title block))}
+                                  [:db/retract id :block/page]]
+                       move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
+                                                       block-parent (:block/parent block)]
+                                                   (assert (ldb/page? block-parent))
+                                                   (when (and (nil? (:block/parent block-parent)) block-parent)
+                                                     [{:db/id (:db/id block-parent)
+                                                       :block/parent (:db/id (ldb/get-library-page db-after))
+                                                       :block/order (db-order/gen-key)}]))]
+                   (concat ->page-tx move-parent-to-library-tx))
 
                  ;; page->block
                  (and (not (:added datom)) (ldb/internal-page? block))

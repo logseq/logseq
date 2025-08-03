@@ -273,6 +273,9 @@
 (def get-built-in-page db-db/get-built-in-page)
 
 (def library? db-db/library?)
+(defn get-library-page
+  [db]
+  (get-built-in-page db common-config/library-page-name))
 
 (defn get-case-page
   "Case sensitive version of get-page. For use with DB graphs"
