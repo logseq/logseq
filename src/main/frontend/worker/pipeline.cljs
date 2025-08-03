@@ -127,13 +127,14 @@
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
 (defn- toggle-page-and-block
-  [conn {:keys [db-before tx-data tx-meta]}]
+  [conn {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (:rtc-op? tx-meta)
     (let [page-tag (d/entity @conn :logseq.class/Page)]
       (mapcat
        (fn [datom]
          (when (and (= :block/tags (:a datom))
-                    (= (:db/id page-tag) (:v datom)))
+                    (= (:db/id page-tag) (:v datom))
+                    (d/entity db-after (:e datom)))
            (when-let [block (d/entity db-before (:e datom))]
              (let [id (:db/id block)]
                (cond
