@@ -1,6 +1,6 @@
 (ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
-  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
@@ -187,7 +187,7 @@
   (when search (.close search))
   (when client-ops (.close client-ops))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool))
+    (.pauseVfs pool))
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
@@ -221,7 +221,7 @@
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
-                (.acquireAccessHandles pool))
+                (.unpauseVfs pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
             client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
@@ -547,7 +547,7 @@
 (def-thread-api :thread-api/release-access-handles
   [repo]
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool)
+    (.pauseVfs pool)
     nil))
 
 (def-thread-api :thread-api/db-exists
