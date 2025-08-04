@@ -440,9 +440,11 @@
                          hours (.getHours date)
                          minutes (.getMinutes date)]
                      [:span.select-none
-                      (str (util/zero-pad hours)
-                           ":"
-                           (util/zero-pad minutes))])]]
+                      (if (= 0 hours minutes)
+                        (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"})
+                        (str (util/zero-pad hours)
+                             ":"
+                             (util/zero-pad minutes)))])]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
