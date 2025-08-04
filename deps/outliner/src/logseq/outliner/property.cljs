@@ -528,8 +528,18 @@
                (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
       (when (= property-id :block/tags)
         (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
-      (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
-        (ldb/transact! conn tx-data {:outliner-op :save-block})))))
+      (if (= property-id :block/tags)
+        (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
+          (ldb/transact! conn tx-data {:outliner-op :save-block}))
+        (doseq [block-eid block-eids]
+          (when-let [block (d/entity @conn block-eid)]
+            (let [current-val (get block property-id)
+                  fv (first current-val)]
+              (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
+                (remove-block-property! conn (:db/id block) property-id)
+                (ldb/transact! conn
+                               [[:db/retract (:db/id block) property-id property-value]]
+                               {:outliner-op :save-block})))))))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
