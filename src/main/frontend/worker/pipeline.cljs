@@ -160,7 +160,11 @@
                          move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
                                                          block-parent (:block/parent block)]
                                                      (assert (ldb/page? block-parent))
-                                                     (when (and (nil? (:block/parent block-parent)) block-parent)
+                                                     (when (and (nil? (:block/parent block-parent))
+                                                                block-parent
+                                                                (not= (:db/id block-parent) (:db/id library-page))
+                                                                (not (:db/ident block-parent))
+                                                                (not (ldb/built-in? block-parent)))
                                                        [{:db/id (:db/id block-parent)
                                                          :block/parent (:db/id (ldb/get-library-page db-after))
                                                          :block/order (db-order/gen-key)}]))]
