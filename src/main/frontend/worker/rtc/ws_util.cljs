@@ -1,12 +1,12 @@
 (ns frontend.worker.rtc.ws-util
   "Add RTC related logic to the function based on ws."
   (:require [cljs-http-missionary.client :as http]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.rtc.db :as rtc-db]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [goog.string :as gstring]
             [logseq.graph-parser.utf8 :as utf8]
             [missionary.core :as m]))

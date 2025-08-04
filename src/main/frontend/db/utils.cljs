@@ -3,8 +3,8 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.common.entity-plus :as entity-plus]))
+            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
 
