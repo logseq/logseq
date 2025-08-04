@@ -44,8 +44,7 @@
                            :externs ["datascript/externs.js"
                                      "externs.js"]
                            :warnings {:fn-deprecated false
-                                      :redef false}
-                           :cross-chunk-method-motion false}
+                                      :redef false}}
         :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines {lambdaisland.glogi.console/colorize "false"
                           goog.debug.LOGGING_ENABLED true
@@ -56,7 +55,7 @@
                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
-
+        
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
                    :watch-path "/static"
@@ -93,8 +92,7 @@
                                :externs ["datascript/externs.js"
                                          "externs.js"]
                                :warnings {:fn-deprecated false
-                                          :redef false}
-                               :cross-chunk-method-motion false}
+                                          :redef false}}
             :closure-defines {goog.debug.LOGGING_ENABLED true}
             :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                        :after-load frontend.core/start          ;; after live-reloading finishes call this function
@@ -129,8 +127,7 @@
                               :externs ["datascript/externs.js"
                                         "externs.js"]
                               :warnings {:fn-deprecated false
-                                         :redef false}
-                              :cross-chunk-method-motion false}
+                                         :redef false}}
            :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
            :closure-defines
            {;; Set to switch file sync server to dev, set this to false in `yarn watch`
