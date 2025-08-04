@@ -73,6 +73,11 @@
   (op-transact!
    [:delete-property-value [block-eid property-id property-value]]))
 
+(defn batch-delete-property-value!
+  [block-eids property-id property-value]
+  (op-transact!
+   [:batch-delete-property-value [block-eids property-id property-value]]))
+
 (defn create-property-text-block!
   [block-id property-id value opts]
   (op-transact!

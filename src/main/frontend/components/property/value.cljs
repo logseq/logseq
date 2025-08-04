@@ -249,8 +249,7 @@
        (p/do!
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
-         (doseq [block blocks]
-           (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)))
+         (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))

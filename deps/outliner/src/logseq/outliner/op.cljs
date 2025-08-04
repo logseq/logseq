@@ -53,6 +53,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::block-id ::property-id ::value]]]]
+   [:batch-delete-property-value
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block-ids ::property-id ::value]]]]
    [:create-property-text-block
     [:catn
      [:op :keyword]
@@ -210,6 +214,9 @@
 
          :batch-remove-property
          (apply outliner-property/batch-remove-property! conn args)
+
+         :batch-delete-property-value
+         (apply outliner-property/batch-delete-property-value! conn args)
 
          :class-add-property
          (apply outliner-property/class-add-property! conn args)
