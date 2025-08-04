@@ -1,5 +1,5 @@
 (ns frontend.handler.worker
-  "Handle messages received from the db worker"
+  "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
@@ -37,6 +37,9 @@
   (let [state data]
     (state/pub-event! [:rtc/sync-state state])))
 
+(defmethod handle :vector-search-sync-state [_ _worker data]
+  (state/pub-event! [:vector-search/sync-state data]))
+
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
 
@@ -48,6 +51,9 @@
 
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
+
+(defmethod handle :vector-search/load-model-progress [_ _ data]
+  (state/pub-event! [:vector-search/load-model-progress data]))
 
 (defmethod handle :backup-file [_ _worker data]
   (state/pub-event! [:graph/backup-file data]))
