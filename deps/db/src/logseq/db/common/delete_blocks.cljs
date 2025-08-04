@@ -5,8 +5,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn- replace-ref-with-deleted-block-title

@@ -69,8 +69,7 @@
   [:div.flex-1.overflow-hidden
    [:h1.title
     (t :all-files)]
-   (files-all)
-   ])
+   (files-all)])
 
 ;; FIXME: misuse of rpath and fpath
 (rum/defcs file-inner < rum/reactive
