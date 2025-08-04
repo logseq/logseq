@@ -1,7 +1,6 @@
 (ns mobile.components.popup
   "Mobile popup"
-  (:require [dommy.core :as dom]
-            [frontend.handler.editor :as editor-handler]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.silkhq :as silkhq]
@@ -73,27 +72,27 @@
       (state/clear-edit!)
       (init/keyboard-hide))
 
-    (when open?
-      (silkhq/bottom-sheet
-       (merge
-        {:presented (boolean open?)
-         :onPresentedChange (fn [v?]
-                              (if (false? v?)
-                                (do
-                                  (mobile-state/set-popup! nil)
-                                  (state/clear-edit!)
-                                  (state/pub-event! [:mobile/keyboard-will-hide]))
-                                (when (= :ls-quick-add (:id opts))
-                                  (editor-handler/quick-add-open-last-block!))))}
-        (:modal-props opts))
-       (silkhq/bottom-sheet-portal
-        (silkhq/bottom-sheet-view
-         {:class "app-silk-popup-sheet-view"}
-         (silkhq/bottom-sheet-backdrop)
-         (silkhq/bottom-sheet-content
-          {:class "flex flex-col items-center p-2"}
-          (silkhq/bottom-sheet-handle)
-          [:div.w-full.app-silk-popup-content-inner.p-2
-           (when-let [title (:title opts)]
-             [:h2.py-2.opacity-40 title])
-           (if (fn? content-fn) (content-fn) content-fn)])))))))
+    (silkhq/bottom-sheet
+     (merge
+      {:presented (boolean open?)
+       :onPresentedChange (fn [v?]
+                            (cond
+                              (false? v?)
+                              (do
+                                (mobile-state/set-popup! nil)
+                                (state/clear-edit!)
+                                (state/pub-event! [:mobile/keyboard-will-hide]))
+                              (and (true? v?) (= :ls-quick-add (:id opts)))
+                              (editor-handler/quick-add-open-last-block!)))}
+      (:modal-props opts))
+     (silkhq/bottom-sheet-portal
+      (silkhq/bottom-sheet-view
+       {:class "app-silk-popup-sheet-view"}
+       (silkhq/bottom-sheet-backdrop)
+       (silkhq/bottom-sheet-content
+        {:class "flex flex-col items-center p-2"}
+        (silkhq/bottom-sheet-handle)
+        [:div.w-full.app-silk-popup-content-inner.p-2
+         (when-let [title (:title opts)]
+           [:h2.py-2.opacity-40 title])
+         (if (fn? content-fn) (content-fn) content-fn)]))))))
