@@ -1,4 +1,4 @@
-import path from 'path/path.js'
+import path from 'path'
 
 // TODO split the capacitor abilities to a separate file for capacitor APIs
 import { Capacitor } from '@capacitor/core'

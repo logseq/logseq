@@ -11,16 +11,16 @@
 (rum/defc query-refresh-button
   [query-time {:keys [on-pointer-down full-text-search?]}]
   (ui/tooltip
-    [:a.fade-link.flex
-     {:on-pointer-down on-pointer-down}
-     (ui/icon "refresh" {:style {:font-size 20}})]
-    [:div
-     [:p
-      (if full-text-search?
-        [:span "Full-text search results will not be refreshed automatically."]
-        [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
-     [:p
-      "Click the refresh button instead if you want to see the latest result."]]))
+   [:a.fade-link.flex
+    {:on-pointer-down on-pointer-down}
+    (ui/icon "refresh" {:style {:font-size 20}})]
+   [:div
+    [:p
+     (if full-text-search?
+       [:span "Full-text search results will not be refreshed automatically."]
+       [:span (str "This query takes " (int query-time) "ms to finish, it's a bit slow so that auto refresh is disabled.")])]
+    [:p
+     "Click the refresh button instead if you want to see the latest result."]]))
 
 ;; Custom query header only used by file graphs
 (rum/defc custom-query-header

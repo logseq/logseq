@@ -1,14 +1,14 @@
 (ns ^:node-only logseq.publishing.export
   "This electron only ns (for the main process) exports files from multiple
   locations to provide a complete publishing app"
-  (:require ["fs-extra" :as fse]
+  (:require ["fs" :as fs]
+            ["fs-extra" :as fse]
             ["path" :as node-path]
-            ["fs" :as fs]
             [promesa.core :as p]))
 
 (def ^:api js-files
   "js files from publishing release build"
-  (->> ["shared.js" "main.js" "code-editor.js" "excalidraw.js" "tldraw.js" "db-worker.js"]
+  (->> ["main.js" "code-editor.js" "excalidraw.js" "tldraw.js"]
        ;; Add source maps for all js files as it doesn't affect initial load time
        (mapcat #(vector % (str % ".map")))
        vec))

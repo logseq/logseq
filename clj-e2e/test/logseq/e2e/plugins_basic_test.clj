@@ -25,14 +25,14 @@
   (when (string? s)
     (-> s
       ;; Normalize input: replace hyphens/spaces with underscores, collapse multiple underscores
-      (clojure.string/replace #"[-\s]+" "_")
+        (clojure.string/replace #"[-\s]+" "_")
       ;; Split on uppercase letters (except at start) and join with underscore
-      (clojure.string/replace #"(?<!^)([A-Z])" "_$1")
+        (clojure.string/replace #"(?<!^)([A-Z])" "_$1")
       ;; Remove redundant underscores and trim
-      (clojure.string/replace #"_+" "_")
-      (clojure.string/trim)
+        (clojure.string/replace #"_+" "_")
+        (clojure.string/trim)
       ;; Convert to lowercase
-      (clojure.string/lower-case))))
+        (clojure.string/lower-case))))
 
 (defn- ls-api-call!
   [tag & args]
@@ -63,7 +63,7 @@
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-apis" "append-block-in-page-0")
           uuid' (assert-api-ls-block! ret)]
       (-> (ls-api-call! :editor.insertBlock uuid' "insert-0")
-        (assert-api-ls-block!))
+          (assert-api-ls-block!))
       (ls-api-call! :editor.updateBlock uuid' "append-but-updated-0")
       (k/esc)
       (w/wait-for ".block-title-wrap:text('append-but-updated-0')")

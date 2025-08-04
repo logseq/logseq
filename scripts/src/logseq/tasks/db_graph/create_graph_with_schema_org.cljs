@@ -195,11 +195,11 @@
                              (map #(vector % (str % "_Class")))
                              (into {}))]
     (when (seq renamed-classes)
-     (if verbose
-       (println "Renaming the following classes because they have names that conflict with Logseq's case insensitive :block/name:"
-                (keys renamed-classes) "\n")
-       (when (pos? (count renamed-classes))
-         (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))))
+      (if verbose
+        (println "Renaming the following classes because they have names that conflict with Logseq's case insensitive :block/name:"
+                 (keys renamed-classes) "\n")
+        (when (pos? (count renamed-classes))
+          (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))))
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
