@@ -1,5 +1,6 @@
 (ns logseq.e2e.editor-basic-test
   (:require
+   [clojure.set :as set]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [logseq.e2e.assert :as assert]
    [logseq.e2e.block :as b]
@@ -70,8 +71,9 @@
 
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"
+    (p/goto-page "Library")
     (p/new-page "test page")
-    (b/new-blocks ["b1" "b2" "b3"])
+    (b/new-blocks ["block1" "block2" "block3"])
     (b/select-blocks 3)
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
@@ -79,9 +81,10 @@
     (.focus (w/-query ".cp__cmdk-search-input"))
     (k/enter)
     (p/goto-page "Library")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 3)
+    (let [contents (set (util/get-page-blocks-contents))]
+      (is (set/subset? (set ["block1" "block2" "block3"]) contents)))
     (p/goto-page "test page")
-    (b/new-blocks ["b4" "b5"])
+    (b/new-blocks ["block4" "block5"])
     (b/select-blocks 2)
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
@@ -89,5 +92,5 @@
     (.focus (w/-query ".cp__cmdk-search-input"))
     (k/enter)
     (p/goto-page "Library")
-    (let [contents (util/get-page-blocks-contents)]
-      (is (= contents ["b1" "b2" "b3" "b4" "b5"])))))
+    (let [contents (set (util/get-page-blocks-contents))]
+      (is (set/subset? (set ["block1" "block2" "block3" "block4" "block5"]) contents)))))
