@@ -231,20 +231,42 @@
                                              " on built-in " (pr-str (:block/title built-in-ent)))
                                :type :error}}))))
 
-(defn- disallow-removing-page-tag-if-no-parent
+(defn- disallow-removing-page-tag
+  "Disallow page->block when
+  1. this page doesn't have :block/parent
+  2. its parent is Library
+  3. it has page child"
   [db eids v]
   (when (= (:db/ident (d/entity db v)) :logseq.class/Page)
-    (doseq [eid eids]
-      (let [entity (d/entity db eid)]
-        (when (and (ldb/internal-page? entity)
-                   (not (:block/parent entity)))
-          (throw (ex-info "This page cannot be converted to a block"
-                          {:type :notification
-                           :payload
-                           {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
-                            :type :error
-                            :entity (into {} entity)
-                            :property :block/tags}})))))))
+    (let [library-page (ldb/get-library-page db)]
+      (doseq [eid eids]
+        (let [entity (d/entity db eid)]
+          (when (ldb/internal-page? entity)
+            (cond
+              (not (:block/parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (= (:db/id library-page) (:db/id (:block/parent entity)))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block, please move it to another page first")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}}))
+              (some ldb/page? (:block/_parent entity))
+              (throw (ex-info "This page cannot be converted to a block"
+                              {:type :notification
+                               :payload
+                               {:message (str "Page " (pr-str (:block/title entity)) " cannot be converted to a block because it has page children")
+                                :type :error
+                                :entity (into {} entity)
+                                :property :block/tags}})))))))))
 
 (defn- validate-block-can-tag-with-page-tag
   "Validates block can convert to page by adding #Page for allowed scenarios"
@@ -289,4 +311,4 @@
   [db block-eids v]
   (disallow-tagging-a-built-in-entity db block-eids {:delete? true})
   (disallow-node-cant-tag-with-private-tags db block-eids v {:delete? true})
-  (disallow-removing-page-tag-if-no-parent db block-eids v))
+  (disallow-removing-page-tag db block-eids v))
