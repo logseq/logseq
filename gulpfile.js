@@ -132,8 +132,20 @@ const common = {
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
       ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
       () => gulp.src([
-        'packages/ui/dist/silkhq/*',
-      ]).pipe(gulp.dest(path.join(outputPath, 'mobile'))),
+        'packages/ui/dist/silkhq/*.css*',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
+      () => gulp.src([
+        'packages/ui/dist/silkhq/*.js*',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'js'))),
+      () => gulp.src([
+        'node_modules/inter-ui/inter.css',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css'))),
+      () => gulp.src('node_modules/inter-ui/Inter (web)/*.*').
+        pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'Inter (web)'))),
+      () => gulp.src([
+        'node_modules/@tabler/icons-webfont/fonts/**',
+        'node_modules/katex/dist/fonts/*.woff2',
+      ]).pipe(gulp.dest(path.join(outputPath, 'mobile', 'css', 'fonts'))),
     )(...params)
   },
 
