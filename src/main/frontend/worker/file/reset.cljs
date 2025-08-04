@@ -2,8 +2,8 @@
   "Fns for resetting a db file with parsed file content"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]

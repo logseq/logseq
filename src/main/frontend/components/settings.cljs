@@ -1,7 +1,9 @@
 (ns frontend.components.settings
   (:require [clojure.string :as string]
+            [clojure.walk :as walk]
             [electron.ipc :as ipc]
             [frontend.colors :as colors]
+            [frontend.common.missionary :as c.m]
             [frontend.components.assets :as assets]
             [frontend.components.file-sync :as fs]
             [frontend.components.shortcut :as shortcut]
@@ -13,6 +15,7 @@
             [frontend.dicts :as dicts]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
@@ -35,6 +38,7 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [missionary.core :as m]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
@@ -1189,6 +1193,87 @@
                            (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
         "Invite")]]]))
 
+(rum/defc settings-ai
+  []
+  (let [[model-info set-model-info] (hooks/use-state nil)
+        [load-model-progress set-load-model-progress] (hooks/use-state nil)
+        {:keys [status]} load-model-progress
+        repo (state/get-current-repo)
+        current-model (:graph-text-embedding-model-name model-info)]
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task
+         ::fetch-model-info
+         (m/reduce
+          (constantly nil)
+          (m/ap
+            (m/?> vector-search-flows/infer-worker-ready-flow)
+            (let [model-info (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-model-info repo))]
+              (set-model-info model-info))))
+         :succ (constantly nil)))
+     [])
+    (hooks/use-effect!
+     (fn []
+       (c.m/run-task
+         ::update-load-model-progress
+         (m/reduce
+          (fn [_ v] (set-load-model-progress (walk/keywordize-keys v)))
+          vector-search-flows/load-model-progress-flow)
+         :succ (constantly nil)))
+     [])
+    [:div.panel-wrap
+     [:div.flex.flex-col.gap-2.mt-4
+      [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
+
+      [:div.flex.flex-col.gap-2
+       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+        [:label.block.text-sm.font-medium.leading-8.opacity-70
+         {:for "local-embedding-model"}
+         "Local embedding model"]
+        [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+         [:div.flex.flex-col.gap-2
+          (shui/select
+           (cond->
+            {:on-value-change (fn [model-name]
+                                (c.m/run-task
+                                  ::load-model
+                                  (m/sp
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
+                                    (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+                                    (c.m/<?
+                                     (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
+                                  :succ (constantly nil)))}
+             current-model
+             (assoc :value current-model))
+           (shui/select-trigger
+            {:class "h-8"}
+            (shui/select-value
+             {:placeholder "Select a model"}))
+
+           (shui/select-content
+            (shui/select-group
+             (for [model-name (:available-model-names model-info)]
+               (shui/select-item {:value model-name} model-name)))))
+
+          (when (and status current-model)
+            [:div.text-muted-foreground.text-sm
+             (let [{:keys [file progress loaded total]} load-model-progress]
+               (case status
+                 ("progress" "download" "initiate")
+                 (str "Downloading " file
+                      (when progress
+                        (util/format " %d/%dm"
+                                     (int (/ loaded 1024 1024))
+                                     (int (/ total 1024 1024)))))
+                 "done"
+                 (str "Downloaded " file)
+                 "ready"
+                 "Model is ready  🚀"
+                 nil))])]]]]]]))
+
 (rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
   {:will-mount
@@ -1212,7 +1297,8 @@
         _installed-plugins (state/sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)
-        logged-in? (user-handler/logged-in?)]
+        logged-in? (user-handler/logged-in?)
+        db-based? (config/db-based-graph?)]
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
@@ -1228,6 +1314,8 @@
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
 
+               (when db-based?
+                 [:ai (t :settings-page/tab-ai) (t :settings-page/ai) (ui/icon "wand")])
                (when (util/electron?)
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
 
@@ -1292,5 +1380,8 @@
 
          :collaboration
          (settings-collaboration)
+
+         :ai
+         (settings-ai)
 
          nil)]]]))

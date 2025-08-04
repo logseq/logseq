@@ -435,19 +435,19 @@
   {:pre [(or (coll? root-block-uuids-or-page-uuid)
              (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
-   :export-blocks-as-opml
-   (let [content
-         (if (uuid? root-block-uuids-or-page-uuid)
+    :export-blocks-as-opml
+    (let [content
+          (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-           (common/get-page-content root-block-uuids-or-page-uuid)
-           (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
-         title (if (uuid? root-block-uuids-or-page-uuid)
-                 (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
-                 "untitled")
-         first-block (and (coll? root-block-uuids-or-page-uuid)
-                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
-         format (get first-block :block/format :markdown)]
-     (export-helper content format options :title title))))
+            (common/get-page-content root-block-uuids-or-page-uuid)
+            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+          title (if (uuid? root-block-uuids-or-page-uuid)
+                  (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
+                  "untitled")
+          first-block (and (coll? root-block-uuids-or-page-uuid)
+                           (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+          format (get first-block :block/format :markdown)]
+      (export-helper content format options :title title))))
 
 (defn- export-files-as-opml
   "options see also `export-blocks-as-opml`"
@@ -456,7 +456,7 @@
    (fn [{:keys [path content title format]}]
      (when (and title (not (string/blank? content)))
        (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options :title title)])))
+         [path (export-helper content format options :title title)])))
    files))
 
 (defn export-repo-as-opml!

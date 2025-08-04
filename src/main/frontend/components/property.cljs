@@ -490,7 +490,10 @@
 
          (let [property-desc (when-not (= (:db/ident property) :logseq.property/description)
                                (:logseq.property/description property))]
-           [:div.ls-block.property-value-container.flex.flex-row.gap-1.items-start
+           [:div.ls-block.property-value-container.flex.flex-row.gap-1
+            {:class (if (contains? #{:checkbox :date :datetime} type)
+                      "items-center"
+                      "items-start")}
 
             (when-not (or block? (and property-desc (:class-schema? opts)))
               [:div.flex.items-center {:style {:height 28}}

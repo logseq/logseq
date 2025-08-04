@@ -75,7 +75,7 @@
    :commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :nodes         {:status :success :show :less :items nil}
+   :nodes          {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
@@ -647,7 +647,6 @@
   [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
-        highlighted-group @(::highlighted-group state)
         *mouse-active? (::mouse-active? state')
         filter' @(::filter state)
         can-show-less? (< (get-group-limit group) (count visible-items))
@@ -677,8 +676,7 @@
 
          [:div {:class "flex-1"}]
 
-         (when (and (= group highlighted-group)
-                    (or can-show-more? can-show-less?)
+         (when (and (or can-show-more? can-show-less?)
                     (empty? filter')
                     (not sidebar?))
            [:a.text-link.select-node.opacity-50.hover:opacity-90

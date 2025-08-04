@@ -251,7 +251,7 @@
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
-                  (dissoc :block/children :block/meta :block/unordered
+                  (dissoc :block/children :block/meta :block/unordered :block/path-refs
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
                   common-util/remove-nils
