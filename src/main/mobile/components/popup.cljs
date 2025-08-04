@@ -86,7 +86,7 @@
        {:class "app-silk-popup-sheet-view"
         :onTravelEnd (fn []
                        (when (= :ls-quick-add (:id opts))
-                         (js/setTimeout #(editor-handler/quick-add-open-last-block!) 30)))}
+                         (js/setTimeout #(editor-handler/quick-add-open-last-block!) 50)))}
        (silkhq/bottom-sheet-backdrop)
        (silkhq/bottom-sheet-content
         {:class "flex flex-col items-center p-2"}
