@@ -1,4 +1,4 @@
-(ns logseq.cli.common.graph
+(ns ^:node-only logseq.cli.common.graph
   "Graph related fns shared between CLI and electron"
   (:require ["fs-extra" :as fs-extra]
             ["os" :as os]
@@ -14,15 +14,15 @@
         (string/replace "+3A+" ":")
         (string/replace "++" "/"))))
 
-(defn- get-db-based-graphs-dir
+(defn get-db-graphs-dir
+  "Directory where DB graphs are stored"
   []
-  (let [dir (node-path/join (os/homedir) "logseq" "graphs")]
-    (fs-extra/ensureDirSync dir)
-    dir))
+  (node-path/join (os/homedir) "logseq" "graphs"))
 
 (defn get-db-based-graphs
   []
-  (let [dir (get-db-based-graphs-dir)]
+  (let [dir (get-db-graphs-dir)]
+    (fs-extra/ensureDirSync dir)
     (->> (common-graph/read-directories dir)
          (remove (fn [s] (= s common-config/unlinked-graphs-dir)))
          (map graph-name->path)
