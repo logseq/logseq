@@ -284,7 +284,7 @@
                     (:logseq.property/created-from-property block))
             (let [message (if (:logseq.property/created-from-property block)
                             "Can't convert property value to page."
-                            "Can't convert this block to page since its parents is not a page.")]
+                            "Can't convert this block to page since its parent is not a page.")]
               (throw (ex-info message
                               {:type :notification
                                :payload {:message message
