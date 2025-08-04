@@ -70,15 +70,24 @@
 
 (deftest move-pages-to-library
   (testing "move pages using `mod+shift+m`"
+    (p/new-page "test page")
     (b/new-blocks ["b1" "b2" "b3"])
     (b/select-blocks 3)
-    (b/toggle-property "Tags" "Page")
-    (assert/assert-is-visible ".ls-page-blocks .ls-block .ls-icon-file")
-    (k/esc)
     (k/press "ControlOrMeta+Shift+m")
     (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
     (w/wait-for (w/get-by-test-id "Library"))
     (.focus (w/-query ".cp__cmdk-search-input"))
     (k/enter)
     (p/goto-page "Library")
-    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 3)))
+    (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 3)
+    (p/goto-page "test page")
+    (b/new-blocks ["b4" "b5"])
+    (b/select-blocks 2)
+    (k/press "ControlOrMeta+Shift+m")
+    (w/fill "input[placeholder=\"Move blocks to\"]" "Library")
+    (w/wait-for (w/get-by-test-id "Library"))
+    (.focus (w/-query ".cp__cmdk-search-input"))
+    (k/enter)
+    (p/goto-page "Library")
+    (let [contents (util/get-page-blocks-contents)]
+      (is (= contents ["b1" "b2" "b3" "b4" "b5"])))))
