@@ -8,7 +8,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
@@ -204,11 +203,9 @@
                                                    (settings/page)
                                                    :search
                                                    (search/search)
-                 ;:demos
-                 ;(demos/demos-inner)
                                                    "Not Found")])))
 
-;; app topbar
+                               ;; app topbar
                                (ui-silk/app-silk-topbar
                                 (cond-> {:title [:span.capitalize (str tab)]
                                          :props {:class (str tab)}}

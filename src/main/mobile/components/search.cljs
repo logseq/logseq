@@ -88,7 +88,8 @@
       (when-not (string/blank? input)
         [:a.x {:on-click (fn []
                            (set-input! "")
-                           (util/schedule #(some-> (rum/deref *ref) (.focus))))}
+                           (set-search-result! nil)
+                           (some-> (rum/deref *ref) (.focus)))}
          (shui/tabler-icon "x" {:size 14})])]
 
      [:div.bd
