@@ -259,7 +259,7 @@
                                 :type :error
                                 :entity (into {} entity)
                                 :property :block/tags}}))
-              (some ldb/page? (:block/_parent entity))
+              (some entity-util/page? (:block/_parent entity))
               (throw (ex-info "This page cannot be converted to a block"
                               {:type :notification
                                :payload
@@ -280,7 +280,7 @@
 
           ;; Only allow block to be page when its parent is a page to guard against invalid pages
           ;; in property values or pages being created with blocks as namespace parents
-          (when (or (not (ldb/page? (:block/parent block)))
+          (when (or (not (entity-util/page? (:block/parent block)))
                     (:logseq.property/created-from-property block))
             (let [message (if (:logseq.property/created-from-property block)
                             "Can't convert property value to page."

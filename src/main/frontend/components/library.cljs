@@ -7,7 +7,6 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
