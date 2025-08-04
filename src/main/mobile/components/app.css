@@ -113,8 +113,6 @@ ul {
 
   .notification-area {
     @apply border;
-
-    background-color: var(--ion-color-light-tint);
   }
 }
 
