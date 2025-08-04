@@ -76,18 +76,17 @@
      (merge
       {:presented (boolean open?)
        :onPresentedChange (fn [v?]
-                            (cond
-                              (false? v?)
-                              (do
-                                (mobile-state/set-popup! nil)
-                                (state/clear-edit!)
-                                (state/pub-event! [:mobile/keyboard-will-hide]))
-                              (and (true? v?) (= :ls-quick-add (:id opts)))
-                              (editor-handler/quick-add-open-last-block!)))}
+                            (when (false? v?)
+                              (mobile-state/set-popup! nil)
+                              (state/clear-edit!)
+                              (state/pub-event! [:mobile/keyboard-will-hide])))}
       (:modal-props opts))
      (silkhq/bottom-sheet-portal
       (silkhq/bottom-sheet-view
-       {:class "app-silk-popup-sheet-view"}
+       {:class "app-silk-popup-sheet-view"
+        :onTravelEnd (fn []
+                       (when (= :ls-quick-add (:id opts))
+                         (js/setTimeout #(editor-handler/quick-add-open-last-block!) 30)))}
        (silkhq/bottom-sheet-backdrop)
        (silkhq/bottom-sheet-content
         {:class "flex flex-col items-center p-2"}
