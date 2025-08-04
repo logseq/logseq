@@ -29,8 +29,10 @@
      (let [qkw (keyword qualified-kw-str)]
        (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
-         (let [result (apply f (cond-> args-transit-str-or-args-array
-                                 (not direct-pass?) ldb/read-transit-str))
+         (let [result (if (= qkw :thread-api/set-infer-worker-proxy)
+                        (f args-transit-str-or-args-array)
+                        (apply f (cond-> args-transit-str-or-args-array
+                                   (not direct-pass?) ldb/read-transit-str)))
                result-promise
                (if (fn? result) ;; missionary task is a fn
                  (js/Promise. result)

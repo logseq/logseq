@@ -2,14 +2,13 @@
   "Implementation of text (file) based content diff & merge for conflict resolution"
   (:require ["@logseq/diff-merge" :refer [attach_uuids Differ Merger]]
             [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.db.file-based.model :as file-model]
             [frontend.db.utils :as db-utils]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.utf8 :as utf8]
-            [clojure.string :as string]))
-
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn diff
   "2-ways diff
@@ -90,7 +89,6 @@
                    :level 1
                    :uuid uuid}
                   (reverse headings))))))))
-
 
 (defn- get-sub-content-from-pos-meta
   "Replace gp-block/get-block-content, return bare content, without any trim"

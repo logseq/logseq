@@ -5,7 +5,7 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker-common.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -367,7 +367,8 @@
    ["65.5" {:fix remove-block-order-for-tags}]
    ["65.6" {:fix update-extends-to-cardinality-many}]
    ["65.7" {:fix add-quick-add-page}]
-   ["65.8" {:fix add-missing-page-name}]])
+   ["65.8" {:fix add-missing-page-name}]
+   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
