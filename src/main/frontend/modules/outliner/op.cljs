@@ -35,11 +35,11 @@
        [:delete-blocks [ids opts]]))))
 
 (defn move-blocks!
-  [blocks target-block sibling?]
+  [blocks target-block opts]
   (op-transact!
    (let [ids (map :db/id blocks)
          target-id (:db/id target-block)]
-     [:move-blocks [ids target-id sibling?]])))
+     [:move-blocks [ids target-id opts]])))
 
 (defn move-blocks-up-down!
   [blocks up?]

@@ -294,7 +294,7 @@
                                     (let [op (if add? :db/retract :db/add)]
                                       [op e a v])) tx-data)]
         (d/transact! conn reversed-tx-data {:op :undo-tx-data}))
-      (throw (ex-info "page has block parent" {:tx-data tx-data})))))
+      (throw (ex-info "Page shouldn't have block as parent" {:tx-data tx-data})))))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]

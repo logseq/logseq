@@ -178,7 +178,7 @@ so need to pull earlier remote-data from websocket."})
         (when-let [b (d/entity @conn [:block/uuid block-uuid])]
           (when-let [target-b
                      (d/entity @conn (:db/id (:block/page (d/entity @conn [:block/uuid block-uuid]))))]
-            (transact-db! :move-blocks&persist-op repo conn [b] target-b false))))
+            (transact-db! :move-blocks&persist-op repo conn [b] target-b {:sibling? false}))))
       (doseq [block-uuid block-uuids-to-remove]
         (when-let [b (d/entity @conn [:block/uuid block-uuid])]
           (transact-db! :delete-blocks repo conn date-formatter [b] {}))))))
@@ -193,7 +193,7 @@ so need to pull earlier remote-data from websocket."})
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]
         (do (if move?
-              (transact-db! :move-blocks repo conn [b] local-parent false)
+              (transact-db! :move-blocks repo conn [b] local-parent {:sibling? false})
               (transact-db! :insert-blocks repo conn
                             [{:block/uuid block-uuid
                               :block/title ""}]
@@ -202,7 +202,8 @@ so need to pull earlier remote-data from websocket."})
 
         [false true false]
         (if move?
-          (transact-db! :move-blocks repo conn [b] local-parent false)
+          (transact-db! :move-blocks repo conn [b] local-parent
+                        {:sibling? false})
           (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
         ([true false false] [true false true] [true true false] [true true true])

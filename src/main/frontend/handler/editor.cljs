@@ -860,7 +860,7 @@
                        (ui-outliner-tx/transact!
                         transact-opts
                         (when (seq children)
-                          (outliner-op/move-blocks! children prev-block false))
+                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
                         (delete-block-aux! block)
                         (save-block! repo prev-block new-content {})))))
 
@@ -870,11 +870,11 @@
                    (delete-block-aux! block)))))))))))
 
 (defn move-blocks!
-  [blocks target sibling?]
+  [blocks target opts]
   (when (seq blocks)
     (ui-outliner-tx/transact!
      {:outliner-op :move-blocks}
-     (outliner-op/move-blocks! blocks target sibling?))))
+     (outliner-op/move-blocks! blocks target opts))))
 
 (defn move-selected-blocks
   [e]
@@ -891,7 +891,7 @@
                                       :trigger (fn [chosen]
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
-                                                 (move-blocks! blocks (:source-page chosen) false))})))))
+                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))})))))
 
 (defn delete-block!
   [repo]
@@ -3987,8 +3987,8 @@
         (p/do!
          (when (seq children)
            (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
-             (move-blocks! children today-last-child true)
-             (move-blocks! children today false)))
+             (move-blocks! children today-last-child {:sibling? true})
+             (move-blocks! children today {:sibling? false})))
          (state/close-modal!)
          (mobile-state/set-popup! nil)
          (when (seq children)

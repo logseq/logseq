@@ -608,7 +608,7 @@
      :id->new-uuid id->new-uuid}))
 
 (defn- get-target-block
-  [db blocks target-block {:keys [outliner-op indent? sibling? up?]}]
+  [db blocks target-block {:keys [outliner-op bottom? top? indent? sibling? up?]}]
   (when-let [block (if (:db/id target-block)
                      (d/entity db (:db/id target-block))
                      (when (:block/uuid target-block)
@@ -636,7 +636,16 @@
                              [block sibling?]
 
                              (contains? #{:insert-blocks :move-blocks} outliner-op)
-                             [block sibling?]
+                             (cond
+                               top?
+                               [block false]
+
+                               bottom?
+                               (if-let [last-child (last (ldb/sort-by-order (:block/_parent block)))]
+                                 [last-child true]
+                                 [block false])
+                               :else
+                               [block sibling?])
 
                              linked
                              (get-last-child-or-self db linked)
@@ -683,6 +692,8 @@
     `target-block`: where `blocks` will be inserted.
     Options:
       `sibling?`: as siblings (true) or children (false).
+      `bottom?`: inserts block to the bottom.
+      `top?`: inserts block to the top.
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
@@ -890,7 +901,7 @@
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
-  [_repo conn blocks target-block {:keys [_sibling? _up? outliner-op _indent?]
+  [_repo conn blocks target-block {:keys [_sibling? _top? _bottom? _up? outliner-op _indent?]
                                    :as opts}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
@@ -1065,9 +1076,10 @@
     (op-transact! f repo conn blocks opts)))
 
 (defn move-blocks!
-  [repo conn blocks target-block sibling?]
-  (op-transact! move-blocks repo conn blocks target-block {:sibling? sibling?
-                                                           :outliner-op :move-blocks}))
+  [repo conn blocks target-block opts]
+  (op-transact! move-blocks repo conn blocks target-block
+                (assoc opts :outliner-op :move-blocks)))
+
 (defn move-blocks-up-down!
   [repo conn blocks up?]
   (op-transact! move-blocks-up-down repo conn blocks up?))
