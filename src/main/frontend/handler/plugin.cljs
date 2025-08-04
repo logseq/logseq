@@ -891,7 +891,7 @@
 
                   (.on "themes-changed" (fn [^js themes]
                                           (swap! state/state assoc :plugin/installed-themes
-                                            (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
+                                                 (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
                   (.on "theme-selected" (fn [^js theme]
                                           (let [theme (bean/->clj theme)
