@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
@@ -20,7 +21,6 @@
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
@@ -304,10 +304,11 @@
    :canceler nil
    :*last-stop-exception nil})
 
+(def ^:private rtc-loop-metadata-keys (set (keys empty-rtc-loop-metadata)))
+
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata
                                             :validator
-                                            (fn [v] (= (set (keys empty-rtc-loop-metadata))
-                                                       (set (keys v))))))
+                                            (fn [v] (= rtc-loop-metadata-keys (set (keys v))))))
 
 (defn- validate-rtc-start-conditions
   "Return exception if validation failed"

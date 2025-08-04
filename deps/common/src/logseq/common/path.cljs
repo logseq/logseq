@@ -148,7 +148,7 @@
         scheme (.-protocol url)
         path (.-pathname url)
         domain (or (not-empty (.-host url))
-                 (if (string/starts-with? path "/") "" "/"))
+                   (if (string/starts-with? path "/") "" "/"))
         encoded-new-path (apply uri-path-join-internal path segments)]
     (str scheme "//" domain encoded-new-path)))
 
