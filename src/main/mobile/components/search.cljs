@@ -20,7 +20,7 @@
   [input]
   (p/let [repo (state/get-current-repo)
           blocks (search/block-search repo input
-                   {:limit 100 :built-in? true})
+                                      {:limit 100 :built-in? true})
           blocks (remove nil? blocks)
           blocks (search/fuzzy-search blocks input {:limit 100
                                                     :extract-fn :block/title})
@@ -33,7 +33,7 @@
 (defn- get-recent-pages
   []
   (let [recent-pages (->> (ldb/get-recent-updated-pages (db/get-db))
-                       (remove ldb/built-in?))]
+                          (remove ldb/built-in?))]
     (map (fn [block]
            (let [text (block-handler/block-unique-title block)
                  icon (cmdk/get-page-icon block)]
@@ -41,7 +41,7 @@
               :icon-theme :gray
               :text text
               :source-block block}))
-      recent-pages)))
+         recent-pages)))
 
 (rum/defc search
   []
@@ -55,36 +55,36 @@
                  search-result)]
 
     (hooks/use-effect!
-      (fn []
-        (let [*timeout (atom nil)]
-          (when-not (string/blank? input)
-            (p/let [result (search-blocks input)]
-              (set-search-result! result)
-              (when (seq result)
-                (reset! *timeout
-                  (js/setTimeout
-                    (fn []
-                      (let [now (util/time-ms)]
-                        (when (and last-input-at (>= (- now last-input-at) 2000))
-                          (search-handler/add-recent! input)
-                          (set-recents! (search-handler/get-recents)))))
-                    2000)))))
-          #(when-let [timeout @*timeout]
-             (js/clearTimeout timeout))))
-      [(hooks/use-debounced-value input 150)])
+     (fn []
+       (let [*timeout (atom nil)]
+         (when-not (string/blank? input)
+           (p/let [result (search-blocks input)]
+             (set-search-result! result)
+             (when (seq result)
+               (reset! *timeout
+                       (js/setTimeout
+                        (fn []
+                          (let [now (util/time-ms)]
+                            (when (and last-input-at (>= (- now last-input-at) 2000))
+                              (search-handler/add-recent! input)
+                              (set-recents! (search-handler/get-recents)))))
+                        2000)))))
+         #(when-let [timeout @*timeout]
+            (js/clearTimeout timeout))))
+     [(hooks/use-debounced-value input 150)])
 
     [:div.app-silk-search-page
      [:div.hd
       [:div.relative
        (shui/tabler-icon "search")
        (shui/input
-         {:ref *ref
-          :placeholder "Search"
-          :value input
-          :on-change (fn [^js e]
-                       (let [input (.-value (.-target e))]
-                         (set-input! input)
-                         (set-last-input-at! (util/time-ms))))})]
+        {:ref *ref
+         :placeholder "Search"
+         :value input
+         :on-change (fn [^js e]
+                      (let [input (.-value (.-target e))]
+                        (set-input! input)
+                        (set-last-input-at! (util/time-ms))))})]
       (when-not (string/blank? input)
         [:a.x {:on-click (fn []
                            (set-input! "")
@@ -94,27 +94,28 @@
      [:div.bd
       (when (string/blank? input)
         [:<>
-         [:div.mb-4
-          [:div.px-4.text-sm.text-muted-foreground.border-b
-           [:div.flex.flex-item.items-center.justify-between.py-1
-            [:div.pl-1 "Recent search"]
-            (shui/button
-              {:variant :text
-               :size :sm
-               :class "text-muted-foreground flex justify-end pr-1"
-               :on-click (fn []
-                           (search-handler/clear-recents!)
-                           (set-recents! nil))}
-              "Clear all")]]
+         (when (seq recents)
+           [:div.mb-4
+            [:div.px-4.text-sm.text-muted-foreground.border-b
+             [:div.flex.flex-item.items-center.justify-between.py-1
+              "Recent search"
+              (shui/button
+               {:variant :text
+                :size :sm
+                :class "text-muted-foreground flex justify-end pr-1"
+                :on-click (fn []
+                            (search-handler/clear-recents!)
+                            (set-recents! nil))}
+               "Clear all")]]
 
-          [:ul.px-3
-           (for [item recents]
-             [:li.flex.gap-1
-              {:on-click #(set-input! item)}
-              [:div.flex.flex-row.items-center.gap-1
-               (ui/icon "search" {:size 15
-                                  :class "text-muted-foreground"})
-               item]])]]
+            [:ul.px-3
+             (for [item recents]
+               [:li.flex.gap-1
+                {:on-click #(set-input! item)}
+                [:div.flex.flex-row.items-center.gap-1
+                 (ui/icon "search" {:size 15
+                                    :class "text-muted-foreground"})
+                 item]])]])
 
          [:div.px-4.py-2.text-sm.text-muted-foreground.border-b
           "Recent updates"]])
