@@ -290,6 +290,8 @@
 
    :editor/move-block-down                  {:binding (if mac? "mod+shift+down" "alt+shift+down")
                                              :fn      (editor-handler/move-up-down false)}
+   :editor/move-blocks                      {:binding "mod+shift+m"
+                                             :fn      editor-handler/move-selected-blocks}
 
    :editor/open-edit                        {:binding "enter"
                                              :fn      (fn [e]
@@ -365,6 +367,11 @@
                                              :fn      (fn [e]
                                                         (when e (util/stop e))
                                                         (state/pub-event! [:editor/new-property {}]))}
+   :editor/set-tags                         {:binding "p t"
+                                             :db-graph? true
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Tags"}]))}
 
    :editor/add-property-deadline            {:binding "p d"
                                              :db-graph? true
@@ -390,7 +397,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
-   :editor/toggle-display-all-properties    {:binding "p t"
+   :editor/toggle-display-all-properties    {:binding "p a"
                                              :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
@@ -792,6 +799,7 @@
           :editor/select-down
           :editor/move-block-up
           :editor/move-block-down
+          :editor/move-blocks
           :editor/open-edit
           :editor/open-selected-blocks-in-sidebar
           :editor/select-block-up
@@ -862,6 +870,7 @@
           :editor/copy-current-file
           :editor/copy-page-url
           :editor/new-whiteboard
+          :editor/set-tags
           :editor/add-property-deadline
           :editor/add-property-status
           :editor/add-property-priority
@@ -968,6 +977,7 @@
      :editor/open-link-in-sidebar
      :editor/move-block-up
      :editor/move-block-down
+     :editor/move-blocks
      :editor/escape-editing]
 
     :shortcut.category/block-command-editing
@@ -996,6 +1006,7 @@
      :editor/select-block-down
      :editor/delete-selection
      :editor/add-property
+     :editor/set-tags
      :editor/add-property-deadline
      :editor/add-property-status
      :editor/add-property-priority

@@ -5,7 +5,6 @@
             [frontend.handler.user :as user-handler]
             [frontend.state :as state]
             [logseq.shui.ui :as shui]
-            [logseq.shui.silkhq :as silkhq]
             [rum.core :as rum]))
 
 (rum/defc user-profile
@@ -27,7 +26,7 @@
 (rum/defc page < rum/reactive
   []
   (let [login? (and (state/sub :auth/id-token)
-                 (user-handler/logged-in?))]
+                    (user-handler/logged-in?))]
     [:div.app-index-settings
      (user-profile login?)
      [:div.mt-8

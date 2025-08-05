@@ -1,9 +1,9 @@
 (ns logseq.e2e.page
-  (:require [logseq.e2e.keyboard :as k]
+  (:require [logseq.e2e.block :as b]
+            [logseq.e2e.keyboard :as k]
             [logseq.e2e.util :as util]
             [wally.main :as w]
-            [wally.selectors :as ws]
-            [logseq.e2e.block :as b])
+            [wally.selectors :as ws])
   (:import (com.microsoft.playwright TimeoutError)))
 
 (defn goto-page
