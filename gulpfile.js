@@ -9,8 +9,11 @@ const ip = require('ip')
 const replace = require('gulp-replace')
 
 const outputPath = path.join(__dirname, 'static')
+const outputJsPath = path.join(outputPath, 'js')
 const resourcesPath = path.join(__dirname, 'resources')
 const publicRootPath = path.join(__dirname, 'public')
+const mobilePath = path.join(outputPath, 'mobile')
+const mobileJsPath = path.join(mobilePath, 'js')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 const outputFilePath = path.join(outputPath, '**')
@@ -178,6 +181,20 @@ const common = {
     ], { ignoreInitial: true }, common.syncJS_CSSinRt)
   },
 
+  syncWorkersToMobile () {
+    return gulp.src([
+      path.join(outputPath, 'js/db-worker.js'),
+      path.join(outputPath, 'js/inference-worker.js'),
+    ], { base: outputJsPath }).pipe(gulp.dest(mobileJsPath))
+  },
+
+  keepSyncWorkersToMobile () {
+    return gulp.watch([
+      path.join(outputPath, 'js/db-worker.js'),
+      path.join(outputPath, 'js/inference-worker.js'),
+    ], { ignoreInitial: false }, common.syncWorkersToMobile)
+  },
+
   async runCapWithLocalDevServerEntry (cb) {
     const mode = process.env.PLATFORM || 'ios'
 
@@ -291,7 +308,7 @@ exports.watch = gulp.series(
   gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
 exports.watchMobile = gulp.series(
   common.syncResourceFile, common.syncAssetFiles,
-  gulp.parallel(common.keepSyncResourceFile, css.watchMobileCSS))
+  gulp.parallel(common.keepSyncResourceFile, common.keepSyncWorkersToMobile, css.watchMobileCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile,
   common.syncAssetFiles, css.buildCSS)
 exports.buildMobile = gulp.series(common.clean, common.syncResourceFile,
