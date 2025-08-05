@@ -97,6 +97,10 @@ ul {
   }
 }
 
+.view-actions {
+  @apply absolute right-0;
+}
+
 .app-login-modal {
   @apply mx-8 p-0;
 }
