@@ -44,13 +44,14 @@
             [promesa.core :as p]))
 
 (defmethod events/handle :go/search [_]
-  (shui/dialog-open!
-   cmdk/cmdk-modal
-   {:id :ls-dialog-cmdk
-    :align :top
-    :content-props {:class "ls-dialog-cmdk"}
-    :close-btn? false
-    :onEscapeKeyDown (fn [e] (.preventDefault e))}))
+  (when-not (editor-handler/dialog-exists? :ls-dialog-cmdk)
+    (shui/dialog-open!
+     cmdk/cmdk-modal
+     {:id :ls-dialog-cmdk
+      :align :top
+      :content-props {:class "ls-dialog-cmdk"}
+      :close-btn? false
+      :onEscapeKeyDown (fn [e] (.preventDefault e))})))
 
 (defmethod events/handle :command/run [_]
   (when (util/electron?)
@@ -233,8 +234,7 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            {:align "start"
-                             :auto-focus? true})
+                            {:align "start"})
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))
