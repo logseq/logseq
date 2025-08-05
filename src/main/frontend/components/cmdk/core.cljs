@@ -824,12 +824,20 @@
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
-      esc? (let [filter' @(::filter state)]
-             (if filter'
+      esc? (let [filter' @(::filter state)
+                 action (get-action)
+                 move-blocks? (= :move-blocks action)]
+             (cond
+               (and move-blocks? (string/blank? input))
+               (state/close-modal!)
+
+               (and filter' (not move-blocks?))
                (do
                  (util/stop e)
                  (reset! (::filter state) nil)
                  (load-results :default state))
+
+               :else
                (when-not (string/blank? input)
                  (util/stop e)
                  (handle-input-change state nil ""))))

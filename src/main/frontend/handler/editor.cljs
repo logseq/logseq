@@ -879,10 +879,10 @@
 (defn move-selected-blocks
   [e]
   (util/stop e)
-  (let [block-ids (or (state/get-selection-block-ids)
+  (let [block-ids (or (seq (state/get-selection-block-ids))
                       (when-let [id (:block/uuid (state/get-edit-block))]
                         [id]))]
-    (when (seq block-ids)
+    (if (seq block-ids)
       (let [blocks (->> (map (fn [id] (db/entity [:block/uuid id])) block-ids)
                         block-handler/get-top-level-blocks)]
         (route-handler/go-to-search! :nodes
@@ -891,7 +891,8 @@
                                       :trigger (fn [chosen]
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
-                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))})))))
+                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))}))
+      (notification/show! "There's no block selected, please select blocks first." :warning))))
 
 (defn delete-block!
   [repo]
