@@ -19,5 +19,15 @@
   [data]
   (reset! *popup-data data))
 
+(defonce *left-sidebar-open? (atom false))
+
+(defn toggle-left-sidebar!
+  []
+  (swap! *left-sidebar-open? not))
+
+(defn close-left-sidebar!
+  []
+  (reset! *left-sidebar-open? false))
+
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))

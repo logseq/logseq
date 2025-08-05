@@ -14,6 +14,7 @@
             [logseq.shui.ui :as shui]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.header :as mobile-header]
+            [mobile.components.left-sidebar :as mobile-left-sidebar]
             [mobile.components.modal :as modal]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
@@ -124,6 +125,8 @@
                           "Not Found")])))
 
       (mobile-header/header tab login?)
+
+      (mobile-left-sidebar/left-sidebar)
 
       ;; bottom tabs
       (ui-silk/app-silk-tabs)
