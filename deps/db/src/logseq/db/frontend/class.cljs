@@ -24,7 +24,9 @@
 
      :logseq.class/Property {:title "Property"}
 
-     :logseq.class/Page {:title "Page"}
+     :logseq.class/Page
+     {:title "Page"
+      :properties {:logseq.property.class/hide-from-node true}}
 
      :logseq.class/Journal
      {:title "Journal"
@@ -106,7 +108,7 @@
 
 (def internal-tags
   "Built-in classes that are hidden on a node and all pages view"
-  #{:logseq.class/Page :logseq.class/Property :logseq.class/Tag :logseq.class/Root
+  #{:logseq.class/Property :logseq.class/Tag :logseq.class/Root
     :logseq.class/Asset})
 
 (def private-tags
