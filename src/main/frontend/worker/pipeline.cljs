@@ -143,7 +143,7 @@
            (when (or page-tag-update? move-to-library?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)]
-               (when (and block-before block-after)
+               (when block-after
                  (cond
                    ;; move non-page block to Library
                    (and move-to-library? (not (ldb/page? block-after)))
@@ -153,7 +153,7 @@
                     [:db/retract id :block/page]]
 
                    ;; block->page
-                   (and (:added datom) (not (ldb/page? block-before))) ; block->page
+                   (and (:added datom) block-before (not (ldb/page? block-before))) ; block->page
                    (let [->page-tx [{:db/id id
                                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
                                     [:db/retract id :block/page]]
@@ -171,7 +171,7 @@
                      (concat ->page-tx move-parent-to-library-tx))
 
                    ;; page->block
-                   (and (not (:added datom)) (ldb/internal-page? block-before))
+                   (and block-before (not (:added datom)) (ldb/internal-page? block-before))
                    (let [parent (:block/parent block-before)
                          parent-page (when parent
                                        (loop [parent parent]
