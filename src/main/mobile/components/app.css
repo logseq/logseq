@@ -376,9 +376,29 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     padding-top: calc(env(safe-area-inset-top, 0px) + 6px);
     margin-top: calc(-10px - env(safe-area-inset-top, 0px));
     z-index: 1;
+    transition: padding 0.1s ease-in-out;
 
     .ls-icon-search {
       @apply absolute left-3 top-3;
+    }
+
+    .cancel {
+      @apply absolute right-0.5 opacity-0;
+
+      top: calc(env(safe-area-inset-top, 0px) + 6px);
+    }
+
+    &.input-focused {
+      padding-right: 80px;
+
+      .cancel {
+        opacity: .6;
+        display: block;
+      }
+
+      > .x {
+        right: 90px;
+      }
     }
 
     .ui__input {
@@ -390,9 +410,10 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
     > .x {
       @apply absolute right-6 w-[18px] h-[18px] bg-gray-10 overflow-hidden
-      rounded-full flex items-center justify-center text-gray-02 opacity-80;
+      rounded-full flex items-center justify-center text-gray-02 opacity-50;
 
       bottom: 22px;
+      right: 23px;
     }
   }
 
