@@ -102,7 +102,8 @@
      (assoc
       :left-render (shui/button
                     {:variant :text
-                     :size :sm}
+                     :size :sm
+                     :on-click mobile-state/toggle-left-sidebar!}
                     [:span.text-muted-foreground.mt-2
                      (shui/tabler-icon "menu" {:size 24})])
       :title (app-graphs-select)
