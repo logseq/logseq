@@ -551,28 +551,31 @@
                                                       (let [ref-ids (set (map :block/uuid (:block/refs block)))]
                                                         (->> (set/intersection block-ids ref-ids)
                                                              (remove #{(:block/uuid block)})))))
-                           m (cond->
-                              {:db/id (:db/id block)
-                               :block/uuid uuid'
-                               :block/parent parent
-                               :block/order order}
-                               (not (ldb/page? block))
-                               (assoc :block/page target-page))
-                           result (->
-                                   (if (de/entity? block)
-                                     (assoc m :block/level (:block/level block))
-                                     (merge block m))
-                                   (update :block/title (fn [value]
-                                                          (if (seq template-ref-block-ids)
-                                                            (reduce
-                                                             (fn [value id]
-                                                               (string/replace value
-                                                                               (page-ref/->page-ref id)
-                                                                               (page-ref/->page-ref (uuids id))))
-                                                             value
-                                                             template-ref-block-ids)
-                                                            value)))
-                                   (dissoc :db/id))]
+                           m {:db/id (:db/id block)
+                              :block/uuid uuid'
+                              :block/parent parent
+                              :block/order order}
+                           result* (->
+                                    (if (de/entity? block)
+                                      (assoc m :block/level (:block/level block))
+                                      (merge block m))
+                                    (update :block/title (fn [value]
+                                                           (if (seq template-ref-block-ids)
+                                                             (reduce
+                                                              (fn [value id]
+                                                                (string/replace value
+                                                                                (page-ref/->page-ref id)
+                                                                                (page-ref/->page-ref (uuids id))))
+                                                              value
+                                                              template-ref-block-ids)
+                                                             value)))
+                                    (dissoc :db/id))
+                           page? (or (ldb/page? block) (:block/name block))
+                           result (cond-> result*
+                                    (not page?)
+                                    (assoc :block/page target-page)
+                                    page?
+                                    (dissoc :block/page))]
                        (update-property-ref-when-paste result uuids))))
                  blocks)))
 
