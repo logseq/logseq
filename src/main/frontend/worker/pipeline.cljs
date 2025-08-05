@@ -12,6 +12,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -126,6 +127,62 @@
               (assert (= (count (distinct (map :block/order children))) (count children))
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
+(defn- toggle-page-and-block
+  [conn {:keys [db-before db-after tx-data tx-meta]}]
+  (when-not (:rtc-op? tx-meta)
+    (let [page-tag (d/entity @conn :logseq.class/Page)
+          library-page (ldb/get-library-page db-after)]
+      (mapcat
+       (fn [datom]
+         (let [id (:e datom)
+               page-tag-update? (and (= :block/tags (:a datom))
+                                     (= (:db/id page-tag) (:v datom)))
+               move-to-library? (and (= :block/parent (:a datom))
+                                     (= (:db/id library-page) (:v datom))
+                                     (:added datom))]
+           (when (or page-tag-update? move-to-library?)
+             (let [block-before (d/entity db-before id)
+                   block-after (d/entity db-after id)]
+               (when block-after
+                 (cond
+                   ;; move non-page block to Library
+                   (and move-to-library? (not (ldb/page? block-after)))
+                   [{:db/id id
+                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))
+                     :block/tags :logseq.class/Page}
+                    [:db/retract id :block/page]]
+
+                   ;; block->page
+                   (and (:added datom) block-before (not (ldb/page? block-before))) ; block->page
+                   (let [->page-tx [{:db/id id
+                                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
+                                    [:db/retract id :block/page]]
+                         move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
+                                                         block-parent (:block/parent block)]
+                                                     (assert (ldb/page? block-parent))
+                                                     (when (and (nil? (:block/parent block-parent))
+                                                                block-parent
+                                                                (not= (:db/id block-parent) (:db/id library-page))
+                                                                (not (:db/ident block-parent))
+                                                                (not (ldb/built-in? block-parent)))
+                                                       [{:db/id (:db/id block-parent)
+                                                         :block/parent (:db/id (ldb/get-library-page db-after))
+                                                         :block/order (db-order/gen-key)}]))]
+                     (concat ->page-tx move-parent-to-library-tx))
+
+                   ;; page->block
+                   (and block-before (not (:added datom)) (ldb/internal-page? block-before))
+                   (let [parent (:block/parent block-before)
+                         parent-page (when parent
+                                       (loop [parent parent]
+                                         (if (ldb/page? parent)
+                                           parent
+                                           (recur (:block/parent parent)))))]
+                     (when parent-page
+                       [[:db/retract id :block/name]
+                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+       tx-data))))
+
 (defn- add-missing-properties-to-typed-display-blocks
   "Add missing properties for these cases:
   1. Add corresponding tag when invoking commands like /code block.
@@ -220,22 +277,44 @@
 (defn- compute-extra-tx-data
   [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
+        toggle-page-and-block-tx-data (toggle-page-and-block conn tx-report)
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands conn tx-report))
         insert-templates-tx (insert-tag-templates repo tx-report)
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
-    (concat display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+    (concat toggle-page-and-block-tx-data display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+
+(defn- undo-tx-data-if-disallowed!
+  [conn {:keys [tx-data]}]
+  (let [db @conn
+        page-has-block-parent? (some (fn [d] (and (:added d)
+                                                  (= :block/parent (:a d))
+                                                  (ldb/page? (d/entity db (:e d)))
+                                                  (not (ldb/page? (d/entity db (:v d)))))) tx-data)]
+    ;; TODO: add other cases that need to be undo
+    (when page-has-block-parent?
+      (let [reversed-tx-data (map (fn [[e a v _tx add?]]
+                                    (let [op (if add? :db/retract :db/add)]
+                                      [op e a v])) tx-data)]
+        (d/transact! conn reversed-tx-data {:op :undo-tx-data}))
+      (throw (ex-info "Page can't have block as parent"
+                      {:type :notification
+                       :payload {:message "Page can't have block as parent"
+                                 :type :warning}
+                       :tx-data tx-data})))))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
+  ;; Notice: don't catch `undo-tx-data-if-disallowed!` since we want it failed immediately
+  (undo-tx-data-if-disallowed! conn tx-report)
   (try
-    (let [tx-before-refs (when (sqlite-util/db-based-graph? repo)
-                           (compute-extra-tx-data repo conn tx-report))
-          tx-report* (if (seq tx-before-refs)
-                       (let [result (ldb/transact! conn tx-before-refs {:pipeline-replace? true
-                                                                        :outliner-op :pre-hook-invoke
-                                                                        :skip-store? true})]
+    (let [extra-tx-data (when (sqlite-util/db-based-graph? repo)
+                          (compute-extra-tx-data repo conn tx-report))
+          tx-report* (if (seq extra-tx-data)
+                       (let [result (ldb/transact! conn extra-tx-data {:pipeline-replace? true
+                                                                       :outliner-op :pre-hook-invoke
+                                                                       :skip-store? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
                                 :db-after (:db-after result)))
