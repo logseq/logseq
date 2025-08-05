@@ -16,6 +16,7 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
+            [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.events :as events]
             [frontend.handler.events.ui]
             [frontend.handler.file-based.events]
@@ -167,8 +168,15 @@
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (if (empty? repos)
                    (repo-handler/new-db! config/demo-repo)
-                   (restore-and-setup! repo))]
+                   (restore-and-setup! repo))
+               webgpu-available? (db-browser/<check-webgpu-available?)]
+         (log/info :webgpu-available? webgpu-available?)
+         (when webgpu-available?
+           (p/do! (db-browser/start-inference-worker!)
+                  (db-browser/<connect-db-worker-and-infer-worker!)
+                  (reset! vector-search-flows/*infer-worker-ready true)))
          (set-network-watcher!)
+
          (when (util/electron?)
            (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)

@@ -96,7 +96,7 @@
      ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
      ([el] (when el
              (some-> (or (.closest el ".app-silk-scroll-content")
-                       (.closest el ".app-silk-index-scroll-content")) (.-parentNode))))))
+                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
@@ -1097,7 +1097,7 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-;; FIXME: drain-chan was copied from frontend.worker.util due to shadow-cljs compile bug
+;; FIXME: drain-chan was copied from frontend.worker-common.util due to shadow-cljs compile bug
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"
@@ -1235,21 +1235,21 @@
      ([^js/HTMLElement el start?]
       (when (and el (mobile?)
               ;; start? selection
-              (or (not start?) (zero? (get-selection-start el))))
+                 (or (not start?) (zero? (get-selection-start el))))
         (when-let [scroll-node (app-scroll-container-node el)]
           (let [scroll-top (.-scrollTop scroll-node)
                 vw-height (if (mobile-util/native-platform?)
                             (- (.-height js/window.screen) (or @keyboard-height 312))
                             (or (.-height js/window.visualViewport)
-                              (.-clientHeight js/document.documentElement)))
+                                (.-clientHeight js/document.documentElement)))
                 ^js box-rect (.getBoundingClientRect el)
                 box-top (.-top box-rect)
                 top-offset 84
                 inset (- box-top (- vw-height top-offset))]
             (when (> inset 0)
               (js/setTimeout
-                #(set! (.-scrollTop scroll-node)
-                   (+ scroll-top inset (if (false? start?) 96 64))) 16))))))))
+               #(set! (.-scrollTop scroll-node)
+                      (+ scroll-top inset (if (false? start?) 96 64))) 16))))))))
 
 #?(:cljs
    (do

@@ -344,6 +344,7 @@
                         :logseq.kv/graph-uuid
                         :logseq.kv/latest-code-lang
                         :logseq.kv/graph-backup-folder
+                        :logseq.kv/graph-text-embedding-model-name
                         :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
         views (when db-graph? (get-views-data db))
