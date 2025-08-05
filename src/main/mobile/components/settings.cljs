@@ -57,6 +57,6 @@
                        [:span.text-muted-foreground {:slot "icon-only"}
                         (ion/tabler-icon "dots" {:size 20})])))))
      (ion/content {:class "ion-padding"}
-      (user-profile login?)
-      [:div.mt-8
-       (repo/repos-cp)]))))
+                  (user-profile login?)
+                  [:div.mt-8
+                   (repo/repos-cp)]))))

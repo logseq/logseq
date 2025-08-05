@@ -40,6 +40,10 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(defn- get-action
+  []
+  (:action (:search/args @state/state)))
+
 (defn translate [t {:keys [id desc]}]
   (when id
     (let [desc-i18n (t (shortcut-utils/decorate-namespace id))]
@@ -197,8 +201,10 @@
                (first))))
 
 (defn state->action [state]
-  (let [highlighted-item (state->highlighted-item state)]
-    (cond (:source-page highlighted-item) :open
+  (let [highlighted-item (state->highlighted-item state)
+        action (get-action)]
+    (cond (and (:source-page highlighted-item) (= action :move-blocks)) :trigger
+          (:source-page highlighted-item) :open
           (:source-block highlighted-item) :open
           (:file-path highlighted-item) :open
           (:source-search highlighted-item) :search
@@ -327,7 +333,9 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts {:limit 100 :dev? config/dev? :built-in? true}]
+        opts (cond-> {:limit 100 :dev? config/dev? :built-in? true}
+               (contains? #{:move-blocks} (get-action))
+               (assoc :page-only? true))]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
@@ -548,12 +556,21 @@
       (reset! (::input state) search-query))))
 
 (defmethod handle-action :trigger [_ state _event]
-  (let [command (some-> state state->highlighted-item :source-command)
-        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data}]
-    (when-let [action (:action command)]
+  (let [highlighted-item (some-> state state->highlighted-item)
+        command (:source-command highlighted-item)
+        dont-close-commands #{:graph/open :graph/remove :dev/replace-graph-with-db-file :misc/import-edn-data :editor/move-blocks}
+        search-args (:search/args @state/state)
+        action (or (:action command)
+                   (when-let [trigger (:trigger search-args)]
+                     #(trigger highlighted-item)))
+        input-ref @(::input-ref state)]
+    (when action
+      (when input-ref
+        (set! (.-value input-ref) "")
+        (.focus input-ref))
+      (action)
       (when-not (contains? dont-close-commands (:id command))
-        (shui/dialog-close! :ls-dialog-cmdk))
-      (util/schedule #(action) 32))))
+        (shui/dialog-close! :ls-dialog-cmdk)))))
 
 (defmethod handle-action :create [_ state _event]
   (let [item (state->highlighted-item state)
@@ -692,11 +709,13 @@
                              ;; for some reason, the highlight effect does not always trigger on a
                              ;; boolean value change so manually pass in the dep
                             :on-highlight-dep highlighted-item
-                            :on-click (fn [e]
-                                        (reset! (::highlighted-item state) item)
-                                        (handle-action :default state item)
-                                        (when-let [on-click (:on-click item)]
-                                          (on-click e)))
+                            :on-click
+                            (fn [e]
+                              (util/stop-propagation e)
+                              (reset! (::highlighted-item state) item)
+                              (handle-action :default state item)
+                              (when-let [on-click (:on-click item)]
+                                (on-click e)))
                              ;; :on-mouse-enter (fn [e]
                              ;;                   (when (not highlighted?)
                              ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
@@ -805,12 +824,20 @@
       (and enter? (not composing?)) (do
                                       (handle-action :default state e)
                                       (util/stop-propagation e))
-      esc? (let [filter' @(::filter state)]
-             (if filter'
+      esc? (let [filter' @(::filter state)
+                 action (get-action)
+                 move-blocks? (= :move-blocks action)]
+             (cond
+               (and move-blocks? (string/blank? input))
+               (state/close-modal!)
+
+               (and filter' (not move-blocks?))
                (do
                  (util/stop e)
                  (reset! (::filter state) nil)
                  (load-results :default state))
+
+               :else
                (when-not (string/blank? input)
                  (util/stop e)
                  (handle-input-change state nil ""))))
@@ -831,12 +858,15 @@
 (defn- input-placeholder
   [sidebar?]
   (let [search-mode (:search/mode @state/state)
-        search-args (:search/args @state/state)]
+        action (get-action)]
     (cond
+      (= action :move-blocks)
+      "Move blocks to"
+
       (and (= search-mode :graph) (not sidebar?))
       "Add graph filter"
 
-      (= search-args :new-page)
+      (= action :new-page)
       "Type a page name to create"
 
       :else
@@ -1000,8 +1030,10 @@
        (shortcut/listen-all!))
      state)}
   {:init (fn [state]
-           (let [search-mode (:search/mode @state/state)
+           (let [search-mode (or (:search/mode @state/state) :global)
                  opts (last (:rum/args state))]
+             (when (nil? search-mode)
+               (state/set-state! :search/mode :global))
              (assoc state
                     ::ref (atom nil)
                     ::filter (if (and search-mode
@@ -1032,8 +1064,10 @@
   (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
-        search-mode (:search/mode @state/state)
-        group-filter (:group (rum/react (::filter state)))
+        search-mode (state/sub :search/mode)
+        group-filter (or (when (and (not (contains? #{:global :graph} search-mode)) (not (:sidebar? opts)))
+                           search-mode)
+                         (:group (rum/react (::filter state))))
         results-ordered (state->results-ordered state search-mode)
         all-items (mapcat last results-ordered)
         first-item (first all-items)]
@@ -1072,7 +1106,8 @@
      (when-not sidebar? (hints state))]))
 
 (rum/defc cmdk-modal [props]
-  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"}
+  [:div {:class "cp__cmdk__modal rounded-lg w-[90dvw] max-w-4xl relative"
+         :data-keep-selection true}
    (cmdk props)])
 
 (rum/defc cmdk-block [props]

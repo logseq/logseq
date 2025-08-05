@@ -26,7 +26,7 @@
    [:move-blocks
     [:catn
      [:op :keyword]
-     [:args [:tuple ::ids ::id :boolean]]]]
+     [:args [:tuple ::ids ::id ::option]]]]
    [:move-blocks-up-down
     [:catn
      [:op :keyword]
@@ -53,6 +53,10 @@
     [:catn
      [:op :keyword]
      [:args [:tuple ::block-id ::property-id ::value]]]]
+   [:batch-delete-property-value
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::block-ids ::property-id ::value]]]]
    [:create-property-text-block
     [:catn
      [:op :keyword]
@@ -171,11 +175,11 @@
            (outliner-core/delete-blocks! repo conn date-formatter blocks (merge opts opts')))
 
          :move-blocks
-         (let [[block-ids target-block-id sibling?] args
+         (let [[block-ids target-block-id opts] args
                blocks (keep #(d/entity @conn %) block-ids)
                target-block (d/entity @conn target-block-id)]
            (when (and target-block (seq blocks))
-             (outliner-core/move-blocks! repo conn blocks target-block sibling?)))
+             (outliner-core/move-blocks! repo conn blocks target-block opts)))
 
          :move-blocks-up-down
          (let [[block-ids up?] args
@@ -210,6 +214,9 @@
 
          :batch-remove-property
          (apply outliner-property/batch-remove-property! conn args)
+
+         :batch-delete-property-value
+         (apply outliner-property/batch-delete-property-value! conn args)
 
          :class-add-property
          (apply outliner-property/class-add-property! conn args)
