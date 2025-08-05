@@ -1,6 +1,6 @@
 (ns logseq.shui.silkhq
-  (:require [logseq.shui.util :refer [component-wrap] :as util]
-            [goog.object :refer [getValueByKeys] :as gobj]))
+  (:require [goog.object :refer [getValueByKeys] :as gobj]
+            [logseq.shui.util :refer [component-wrap] :as util]))
 
 (goog-define NODETEST false)
 
@@ -120,7 +120,6 @@
 (def page-backdrop (silkhq-wrap "Page.Backdrop"))
 (def page-view (silkhq-wrap "Page.View"))
 
-
 (def card-sheet (silkhq-wrap "CardSheet.Root"))
 (def card-sheet-portal (silkhq-wrap "CardSheet.Portal"))
 (def card-sheet-handle (silkhq-wrap "CardSheet.Handle"))
@@ -131,3 +130,26 @@
 (def card-sheet-outlet (silkhq-wrap "CardSheet.Outlet"))
 (def card-sheet-backdrop (silkhq-wrap "CardSheet.Backdrop"))
 (def card-sheet-view (silkhq-wrap "CardSheet.View"))
+
+(def sidebar-sheet (silkhq-wrap "Sidebar.Root"))
+(def sidebar-sheet-portal (silkhq-wrap "Sidebar.Portal"))
+(def sidebar-sheet-view (silkhq-wrap "Sidebar.View"))
+(def sidebar-sheet-backdrop (silkhq-wrap "Sidebar.Backdrop"))
+(def sidebar-sheet-content (silkhq-wrap "Sidebar.Content"))
+(def sidebar-sheet-trigger (silkhq-wrap "Sidebar.Trigger"))
+(def sidebar-sheet-handle (silkhq-wrap "Sidebar.Handle"))
+(def sidebar-sheet-outlet (silkhq-wrap "Sidebar.Outlet"))
+(def sidebar-sheet-title (silkhq-wrap "Sidebar.Title"))
+(def sidebar-sheet-description (silkhq-wrap "Sidebar.Description"))
+
+(def persistent-sheet (silkhq-wrap "PersistentSheetWithDetent.Root"))
+(def persistent-sheet-portal (silkhq-wrap "PersistentSheetWithDetent.Portal"))
+(def persistent-sheet-view (silkhq-wrap "PersistentSheetWithDetent.View"))
+(def persistent-sheet-content (silkhq-wrap "PersistentSheetWithDetent.Content"))
+(def persistent-sheet-trigger (silkhq-wrap "PersistentSheetWithDetent.Trigger"))
+(def persistent-sheet-handle (silkhq-wrap "PersistentSheetWithDetent.Handle"))
+(def persistent-sheet-retracted-content (silkhq-wrap "PersistentSheetWithDetent.RetractedContent"))
+(def persistent-sheet-expanded-content (silkhq-wrap "PersistentSheetWithDetent.ExpandedContent"))
+(def persistent-sheet-outlet (silkhq-wrap "PersistentSheetWithDetent.Outlet"))
+(def persistent-sheet-title (silkhq-wrap "PersistentSheetWithDetent.Title"))
+(def persistent-sheet-description (silkhq-wrap "PersistentSheetWithDetent.Description"))
