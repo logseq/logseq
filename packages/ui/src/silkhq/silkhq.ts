@@ -8,6 +8,8 @@ import { ParallaxPage, ParallaxPageStack } from './ParallaxPage'
 import { Toast } from './Toast'
 import { Card } from './Card'
 import { Page } from './Page'
+import { Sidebar } from './Sidebar'
+import { PersistentSheetWithDetent } from './PersistentSheetWithDetent'
 
 declare global {
   var LSSilkhq: any
@@ -19,7 +21,7 @@ const silkhq = {
   SheetWithStacking, SheetWithDetent,
   SheetWithStackingStack,
   ParallaxPage, ParallaxPageStack,
-  Toast, CardSheet: Card, Page
+  Toast, CardSheet: Card, Page, Sidebar, PersistentSheetWithDetent
 }
 
 window.LSSilkhq = silkhq
