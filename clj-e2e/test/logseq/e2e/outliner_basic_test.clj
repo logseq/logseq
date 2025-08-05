@@ -100,6 +100,7 @@
     (b/indent)
     (k/arrow-up)
     (b/delete-blocks)
+    (util/wait-editor-visible)
     (is (= "b1" (util/get-edit-content)))
     (is (= 1 (util/page-blocks-count)))))
 
