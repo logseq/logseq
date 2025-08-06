@@ -64,7 +64,12 @@
       [:db/ident :keyword]
       [:db/valueType :keyword]
       [:db/cardinality {:optional true} :keyword]
-      [:db/index {:optional true} :boolean]]]]])
+      [:db/index {:optional true} :boolean]]]]
+   [:rename-db-ident
+    [:cat :keyword
+     [:map
+      [:db/ident :keyword]
+      [:new-db-ident :keyword]]]]])
 
 (comment
   (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema])))
