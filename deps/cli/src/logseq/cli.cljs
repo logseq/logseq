@@ -4,12 +4,10 @@
             ["path" :as node-path]
             [babashka.cli :as cli]
             [clojure.string :as string]
-            [logseq.cli.commands.export-edn :as cli-export-edn]
-            [logseq.cli.commands.graph :as cli-graph]
-            [logseq.cli.commands.query :as cli-query]
-            [logseq.cli.commands.search :as cli-search]
             [logseq.cli.common.graph :as cli-common-graph]
-            [nbb.error :as error]))
+            [logseq.cli.spec :as cli-spec]
+            [nbb.error :as error]
+            [promesa.core :as p]))
 
 (defn- format-commands [{:keys [table]}]
   (let [table (mapv (fn [{:keys [cmds desc spec]}]
@@ -51,18 +49,32 @@
                          (cli/format-opts {:spec (:spec cmd-map)})))))
     (println "Command" (pr-str command) "does not exist")))
 
+(defn- lazy-load-fn
+  "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s"
+  [fn-sym]
+  (fn [& args]
+    (p/let [_ (require (symbol (namespace fn-sym)))]
+      (apply (resolve fn-sym) args))))
+
 (def ^:private table
-  [{:cmds ["list"] :fn cli-graph/list-graphs :desc "List graphs"}
-   {:cmds ["show"] :fn cli-graph/show-graph :desc "Show DB graph(s) info"
+  [{:cmds ["list"] :desc "List graphs"
+    :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
+   {:cmds ["show"] :desc "Show DB graph(s) info"
+    :fn (lazy-load-fn 'logseq.cli.commands.graph/show-graph)
     :args->opts [:graphs] :coerce {:graphs []}}
-   {:cmds ["search"] :fn cli-search/search :desc "Search current DB graph"
+   {:cmds ["search"]
+    :fn (lazy-load-fn 'logseq.cli.commands.search/search)
+    :desc "Search current DB graph"
     :args->opts [:search-terms] :coerce {:search-terms []}
-    :spec cli-search/spec}
-   {:cmds ["query"] :fn cli-query/query :desc "Query DB graph(s)"
+    :spec cli-spec/search}
+   {:cmds ["query"] :desc "Query DB graph(s)"
+    :fn (lazy-load-fn 'logseq.cli.commands.query/query)
     :args->opts [:graph :queries] :coerce {:queries []} :no-keyword-opts true
-    :spec cli-query/spec}
-   {:cmds ["export-edn"] :fn cli-export-edn/export :desc "Export DB graph as EDN"
-    :args->opts [:graph] :spec cli-export-edn/spec}
+    :spec cli-spec/query}
+   {:cmds ["export-edn"] :desc "Export DB graph as EDN"
+    :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
+    :args->opts [:graph]
+    :spec cli-spec/export-edn}
    {:cmds ["help"] :fn command-help :desc "Print a command's help"
     :args->opts [:command]}
    {:cmds []
