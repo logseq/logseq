@@ -6,8 +6,6 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
-            [datascript.core]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.file-based.schema :as file-schema]
