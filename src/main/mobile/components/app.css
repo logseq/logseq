@@ -167,7 +167,7 @@ ul {
   &.as-action-sheet {
     .app-silk-popup-content-inner {
       > h2 {
-        @apply text-center pb-3;
+        @apply text-center pb-3 text-sm;
       }
     }
 
