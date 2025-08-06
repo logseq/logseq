@@ -4,8 +4,8 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.rtc.client-op :as client-op]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -14,7 +14,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [frontend.worker.db.rename-db-ident :as rename-db-ident]))
 
 ;; TODO: fixes/rollback
 ;; Frontend migrations
@@ -157,6 +158,7 @@
                {old-p new-p}
                {:replace-fn (fn [id prop-value]
                               (let [page (d/entity db id)
+                                    ;; bad impl, it's not just simple db/ident renaming
                                     new-p' (if (ldb/class? page) new-p :block/parent)]
                                 [[:db/retract id old-p]
                                  [:db/add id new-p' prop-value]]))})
@@ -368,7 +370,10 @@
    ["65.6" {:fix update-extends-to-cardinality-many}]
    ["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
-   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]])
+   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
+   ["65.10" {:properties [:logseq.property/test1]}]
+   ["65.11" {:rename-db-idents [{:db-ident :logseq.property/test1
+                                 :new-db-ident :logseq.property/test2}]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -436,11 +441,11 @@
                data)
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
-    (:tx-data r)))
+    r))
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn db-based? version {:keys [properties classes fix]}]
+  [conn db-based? version {:keys [properties classes rename-db-idents fix]}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -462,15 +467,18 @@
         new-class-idents (keep (fn [class]
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
+        rename-db-idents-tx-data (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents)
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
+        tx-data (if db-based?
+                  (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
+                  fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)
         r (ldb/transact! conn tx-data' {:db-migrate? true})]
     (println "DB schema migrated to" version)
-    (:tx-data r)))
+    r))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
@@ -496,16 +504,17 @@
                                              (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
                                     [v updates])))
                               schema-version->updates)
-                *tx-data-coll (atom [])]
+                *transact-result-coll (atom [])]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
-              (let [tx-data (upgrade-version! conn db-based? v m)]
-                (swap! *tx-data-coll conj tx-data)))
-            (client-op/add-migration-datoms! repo version-in-db db-schema/version @*tx-data-coll)
-            (swap! *tx-data-coll conj (ensure-built-in-data-exists! conn))
+              (let [r (upgrade-version! conn db-based? v m)]
+                (swap! *transact-result-coll conj (select-keys r [:tx-data :db-before :db-after]))))
+            ;; (client-op/add-migration-datoms! repo version-in-db db-schema/version @*transact-result-coll)
+            (swap! *transact-result-coll conj
+                   (select-keys (ensure-built-in-data-exists! conn) [:tx-data :db-before :db-after]))
             {:from-version version-in-db
              :to-version db-schema/version
-             :tx-data-coll @*tx-data-coll})
+             :transact-result-coll @*transact-result-coll})
           (catch :default e
             (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
             (js/console.error e)
