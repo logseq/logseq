@@ -40,7 +40,7 @@
      (shui/button
       {:variant :text
        :size :sm
-       :class "ml-1 text-primary !font-semibold !opacity-90 text-base"
+       :class "ml-1 text-base"
        :on-click (fn []
                    (let [buttons (concat
                                   (->>
@@ -62,8 +62,8 @@
                                                                  (when (string/starts-with? role "logseq_db_")
                                                                    (state/pub-event! [:graph/switch role])))))
                                                 :modal-props {:class "graph-switcher"}})))}
-      [:span.flex.items-center.gap-2.opacity-80.pt-1
-       [:strong.overflow-hidden.text-ellipsis.block.font-normal
+      [:span.flex.items-center.gap-2.pt-1
+       [:strong.overflow-hidden.text-ellipsis.block.font-medium
         {:style {:max-width "40vw"}}
         short-repo-name]])]))
 
@@ -81,13 +81,13 @@
                                             (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
                   (-> (.showDatePicker mobile-util/ui-local)
                       (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
-   [:span.text-muted-foreground.mt-1
+   [:span.mt-1
     (shui/tabler-icon "calendar-month" {:size 24})]))
 
 (rum/defc rtc-indicator-btn
   []
   (let [repo (state/get-current-repo)]
-    [:div.flex.flex-row.items-center.gap-2.text-muted-foreground
+    [:div.flex.flex-row.items-center.gap-2
      (when (and repo
                 (ldb/get-graph-rtc-uuid (db/get-db))
                 (user-handler/logged-in?))
@@ -104,7 +104,7 @@
                     {:variant :text
                      :size :sm
                      :on-click mobile-state/toggle-left-sidebar!}
-                    [:span.text-muted-foreground.mt-2
+                    [:span.mt-2
                      (shui/tabler-icon "menu" {:size 24})])
       :title (app-graphs-select)
       :right-render [:div.flex.items-center.gap-1
