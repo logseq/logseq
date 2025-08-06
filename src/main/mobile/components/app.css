@@ -74,7 +74,7 @@ body {
 }
 
 ul {
-  @apply !list-disc ml-1 mt-2 list-inside;
+  @apply list-disc ml-1 mt-2 list-inside;
 
   li {
     @apply pl-0;
@@ -464,6 +464,18 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       a.as-item-btn {
         @apply select-none py-2 flex justify-start w-full text-lg;
       }
+    }
+  }
+}
+
+.left-sidebar-inner {
+  @apply -mx-4;
+
+  a {
+    @apply text-gray-12 dark:text-gray-11;
+
+    .page-title {
+      display: flex !important;
     }
   }
 }
