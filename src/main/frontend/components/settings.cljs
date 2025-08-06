@@ -27,6 +27,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.spec.storage :as storage-spec]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -1199,7 +1200,13 @@
         [load-model-progress set-load-model-progress] (hooks/use-state nil)
         {:keys [status]} load-model-progress
         repo (state/get-current-repo)
-        current-model (:graph-text-embedding-model-name model-info)]
+        current-model (:graph-text-embedding-model-name model-info)
+        [webgpu? set-webgpu?] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (p/let [webgpu? (db-browser/<check-webgpu-available?)]
+         (set-webgpu? webgpu?)))
+     [])
     (hooks/use-effect!
      (fn []
        (c.m/run-task
@@ -1231,48 +1238,50 @@
          {:for "local-embedding-model"}
          "Local embedding model"]
         [:div.rounded-md.sm:max-w-tss.sm:col-span-2
-         [:div.flex.flex-col.gap-2
-          (shui/select
-           (cond->
-            {:on-value-change (fn [model-name]
-                                (c.m/run-task
-                                  ::load-model
-                                  (m/sp
-                                    (c.m/<?
-                                     (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
-                                    (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
-                                    (c.m/<?
-                                     (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
-                                    (c.m/<?
-                                     (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
-                                  :succ (constantly nil)))}
-             current-model
-             (assoc :value current-model))
-           (shui/select-trigger
-            {:class "h-8"}
-            (shui/select-value
-             {:placeholder "Select a model"}))
+         (if webgpu?
+           [:div.flex.flex-col.gap-2
+            (shui/select
+             (cond->
+              {:on-value-change (fn [model-name]
+                                  (c.m/run-task
+                                    ::load-model
+                                    (m/sp
+                                      (set-model-info (assoc model-info :graph-text-embedding-model-name model-name))
+                                      (c.m/<?
+                                       (state/<invoke-db-worker :thread-api/vec-search-load-model repo model-name))
+                                      (c.m/<?
+                                       (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+                                      (c.m/<?
+                                       (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
+                                    :succ (constantly nil)))}
+               current-model
+               (assoc :value current-model))
+             (shui/select-trigger
+              {:class "h-8"}
+              (shui/select-value
+               {:placeholder "Select a model"}))
 
-           (shui/select-content
-            (shui/select-group
-             (for [model-name (:available-model-names model-info)]
-               (shui/select-item {:value model-name} model-name)))))
+             (shui/select-content
+              (shui/select-group
+               (for [model-name (:available-model-names model-info)]
+                 (shui/select-item {:value model-name} model-name)))))
 
-          (when (and status current-model)
-            [:div.text-muted-foreground.text-sm
-             (let [{:keys [file progress loaded total]} load-model-progress]
-               (case status
-                 ("progress" "download" "initiate")
-                 (str "Downloading " file
-                      (when progress
-                        (util/format " %d/%dm"
-                                     (int (/ loaded 1024 1024))
-                                     (int (/ total 1024 1024)))))
-                 "done"
-                 (str "Downloaded " file)
-                 "ready"
-                 "Model is ready  🚀"
-                 nil))])]]]]]]))
+            (when status
+              [:div.text-muted-foreground.text-sm
+               (let [{:keys [file progress loaded total]} load-model-progress]
+                 (case status
+                   ("progress" "download" "initiate")
+                   (str "Downloading " file
+                        (when progress
+                          (util/format " %d/%dm"
+                                       (int (/ loaded 1024 1024))
+                                       (int (/ total 1024 1024)))))
+                   "done"
+                   (str "Downloaded " file)
+                   "ready"
+                   "Model is ready  🚀"
+                   nil))])]
+           [:div.warning "WebGPU is not supported on this browser, please upgrade it or using another browser."])]]]]]))
 
 (rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
