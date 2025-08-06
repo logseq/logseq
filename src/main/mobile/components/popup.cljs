@@ -2,6 +2,7 @@
   "Mobile popup"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [goog.object :as gobj]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
@@ -66,7 +67,8 @@
 
 (rum/defc popup < rum/reactive
   []
-  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)]
+  (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
+        quick-add? (= :ls-quick-add (:id opts))]
 
     (when open?
       (state/clear-edit!)
@@ -81,17 +83,21 @@
                               (state/clear-edit!)
                               (state/pub-event! [:mobile/keyboard-will-hide])))}
       (:modal-props opts))
-      (silkhq/bottom-sheet-portal
-        (silkhq/bottom-sheet-view
-          {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
-           :onTravelEnd (fn []
-                          (when (= :ls-quick-add (:id opts))
-                            (js/setTimeout #(editor-handler/quick-add-open-last-block!) 50)))}
-          (silkhq/bottom-sheet-backdrop)
-          (silkhq/bottom-sheet-content
-            {:class "flex flex-col items-center p-2"}
-            (silkhq/bottom-sheet-handle)
-            [:div.w-full.app-silk-popup-content-inner.p-2
-             (when-let [title (:title opts)]
-               [:h2.py-2.opacity-40 title])
-             (if (fn? content-fn) (content-fn) content-fn)]))))))
+     (silkhq/bottom-sheet-portal
+      (silkhq/bottom-sheet-view
+       {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
+        :onTravelEnd (fn []
+                       (when quick-add?
+                         (js/setTimeout #(editor-handler/quick-add-open-last-block!) 50)))}
+       (silkhq/bottom-sheet-backdrop
+        (when quick-add?
+          {:travelAnimation {:opacity (fn [data]
+                                        (let [progress (gobj/get data "progress")]
+                                          (js/Math.min (* progress 0.9) 0.9)))}}))
+       (silkhq/bottom-sheet-content
+        {:class "flex flex-col items-center p-2"}
+        (silkhq/bottom-sheet-handle)
+        [:div.w-full.app-silk-popup-content-inner.p-2
+         (when-let [title (:title opts)]
+           [:h2.py-2.opacity-40 title])
+         (if (fn? content-fn) (content-fn) content-fn)]))))))
