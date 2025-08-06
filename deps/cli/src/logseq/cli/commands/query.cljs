@@ -10,14 +10,6 @@
             [logseq.db.frontend.rules :as rules]
             [promesa.core :as p]))
 
-(def spec
-  "Query spec"
-  {:graphs {:alias :g
-            :coerce []
-            :desc "Additional graphs to query"}
-   :api-query-token {:alias :a
-                     :desc "Query current graph with api server token"}})
-
 (defn- api-query
   [query token]
   (let [datalog-query? (string/starts-with? query "[")

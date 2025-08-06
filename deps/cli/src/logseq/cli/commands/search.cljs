@@ -6,15 +6,6 @@
             [logseq.cli.text-util :as cli-text-util]
             [promesa.core :as p]))
 
-(def spec {:api-query-token {:alias :a
-                             :require true
-                             :desc "Api server token"}
-           :raw {:alias :r
-                 :desc "Print raw response"}
-           :limit {:alias :l
-                   :default 100
-                   :desc "Limit max number of results"}})
-
 (defn- highlight
   "Shows up as soft red on terminals that support ANSI 24-bit color like iTerm"
   [text]
