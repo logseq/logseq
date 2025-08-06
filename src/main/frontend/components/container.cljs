@@ -444,7 +444,7 @@
      [close-signal])
 
     [:<>
-     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
+     [:div.left-sidebar-inner.as-container.flex-1.flex.flex-col.min-h-0
       {:key "left-sidebar"
        :ref ref-el
        :style (cond-> {}

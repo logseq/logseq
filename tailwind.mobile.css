@@ -21,6 +21,7 @@
 @import "src/main/frontend/components/icon.css";
 @import "src/main/frontend/mobile/index.css";
 @import "src/main/frontend/components/theme.css";
+@import "src/main/frontend/components/container.css";
 @import "src/main/frontend/components/block.css";
 @import "src/main/frontend/components/property.css";
 @import "src/main/frontend/components/editor.css";

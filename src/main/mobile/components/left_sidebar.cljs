@@ -21,6 +21,7 @@
         {:class "flex flex-col items-center p-2"}
         (silkhq/sidebar-sheet-handle)
         [:div.w-full.app-silk-popup-content-inner.p-2
-         [:div.sidebar-contents-container.mt-8
-          (container/sidebar-favorites)
-          (container/sidebar-recent-pages)]]))))))
+         [:div.left-sidebar-inner
+          [:div.sidebar-contents-container.mt-8
+           (container/sidebar-favorites)
+           (container/sidebar-recent-pages)]]]))))))
