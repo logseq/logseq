@@ -48,37 +48,37 @@
                                      {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
                                       :role (:url repo)})
                                    (remove (fn [{:keys [text]}] (string/blank? text))))
-                                  [{:text [:div.text-gray-09.pb-4.active:opacity-80.flex.flex-row.items-center
-                                           (ui/icon "plus")
-                                           "Add new graph"]
+                                  [{:text [:div.text-gray-09.pb-4.active:opacity-80.flex.justify-center
+                                           "+ Add new graph"]
                                     :role "add-new-graph"}])]
-                     (ui-component/open-modal! "Switch graph"
-                                               {:type :action-sheet
-                                                :buttons buttons
-                                                :on-action (fn [e]
-                                                             (when-let [role (:role e)]
-                                                               (if (= "add-new-graph" role)
-                                                                 (state/pub-event! [:graph/new-db-graph])
-                                                                 (when (string/starts-with? role "logseq_db_")
-                                                                   (state/pub-event! [:graph/switch role])))))
-                                                :modal-props {:class "graph-switcher"}})))}
-      [:span.flex.items-center.gap-2.pt-1
-       [:strong.overflow-hidden.text-ellipsis.block.font-medium
-        {:style {:max-width "40vw"}}
-        short-repo-name]])]))
+                     (ui-component/open-popup! "Switch graph"
+                       {:modal-props {:class "graph-switcher"}
+                        :buttons buttons
+                        :on-action (fn [e]
+                                     (when-let [role (:role e)]
+                                       (if (= "add-new-graph" role)
+                                         (state/pub-event! [:graph/new-db-graph])
+                                         (when (string/starts-with? role "logseq_db_")
+                                           (state/pub-event! [:graph/switch role]))))
+                                     (ui-component/close-popup!))
+                        :type :action-sheet})))}
+       [:span.flex.items-center.gap-2.pt-1
+        [:strong.overflow-hidden.text-ellipsis.block.font-medium
+         {:style {:max-width "40vw"}}
+         short-repo-name]])]))
 
 (rum/defc journal-calendar-btn
   []
   (shui/button
-   {:variant :text
-    :size :sm
-    :on-click (fn []
-                (let [apply-date! (fn [date]
-                                    (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                                      (if-let [journal (db/get-page page-name)]
-                                        (mobile-state/open-block-modal! journal)
-                                        (-> (page-handler/<create! page-name {:redirect? false})
-                                            (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
+    {:variant :text
+     :size :sm
+     :on-click (fn []
+                 (let [apply-date! (fn [date]
+                                     (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                                       (if-let [journal (db/get-page page-name)]
+                                         (mobile-state/open-block-modal! journal)
+                                         (-> (page-handler/<create! page-name {:redirect? false})
+                                           (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
                   (-> (.showDatePicker mobile-util/ui-local)
                       (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
    [:span.mt-1
