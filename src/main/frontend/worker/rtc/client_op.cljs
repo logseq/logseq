@@ -20,6 +20,13 @@
      [:value [:map
               [:db-ident :keyword]
               [:value :any]]]]]
+   [:rename-db-ident
+    [:catn
+     [:op :keyword]
+     [:t :int]
+     [:value [:map
+              [:db-ident :keyword]
+              [:new-db-ident :keyword]]]]]
    [:move
     [:catn
      [:op :keyword]
@@ -238,15 +245,36 @@
            (cons [:db/add tmpid :db-ident db-ident] tx-data))))
      db-ident->op-type->op)))
 
+(defn generate-rename-db-ident-ops-tx-data
+  [client-ops-db ops]
+  (let [op-type :rename-db-ident
+        sorted-ops (sort-by second ops)
+        db-idents (map (fn [[_op-type _t value]] (:db-ident value)) sorted-ops)
+        ents (d/pull-many client-ops-db '[*] (map (fn [db-ident] [:db-ident db-ident]) db-idents))
+        db-ident->op
+        (reduce
+         (fn [r op]
+           (let [[op-type _t value] op
+                 db-ident (:db-ident value)]
+             (assoc r db-ident op)))
+         {} sorted-ops)]
+    (mapcat
+     (fn [[db-ident op]]
+       (let [tmpid (str db-ident "-rename-db-ident")]
+         [[:db/add tmpid :db-ident db-ident]
+          [:db/add tmpid op-type op]]))
+     db-ident->op)))
+
 (defn- partition-ops
-  "Return [db-ident-kv-ops block-ops]"
+  "Return [:update-kv-value-ops :rename-db-ident-ops block-ops]"
   [ops]
-  ((juxt :db-ident :block-uuid)
+  ((juxt :update-kv-value :rename-db-ident :block-uuid)
    (group-by
-    (fn [[_op-type _t value :as op]]
+    (fn [[op-type _t value :as op]]
       (cond
         (:block-uuid value) :block-uuid
-        (:db-ident value) :db-ident
+        (= :update-kv-value op-type) :update-kv-value
+        (= :rename-db-ident op-type) :rename-db-ident
         :else (throw (ex-info "invalid op" {:op op}))))
     ops)))
 
@@ -256,10 +284,11 @@
     (let [conn (worker-state/get-client-ops-conn repo)
           ops (ops-coercer ops)
           _ (assert (some? conn) repo)
-          [db-ident-kv-ops block-ops] (partition-ops ops)
+          [update-kv-value-ops rename-db-ident-ops block-ops] (partition-ops ops)
           tx-data1 (when (seq block-ops) (generate-block-ops-tx-data @conn block-ops))
-          tx-data2 (when (seq db-ident-kv-ops) (generate-ident-kv-ops-tx-data @conn db-ident-kv-ops))]
-      (when-let [tx-data (not-empty (concat tx-data1 tx-data2))]
+          tx-data2 (when (seq update-kv-value-ops) (generate-ident-kv-ops-tx-data @conn update-kv-value-ops))
+          tx-data3 (when (seq rename-db-ident-ops) (generate-rename-db-ident-ops-tx-data @conn rename-db-ident-ops))]
+      (when-let [tx-data (not-empty (concat tx-data1 tx-data2 tx-data3))]
         (d/transact! conn tx-data)))))
 
 (defn- get-all-block-ops*

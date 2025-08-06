@@ -27,11 +27,13 @@
   [db client-schema-version migrate-updates]
   (let [property-ks (mapcat :properties migrate-updates)
         class-ks (mapcat :classes migrate-updates)
+        rename-db-idents (mapcat :rename-db-idents migrate-updates)
         d-entity-fn (partial d/entity db)
         new-property-entities (keep d-entity-fn property-ks)
         new-class-entities (keep d-entity-fn class-ks)
         client-ops (vec (concat (gen-client-op/generate-rtc-ops-from-property-entities new-property-entities)
-                                (gen-client-op/generate-rtc-ops-from-class-entities new-class-entities)))
+                                (gen-client-op/generate-rtc-ops-from-class-entities new-class-entities)
+                                (gen-client-op/generate-rtc-rename-db-ident-ops rename-db-idents)))
         max-t (apply max 0 (map second client-ops))]
     (conj client-ops
           [:update-kv-value
@@ -48,23 +50,8 @@
     (client-op/add-ops! repo ops)
     ops))
 
-(defn local-datoms-tx-data=>remote-tx-data
-  [db datoms-tx-data]
-  (let [e->datoms (group-by :e datoms-tx-data)
-        e->datomvec-coll
-        (update-vals
-         e->datoms
-         (fn [datoms]
-           (let [e (:e (first datoms))
-                 need-block-uuid-datom?
-                 (every?
-                  (fn [{:keys [a added]}]
-                    (or (not= :block/uuid a)
-                        (and (= :block/uuid a) (false? added))))
-                  datoms)
-                 block-uuid (when need-block-uuid-datom? (:block/uuid (d/entity db e)))
-                 datoms* (cond->> datoms
-                           (and need-block-uuid-datom? block-uuid)
-                           (cons (d/datom e :block/uuid block-uuid)))]
-             (map (fn [{:keys [e a v tx added]}] [e a v tx added]) datoms*))))]
-    e->datomvec-coll))
+(defn local-migrate-result-data=>remote-tx-data
+  "datoms-tx-data: [tx-data1, tx-data2, ...]
+TODO:"
+  [transact-result-data]
+  transact-result-data)
