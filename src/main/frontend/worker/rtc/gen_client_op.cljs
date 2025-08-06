@@ -158,3 +158,14 @@
   (when (seq class-ents)
     (assert (every? ldb/class? class-ents))
     (generate-rtc-ops-from-entities class-ents)))
+
+(defn generate-rtc-rename-db-ident-ops
+  [rename-db-idents]
+  (assert (every? (fn [{:keys [db-ident new-db-ident]}]
+                    (and (keyword? db-ident) (keyword? new-db-ident)))
+                  rename-db-idents)
+          rename-db-idents)
+  (map
+   (fn [{:keys [db-ident new-db-ident]}]
+     [:rename-db-ident 0 {:db-ident db-ident :new-db-ident new-db-ident}])
+   rename-db-idents))
