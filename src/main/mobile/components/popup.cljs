@@ -2,6 +2,7 @@
   "Mobile popup"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [frontend.ui :as ui]
             [goog.object :as gobj]
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.silkhq :as silkhq]
@@ -97,7 +98,16 @@
        (silkhq/bottom-sheet-content
         {:class "flex flex-col items-center p-2"}
         (silkhq/bottom-sheet-handle)
-        [:div.w-full.app-silk-popup-content-inner.p-2
-         (when-let [title (:title opts)]
-           [:h2.py-2.opacity-40 title])
-         (if (fn? content-fn) (content-fn) content-fn)]))))))
+         (let [title (or (:title opts) (when (string? content-fn) content-fn))
+               content (if (fn? content-fn) (content-fn)
+                         (if-let [buttons (and (= :action-sheet (:type opts))
+                                            (:buttons opts))]
+                           [:div.-mx-2
+                            (for [{:keys [role text]} buttons]
+                              (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
+                                             :data-role role}
+                                [:span.text-lg.flex.items-center text]))]
+                           (when-not (string? content-fn) content-fn)))]
+           [:div.w-full.app-silk-popup-content-inner.p-2
+            (when title [:h2.py-2.opacity-40 title])
+            content])))))))
