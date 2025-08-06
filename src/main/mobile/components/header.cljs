@@ -130,5 +130,6 @@
                                        [:span.text-lg.flex.gap-2.items-center
                                         (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
                                         "Report bug"])])
-                      {:title "Actions"}))}
+                      {:title "Actions"
+                       :type :action-sheet}))}
         (shui/tabler-icon "dots" {:size 23}))]))))
