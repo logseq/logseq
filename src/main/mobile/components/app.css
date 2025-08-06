@@ -163,6 +163,36 @@ ul {
   .cp__emoji-icon-picker {
     @apply w-full;
   }
+
+  &.as-action-sheet {
+    .app-silk-popup-content-inner {
+      > h2 {
+        @apply text-center pb-3;
+      }
+    }
+
+    .menu-link {
+      @apply border-b -mx-2 py-3;
+
+      .text-lg {
+        @apply inline-block w-full text-center text-xl;
+      }
+
+      .ui__icon {
+        @apply hidden;
+      }
+
+      &:first-child {
+        @apply border-t;
+      }
+
+      &:last-child {
+        @apply -mb-4;
+
+        padding-bottom: calc(env(safe-area-inset-bottom) + 6px);
+      }
+    }
+  }
 }
 
 .blocks-container {
