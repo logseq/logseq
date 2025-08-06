@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v24",
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v26",
     "better-sqlite3": "11.10.0",
     "fs-extra": "^11.3.0"
   },
