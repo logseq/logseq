@@ -6,26 +6,6 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.cli.util :as cli-util]))
 
-(def spec
-  "Options spec"
-  {:include-timestamps? {:alias :T
-                         :desc "Include timestamps in export"}
-   :file {:alias :f
-          :desc "Saves edn to file"}
-   :catch-validation-errors? {:alias :c
-                              :desc "Catch validation errors for dev"}
-   :exclude-namespaces {:alias :e
-                        :coerce #{}
-                        :desc "Namespaces to exclude from properties and classes"}
-   :exclude-built-in-pages? {:alias :b
-                             :desc "Exclude built-in pages"}
-   :exclude-files? {:alias :F
-                    :desc "Exclude :file/path files"}
-   :export-type {:alias :t
-                 :coerce :keyword
-                 :desc "Export type"
-                 :default :graph}})
-
 (defn export [{{:keys [graph] :as options} :opts}]
   (if (fs/existsSync (cli-util/get-graph-dir graph))
    (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
