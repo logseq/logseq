@@ -322,8 +322,24 @@
                                                         (contains? update-kv-value-op-types a))
                                                 [a (:v datom)]))))
                                     datoms)]
-                   (when (and (:db-ident op-map)
-                              (> (count op-map) 1))
+                   (when (and (:db-ident op-map) (> (count op-map) 1))
+                     [e op-map]))))
+         (into {}))))
+
+(defn- get-all-rename-db-ident-ops*
+  [db]
+  (let [db-ident-datoms (d/datoms db :avet :db-ident)
+        es (map :e db-ident-datoms)]
+    (->> (map (fn [e] [e (d/datoms db :eavt e)]) es)
+         (keep (fn [[e datoms]]
+                 (let [op-map (into {}
+                                    (keep (fn [datom]
+                                            (let [a (:a datom)]
+                                              (when (or (keyword-identical? :db-ident a)
+                                                        (contains? db-ident-rename-op-types a))
+                                                [a (:v datom)]))))
+                                    datoms)]
+                   (when (and (:db-ident op-map) (> (count op-map) 1))
                      [e op-map]))))
          (into {}))))
 
@@ -339,6 +355,14 @@
   [conn]
   (let [e->op-map (get-all-update-kv-value-ops* @conn)
         retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) update-kv-value-op-types))
+                                    (keys e->op-map))]
+    (d/transact! conn retract-all-tx-data)
+    (vals e->op-map)))
+
+(defn- get&remove-all-rename-db-ident-ops*
+  [conn]
+  (let [e->op-map (get-all-rename-db-ident-ops* @conn)
+        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) db-ident-rename-op-types))
                                     (keys e->op-map))]
     (d/transact! conn retract-all-tx-data)
     (vals e->op-map)))
@@ -373,6 +397,11 @@
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (get&remove-all-update-kv-value-ops* conn)))
+
+(defn get&remove-all-rename-db-ident-ops
+  [repo]
+  (when-let [conn (worker-state/get-client-ops-conn repo)]
+    (get&remove-all-rename-db-ident-ops* conn)))
 
 (defn get-unpushed-block-ops-count
   [repo]

@@ -33,7 +33,7 @@
    [:rename-db-ident
     [:cat :keyword
      [:map
-      [:db/ident :keyword]
+      [:db-ident :keyword]
       [:new-db-ident :keyword]]]]
    [:move
     [:cat :keyword
