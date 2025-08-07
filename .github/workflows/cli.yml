@@ -25,6 +25,20 @@ on:
       - 'deps/graph-parser/**'
       - 'deps/db/**'
       - 'deps/common/**'
+  workflow_dispatch:
+    inputs:
+      git-ref:
+        description: "Release Git Ref (Which branch to build?)"
+        required: true
+        default: "master"
+      release-tag:
+        type: choice
+        description: "Npm Release Tag (Use 'latest' for a stable release)"
+        required: true
+        options:
+          - alpha
+          - latest
+        default: "latest"
 
 defaults:
   run:
@@ -109,3 +123,49 @@ jobs:
 
       - name: Lint for public vars that are private based on usage
         run: bb lint:minimize-public-vars
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: deps/cli/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # Clojure needed for bb step
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Fetch yarn deps
+        run: yarn install --frozen-lockfile
+
+      - name: Bundle vendor deps
+        run: bb build:vendor-nbb-deps
+
+      # - name: Debug package
+      #   run: yarn pack && tar -tf logseq-cli-*.tgz
+
+      - name: Authenticate with registry
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_CLI_TOKEN }}
+        run: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc
+
+      - name: Publish package
+        run: npm publish --tag "${{ github.event.inputs.release-tag || 'alpha' }}" --access public
