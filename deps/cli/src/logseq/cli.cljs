@@ -31,7 +31,7 @@
 (defn- default-command
   [{{:keys [version]} :opts :as m}]
   (if version
-    (let [package-json (node-path/join (node-path/dirname (second js/process.argv)) "package.json")]
+    (let [package-json (node-path/join js/__dirname "package.json")]
       (when (fs/existsSync package-json)
         (println (-> (fs/readFileSync package-json)
                      js/JSON.parse
