@@ -1,15 +1,20 @@
 ## Description
 
-This library provides a `logseq` CLI for DB graph to be installed with npm or yarn. Most of this
-library is also compatible with ClojureScript for use on the frontend.
+This library provides a `logseq` CLI for DB graphs. The CLI currently only applies to desktop DB graphs and requires the [database-version](/README.md#-database-version) desktop app to be installed. The CLI works offline by default which means it can also be used on CI/CD platforms like Github Actions. Some CLI commands can also interact with the current DB graph if the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on in the Desktop app.
+
+## Install
+
+Install the `logseq` CLI with `npm install -g @logseq/cli`.
 
 ## Usage
 
-First, install the CLI per [the dev setup instructions](#setup). Ensure that you have the [database-version](/README.md#-database-version) desktop app installed. If you can't install the CLI locally, the below commands can be run as `node cli.mjs` for `logseq` e.g. `node.cli.mjs -h`.
+This section assumes you have installed the CLI from npm or via the [dev
+setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
+`node.cli.mjs -h`.
 
-All commands excepts for `search` can be used offline or on CI. For the `search` command and any command that has an optional api-query-token mode, you will need the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) turned on in the Desktop app.
+All commands excepts for `search` can be used offline or on CI. The `search` command and any command that has an api-query-token option require the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
 
-Then use it!
+Now let's use it!
 
 ```
 $ logseq -h
@@ -107,7 +112,8 @@ This library is under the parent namespace `logseq.cli`.
 
 ## Dev
 
-This follows the practices that [the Logseq frontend
+Most of this library is also compatible with ClojureScript for use on the
+frontend. This library follows the practices that [the Logseq frontend
 follows](/docs/dev-practices.md). Most of the same linters are used, with
 configurations that are specific to this library. See [this library's CI
 file](/.github/workflows/cli.yml) for linting examples.
@@ -115,7 +121,7 @@ file](/.github/workflows/cli.yml) for linting examples.
 ### Setup
 
 First install the following dependencies:
-* Install node.js >= 22 and yarn or npm.
+* Install node.js >= 22 and yarn.
 * Run `yarn install` to install npm dependencies.
 * Install [babashka](https://github.com/babashka/babashka).
 
