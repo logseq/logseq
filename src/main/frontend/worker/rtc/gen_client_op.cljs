@@ -6,6 +6,16 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn group-datoms-by-entity
+  "Groups transaction datoms by entity and returns a map of entity-id to datoms."
+  [tx-data]
+  (let [datom-vec-coll (map vec tx-data)
+        id->same-entity-datoms (group-by first datom-vec-coll)
+        id-order (distinct (map first datom-vec-coll))
+        same-entity-datoms-coll (map id->same-entity-datoms id-order)]
+    {:same-entity-datoms-coll same-entity-datoms-coll
+     :id->same-entity-datoms  id->same-entity-datoms}))
+
 (defn- latest-add?->v->t
   [add?->v->t]
   (let [latest-add     (first (sort-by second > (seq (add?->v->t true))))

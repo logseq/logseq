@@ -79,7 +79,8 @@
 
 (def ^:private block-op-types #{:move :remove :update-page :remove-page :update})
 (def ^:private asset-op-types #{:update-asset :remove-asset})
-(def ^:private db-ident-kv-op-types #{:update-kv-value})
+(def ^:private update-kv-value-op-types #{:update-kv-value})
+(def ^:private db-ident-rename-op-types #{:rename-db-ident})
 
 (def schema-in-db
   "TODO: rename this db-name from client-op to client-metadata+op.
@@ -89,7 +90,6 @@
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :aes-key-jwk {:db/index true}
-   :migration-datoms {:db/index true}
 
    ;; device
    :device/uuid {:db/unique :db.unique/identity}
@@ -246,15 +246,13 @@
      db-ident->op-type->op)))
 
 (defn generate-rename-db-ident-ops-tx-data
-  [client-ops-db ops]
+  [ops]
   (let [op-type :rename-db-ident
         sorted-ops (sort-by second ops)
-        db-idents (map (fn [[_op-type _t value]] (:db-ident value)) sorted-ops)
-        ents (d/pull-many client-ops-db '[*] (map (fn [db-ident] [:db-ident db-ident]) db-idents))
         db-ident->op
         (reduce
          (fn [r op]
-           (let [[op-type _t value] op
+           (let [[_op-type _t value] op
                  db-ident (:db-ident value)]
              (assoc r db-ident op)))
          {} sorted-ops)]
@@ -287,7 +285,7 @@
           [update-kv-value-ops rename-db-ident-ops block-ops] (partition-ops ops)
           tx-data1 (when (seq block-ops) (generate-block-ops-tx-data @conn block-ops))
           tx-data2 (when (seq update-kv-value-ops) (generate-ident-kv-ops-tx-data @conn update-kv-value-ops))
-          tx-data3 (when (seq rename-db-ident-ops) (generate-rename-db-ident-ops-tx-data @conn rename-db-ident-ops))]
+          tx-data3 (when (seq rename-db-ident-ops) (generate-rename-db-ident-ops-tx-data rename-db-ident-ops))]
       (when-let [tx-data (not-empty (concat tx-data1 tx-data2 tx-data3))]
         (d/transact! conn tx-data)))))
 
@@ -310,7 +308,7 @@
                    [e op-map]))))
        (into {})))
 
-(defn- get-all-db-ident-kv-ops*
+(defn- get-all-update-kv-value-ops*
   "Return e->op-map"
   [db]
   (let [db-ident-datoms (d/datoms db :avet :db-ident)
@@ -321,7 +319,7 @@
                                     (keep (fn [datom]
                                             (let [a (:a datom)]
                                               (when (or (keyword-identical? :db-ident a)
-                                                        (contains? db-ident-kv-op-types a))
+                                                        (contains? update-kv-value-op-types a))
                                                 [a (:v datom)]))))
                                     datoms)]
                    (when (and (:db-ident op-map)
@@ -337,10 +335,10 @@
     (d/transact! conn retract-all-tx-data)
     (vals e->op-map)))
 
-(defn- get&remove-all-db-ident-kv-ops*
+(defn- get&remove-all-update-kv-value-ops*
   [conn]
-  (let [e->op-map (get-all-db-ident-kv-ops* @conn)
-        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) db-ident-kv-op-types))
+  (let [e->op-map (get-all-update-kv-value-ops* @conn)
+        retract-all-tx-data (mapcat (fn [e] (map (fn [a] [:db.fn/retractAttribute e a]) update-kv-value-op-types))
                                     (keys e->op-map))]
     (d/transact! conn retract-all-tx-data)
     (vals e->op-map)))
@@ -371,10 +369,10 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (get&remove-all-block-ops* conn)))
 
-(defn get&remove-all-db-ident-kv-ops
+(defn get&remove-all-update-kv-value-ops
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (get&remove-all-db-ident-kv-ops* conn)))
+    (get&remove-all-update-kv-value-ops* conn)))
 
 (defn get-unpushed-block-ops-count
   [repo]
@@ -499,10 +497,3 @@
       (m/ap
         (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
           (datom-count-fn @conn))))))
-
-(defn add-migration-datoms!
-  [repo from-version to-version datoms]
-  (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (d/transact! conn [{:migration-datoms {:datoms datoms
-                                           :from from-version
-                                           :to to-version}}])))
