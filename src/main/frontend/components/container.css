@@ -278,7 +278,7 @@
 
   @screen sm {
     padding-top: 0;
-    width: var(--ls-left-sidebar-width);
+    width: var(--ls-left-sidebar-width) !important;
 
     > .wrap {
       margin-top: 52px;
