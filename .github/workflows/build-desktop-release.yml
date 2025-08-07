@@ -384,7 +384,6 @@ jobs:
 
       - name: Save Artifact
         run: |
-          rm builds\*.exe
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
           mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\wix\x64\Logseq.msi            builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.msi
