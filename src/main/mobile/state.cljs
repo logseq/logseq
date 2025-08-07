@@ -25,6 +25,10 @@
   []
   (swap! *left-sidebar-open? not))
 
+(defn open-left-sidebar!
+  []
+  (reset! *left-sidebar-open? true))
+
 (defn close-left-sidebar!
   []
   (reset! *left-sidebar-open? false))
