@@ -156,8 +156,6 @@
         "d3-force": "3.0.0",
         "diff": "5.0.0",
         "dompurify": "2.4.0",
-        "electron": "34.5.6",
-        "electron-dl": "^4.0.0",
         "emoji-mart": "^5.5.2",
         "fs": "0.0.1-security",
         "fs-extra": "9.1.0",
