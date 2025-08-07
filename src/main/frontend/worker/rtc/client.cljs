@@ -285,6 +285,17 @@
   [update-kv-value-ops-map-coll]
   (mapcat local-update-kv-value-ops->remote-ops update-kv-value-ops-map-coll))
 
+(defn- local-rename-db-ident-ops->remote-ops
+  [rename-db-ident-ops-map]
+  (keep (fn [[op-type op]]
+          (when (keyword-identical? :rename-db-ident op-type)
+            [:rename-db-ident (select-keys (last op) [:db-ident :new-db-ident])]))
+        rename-db-ident-ops-map))
+
+(defn- gen-rename-db-ident-remote-ops
+  [rename-db-ident-ops-map-coll]
+  (mapcat local-rename-db-ident-ops->remote-ops rename-db-ident-ops-map-coll))
+
 (defn- merge-remove-remove-ops
   [remote-remove-ops]
   (when-let [block-uuids (->> remote-remove-ops
@@ -343,7 +354,7 @@
     (concat update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
 (defn- rollback
-  [repo block-ops-map-coll update-kv-value-ops-map-coll]
+  [repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll]
   (let [block-ops
         (mapcat
          (fn [m]
@@ -359,9 +370,18 @@
                    (when (keyword-identical? :update-kv-value k)
                      op))
                  m))
-         update-kv-value-ops-map-coll)]
+         update-kv-value-ops-map-coll)
+        rename-db-ident-ops
+        (mapcat
+         (fn [m]
+           (keep (fn [[k op]]
+                   (when (keyword-identical? :rename-db-ident k)
+                     op))
+                 m))
+         rename-db-ident-ops-map-coll)]
     (client-op/add-ops! repo block-ops)
     (client-op/add-ops! repo update-kv-value-ops)
+    (client-op/add-ops! repo rename-db-ident-ops)
     nil))
 
 (defn new-task--push-local-ops
@@ -370,10 +390,14 @@
   (m/sp
     (let [block-ops-map-coll (client-op/get&remove-all-block-ops repo)
           update-kv-value-ops-map-coll (client-op/get&remove-all-update-kv-value-ops repo)
+          rename-db-ident-ops-map-coll (client-op/get&remove-all-rename-db-ident-ops repo)
           block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))
+          rename-db-ident-remote-ops (gen-rename-db-ident-remote-ops rename-db-ident-ops-map-coll)
           other-remote-ops (gen-update-kv-value-remote-ops update-kv-value-ops-map-coll)
-          remote-ops (concat (when block-uuid->remote-ops (sort-remote-ops block-uuid->remote-ops))
-                             other-remote-ops)]
+          remote-ops (concat
+                      rename-db-ident-remote-ops
+                      (when block-uuid->remote-ops (sort-remote-ops block-uuid->remote-ops))
+                      other-remote-ops)]
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
               r (try
@@ -383,7 +407,7 @@
                                                    :ops ops-for-remote :t-before (or local-tx 1)}
                                             (true? @*remote-profile?) (assoc :profile true))))
                   (catch :default e
-                    (rollback repo block-ops-map-coll update-kv-value-ops-map-coll)
+                    (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                     (throw e)))]
           (if-let [remote-ex (:ex-data r)]
             (do (add-log-fn :rtc.log/push-local-update remote-ex)
@@ -392,18 +416,18 @@
                   ;;   conflict-update remote-graph, keep these local-pending-ops
                   ;;   and try to send ops later
                   :graph-lock-failed
-                  (rollback repo block-ops-map-coll update-kv-value-ops-map-coll)
+                  (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                   ;; - :graph-lock-missing
                   ;;   this case means something wrong in remote-graph data,
                   ;;   nothing to do at client-side
                   :graph-lock-missing
-                  (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll)
+                  (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                       (throw r.ex/ex-remote-graph-lock-missing))
 
                   :rtc.exception/get-s3-object-failed
-                  (rollback repo block-ops-map-coll update-kv-value-ops-map-coll)
+                  (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                   ;; else
-                  (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll)
+                  (do (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                       (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
             (do (assert (pos? (:t r)) r)
