@@ -29,6 +29,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
+            [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -291,7 +292,20 @@
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (db-migrate/migrate repo conn)
+        (let [migration-result (db-migrate/migrate repo conn)
+              transact-result-coll (:transact-result-coll migration-result)]
+          ;; convert migration-result into rtc ops if it's a rtc-db-graph
+          (when (client-op/rtc-db-graph? repo)
+            (let [ops-coll
+                  (for [{:keys [tx-data db-before db-after]} transact-result-coll]
+                    (let [{:keys [same-entity-datoms-coll id->same-entity-datoms]}
+                          (gen-client-op/group-datoms-by-entity tx-data)
+                          e->a->add?->v->t (update-vals
+                                            id->same-entity-datoms
+                                            gen-client-op/entity-datoms=>a->add?->v->t)]
+                      (gen-client-op/generate-rtc-ops db-before db-after same-entity-datoms-coll e->a->add?->v->t)))]
+              ;; TODO: client-op/add-ops!
+              ops-coll)))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

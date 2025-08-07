@@ -30,6 +30,11 @@
      [:map
       [:db-ident :keyword]
       [:value :string]]]]
+   [:rename-db-ident
+    [:cat :keyword
+     [:map
+      [:db/ident :keyword]
+      [:new-db-ident :keyword]]]]
    [:move
     [:cat :keyword
      [:map
@@ -64,12 +69,7 @@
       [:db/ident :keyword]
       [:db/valueType :keyword]
       [:db/cardinality {:optional true} :keyword]
-      [:db/index {:optional true} :boolean]]]]
-   [:rename-db-ident
-    [:cat :keyword
-     [:map
-      [:db/ident :keyword]
-      [:new-db-ident :keyword]]]]])
+      [:db/index {:optional true} :boolean]]]]])
 
 (comment
   (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema])))
