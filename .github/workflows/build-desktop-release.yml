@@ -591,12 +591,6 @@ jobs:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win64-signed-builds
-          path: ./
-
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v4
         with:
@@ -669,12 +663,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: logseq-linux-arm64-builds
-          path: ./
-
-      - name: Download The Windows Artifact (Signed)
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
