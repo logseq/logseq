@@ -1490,6 +1490,23 @@
         ;; actually, writing binary using memory fs
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
+(defn- <asset-entity-valid?
+  "Check if an asset entity is valid (has required properties and file exists)"
+  [repo asset-entity]
+  (if (and asset-entity
+           (:logseq.property.asset/type asset-entity)
+           (:logseq.property.asset/checksum asset-entity)
+           (:block/uuid asset-entity))
+    ;; Check if the physical file exists
+    (p/let [asset-type (:logseq.property.asset/type asset-entity)
+            asset-id (str (:block/uuid asset-entity))
+            repo-dir (config/get-repo-dir repo)
+            file-path (path/path-join repo-dir common-config/local-assets-dir
+                                      (str asset-id "." asset-type))]
+      (p/catch (fs/stat repo file-path)
+               (constantly nil)))
+    (p/resolved false)))
+
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
@@ -1505,8 +1522,10 @@
                                        (date/get-date-time-string-2)
                                        file-name-without-ext*)
                checksum (assets-handler/get-file-checksum file)
-               existing-asset (db-async/<get-asset-with-checksum repo checksum)]
-         (if existing-asset
+               existing-asset (db-async/<get-asset-with-checksum repo checksum)
+               valid-existing-asset? (when existing-asset 
+                                       (<asset-entity-valid? repo existing-asset))]
+         (if valid-existing-asset?
            existing-asset
            (p/let [block-id (ldb/new-block-id)
                    ext (when file-name (db-asset/asset-path->type file-name))
