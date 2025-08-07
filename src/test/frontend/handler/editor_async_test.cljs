@@ -100,3 +100,27 @@
                                                                  @conn)
                                                             (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))}))))
+
+(deftest-async test-asset-reupload-after-deletion
+  (testing "PDF can be re-uploaded after deletion without creating broken references"
+    (async done
+      (load-test-files)
+      (p/let [;; Create a mock file object
+              mock-file #js {:name "test.pdf"
+                            :size 1024
+                            :arrayBuffer #(p/resolved #js [1 2 3 4 5])}
+              repo test-helper/test-db
+              ;; First upload
+              initial-assets (editor/db-based-save-assets! repo [mock-file])
+              initial-asset (first initial-assets)
+              ;; Simulate deletion by removing the asset block
+              _ (when initial-asset
+                  (editor/delete-block-aux! initial-asset))
+              ;; Second upload - should create new asset, not return broken reference  
+              reupload-assets (editor/db-based-save-assets! repo [mock-file])
+              reupload-asset (first reupload-assets)]
+        (is (some? initial-asset) "Initial asset should be created")
+        (is (some? reupload-asset) "Reupload asset should be created")
+        (is (:block/uuid reupload-asset) "Reupload asset should have valid UUID")
+        (is (:logseq.property.asset/checksum reupload-asset) "Reupload asset should have checksum")
+        (done))))))
