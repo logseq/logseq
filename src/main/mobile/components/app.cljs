@@ -97,12 +97,47 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
+(defn setup-sidebar-touch-swipe! []
+  (let [touch-start-x (atom 0)
+        touch-start-y (atom 0)
+        has-triggered? (atom false)
+        edge-threshold 30
+        swipe-trigger-distance 50
+        max-vertical-drift 50
+
+        on-touch-start (fn [^js e]
+                         (let [touch (aget e "touches" 0)]
+                           (reset! touch-start-x (.-pageX touch))
+                           (reset! touch-start-y (.-pageY touch))
+                           (reset! has-triggered? false)))
+
+        on-touch-move (fn [^js e]
+                        (when-not @has-triggered?
+                          (let [touch (aget e "touches" 0)
+                                delta-x (- (.-pageX touch) @touch-start-x)
+                                delta-y (js/Math.abs (- (.-pageY touch) @touch-start-y))
+                                started-from-edge (<= @touch-start-x edge-threshold)
+                                is-horizontal-swipe (and (> delta-x swipe-trigger-distance)
+                                                         (< delta-y max-vertical-drift))]
+                            (when (and started-from-edge is-horizontal-swipe)
+                              (reset! has-triggered? true)
+                              (mobile-state/open-left-sidebar!)))))]
+
+    (.addEventListener js/document "touchstart" on-touch-start #js {:passive true})
+    (.addEventListener js/document "touchmove" on-touch-move #js {:passive true})
+
+    ;; Return cleanup function
+    #(do
+       (.removeEventListener js/document "touchstart" on-touch-start)
+       (.removeEventListener js/document "touchmove" on-touch-move))))
+
 (rum/defc app
   [current-repo {:keys [login?]}]
   (let [[tab] (mobile-state/use-tab)
         *home (rum/use-ref nil)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo)
+    (hooks/use-effect! (fn [] (setup-sidebar-touch-swipe!)) [])
     (silkhq/depth-sheet-stack
      {:as-child true}
      (silkhq/depth-sheet-scenery-outlets
