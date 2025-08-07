@@ -164,17 +164,6 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
-(defn- add-migration-client-ops!
-  [repo db server-schema-version]
-  (when server-schema-version
-    (let [client-schema-version (ldb/get-graph-schema-version db)
-          added-ops (r.migrate/add-migration-client-ops! repo db server-schema-version client-schema-version)]
-      (when (seq added-ops)
-        (log/info :add-migration-client-ops
-                  {:repo repo
-                   :server-schema-version server-schema-version
-                   :client-schema-version client-schema-version})))))
-
 (defn- update-remote-schema-version!
   [conn server-schema-version]
   (when server-schema-version
@@ -252,7 +241,6 @@
           (m/? get-ws-create-task)
           (started-dfv true)
           (update-remote-schema-version! conn @*server-schema-version)
-          (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
                     assets-sync-loop-task))
@@ -652,11 +640,6 @@
   (def-thread-api :thread-api/rtc-download-info-list
     [token graph-uuid schema-version]
     (new-task--download-info-list token graph-uuid schema-version)))
-
-(def-thread-api :thread-api/rtc-add-migration-client-ops
-  [repo server-schema-version]
-  (when-let [db @(worker-state/get-datascript-conn repo)]
-    (add-migration-client-ops! repo db server-schema-version)))
 
 ;;; ================ API (ends) ================
 

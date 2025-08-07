@@ -7,13 +7,10 @@
             [frontend.worker.rtc.migrate :as rtc-migrate]
             [logseq.db :as ldb]))
 
-(deftest ^:focus local-datoms-tx-data=>remote-tx-data-test
+(deftest ^:focus migration-results=>client-ops
   (let [db-transit (str (fs-node/readFileSync "src/test/migration/64.8.transit"))
         db (ldb/read-transit-str db-transit)
         conn (d/conn-from-db db)
-        transact-result-coll (db-migrate/migrate "rtc-migrate-test" conn)]
-    (pp/pprint (update transact-result-coll :transact-result-coll #(map :tx-data %)))
-    (let [remote-tx-data (rtc-migrate/local-migrate-result-data=>remote-tx-data
-                          (:transact-result-coll transact-result-coll))]
-      ;; (pp/pprint (map :tx-data remote-tx-data))
-      )))
+        migration-result (db-migrate/migrate conn)
+        client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+    (pp/pprint client-ops)))
