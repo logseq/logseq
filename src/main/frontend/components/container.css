@@ -239,7 +239,7 @@
               @apply flex items-center;
             }
 
-            &:hover, &:has([data-popup-active]) {
+            &:hover, &:has([data-popup-active]), &:active {
               @apply bg-gray-04 opacity-100;
             }
           }
