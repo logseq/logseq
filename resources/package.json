@@ -1,7 +1,7 @@
 {
   "name": "Logseq",
   "productName": "Logseq",
-  "version": "0.10.12",
+  "version": "0.10.13",
   "main": "electron.js",
   "author": "Logseq",
   "license": "AGPL-3.0",
