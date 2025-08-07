@@ -29,7 +29,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
-            [frontend.worker.rtc.gen-client-op :as gen-client-op]
+            [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -286,26 +286,16 @@
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
-                initial-data (sqlite-create-graph/build-db-initial-data config
-                                                                        (select-keys opts [:import-type :graph-git-sha]))]
+                initial-data (sqlite-create-graph/build-db-initial-data
+                              config (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (let [migration-result (db-migrate/migrate repo conn)
-              transact-result-coll (:transact-result-coll migration-result)]
-          ;; convert migration-result into rtc ops if it's a rtc-db-graph
+        (let [migration-result (db-migrate/migrate conn)]
           (when (client-op/rtc-db-graph? repo)
-            (let [ops-coll
-                  (for [{:keys [tx-data db-before db-after]} transact-result-coll]
-                    (let [{:keys [same-entity-datoms-coll id->same-entity-datoms]}
-                          (gen-client-op/group-datoms-by-entity tx-data)
-                          e->a->add?->v->t (update-vals
-                                            id->same-entity-datoms
-                                            gen-client-op/entity-datoms=>a->add?->v->t)]
-                      (gen-client-op/generate-rtc-ops db-before db-after same-entity-datoms-coll e->a->add?->v->t)))]
-              ;; TODO: client-op/add-ops!
-              ops-coll)))
+            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+              (client-op/add-ops! repo client-ops))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

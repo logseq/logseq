@@ -4,8 +4,9 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [frontend.util :as util]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -14,10 +15,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.db.rename-db-ident :as rename-db-ident]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
-;; TODO: fixes/rollback
 ;; Frontend migrations
 ;; ===================
 
@@ -384,6 +383,12 @@
       (when (neg? compare-result)
         (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))))
 
+;;; some validations of schema-version->updates
+(doseq [[version migrate-updates] schema-version->updates]
+  (when (contains? (set (keys migrate-updates)) :fix)
+    (assert (= 1 (count migrate-updates))
+            (util/format "migration(%s): :fix type cannot coexist with other types (:properties, :classes, :rename-db-idents) " version))))
+
 (defn ensure-built-in-data-exists!
   "Return tx-data"
   [conn]
@@ -445,7 +450,7 @@
 
 (defn- upgrade-version!
   "Return tx-data"
-  [conn db-based? version {:keys [properties classes rename-db-idents fix]}]
+  [conn db-based? version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -478,12 +483,12 @@
                   tx-data)
         r (ldb/transact! conn tx-data' {:db-migrate? true})]
     (println "DB schema migrated to" version)
-    r))
+    (assoc r :migrate-updates migrate-updates)))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
-  [repo conn]
+  [conn]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
@@ -504,17 +509,17 @@
                                              (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
                                     [v updates])))
                               schema-version->updates)
-                *transact-result-coll (atom [])]
+                result-ks [:tx-data :db-before :db-after :migrate-updates]
+                *upgrade-result-coll (atom [])]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
               (let [r (upgrade-version! conn db-based? v m)]
-                (swap! *transact-result-coll conj (select-keys r [:tx-data :db-before :db-after]))))
-            ;; (client-op/add-migration-datoms! repo version-in-db db-schema/version @*transact-result-coll)
-            (swap! *transact-result-coll conj
-                   (select-keys (ensure-built-in-data-exists! conn) [:tx-data :db-before :db-after]))
+                (swap! *upgrade-result-coll conj (select-keys r result-ks))))
+            (swap! *upgrade-result-coll conj
+                   (select-keys (ensure-built-in-data-exists! conn) result-ks))
             {:from-version version-in-db
              :to-version db-schema/version
-             :transact-result-coll @*transact-result-coll})
+             :upgrade-result-coll @*upgrade-result-coll})
           (catch :default e
             (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
             (js/console.error e)
