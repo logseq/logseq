@@ -2,13 +2,7 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v24":
-  version "1.2.173-feat-db-v24"
-  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/3d5b78b0382c7253bf9874c1f38586dd338434f4"
-  dependencies:
-    import-meta-resolve "^4.1.0"
-
-"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v26":
+"@logseq/nbb-logseq@github:logseq/nbb-logseq#feat-db-v26":
   version "1.2.173-feat-db-v25"
   resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/b26d290944234b20762ff109e5328b87ea240692"
   dependencies:
@@ -19,7 +13,7 @@ base64-js@^1.3.1:
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"
   integrity sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==
 
-better-sqlite3@11.10.0:
+better-sqlite3@~11.10.0:
   version "11.10.0"
   resolved "https://registry.yarnpkg.com/better-sqlite3/-/better-sqlite3-11.10.0.tgz#2b1b14c5acd75a43fd84d12cc291ea98cef57d98"
   integrity sha512-EwhOpyXiOEL/lKzHz9AW1msWFNzGc/z+LzeB3/jnFJpxu+th2yqvzsSWas1v9jgs9+xiXJcD5A8CJxAG2TaghQ==
