@@ -4,7 +4,6 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.util :as util]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
@@ -387,7 +386,9 @@
 (doseq [[version migrate-updates] schema-version->updates]
   (when (contains? (set (keys migrate-updates)) :fix)
     (assert (= 1 (count migrate-updates))
-            (util/format "migration(%s): :fix type cannot coexist with other types (:properties, :classes, :rename-db-idents) " version))))
+            (common-util/format
+             "migration(%s): :fix type cannot coexist with other types (:properties, :classes, :rename-db-idents)"
+             version))))
 
 (defn ensure-built-in-data-exists!
   "Return tx-data"
