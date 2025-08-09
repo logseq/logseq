@@ -1,0 +1,46 @@
+.SheetWithStacking-view {
+  /* SELF-LAYOUT */
+  z-index: 1;
+  /* Adding 60px to make it fully visible below iOS Safari's
+    bottom UI */
+  height: calc(var(--silk-100-lvh-dvh-pct) + 60px);
+}
+.SheetWithStacking-view.contentPlacement-right {
+  /* SELF-LAYOUT */
+  height: var(--silk-100-lvh-dvh-pct);
+}
+
+.SheetWithStacking-content {
+  /* SELF-LAYOUT */
+  box-sizing: border-box;
+  height: calc(min(500px, 90svh) + env(safe-area-inset-bottom, 0px));
+
+  /* APPEARANCE */
+  background-color: transparent;
+
+  /* INNER-LAYOUT */
+  padding-inline: 0.5rem;
+  padding-block: 0.5rem max(env(safe-area-inset-bottom, 0px), 0.5rem);
+  display: grid;
+}
+.SheetWithStacking-content.contentPlacement-right {
+  /* SELF-LAYOUT */
+  height: 100%;
+  width: min(80%, 700px);
+
+  /* INNER-LAYOUT */
+  padding: 0.75rem;
+}
+
+.SheetWithStacking-innerContent {
+  /* SELF-LAYOUT */
+  height: 100%;
+  min-height: 0;
+
+  /* APPEARANCE */
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  overflow: hidden;
+  overflow: clip;
+  border-radius: 24px;
+  background-color: white;
+}

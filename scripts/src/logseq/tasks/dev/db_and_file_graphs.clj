@@ -21,7 +21,7 @@
          "frontend.inference-worker"
          "frontend.components.property" "frontend.components.class" "frontend.components.quick-add" "frontend.components.vector-search"
          "frontend.components.db-based" "frontend.components.objects" "frontend.components.query.view"
-         "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.ionic" "mobile.state"
+         "mobile.core" "mobile.events" "mobile.externals" "mobile.init" "mobile.state"
          "mobile.components"]))
 
 (def file-graph-ns
