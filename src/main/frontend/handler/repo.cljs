@@ -24,6 +24,7 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -118,10 +119,12 @@
                        nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        (cond (util/electron?)
-                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
+                             (p/chain
+                              (ipc/ipc :inflateGraphsInfo (ldb/write-transit-str nfs-dbs))
+                              ldb/read-transit-str)
 
-                             ;(mobile-util/native-platform?)
-                             ;(util-fs/inflate-graphs-info nfs-dbs)
+                                        ;(mobile-util/native-platform?)
+                                        ;(util-fs/inflate-graphs-info nfs-dbs)
 
                              :else
                              nfs-dbs))]
