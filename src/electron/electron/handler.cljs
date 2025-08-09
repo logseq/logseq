@@ -31,6 +31,7 @@
             [electron.window :as win]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
+            [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]))
@@ -279,14 +280,16 @@
       (logger/error "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
-  (if (seq graphs)
-    (for [{:keys [root] :as graph} graphs]
-      (if-let [sync-meta (read-txid-info! root)]
-        (assoc graph
-               :sync-meta sync-meta
-               :GraphUUID (second sync-meta))
-        graph))
-    []))
+  (let [graphs (ldb/read-transit-str graphs)]
+    (-> (if (seq graphs)
+          (for [{:keys [root] :as graph} graphs]
+            (if-let [sync-meta (read-txid-info! root)]
+              (assoc graph
+                     :sync-meta sync-meta
+                     :GraphUUID (second sync-meta))
+              graph))
+          [])
+        ldb/write-transit-str)))
 
 (defmethod handle :readGraphTxIdInfo [_win [_ root]]
   (read-txid-info! root))
