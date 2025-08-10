@@ -135,16 +135,17 @@
     ;; TODO: move to standalone component
       [:a.link-item.group
        (cond->
-        {:on-click
+        {(if (util/mobile?)
+           :on-pointer-up :on-click)
          (fn [e]
            (if (gobj/get e "shiftKey")
              (open-in-sidebar)
              (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
          :on-context-menu (fn [^js e]
                             (shui/popup-show! e (x-menu-content)
-                                              {:as-dropdown? true
-                                               :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                               :class "w-60"}})
+                              {:as-dropdown? true
+                               :content-props {:on-click (fn [] (shui/popup-hide!))
+                                               :class "w-60"}})
                             (util/stop e))}
          (ldb/object? page)
          (assoc :title (block-handler/block-unique-title page)))

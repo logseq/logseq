@@ -23,8 +23,9 @@
             [:div.w-full.app-silk-popup-content-inner.p-2
              [:div.left-sidebar-inner
               [:div.sidebar-contents-container.mt-8
-               {:on-click (fn [^js e]
-                            (when (some-> (.-target e) (.closest ".link-item"))
-                              (mobile-state/toggle-left-sidebar!)))}
+               {:on-pointer-down
+                (fn [^js e]
+                  (when (some-> (.-target e) (.closest ".link-item"))
+                    (mobile-state/toggle-left-sidebar!)))}
                (container/sidebar-favorites)
                (container/sidebar-recent-pages)]]]))))))

@@ -81,6 +81,10 @@ ul {
   }
 }
 
+a, button {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .bg-background {
   @apply bg-gray-01;
 }
