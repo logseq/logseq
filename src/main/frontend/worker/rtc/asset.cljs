@@ -140,7 +140,7 @@
                                                       repo (str asset-uuid) asset-type checksum url))]
              (when (:ex-data r)
                (throw (ex-info "upload asset failed" r)))
-             ;; asset might be deleted by the server before uploaded successfully
+             ;; asset might be deleted by the user before uploaded successfully
              (when (d/entity @conn [:block/uuid asset-uuid])
                (d/transact! conn
                             [{:block/uuid asset-uuid
