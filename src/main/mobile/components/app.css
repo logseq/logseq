@@ -329,7 +329,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   @apply p-4 flex flex-col gap-3 bg-gray-01;
 
   &[data-tab=search] {
-    --silk-topbar-height: 8px;
+    --silk-topbar-height: 2px;
   }
 
   padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
@@ -348,7 +348,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 2px);
   height: 48px;
   box-sizing: content-box;
 
