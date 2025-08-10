@@ -184,18 +184,12 @@
                                              (and (coll? v) (every? page-or-object? v))
                                              (map :db/id v)
 
+                                             (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident (d/entity db property)))
+                                             (when-let [journal-day (get-journal-day-from-long db v)]
+                                               [journal-day])
+
                                              :else
-                                             (let [datetime? (= :datetime (:logseq.property/type (d/entity db property)))]
-                                               (cond
-                                                 (and datetime? (coll? v))
-                                                 (keep #(get-journal-day-from-long db %) v)
-
-                                                 datetime?
-                                                 (when-let [journal-day (get-journal-day-from-long db v)]
-                                                   [journal-day])
-
-                                                 :else
-                                                 nil))))))
+                                             nil))))
 
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
