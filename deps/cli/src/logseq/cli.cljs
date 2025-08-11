@@ -6,7 +6,7 @@
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.spec :as cli-spec]
-            [nbb.error :as error]
+            [nbb.error]
             [promesa.core :as p]))
 
 (defn- format-commands [{:keys [table]}]
@@ -53,8 +53,13 @@
   "Lazy load fn to speed up start time. After nbb requires ~30 namespaces, start time gets close to 1s"
   [fn-sym]
   (fn [& args]
-    (p/let [_ (require (symbol (namespace fn-sym)))]
-      (apply (resolve fn-sym) args))))
+    (-> (p/let [_ (require (symbol (namespace fn-sym)))]
+          (apply (resolve fn-sym) args))
+        (p/catch (fn [err]
+                   (if (= :sci/error (:type (ex-data err)))
+                     (nbb.error/print-error-report err)
+                     (js/console.error "Error:" err))
+                   (js/process.exit 1))))))
 
 (def ^:private table
   [{:cmds ["list"] :desc "List graphs"
@@ -100,6 +105,6 @@
                                  (throw (ex-info msg data)))
                                (js/process.exit 1))})
     (catch ^:sci/error js/Error e
-      (error/print-error-report e))))
+      (nbb.error/print-error-report e))))
 
 #js {:main -main}

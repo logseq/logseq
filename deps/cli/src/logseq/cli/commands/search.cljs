@@ -40,6 +40,4 @@
                                            (map #(string/replace % "\n" "\\\\n"))
                                            (map highlight-content-query)))))))
           (cli-util/api-handle-error-response resp)))
-      (p/catch (fn [err]
-                 (js/console.error "Error:" err)
-                 (js/process.exit 1)))))
+      (p/catch cli-util/command-catch-handler)))
