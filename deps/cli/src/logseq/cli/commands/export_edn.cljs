@@ -21,4 +21,4 @@
          (fs/writeFileSync (:file options)
                            (with-out-str (pprint/pprint export-map))))
        (pprint/pprint export-map)))
-    (println "Graph" (pr-str graph) "does not exist")))
+    (cli-util/error "Graph" (pr-str graph) "does not exist")))
