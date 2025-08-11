@@ -473,8 +473,8 @@
                   (db-property/property-value-content pvalue))
                 pvalue)))
           result (if group-by-property-ident
-                   (let [group-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
-                                                     :block/journal-day)
+                   (let [groups-sort-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
+                                                           :block/journal-day)
                          desc? (:logseq.property.view/sort-groups-desc? view)
                          result (->> filtered-entities
                                      (group-by readable-property-value-or-ent)
@@ -486,6 +486,8 @@
                                      (let [v (get by-value group-by-property-ident)]
                                        (if (and (= group-by-property-ident :block/journal-day) (not desc?)
                                                 (nil? (:block/journal-day by-value)))
+                                         ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
+                                         ;; after all journal pages when sorting by journal date.
                                          js/Number.MAX_SAFE_INTEGER
                                          v))
                                      group-by-closed-values?
@@ -496,9 +498,9 @@
                                      by-value)))]
                      (sort (common-util/by-sorting
                             (cond->
-                             [{:get-value (keyfn group-by-property-ident)
+                             [{:get-value (keyfn groups-sort-by-property-ident)
                                :asc? (not desc?)}]
-                              (not= group-by-property-ident :block/title)
+                              (not= groups-sort-by-property-ident :block/title)
                               (conj {:get-value (keyfn :block/title)
                                      :asc? (not desc?)})))
                            result))
