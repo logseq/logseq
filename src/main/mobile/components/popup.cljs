@@ -80,13 +80,14 @@
       {:presented (boolean open?)
        :onPresentedChange (fn [v?]
                             (when (false? v?)
-                              (mobile-state/set-popup! nil)
+                              (js/setTimeout
+                                #(mobile-state/set-popup! nil) 300)
                               (state/clear-edit!)
                               (state/pub-event! [:mobile/keyboard-will-hide])))}
-      (:modal-props opts))
-     (silkhq/bottom-sheet-portal
-      (silkhq/bottom-sheet-view
-       {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
+       (:modal-props opts))
+      (silkhq/bottom-sheet-portal
+        (silkhq/bottom-sheet-view
+          {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
         :inertOutside false
         :onTravelEnd (fn []
                        (when quick-add?
