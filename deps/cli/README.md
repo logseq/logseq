@@ -61,30 +61,32 @@ dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
 dev:db-diff woot woot2
 ...
 
-# Local query using `d/entity` ids like a :db/ident
-$ logseq query woot :logseq.class/Tag
-({:block/uuid #uuid "00000002-5389-0208-3000-000000000000",
-  :block/updated-at 1751985393459,
+# Query a graph locally using `d/entity` id(s) like an integer or a :db/ident
+# Can also specify a uuid string to fetch an entity
+$ logseq query woot 10 :logseq.class/Tag
+({:db/id 10,
+  :db/ident :logseq.kv/graph-git-sha,
+  :kv/value "f736895b1b-dirty"}
+ {:block/uuid #uuid "00000002-5389-0208-3000-000000000000",
+  :block/updated-at 1751990934670,
   :logseq.property.class/extends #{{:db/id 1}},
-  :block/refs #{{:db/id 1} {:db/id 23} {:db/id 40}},
-  :block/created-at 1751985393459,
+  :block/created-at 1751990934670,
   :logseq.property/built-in? true,
   :block/tags #{{:db/id 2}},
   :block/title "Tag",
   :db/id 2,
   :db/ident :logseq.class/Tag,
-  :block/path-refs #{{:db/id 1} {:db/id 23} {:db/id 40}},
   :block/name "tag"})
 
-# Local query using datalog
+# Query a graph using a datalog query
 $ logseq query woot '[:find (pull ?b [*]) :where [?b :kv/value]]'
 [{:db/id 5, :db/ident :logseq.kv/db-type, :kv/value "db"}
  {:db/id 6,
   :db/ident :logseq.kv/schema-version,
   :kv/value {:major 65, :minor 7}}
 
-# Api query using a simple query
-# Api query can also take a datalog query like the local query
+# Query the current graph using the api server
+# An api query can be a datalog query or a simple query
 $ logseq query '(task DOING)' -a my-token
  [{:journalDay 20250717,
    :name "jul 17th, 2025",
