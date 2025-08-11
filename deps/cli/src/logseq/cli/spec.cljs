@@ -1,6 +1,6 @@
 (ns logseq.cli.spec
-  "Specs for commands. Normally these would live alongside their commands but are separate
-   because command namespaces are lazy loaded")
+  "Babashka.cli specs for commands. Normally these would live alongside their
+  commands but are separate because command namespaces are lazy loaded")
 
 (def export-edn
   {:include-timestamps? {:alias :T
@@ -25,6 +25,9 @@
   {:graphs {:alias :g
             :coerce []
             :desc "Additional graphs to query"}
+   :properties-readable {:alias :p
+                         :coerce :boolean
+                         :desc "Make properties on entity queries show property values instead of ids"}
    :api-query-token {:alias :a
                      :desc "Query current graph with api server token"}})
 
