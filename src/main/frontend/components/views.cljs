@@ -448,9 +448,9 @@
           :onCheckedChange (fn [checked?]
                              (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option)))]
                                (if checked?
-                                 (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by
+                                 (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property
                                                                           property-id)
-                                 (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by))))
+                                 (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by-property))))
           :onSelect (fn [e] (.preventDefault e))}
          option))))))
 
@@ -531,8 +531,8 @@
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
        (when group-by-page?
-         (groups-sort view-entity (:logseq.property.view/sort-groups-by view-entity)))
-       (when group-by-page?
+         (groups-sort view-entity (:logseq.property.view/sort-groups-by-property view-entity)))
+       (when group-by-property-ident
          (groups-sort-order view-entity (:logseq.property.view/sort-groups-desc? view-entity)))
        (shui/dropdown-menu-item
         {:key "export-edn"

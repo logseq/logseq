@@ -434,12 +434,12 @@
        :hide? true}
       :queryable? true}
 
-     :logseq.property.view/sort-groups-by {:title "View sort groups by"
-                                           :schema
-                                           {:type :property
-                                            :hide? true
-                                            :public? false}
-                                           :rtc property-ignore-rtc}
+     :logseq.property.view/sort-groups-by-property {:title "View sort groups by"
+                                                    :schema
+                                                    {:type :property
+                                                     :hide? true
+                                                     :public? false}
+                                                    :rtc property-ignore-rtc}
      :logseq.property.view/sort-groups-desc? {:title "View sort groups DESC"
                                               :schema
                                               {:type :checkbox

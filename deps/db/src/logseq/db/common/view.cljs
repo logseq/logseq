@@ -473,7 +473,7 @@
                   (db-property/property-value-content pvalue))
                 pvalue)))
           result (if group-by-property-ident
-                   (let [group-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by view))
+                   (let [group-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by-property view))
                                                      :block/journal-day)
                          desc? (:logseq.property.view/sort-groups-desc? view)
                          result (->> filtered-entities
