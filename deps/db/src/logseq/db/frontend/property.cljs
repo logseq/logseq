@@ -130,6 +130,12 @@
                                     :schema {:type :entity
                                              :public? false
                                              :hide? true}}
+     :block/journal-day    {:title "Journal date"
+                            :attribute :block/journal-day
+                            :schema {:type :raw-number
+                                     :public? false
+                                     :hide? true}
+                            :queryable? true}
      :block/created-at     {:title "Node created at"
                             :attribute :block/created-at
                             :schema {:type :datetime
@@ -428,6 +434,20 @@
        :hide? true}
       :queryable? true}
 
+     :logseq.property.view/sort-groups-by {:title "View sort groups by"
+                                           :schema
+                                           {:type :property
+                                            :hide? true
+                                            :public? false}
+                                           :rtc property-ignore-rtc}
+     :logseq.property.view/sort-groups-desc? {:title "View sort groups DESC"
+                                              :schema
+                                              {:type :checkbox
+                                               :hide? true
+                                               :public? false}
+                                              :properties {:logseq.property/scalar-default-value true}
+                                              :rtc property-ignore-rtc}
+
      :logseq.property.table/sorting {:title "View sorting"
                                      :schema
                                      {:type :coll
@@ -440,19 +460,6 @@
                                      {:type :map
                                       :hide? true
                                       :public? false}}
-     :logseq.property.table/sort-groups-by {:title "View sort groups by"
-                                            :schema
-                                            {:type :property
-                                             :hide? true
-                                             :public? false}
-                                            :rtc property-ignore-rtc}
-     :logseq.property.table/sort-groups-desc? {:title "View sort groups DESC"
-                                               :schema
-                                               {:type :boolean
-                                                :hide? true
-                                                :public? false}
-                                               :properties {:logseq.property/scalar-default-value true}
-                                               :rtc property-ignore-rtc}
 
      :logseq.property.table/hidden-columns {:title "View hidden columns"
                                             :schema
@@ -580,7 +587,7 @@
   #{:block/alias :block/tags :block/parent
     :block/order :block/collapsed? :block/page
     :block/refs :block/path-refs :block/link
-    :block/title :block/closed-value-property
+    :block/title :block/closed-value-property :block/journal-day
     :block/created-at :block/updated-at})
 
 (assert (= db-attribute-properties

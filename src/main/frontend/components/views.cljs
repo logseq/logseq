@@ -424,6 +424,53 @@
         columns)))
     columns))
 
+(defonce groups-sort-by-options
+  [["Page updated date" :block/updated-at]
+   ["Journal date" :block/journal-day]
+   ["Page name" :block/title]
+   ["Page created date" :block/created-at]])
+(defonce groups-sort-by-name->property-identity
+  (into {} groups-sort-by-options))
+(defonce groups-sort-by-property-identity->name
+  (set/map-invert groups-sort-by-name->property-identity))
+
+(rum/defc groups-sort
+  [view-entity sort-by-value]
+  (let [property-ident (:db/ident sort-by-value)]
+    (shui/dropdown-menu-sub
+     (shui/dropdown-menu-sub-trigger
+      "Sort groups by")
+     (shui/dropdown-menu-sub-content
+      (for [[option _] groups-sort-by-options]
+        (shui/dropdown-menu-checkbox-item
+         {:key option
+          :checked (= option (groups-sort-by-property-identity->name property-ident))
+          :onCheckedChange (fn [checked?]
+                             (let [property-id (:db/id (db/entity (groups-sort-by-name->property-identity option)))]
+                               (if checked?
+                                 (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by
+                                                                          property-id)
+                                 (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-by))))
+          :onSelect (fn [e] (.preventDefault e))}
+         option))))))
+
+(rum/defc groups-sort-order
+  [view-entity desc?]
+  (shui/dropdown-menu-sub
+   (shui/dropdown-menu-sub-trigger
+    "Sort groups order")
+   (shui/dropdown-menu-sub-content
+    (for [option ["Descending" "Ascending"]]
+      (shui/dropdown-menu-checkbox-item
+       {:key option
+        :checked (= option (if desc? "Descending" "Ascending"))
+        :onCheckedChange (fn [checked?]
+                           (db-property-handler/set-block-property! (:db/id view-entity) :logseq.property.view/sort-groups-desc?
+                                                                    (or (and checked? (= "Descending" option))
+                                                                        (and (not checked?) (not= "Descending" option)))))
+        :onSelect (fn [e] (.preventDefault e))}
+       option)))))
+
 (rum/defc more-actions
   [view-entity columns {:keys [column-visible? rows column-toggle-visibility]} {:keys [group-by-property-ident]}]
   (let [display-type (:db/ident (:logseq.property.view/type view-entity))
@@ -439,7 +486,8 @@
                                              (when-let [p (db/entity (:id column))]
                                                (and (not (db-property/many? p))
                                                     (contains? #{:default :number :checkbox :url :node :date}
-                                                               (:logseq.property/type p)))))) columns))]
+                                                               (:logseq.property/type p)))))) columns))
+        group-by-page? (some #{:block/page} (map :id group-by-columns))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
@@ -482,6 +530,10 @@
                                     (db-property-handler/remove-block-property! (:db/id view-entity) :logseq.property.view/group-by-property)))
                :onSelect (fn [e] (.preventDefault e))}
               (:name column))))))
+       (when group-by-page?
+         (groups-sort view-entity (:logseq.property.view/sort-groups-by view-entity)))
+       (when group-by-page?
+         (groups-sort-order view-entity (:logseq.property.view/sort-groups-desc? view-entity)))
        (shui/dropdown-menu-item
         {:key "export-edn"
          :on-click #(db-export-handler/export-view-nodes-data rows {:group-by? (some? group-by-property-ident)})}

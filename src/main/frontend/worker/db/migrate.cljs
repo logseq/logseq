@@ -368,7 +368,7 @@
    ["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
-   ["65.10" {:properties [:logseq.property.table/sort-groups-by :logseq.property.table/sort-groups-desc?]}]])
+   ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by :logseq.property.view/sort-groups-desc?]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
