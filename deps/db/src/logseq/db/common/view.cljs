@@ -479,12 +479,12 @@
                          result (->> filtered-entities
                                      (group-by readable-property-value-or-ent)
                                      (seq))
-                         keyfn (fn [group-by-property-ident]
+                         keyfn (fn [groups-sort-by-property-ident]
                                  (fn [[by-value _]]
                                    (cond
                                      group-by-page?
-                                     (let [v (get by-value group-by-property-ident)]
-                                       (if (and (= group-by-property-ident :block/journal-day) (not desc?)
+                                     (let [v (get by-value groups-sort-by-property-ident)]
+                                       (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
                                                 (nil? (:block/journal-day by-value)))
                                          ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
                                          ;; after all journal pages when sorting by journal date.
