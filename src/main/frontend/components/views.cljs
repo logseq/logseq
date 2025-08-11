@@ -425,9 +425,9 @@
     columns))
 
 (defonce groups-sort-by-options
-  [["Page updated date" :block/updated-at]
-   ["Journal date" :block/journal-day]
+  [["Journal date" :block/journal-day]
    ["Page name" :block/title]
+   ["Page updated date" :block/updated-at]
    ["Page created date" :block/created-at]])
 (defonce groups-sort-by-name->property-identity
   (into {} groups-sort-by-options))
@@ -436,7 +436,7 @@
 
 (rum/defc groups-sort
   [view-entity sort-by-value]
-  (let [property-ident (:db/ident sort-by-value)]
+  (let [property-ident (or (:db/ident sort-by-value) :block/journal-day)]
     (shui/dropdown-menu-sub
      (shui/dropdown-menu-sub-trigger
       "Sort groups by")

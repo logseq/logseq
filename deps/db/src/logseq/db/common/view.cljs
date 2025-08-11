@@ -473,20 +473,35 @@
                   (db-property/property-value-content pvalue))
                 pvalue)))
           result (if group-by-property-ident
-                   (->> filtered-entities
-                        (group-by readable-property-value-or-ent)
-                        (seq)
-                        (sort-by (fn [[by-value _]]
+                   (let [group-by-property-ident (or (:db/ident (:logseq.property.view/sort-groups-by view))
+                                                     :block/journal-day)
+                         desc? (:logseq.property.view/sort-groups-desc? view)
+                         result (->> filtered-entities
+                                     (group-by readable-property-value-or-ent)
+                                     (seq))
+                         keyfn (fn [group-by-property-ident]
+                                 (fn [[by-value _]]
                                    (cond
                                      group-by-page?
-                                     (:block/updated-at by-value)
+                                     (let [v (get by-value group-by-property-ident)]
+                                       (if (and (= group-by-property-ident :block/journal-day) (not desc?)
+                                                (nil? (:block/journal-day by-value)))
+                                         js/Number.MAX_SAFE_INTEGER
+                                         v))
                                      group-by-closed-values?
                                      (:block/order by-value)
                                      ref-property?
                                      (db-property/property-value-content by-value)
                                      :else
-                                     by-value))
-                                 (if group-by-page? #(compare %2 %1) compare)))
+                                     by-value)))]
+                     (sort (common-util/by-sorting
+                            (cond->
+                             [{:get-value (keyfn group-by-property-ident)
+                               :asc? (not desc?)}]
+                              (not= group-by-property-ident :block/title)
+                              (conj {:get-value (keyfn :block/title)
+                                     :asc? (not desc?)})))
+                           result))
                    (sort-entities db sorting filtered-entities))
           data' (if group-by-property-ident
                   (map
