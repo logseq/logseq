@@ -57,6 +57,10 @@
                            [[:db/add (:db/id entity) :logseq.property.class/extends :logseq.class/Root]]
                            (and (or (ldb/class? entity) (ldb/property? entity)) (ldb/internal-page? entity))
                            [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+
+                           (and (:logseq.property.asset/remote-metadata entity) (nil? (:logseq.property.asset/type entity)))
+                           [[:db/retractEntity (:db/id entity)]]
+
                            :else
                            nil)))
                      errors)
