@@ -26,7 +26,7 @@
           (pprint/print-table
            (map #(array-map "Name" (first %) "Value" (second %))
                 (cond-> [["Graph directory" graph-dir]
-                         ["Graph created at" (ms->journal-title (kv-value :logseq.kv/graph-created-at))]
+                         ["Graph created at" (some-> (kv-value :logseq.kv/graph-created-at) ms->journal-title)]
                          ["Graph schema version" (kv-value :logseq.kv/schema-version)]
                          ["Graph initial schema version" (kv-value :logseq.kv/graph-initial-schema-version)]]
                   (d/entity @conn :logseq.kv/graph-git-sha)
