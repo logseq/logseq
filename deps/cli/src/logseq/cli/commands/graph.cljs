@@ -34,7 +34,7 @@
                          (str "https://github.com/logseq/logseq/commit/" (kv-value :logseq.kv/graph-git-sha))])
                   (d/entity @conn :logseq.kv/import-type)
                   (conj ["Graph imported by" (kv-value :logseq.kv/import-type)])))))
-        (println "Graph" (pr-str graph) "does not exist")))))
+        (cli-util/error "Graph" (pr-str graph) "does not exist")))))
 
 (defn list-graphs
   []
