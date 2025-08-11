@@ -82,7 +82,7 @@
           (when (> (count graphs') 1)
             (println "Results for graph" (pr-str graph')))
           (pprint/pprint results))
-        (println "Graph" (pr-str graph') "does not exist")))))
+        (cli-util/error "Graph" (pr-str graph') "does not exist")))))
 
 (defn query
   [{{:keys [graph args api-query-token]} :opts :as m}]

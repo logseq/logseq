@@ -66,22 +66,22 @@
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/show-graph)
-    :args->opts [:graphs] :coerce {:graphs []}}
+    :args->opts [:graphs] :coerce {:graphs []} :require [:graphs]}
    {:cmds ["search"]
     :fn (lazy-load-fn 'logseq.cli.commands.search/search)
     :desc "Search current DB graph"
-    :args->opts [:search-terms] :coerce {:search-terms []}
+    :args->opts [:search-terms] :coerce {:search-terms []} :require [:search-terms]
     :spec cli-spec/search}
    {:cmds ["query"] :desc "Query DB graph(s)"
     :fn (lazy-load-fn 'logseq.cli.commands.query/query)
-    :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true
+    :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph :args]
     :spec cli-spec/query}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
-    :args->opts [:graph]
+    :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
    {:cmds ["help"] :fn command-help :desc "Print a command's help"
-    :args->opts [:command]}
+    :args->opts [:command] :require [:command]}
    {:cmds []
     :spec default-spec
     :fn default-command}])
@@ -101,7 +101,9 @@
                   {:error-fn (fn [{:keys [cause msg option] type' :type :as data}]
                                (if (and (= :org.babashka/cli type')
                                         (= :require cause))
-                                 (println "Error: Command missing required option" option)
+                                 (println "Error: Command missing required"
+                                          (if (get-in data [:spec option]) "option" "argument")
+                                          option)
                                  (throw (ex-info msg data)))
                                (js/process.exit 1))})
     (catch ^:sci/error js/Error e

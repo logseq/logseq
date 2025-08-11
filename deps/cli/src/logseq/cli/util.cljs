@@ -43,3 +43,9 @@
     :else
     (js/console.error "Error:" err))
   (js/process.exit 1))
+
+(defn error
+  "Prints error and then exits"
+  [& strings]
+  (apply println "Error:" strings)
+  (js/process.exit 1))
