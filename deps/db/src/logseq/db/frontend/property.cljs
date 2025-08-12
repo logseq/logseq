@@ -44,6 +44,9 @@
      :logseq.property/public? {:title "Property public?"
                                :schema {:type :checkbox
                                         :hide? true}}
+     :logseq.property/deprecated? {:title "Property already deprecated?"
+                                   :schema {:type :checkbox
+                                            :hide? true}}
      :logseq.property/view-context {:title "Property view context"
                                     :schema {:type :keyword
                                              :hide? true}}
