@@ -162,8 +162,8 @@
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (when-let [conn (worker-state/get-datascript-conn repo)]
-        (let [stale-blocks (worker-util/profile "stale block" (stale-block-lazy-seq @conn false))]
-          (when (worker-util/profile "seq " (seq stale-blocks))
+        (let [stale-blocks (stale-block-lazy-seq @conn false)]
+          (when (seq stale-blocks)
             (m/? (task--update-index-info!* repo infer-worker true))
             (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
@@ -190,7 +190,12 @@
       (when-let [conn (worker-state/get-datascript-conn repo)]
         (m/? (task--update-index-info!* repo infer-worker true))
         (c.m/<? (.force-reset-index! infer-worker repo))
-        (let [all-blocks (stale-block-lazy-seq @conn true)]
+        (let [all-blocks (stale-block-lazy-seq @conn true)
+              all-block-ids (map :e (d/datoms @conn :avet :block/title))]
+          ;; Mark all blocks for embedding
+          (d/transact! conn
+                       (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0]) all-block-ids)
+                       {:skip-refresh? true})
           (doseq [block-chunk (sequence (partition-by-text-size (get-partition-size repo)) all-blocks)]
             (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
                   _ (when (some (fn [id] (> id 2147483647)) (map :db/id block-chunk))
@@ -203,8 +208,8 @@
                       false))
                   tx-data (labels-update-tx-data @conn e+updated-at-coll)]
               (d/transact! conn tx-data {:skip-refresh? true})
-              (m/? (task--update-index-info!* repo infer-worker true)))))
-        (c.m/<? (.write-index! infer-worker repo))
+              (m/? (task--update-index-info!* repo infer-worker true))
+              (c.m/<? (.write-index! infer-worker repo)))))
         (m/? (task--update-index-info!* repo infer-worker false))))))
 
 (defn embedding-stale-blocks!
