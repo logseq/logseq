@@ -80,13 +80,16 @@
 
 (defn- stale-block-lazy-seq
   [db reset?]
-  (->> (rseq (d/index-range db :block/updated-at nil nil))
-       (sequence
-        (comp (map #(d/entity db (:e %)))
-              (filter (stale-block-filter-preds reset?))
-              (map (fn [b]
-                     (assoc b :block.temp/text-to-embedding
-                            (db-content/recur-replace-uuid-in-block-title b)
+  (let [datoms (if reset?
+                 (rseq (d/index-range db :block/updated-at nil nil))
+                 (d/datoms db :avet :logseq.property.embedding/hnsw-label-updated-at 0))]
+    (->> datoms
+         (sequence
+          (comp (map #(d/entity db (:e %)))
+                (filter (stale-block-filter-preds reset?))
+                (map (fn [b]
+                       (assoc b :block.temp/text-to-embedding
+                              (db-content/recur-replace-uuid-in-block-title b)
                             ;; FIXME: tags and properties can affect sorting
                             ;; (str (db-content/recur-replace-uuid-in-block-title b)
                             ;;      (let [tags (->> (:block/tags b)
@@ -95,7 +98,7 @@
                             ;;          (str " " (string/join ", " (map (fn [t] (str "#" t)) tags)))))
                             ;;      (when-let [desc (:block/title (:logseq.property/description b))]
                             ;;        (str "\nDescription: " desc)))
-                            )))))))
+                              ))))))))
 (defn- partition-by-text-size
   [text-size]
   (let [*current-size (volatile! 0)
@@ -159,8 +162,8 @@
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (when-let [conn (worker-state/get-datascript-conn repo)]
-        (let [stale-blocks (stale-block-lazy-seq @conn false)]
-          (when (seq stale-blocks)
+        (let [stale-blocks (worker-util/profile "stale block" (stale-block-lazy-seq @conn false))]
+          (when (worker-util/profile "seq " (seq stale-blocks))
             (m/? (task--update-index-info!* repo infer-worker true))
             (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
