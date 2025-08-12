@@ -414,7 +414,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     transition: padding 0.1s ease-in-out;
 
     .ls-icon-search {
-      @apply absolute left-3 top-[9px] opacity-90;
+      @apply absolute left-2.5 top-[9px] opacity-60;
     }
 
     .cancel {
@@ -431,13 +431,17 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
         display: block;
       }
 
+      .ls-icon-search {
+        @apply opacity-90;
+      }
+
       > .x {
-        right: 90px;
+        right: 88px;
       }
     }
 
     .ui__input {
-      @apply border-none dark:bg-gray-02 bg-gray-04 pl-10 outline-none ring-0;
+      @apply border-none dark:bg-gray-02 bg-gray-04 pl-9 outline-none ring-0;
 
       height: 34px;
       outline-offset: 0;
@@ -448,7 +452,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       @apply absolute right-6 w-[16px] h-[16px] bg-gray-10 overflow-hidden
       rounded-full flex items-center justify-center text-gray-02 opacity-50;
 
-      bottom: 16px;
+      bottom: 18px;
     }
   }
 
