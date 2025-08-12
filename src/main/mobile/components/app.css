@@ -5,7 +5,7 @@
 
 :root {
   --ls-page-title-size: 26px;
-  --silk-topbar-height: 48px;
+  --silk-topbar-inner-height: 32px;
   --silk-tabbar-bottom-paddding: 12px;
 }
 
@@ -14,9 +14,18 @@ html.is-native-ios {
 }
 
 html.is-native-android {
+  --silk-topbar-inner-padding-top: 10px;
+  --silk-topbar-inner-height: 40px;
+  --silk-topbar-inner-padding-bottom: 6px;
+
+  .app-silk-topbar {}
 }
 
 #mobile-editor-toolbar {
+}
+
+#main-container {
+  overflow-y: visible;
 }
 
 html.has-mobile-keyboard {
@@ -140,9 +149,7 @@ a, button {
     }
   }
 
-  .app-silk-sheet-scroll-content {
-    height: 92vh;
-  }
+  .app-silk-depth-sheet-content {}
 }
 
 .block-content-or-editor-inner {
@@ -293,8 +300,8 @@ a, button {
   @apply bg-gray-01 min-h-[100svh] overflow-x-hidden;
 }
 
-.app-silk-sheet-scroll-content {
-  @apply flex flex-col items-center;
+.app-silk-depth-sheet-content {
+  display: grid;
 }
 
 .BottomSheet-bleedingBackground,
@@ -315,7 +322,6 @@ a, button {
   overflow: hidden;
   overflow: clip;
   position: relative;
-  display: grid;
 }
 
 html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
@@ -329,11 +335,15 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   @apply p-4 flex flex-col gap-3 bg-gray-01;
 
   &[data-tab=search] {
-    --silk-topbar-height: 2px;
+    --silk-topbar-inner-height: 2px;
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-height) + 10px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-height) + 22px);
   padding-bottom: 120px;
+
+  #journals {
+    @apply -mt-4 px-1;
+  }
 }
 
 .app-silk-topbar {
@@ -348,9 +358,10 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + 2px);
-  padding-bottom: 8px;
-  height: 32px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-padding-top, 2px));
+  height: var(--silk-topbar-inner-height, 32px);
+
+  padding-bottom: var(--silk-topbar-inner-padding-bottom, 8px);
   box-sizing: content-box;
 
   &.search {
