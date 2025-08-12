@@ -165,6 +165,8 @@
              frontend.worker.state worker-state
              frontend.worker.util worker-util
              lambdaisland.glogi log
+             logseq.cli.common.graph cli-common-graph
+             logseq.cli.text-util cli-text-util
              logseq.common.config common-config
              logseq.common.date-time-util date-time-util
              logseq.common.graph common-graph
