@@ -1,7 +1,7 @@
 (ns frontend.worker.rtc.migrate-test
   (:require ["fs" :as fs-node]
             [cljs.pprint :as pp]
-            [cljs.test :refer [deftest is testing]]
+            [cljs.test :refer [deftest]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.rtc.migrate :as rtc-migrate]
