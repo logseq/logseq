@@ -104,30 +104,31 @@
                           ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                            (buildable-properties db' ent-properties* properties-config' options'))]
                       (build-pvalue-entity-default db ent-properties pvalue options'))))))]
-    (->> ent-properties
-         (map (fn [[k v]]
-                [k
-                 ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
-                 (if (and (not (db-property/logseq-property? k))
-                          (or (:block/closed-value-property v)
-                              (and (set? v) (:block/closed-value-property (first v)))))
-                   (let [find-closed-uuid (fn [val]
-                                            (or (some #(when (= (:value %) (db-property/property-value-content val))
-                                                         (:uuid %))
-                                                      (get-in properties-config [k :build/closed-values]))
-                                                (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
-                     (if (set? v)
-                       (set (map #(vector :block/uuid (find-closed-uuid %)) v))
-                       [:block/uuid (find-closed-uuid v)]))
-                   (cond
-                     (de/entity? v)
-                     (build-pvalue-entity db (d/entity db k) v properties-config options)
-                     (and (set? v) (every? de/entity? v))
-                     (let [property-ent (d/entity db k)]
-                       (set (map #(build-pvalue-entity db property-ent % properties-config options) v)))
-                     :else
-                     v))]))
-         (into {}))))
+    (let [ignored-properties [:logseq.property/created-by-ref]]
+      (->> (apply dissoc ent-properties ignored-properties)
+           (map (fn [[k v]]
+                  [k
+                   ;; handle user closed value properties. built-ins have idents and shouldn't be handled here
+                   (if (and (not (db-property/logseq-property? k))
+                            (or (:block/closed-value-property v)
+                                (and (set? v) (:block/closed-value-property (first v)))))
+                     (let [find-closed-uuid (fn [val]
+                                              (or (some #(when (= (:value %) (db-property/property-value-content val))
+                                                           (:uuid %))
+                                                        (get-in properties-config [k :build/closed-values]))
+                                                  (throw (ex-info (str "No closed value found for content: " (pr-str (db-property/property-value-content val))) {:properties properties-config}))))]
+                       (if (set? v)
+                         (set (map #(vector :block/uuid (find-closed-uuid %)) v))
+                         [:block/uuid (find-closed-uuid v)]))
+                     (cond
+                       (de/entity? v)
+                       (build-pvalue-entity db (d/entity db k) v properties-config options)
+                       (and (set? v) (every? de/entity? v))
+                       (let [property-ent (d/entity db k)]
+                         (set (map #(build-pvalue-entity db property-ent % properties-config options) v)))
+                       :else
+                       v))]))
+           (into {})))))
 
 (defn- build-export-properties
   "The caller of this fn is responsible for building :build/:property-classes unless shallow-copy?"

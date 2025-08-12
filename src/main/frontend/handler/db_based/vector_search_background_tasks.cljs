@@ -21,6 +21,8 @@
     (m/?< vector-search-flows/infer-worker-ready-flow)
     (when-let [repo (m/?< flows/current-repo-flow)]
       (try
+        ;; Don't block ui render (ui needs data from db-worker)
+        (m/? (m/sleep 1000))
         (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-init-embedding-model repo))
         (m/?< (c.m/clock (* 30 1000)))
         (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo))
