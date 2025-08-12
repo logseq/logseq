@@ -169,7 +169,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3)] (get-block 14) true))
+                                 [(get-block 3)] (get-block 14)
+                                 {:sibling? true}))
     (is (= [6 9] (get-children 2)))
     (is (= [13 14 3 15] (get-children 12))))
 
@@ -192,7 +193,8 @@
        (transact-opts)
        (outliner-core/move-blocks! test-db
                                    (db/get-db test-db false)
-                                   [(get-block 3)] (get-block 12) false))
+                                   [(get-block 3)] (get-block 12)
+                                   {:sibling? false}))
       (is (= [6 9] (get-children 2)))
       (is (= [3 13 14 15] (get-children 12))))))
 
@@ -205,7 +207,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3)] (get-block 2) true))
+                                 [(get-block 3)] (get-block 2)
+                                 {:sibling? true}))
     (is (= [4] (get-children 2)))
     (is (= [2 3 5] (get-children 22)))))
 
@@ -220,7 +223,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3) (get-block 6)] (get-block 2) true))
+                                 [(get-block 3) (get-block 6)] (get-block 2)
+                                 {:sibling? true}))
     (is (= [4] (get-children 2)))
     (is (= [2 3 6 5 7] (get-children 22)))))
 
@@ -236,7 +240,8 @@
      (transact-opts)
      (outliner-core/move-blocks! test-db
                                  (db/get-db test-db false)
-                                 [(get-block 3) (get-block 5)] (get-block 2) false))
+                                 [(get-block 3) (get-block 5)] (get-block 2)
+                                 {:sibling? false}))
     (is (= [3 5 4] (get-children 2)))
     (is (= [2 6 7 8] (get-children 22)))))
 
@@ -706,7 +711,11 @@ tags:: tag1, tag2
           (when (seq blocks)
             (let [target (get-random-block)]
               (outliner-tx/transact! (transact-opts)
-                                     (outliner-core/move-blocks! test-db (db/get-db test-db false) blocks target (gen/generate gen/boolean)))
+                                     (outliner-core/move-blocks! test-db
+                                                                 (db/get-db test-db false)
+                                                                 blocks
+                                                                 target
+                                                                 {:sibling? (gen/generate gen/boolean)}))
               (let [total (get-blocks-count)]
                 (is (= total (count @*random-blocks)))))))))))
 
@@ -774,7 +783,9 @@ tags:: tag1, tag2
                    (outliner-tx/transact! (transact-opts)
                                           (outliner-core/move-blocks! test-db
                                                                       (db/get-db test-db false)
-                                                                      blocks (get-random-block) (gen/generate gen/boolean))))))
+                                                                      blocks
+                                                                      (get-random-block)
+                                                                      {:sibling? (gen/generate gen/boolean)})))))
 
              ;; move up down
              (fn []

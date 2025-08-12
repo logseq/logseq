@@ -62,16 +62,19 @@
                              (let [url            (.-url details)
                                    urlObj         (js/URL. url)
                                    origin         (.-origin urlObj)
-                                   requestHeaders (.-requestHeaders details)]
+                                   requestHeaders (.-requestHeaders details)
+                                   no-cookie-headers (-> (bean/->clj requestHeaders)
+                                                         (dissoc :Cookie :cookie)
+                                                         bean/->js)]
                                (if (and
                                     (.hasOwnProperty requestHeaders "referer")
                                     (not-empty (.-referer requestHeaders)))
                                  (callback #js {:cancel         false
-                                                :requestHeaders requestHeaders})
+                                                :requestHeaders no-cookie-headers})
                                  (do
                                    (set! (.-referer requestHeaders) origin)
                                    (callback #js {:cancel         false
-                                                  :requestHeaders requestHeaders}))))))
+                                                  :requestHeaders no-cookie-headers}))))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))

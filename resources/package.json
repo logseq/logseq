@@ -14,7 +14,7 @@
     "electron:make-linux-arm64": "electron-forge make --platform=linux --arch=arm64",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 34.5.6 -f",
+    "rebuild:all": "electron-rebuild -v 37.2.6 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -30,7 +30,7 @@
     "diff-match-patch": "1.0.5",
     "dugite": "2.7.1",
     "electron-deeplink": "1.0.10",
-    "electron-dl": "3.3.0",
+    "electron-dl": "4.0.0",
     "electron-log": "4.3.1",
     "electron-squirrel-startup": "1.0.0",
     "electron-window-state": "5.0.3",
@@ -46,25 +46,17 @@
     "update-electron-app": "2.0.1"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.8.0",
-    "@electron-forge/maker-deb": "^7.8.0",
-    "@electron-forge/maker-dmg": "^7.8.0",
-    "@electron-forge/maker-wix": "^7.8.0",
-    "@electron-forge/maker-rpm": "^7.8.0",
-    "@electron-forge/maker-squirrel": "^7.8.0",
-    "@electron-forge/maker-zip": "^7.8.0",
-    "@electron/rebuild": "3.7.2",
-    "electron": "34.5.6",
+    "@electron-forge/cli": "^7.8.3",
+    "@electron-forge/maker-deb": "^7.8.3",
+    "@electron-forge/maker-dmg": "^7.8.3",
+    "@electron-forge/maker-wix": "^7.8.3",
+    "@electron-forge/maker-rpm": "^7.8.3",
+    "@electron-forge/maker-squirrel": "^7.8.3",
+    "@electron-forge/maker-zip": "^7.8.3",
+    "@electron/rebuild": "4.0.1",
+    "electron": "37.2.6",
     "electron-builder": "26.0.12",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
-    "electron-devtools-installer": "^3.2.0"
-  },
-  "resolutions": {
-    "**/electron": "34.5.6",
-    "**/node-abi": "3.75.0",
-    "**/node-gyp": "11.1.0",
-    "string-width": "4.2.0",
-    "wrap-ansi": "^7.0.0",
-    "strip-ansi": "^6.0.1"
+    "electron-devtools-installer": "4.0.0"
   }
 }

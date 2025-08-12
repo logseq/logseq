@@ -5,6 +5,7 @@
             [frontend.util :as util]))
 
 ;; TODO: handle errors
+;;; TODO: transit-write args, transit-read response
 (defn ipc
   [& args]
   (when (util/electron?)
