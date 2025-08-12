@@ -570,12 +570,7 @@
      ;; TODO: remove later
      :logseq.property/test1 {:title "test1 property"
                              :schema {:type :default
-                                      :public? true}}
-     ;; :logseq.property/test2 {:title "test2 property"
-     ;;                         :schema {:type :string
-     ;;                                  :public? true
-     ;;                                  :hide? true}}
-     )))
+                                      :public? true}})))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"

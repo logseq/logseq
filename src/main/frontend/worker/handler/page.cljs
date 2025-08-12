@@ -21,7 +21,8 @@
                                                    {:page-uuid uuid
                                                     :skip-existing-page-check? true})
         result            (ldb/transact! conn [page] {:persist-op? false
-                                                      :outliner-op :create-page})]
+                                                      :outliner-op :create-page
+                                                      :rtc-op? true})]
     [result page-name (:block/uuid page)]))
 
 (defn create!
