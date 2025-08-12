@@ -166,51 +166,129 @@
       (and new-type old-ref-type? (not ref-type?))
       (conj [:db/retract (:db/id property) :db/valueType]))))
 
+(defn- create-user-property-ident-from-name
+  [property-name]
+  (try (db-property/create-user-property-ident-from-name property-name)
+       (catch :default e
+         (throw (ex-info (str e)
+                         {:type :notification
+                          :payload {:message "Property failed to create. Please try a different property name."
+                                    :type :error}})))))
+
+(defn- create-property
+  [conn db-ident property-id schema {:keys [property-name properties]}]
+  (let [db @conn
+        k-name (or (and property-name (name property-name))
+                   (name property-id))
+        db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
+    (assert (some? k-name)
+            (prn "property-id: " property-id ", property-name: " property-name))
+    (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+    (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+    (let [db-id (:db/id properties)
+          opts (cond-> {:title k-name
+                        :properties properties}
+                 (integer? db-id)
+                 (assoc :block-uuid (:block/uuid (d/entity db db-id))))
+          tx-data (concat
+                   [(sqlite-util/build-new-property db-ident' schema opts)]
+                          ;; Convert page to property
+                   (when db-id
+                     [[:db/retract db-id :block/tags :logseq.class/Page]]))]
+      {:db-ident db-ident'
+       :tx-data tx-data})))
+
 (defn- update-property
   [conn db-ident property schema {:keys [property-name properties]}]
-  (when (and (some? property-name) (not= property-name (:block/title property)))
-    (outliner-validate/validate-page-title property-name {:node property})
-    (outliner-validate/validate-page-title-characters property-name {:node property})
-    (outliner-validate/validate-block-title @conn property-name property)
-    (outliner-validate/validate-property-title property-name))
+  (if (not= (:logseq.property/type schema) (:logseq.property/type property))
+    ;; Property type changed
+    ;; 1. create a new property
+    ;; 2. remove all existing property datoms
+    ;; 3. update tag properties to the new one
+    ;; 4. mark the old one deprecated
+    (let [new-db-ident' (create-user-property-ident-from-name (:block/title property))
+          m (create-property conn new-db-ident' nil
+                             (-> (select-keys schema [:logseq.property/type])
+                                 (assoc :db/cardinality (:db/cardinality property)))
+                             {:property-name (:block/title property)
+                              :properties (->> (dissoc (:block/properties property)
+                                                       :logseq.property/type
+                                                       :db.type/ref
+                                                       :db/cardinality
+                                                       :logseq.property/default-value
+                                                       :logseq.property/scalar-default-value)
+                                               (map (fn [[k v]]
+                                                      (let [v' (cond
+                                                                 (de/entity? v)
+                                                                 (or (:db/id v) (:db/ident v))
+                                                                 (every? de/entity? v)
+                                                                 (map (fn [v] (or (:db/id v) (:db/ident v))) v)
+                                                                 :else
+                                                                 v)]
+                                                        [k v'])))
+                                               (into {}))})
+          new-db-ident (:db-ident m)
+          new-property-tx-data (:tx-data m)
+          db @conn
+          retract-old-tx-data (->> (d/datoms db :avet db-ident)
+                                   (map (fn [d]
+                                          [:db/retract (:e d) db-ident])))
+          mark-old-property-as-deprecated [{:db/id (:db/id property)
+                                            :logseq.property/deprecated? true}]
+          class-properties-tx-data (->> (d/datoms db :avet :logseq.property.class/properties (:db/id property))
+                                        (mapcat (fn [d]
+                                                  [[:db/retract (:e d) :logseq.property.class/properties (:db/id property)]
+                                                   [:db/add (:e d) :logseq.property.class/properties new-db-ident]])))
+          full-tx-data (concat
+                        new-property-tx-data
+                        retract-old-tx-data
+                        mark-old-property-as-deprecated
+                        class-properties-tx-data)]
+      (ldb/transact! conn full-tx-data {:outliner-op :update-property-type})
+      (d/entity @conn new-db-ident))
+    (do
+      (when (and (some? property-name) (not= property-name (:block/title property)))
+        (outliner-validate/validate-page-title property-name {:node property})
+        (outliner-validate/validate-page-title-characters property-name {:node property})
+        (outliner-validate/validate-block-title @conn property-name property)
+        (outliner-validate/validate-property-title property-name))
 
-  (let [changed-property-attrs
-        ;; Only update property if something has changed as we are updating a timestamp
-        (cond-> (->> (dissoc schema :db/cardinality)
-                     (keep (fn [[k v]]
-                             (when-not (= (get property k) v)
-                               [k v])))
-                     (into {}))
-          (and (some? property-name) (not= property-name (:block/title property)))
-          (assoc :block/title property-name
-                 :block/name (common-util/page-name-sanity-lc property-name)))
-        property-tx-data
-        (cond-> []
-          (seq changed-property-attrs)
-          (conj (outliner-core/block-with-updated-at
-                 (merge {:db/ident db-ident}
-                        changed-property-attrs)))
-          (and (seq schema)
-               (or (not= (:logseq.property/type schema) (:logseq.property/type property))
-                   (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
-                   (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
-                   (seq (:property/closed-values property))))
-          (concat (update-datascript-schema property schema)))
-        tx-data (concat property-tx-data
-                        (when (seq properties)
-                          (mapcat
-                           (fn [[property-id v]]
-                             (build-property-value-tx-data conn property property-id v)) properties)))
-        many->one? (and (db-property/many? property) (= :one (:db/cardinality schema)))]
-    (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
-      (throw (ex-info "Disallowed many to one conversion"
-                      {:type :notification
-                       :payload {:message "This property can't change from multiple values to one value because it has existing data."
-                                 :type :warning}})))
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data {:outliner-op :update-property
-                                   :property-id (:db/id property)}))
-    property))
+      (let [changed-property-attrs
+            ;; Only update property if something has changed as we are updating a timestamp
+            (cond-> (->> (dissoc schema :db/cardinality)
+                         (keep (fn [[k v]]
+                                 (when-not (= (get property k) v)
+                                   [k v])))
+                         (into {}))
+              (and (some? property-name) (not= property-name (:block/title property)))
+              (assoc :block/title property-name
+                     :block/name (common-util/page-name-sanity-lc property-name)))
+            property-tx-data
+            (cond-> []
+              (seq changed-property-attrs)
+              (conj (outliner-core/block-with-updated-at
+                     (merge {:db/ident db-ident}
+                            changed-property-attrs)))
+              (and (seq schema)
+                   (or (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
+                       (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
+                       (seq (:property/closed-values property))))
+              (concat (update-datascript-schema property schema)))
+            tx-data (concat property-tx-data
+                            (when (seq properties)
+                              (mapcat
+                               (fn [[property-id v]]
+                                 (build-property-value-tx-data conn property property-id v)) properties)))
+            many->one? (and (db-property/many? property) (= :one (:db/cardinality schema)))]
+        (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
+          (throw (ex-info "Disallowed many to one conversion"
+                          {:type :notification
+                           :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                                     :type :warning}})))
+        (when (seq tx-data)
+          (ldb/transact! conn tx-data {:outliner-op :update-property
+                                       :property-id (:db/id property)}))
+        property))))
 
 (defn- validate-property-value-aux
   [schema value {:keys [many?]}]
@@ -487,38 +565,16 @@
   "Updates property if property-id is given. Otherwise creates a property
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name properties] :as opts}]
+  [conn property-id schema {:keys [property-name _properties] :as opts}]
   (let [db @conn
         db-ident (or property-id
-                     (try (db-property/create-user-property-ident-from-name property-name)
-                          (catch :default e
-                            (throw (ex-info (str e)
-                                            {:type :notification
-                                             :payload {:message "Property failed to create. Please try a different property name."
-                                                       :type :error}})))))]
+                     (create-user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (update-property conn db-ident property schema opts)
-      (let [k-name (or (and property-name (name property-name))
-                       (name property-id))
-            db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
-        (assert (some? k-name)
-                (prn "property-id: " property-id ", property-name: " property-name))
-        (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
-        (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (let [db-id (:db/id properties)
-              opts (cond-> {:title k-name
-                            :properties properties}
-                     (integer? db-id)
-                     (assoc :block-uuid (:block/uuid (d/entity db db-id))))]
-          (ldb/transact! conn
-                         (concat
-                          [(sqlite-util/build-new-property db-ident' schema opts)]
-                          ;; Convert page to property
-                          (when db-id
-                            [[:db/retract db-id :block/tags :logseq.class/Page]]))
-                         {:outliner-op :upsert-property}))
-        (d/entity @conn db-ident')))))
+      (let [{:keys [db-ident tx-data]} (create-property conn db-ident property-id schema opts)]
+        (ldb/transact! conn tx-data {:outliner-op :upsert-property})
+        (d/entity @conn db-ident)))))
 
 (defn batch-delete-property-value!
   "batch delete value when a property has multiple values"
