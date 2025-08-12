@@ -1233,8 +1233,8 @@
 
 ;; search
 (defn ^:export search
-  [q']
-  (-> (search-handler/search q')
+  [q' & [opts]]
+  (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
       (p/then #(bean/->js %))))
 
 ;; helpers
