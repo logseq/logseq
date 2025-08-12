@@ -184,7 +184,13 @@
        (p/catch (fn [e]
                   (js/console.error "Error while restoring repos: " e)))
        (p/finally (fn []
-                    (state/set-db-restoring! false))))
+                    (state/set-db-restoring! false)
+                    (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
+                      (log/info :webgpu-available? webgpu-available?)
+                      (when webgpu-available?
+                        (p/do! (db-browser/start-inference-worker!)
+                               (db-browser/<connect-db-worker-and-infer-worker!)
+                               (reset! vector-search-flows/*infer-worker-ready true)))))))
 
    (util/<app-wake-up-from-sleep-loop (atom false))
 

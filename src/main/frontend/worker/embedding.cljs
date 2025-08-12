@@ -48,6 +48,13 @@
   [repo]
   (get-in @*vector-search-state [:repo->index-info repo :indexing?]))
 
+(defn- hidden-entity?
+  [entity]
+  (or (ldb/hidden? entity)
+      (let [page (:block/page entity)]
+        (and (ldb/hidden? page)
+             (not= (:block/title page) common-config/quick-add-page-name)))))
+
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
   [reset?]
@@ -57,7 +64,7 @@
                                  (and (or (nil? db-ident)
                                           (not (string/starts-with? (namespace db-ident) "logseq.")))
                                       (not (string/blank? title))
-                                      (not (ldb/hidden? title))
+                                      (not (hidden-entity? b))
                                       (nil? (:logseq.property/view-for b))
                                       (not (keyword-identical?
                                             :logseq.property/description

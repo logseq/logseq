@@ -140,11 +140,13 @@
                                                       repo (str asset-uuid) asset-type checksum url))]
              (when (:ex-data r)
                (throw (ex-info "upload asset failed" r)))
-             (d/transact! conn
-                          [{:block/uuid asset-uuid
-                            :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
-                       ;; Don't generate rtc ops again, (block-ops & asset-ops)
-                          {:persist-op? false})
+             ;; asset might be deleted by the user before uploaded successfully
+             (when (d/entity @conn [:block/uuid asset-uuid])
+               (d/transact! conn
+                            [{:block/uuid asset-uuid
+                              :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
+                            ;; Don't generate rtc ops again, (block-ops & asset-ops)
+                            {:persist-op? false}))
              (client-op/remove-asset-op repo asset-uuid))))
        (c.m/concurrent-exec-flow 3 (m/seed asset-uuid->url))
        (m/reduce (constantly nil))))
