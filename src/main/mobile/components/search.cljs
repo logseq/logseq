@@ -139,6 +139,9 @@
           "Recent updates"]])
 
       [:ul.px-3
+       {:class (when (and (not (string/blank? input))
+                       (seq search-result))
+                 "as-results")}
        (for [{:keys [icon text header source-page source-block]} result]
          (let [block (or source-page source-block)]
            [:li.flex.gap-1
