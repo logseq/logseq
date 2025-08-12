@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useRef,
   useState,
-} from "react";
+} from 'react'
 import {
   Sheet,
   SheetStack,
@@ -15,14 +15,14 @@ import {
   usePageScrollData,
   SheetViewProps,
   createComponentId,
-} from "@silk-hq/components";
-import "./SheetWithDepth.css";
+} from '@silk-hq/components'
+import './SheetWithDepth.css'
 
 // ================================================================================================
 // Stack Id
 // ================================================================================================
 
-const sheetWithDepthStackId = createComponentId();
+const sheetWithDepthStackId = createComponentId()
 
 // ================================================================================================
 // StackRoot Context
@@ -37,16 +37,16 @@ type SheetWithDepthStackRootContextValue = {
 
 const SheetWithDepthStackRootContext = createContext<SheetWithDepthStackRootContextValue | null>(
   null
-);
+)
 const useSheetWithDepthStackRootContext = () => {
-  const context = useContext(SheetWithDepthStackRootContext);
+  const context = useContext(SheetWithDepthStackRootContext)
   if (!context) {
     throw new Error(
-      "useSheetWithDepthStackRootContext must be used within a SheetWithDepthStackRootContext"
-    );
+      'useSheetWithDepthStackRootContext must be used within a SheetWithDepthStackRootContext'
+    )
   }
-  return context;
-};
+  return context
+}
 
 // ================================================================================================
 // View Context
@@ -54,14 +54,14 @@ const useSheetWithDepthStackRootContext = () => {
 
 const SheetWithDepthViewContext = createContext<{
   indexInStack: number;
-} | null>(null);
+} | null>(null)
 const useSheetWithDepthViewContext = () => {
-  const context = useContext(SheetWithDepthViewContext);
+  const context = useContext(SheetWithDepthViewContext)
   if (!context) {
-    throw new Error("useSheetWithDepthViewContext must be used within a SheetWithDepthViewContext");
+    throw new Error('useSheetWithDepthViewContext must be used within a SheetWithDepthViewContext')
   }
-  return context;
-};
+  return context
+}
 
 // ================================================================================================
 // StackRoot
@@ -71,10 +71,10 @@ const SheetWithDepthStackRoot = React.forwardRef<
   React.ElementRef<typeof SheetStack.Root>,
   React.ComponentProps<typeof SheetStack.Root>
 >(({ children, ...restProps }, ref) => {
-  const stackBackgroundRef = useRef<HTMLDivElement | null>(null);
-  const stackFirstSheetBackdropRef = useRef<HTMLDivElement | null>(null);
+  const stackBackgroundRef = useRef<HTMLDivElement | null>(null)
+  const stackFirstSheetBackdropRef = useRef<HTMLDivElement | null>(null)
 
-  const [stackingCount, setStackingCount] = useState(0);
+  const [stackingCount, setStackingCount] = useState(0)
 
   const contextValue = useMemo(
     () => ({
@@ -84,7 +84,7 @@ const SheetWithDepthStackRoot = React.forwardRef<
       setStackingCount,
     }),
     [stackingCount]
-  );
+  )
 
   return (
     <SheetWithDepthStackRootContext.Provider value={contextValue}>
@@ -92,9 +92,9 @@ const SheetWithDepthStackRoot = React.forwardRef<
         {children}
       </SheetStack.Root>
     </SheetWithDepthStackRootContext.Provider>
-  );
-});
-SheetWithDepthStackRoot.displayName = "SheetWithDepthStack.Root";
+  )
+})
+SheetWithDepthStackRoot.displayName = 'SheetWithDepthStack.Root'
 
 // ================================================================================================
 // StackSceneryOutlets
@@ -103,27 +103,27 @@ SheetWithDepthStackRoot.displayName = "SheetWithDepthStack.Root";
 // The SheetStack outlets that define the scenery of the stack
 // (i.e. the content underneath) for the depth effect.
 
-const initialTopOffset = "max(env(safe-area-inset-top), 1.3vh)";
+const initialTopOffset = 'max(env(safe-area-inset-top), 1.3vh)'
 
 const SheetWithDepthStackSceneryOutlets = React.forwardRef<
   React.ElementRef<typeof SheetStack.Outlet>,
-  Omit<React.ComponentProps<typeof SheetStack.Outlet>, "asChild">
+  Omit<React.ComponentProps<typeof SheetStack.Outlet>, 'asChild'>
 >(({ children, className, stackingAnimation: stackingAnimationFromProps, ...restProps }, ref) => {
-  const { stackBackgroundRef, stackFirstSheetBackdropRef } = useSheetWithDepthStackRootContext();
+  const { stackBackgroundRef, stackFirstSheetBackdropRef } = useSheetWithDepthStackRootContext()
 
-  const { nativePageScrollReplaced } = usePageScrollData();
+  const { nativePageScrollReplaced } = usePageScrollData()
 
-  const [iOSStandalone, setiOSStandalone] = useState(false);
+  const [iOSStandalone, setiOSStandalone] = useState(false)
   useEffect(() => {
     setiOSStandalone(
       // @ts-ignore
       window.navigator.standalone && window.navigator.userAgent?.match(/iPhone|iPad/i)
-    );
-  }, []);
+    )
+  }, [])
 
   const stackingAnimation: React.ComponentPropsWithoutRef<
     typeof Sheet.Outlet
-  >["stackingAnimation"] = {
+  >['stackingAnimation'] = {
     // Clipping & border-radius. We have a different animation
     // when the native page scroll is replaced, and in iOS
     // standalone mode.
@@ -133,39 +133,39 @@ const SheetWithDepthStackSceneryOutlets = React.forwardRef<
           // border-radius because the corners are hidden by the
           // screen corners. So we just set the border-radius to
           // the needed value.
-          {
-            overflow: "clip",
-            borderRadius: "24px",
-            transformOrigin: "50% 0",
-          }
+        {
+          overflow: 'clip',
+          borderRadius: '24px',
+          transformOrigin: '50% 0',
+        }
         : // Outside of iOS standalone mode we do animate
           // the border-radius because the scenery is a visible
           // rectangle.
-          {
-            overflow: "clip",
-            borderRadius: ({ progress }: any) => Math.min(progress * 24, 24) + "px",
-            transformOrigin: "50% 0",
-          }
+        {
+          overflow: 'clip',
+          borderRadius: ({ progress }: any) => Math.min(progress * 24, 24) + 'px',
+          transformOrigin: '50% 0',
+        }
       : // When the native page scroll is not replaced we
         // need to use the Silk's special clip properties to cut
         // off the rest of the page.
-        {
-          clipBoundary: "layout-viewport",
-          clipBorderRadius: "24px",
-          clipTransformOrigin: "50% 0",
-        }),
+      {
+        clipBoundary: 'layout-viewport',
+        clipBorderRadius: '24px',
+        clipTransformOrigin: '50% 0',
+      }),
 
     // Translate & scale
     translateY: ({ progress }) =>
       progress <= 1
-        ? "calc(" + progress + " * " + initialTopOffset + ")"
+        ? 'calc(' + progress + ' * ' + initialTopOffset + ')'
         : // prettier-ignore
-          "calc(" + initialTopOffset + " + 0.65vh * " + (progress - 1) + ")",
+        'calc(' + initialTopOffset + ' + 0.65vh * ' + (progress - 1) + ')',
     scale: [1, 0.91],
 
     // We merge animations coming from the props
     ...stackingAnimationFromProps,
-  };
+  }
 
   return (
     <>
@@ -176,7 +176,7 @@ const SheetWithDepthStackSceneryOutlets = React.forwardRef<
       />
       {/* Element used as a container for the content under the stack. */}
       <SheetStack.Outlet
-        className={`SheetWithDepth-stackSceneryContainer ${className ?? ""}`.trim()}
+        className={`SheetWithDepth-stackSceneryContainer ${className ?? ''}`.trim()}
         forComponent={sheetWithDepthStackId}
         stackingAnimation={stackingAnimation}
         {...restProps}
@@ -190,17 +190,17 @@ const SheetWithDepthStackSceneryOutlets = React.forwardRef<
         />
       </SheetStack.Outlet>
     </>
-  );
-});
-SheetWithDepthStackSceneryOutlets.displayName = "SheetWithDepthStack.SceneryOutlets";
+  )
+})
+SheetWithDepthStackSceneryOutlets.displayName = 'SheetWithDepthStack.SceneryOutlets'
 
 // ================================================================================================
 // Root
 // ================================================================================================
 
 type SheetRootProps = React.ComponentPropsWithoutRef<typeof Sheet.Root>;
-type SheetWithDepthRootProps = Omit<SheetRootProps, "license"> & {
-  license?: SheetRootProps["license"];
+type SheetWithDepthRootProps = Omit<SheetRootProps, 'license'> & {
+  license?: SheetRootProps['license'];
 };
 
 const SheetWithDepthRoot = React.forwardRef<
@@ -208,10 +208,10 @@ const SheetWithDepthRoot = React.forwardRef<
   SheetWithDepthRootProps
 >((props, ref) => {
   return (
-    <Sheet.Root license="commercial" forComponent={sheetWithDepthStackId} {...props} ref={ref} />
-  );
-});
-SheetWithDepthRoot.displayName = "SheetWithDepth.Root";
+    <Sheet.Root license="commercial" forComponent={sheetWithDepthStackId} {...props} ref={ref}/>
+  )
+})
+SheetWithDepthRoot.displayName = 'SheetWithDepth.Root'
 
 // ================================================================================================
 // View
@@ -237,58 +237,58 @@ const SheetWithDepthView = React.forwardRef<
 
       stackBackgroundRef,
       stackFirstSheetBackdropRef,
-    } = useSheetWithDepthStackRootContext();
+    } = useSheetWithDepthStackRootContext()
 
-    const [indexInStack, setIndexInStack] = useState(0);
-    const [travelStatus, setTravelStatus] = useState("idleOutside");
+    const [indexInStack, setIndexInStack] = useState(0)
+    const [travelStatus, setTravelStatus] = useState('idleOutside')
 
     //
     // Define a dimming overlay
 
     const { setDimmingOverlayOpacity, animateDimmingOverlayOpacity } = useThemeColorDimmingOverlay({
       elementRef: stackBackgroundRef,
-      dimmingColor: "rgb(0, 0, 0)",
-    });
+      dimmingColor: 'rgb(0, 0, 0)',
+    })
 
     //
     // travelStatusChangeHandler
 
     const travelStatusChangeHandler = useCallback<
-      NonNullable<SheetViewProps["onTravelStatusChange"]>
+      NonNullable<SheetViewProps['onTravelStatusChange']>
     >(
       (newTravelStatus) => {
         // Set indexInStack & stackingCount
-        if (travelStatus !== "stepping" && newTravelStatus === "idleInside") {
-          setStackingCount((prevStackingCount: number) => prevStackingCount + 1);
+        if (travelStatus !== 'stepping' && newTravelStatus === 'idleInside') {
+          setStackingCount((prevStackingCount: number) => prevStackingCount + 1)
           if (indexInStack === 0) {
-            setIndexInStack(stackingCount + 1);
+            setIndexInStack(stackingCount + 1)
           }
         }
         //
-        else if (newTravelStatus === "idleOutside") {
-          setStackingCount((prevStackingCount: number) => prevStackingCount - 1);
-          setIndexInStack(0);
+        else if (newTravelStatus === 'idleOutside') {
+          setStackingCount((prevStackingCount: number) => prevStackingCount - 1)
+          setIndexInStack(0)
         }
 
         // Animate on entering
-        if (newTravelStatus === "entering" && stackingCount === 0) {
-          animateDimmingOverlayOpacity({ keyframes: [0, 1] });
+        if (newTravelStatus === 'entering' && stackingCount === 0) {
+          animateDimmingOverlayOpacity({ keyframes: [0, 1] })
           animate(stackFirstSheetBackdropRef.current as HTMLElement, {
             opacity: [0, 0.33],
-          });
+          })
         }
 
         // Animate on exiting
-        if (newTravelStatus === "exiting" && stackingCount === 1) {
-          animateDimmingOverlayOpacity({ keyframes: [1, 0] });
+        if (newTravelStatus === 'exiting' && stackingCount === 1) {
+          animateDimmingOverlayOpacity({ keyframes: [1, 0] })
           animate(stackFirstSheetBackdropRef.current as HTMLElement, {
             opacity: [0.33, 0],
-          });
+          })
         }
 
         // Set the state
-        onTravelStatusChange?.(newTravelStatus);
-        setTravelStatus(newTravelStatus);
+        onTravelStatusChange?.(newTravelStatus)
+        setTravelStatus(newTravelStatus)
       },
       [
         travelStatus,
@@ -299,26 +299,26 @@ const SheetWithDepthView = React.forwardRef<
         animateDimmingOverlayOpacity,
         onTravelStatusChange,
       ]
-    );
+    )
 
     //
     // travelHandler
 
     const travelHandler = useMemo(() => {
-      if (indexInStack === 1 && travelStatus !== "entering" && travelStatus !== "exiting") {
-        const handler: NonNullable<SheetViewProps["onTravel"]> = ({ progress, ...rest }) => {
-          setDimmingOverlayOpacity(progress);
+      if (indexInStack === 1 && travelStatus !== 'entering' && travelStatus !== 'exiting') {
+        const handler: NonNullable<SheetViewProps['onTravel']> = ({ progress, ...rest }) => {
+          setDimmingOverlayOpacity(progress)
           stackFirstSheetBackdropRef.current?.style.setProperty(
-            "opacity",
+            'opacity',
             (progress * 0.33) as unknown as string
-          );
-          travelHandlerFromProps?.({ progress, ...rest });
-        };
-        return handler;
+          )
+          travelHandlerFromProps?.({ progress, ...rest })
+        }
+        return handler
       } else {
-        return travelHandlerFromProps;
+        return travelHandlerFromProps
       }
-    }, [indexInStack, travelStatus, stackFirstSheetBackdropRef, setDimmingOverlayOpacity]);
+    }, [indexInStack, travelStatus, stackFirstSheetBackdropRef, setDimmingOverlayOpacity])
 
     //
     // Return
@@ -326,7 +326,7 @@ const SheetWithDepthView = React.forwardRef<
     return (
       <SheetWithDepthViewContext.Provider value={{ indexInStack }}>
         <Sheet.View
-          className={`SheetWithDepth-view ${className ?? ""}`.trim()}
+          className={`SheetWithDepth-view ${className ?? ''}`.trim()}
           contentPlacement="bottom"
           onTravelStatusChange={travelStatusChangeHandler}
           onTravel={travelHandler}
@@ -337,10 +337,10 @@ const SheetWithDepthView = React.forwardRef<
           {children}
         </Sheet.View>
       </SheetWithDepthViewContext.Provider>
-    );
+    )
   }
-);
-SheetWithDepthView.displayName = "SheetWithDepth.View";
+)
+SheetWithDepthView.displayName = 'SheetWithDepth.View'
 
 // ================================================================================================
 // Backdrop
@@ -351,8 +351,8 @@ const SheetWithDepthBackdrop = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Sheet.Backdrop>
 // @ts-ignore
 >(({ className, ...restProps }, ref) => {
-  const { stackingCount } = useSheetWithDepthStackRootContext();
-  const { indexInStack } = useSheetWithDepthViewContext();
+  const { stackingCount } = useSheetWithDepthStackRootContext()
+  const { indexInStack } = useSheetWithDepthViewContext()
 
   return (
     // We don't render the Backdrop for the first sheet in the
@@ -361,15 +361,15 @@ const SheetWithDepthBackdrop = React.forwardRef<
     stackingCount > 0 &&
     indexInStack !== 1 && (
       <Sheet.Backdrop
-        className={`SheetWithDepth-backdrop ${className ?? ""}`.trim()}
+        className={`SheetWithDepth-backdrop ${className ?? ''}`.trim()}
         travelAnimation={{ opacity: [0, 0.33] }}
         {...restProps}
         ref={ref}
       />
     )
-  );
-});
-SheetWithDepthBackdrop.displayName = "SheetWithDepth.Backdrop";
+  )
+})
+SheetWithDepthBackdrop.displayName = 'SheetWithDepth.Backdrop'
 
 // ================================================================================================
 // Content
@@ -381,42 +381,42 @@ const SheetWithDepthContent = React.forwardRef<
 >(({ children, className, stackingAnimation, ...restProps }, ref) => {
   return (
     <Sheet.Content
-      className={`SheetWithDepth-content ${className ?? ""}`.trim()}
+      className={`SheetWithDepth-content ${className ?? ''}`.trim()}
       stackingAnimation={{
         translateY: ({ progress }) =>
           progress <= 1
-            ? progress * -1.3 + "vh"
+            ? progress * -1.3 + 'vh'
             : // prettier-ignore
-              "calc(-1.3vh + 0.65vh * " + (progress - 1) + ")",
+            'calc(-1.3vh + 0.65vh * ' + (progress - 1) + ')',
         scale: [1, 0.91],
-        transformOrigin: "50% 0",
+        transformOrigin: '50% 0',
         ...stackingAnimation,
       }}
       {...restProps}
       ref={ref}
     >
-      <Sheet.BleedingBackground className="SheetWithDepth-bleedingBackground" />
+      <Sheet.BleedingBackground className="SheetWithDepth-bleedingBackground"/>
       {children}
     </Sheet.Content>
-  );
-});
-SheetWithDepthContent.displayName = "SheetWithDepth.Content";
+  )
+})
+SheetWithDepthContent.displayName = 'SheetWithDepth.Content'
 
 // ================================================================================================
 // Unchanged components
 // ================================================================================================
 
-const SheetWithDepthPortal = Sheet.Portal;
-const SheetWithDepthTrigger = Sheet.Trigger;
-const SheetWithDepthHandle = Sheet.Handle;
-const SheetWithDepthOutlet = Sheet.Outlet;
-const SheetWithDepthTitle = Sheet.Title;
-const SheetWithDepthDescription = Sheet.Description;
+const SheetWithDepthPortal = Sheet.Portal
+const SheetWithDepthTrigger = Sheet.Trigger
+const SheetWithDepthHandle = Sheet.Handle
+const SheetWithDepthOutlet = Sheet.Outlet
+const SheetWithDepthTitle = Sheet.Title
+const SheetWithDepthDescription = Sheet.Description
 
 export const SheetWithDepthStack = {
   Root: SheetWithDepthStackRoot,
   SceneryOutlets: SheetWithDepthStackSceneryOutlets,
-};
+}
 
 export const SheetWithDepth = {
   Root: SheetWithDepthRoot,
@@ -429,4 +429,4 @@ export const SheetWithDepth = {
   Outlet: SheetWithDepthOutlet,
   Title: SheetWithDepthTitle,
   Description: SheetWithDepthDescription,
-};
+}
