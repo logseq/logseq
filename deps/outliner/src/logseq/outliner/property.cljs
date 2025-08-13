@@ -198,13 +198,34 @@
       {:db-ident db-ident'
        :tx-data tx-data})))
 
+(defn- retract-old-property-data
+  [db property]
+  (let [db-ident (:db/ident property)
+        property-value-datoms (d/datoms db :avet db-ident)]
+    (concat
+     ;; remove kv pairs
+     (->> property-value-datoms
+          (map (fn [d] [:db/retract (:e d) db-ident])))
+     ;; remove property history
+     (map (fn [d] [:db/retractEntity (:e d)])
+          (d/datoms db :avet :logseq.property.history/property db-ident))
+     ;; remove :default && :value values
+     (when (contains? {:default :url} (:logseq.property/type property))
+       (let [property-value-blocks (seq (keep (fn [d]
+                                                (when-let [block (and (integer? (:v d))
+                                                                      (d/entity db (:v d)))]
+                                                  (when-not (or (entity-util/page? block) (ldb/closed-value? block))
+                                                    block)))
+                                              property-value-datoms))]
+         (:tx-data (outliner-core/delete-blocks db property-value-blocks)))))))
+
 (defn- update-property-type!
-  [conn property schema db-ident]
+  [conn property schema]
   ;; Property type changed
-    ;; 1. create a new property
-    ;; 2. remove all existing property datoms
-    ;; 3. update tag properties to the new one
-    ;; 4. mark the old one deprecated
+  ;; 1. create a new property
+  ;; 2. remove all existing property datoms
+  ;; 3. update tag properties to the new one
+  ;; 4. mark the old one deprecated
   (let [new-db-ident' (create-user-property-ident-from-name (:block/title property))
         m (create-property conn new-db-ident' nil
                            (-> (select-keys schema [:logseq.property/type])
@@ -229,23 +250,7 @@
         new-db-ident (:db-ident m)
         new-property-tx-data (:tx-data m)
         db @conn
-        property-value-datoms (d/datoms db :avet db-ident)
-        retract-old-tx-data (concat
-                             ;; remove kv pairs
-                             (->> property-value-datoms
-                                  (map (fn [d] [:db/retract (:e d) db-ident])))
-                             ;; remove property history
-                             (map (fn [d] [:db/retractEntity (:e d)])
-                                  (d/datoms @conn :avet :logseq.property.history/property db-ident))
-                             ;; remove :default && :value values
-                             (when (contains? {:default :url} (:logseq.property/type property))
-                               (let [property-value-blocks (seq (keep (fn [d]
-                                                                        (when-let [block (and (integer? (:v d))
-                                                                                              (d/entity db (:v d)))]
-                                                                          (when-not (or (entity-util/page? block) (ldb/closed-value? block))
-                                                                            block)))
-                                                                      property-value-datoms))]
-                                 (:tx-data (outliner-core/delete-blocks @conn property-value-blocks)))))
+        retract-old-tx-data (retract-old-property-data db property)
         mark-old-property-as-deprecated [{:db/id (:db/id property)
                                           :logseq.property/deprecated? true}]
         class-properties-tx-data (->> (d/datoms db :avet :logseq.property.class/properties (:db/id property))
@@ -265,7 +270,7 @@
   (if (and (:logseq.property/type schema)
            (not= (:logseq.property/type schema)
                  (:logseq.property/type property)))
-    (update-property-type! conn property schema db-ident)
+    (update-property-type! conn property schema)
     (do
       (when (and (some? property-name) (not= property-name (:block/title property)))
         (outliner-validate/validate-page-title property-name {:node property})
