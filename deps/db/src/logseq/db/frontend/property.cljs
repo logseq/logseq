@@ -741,3 +741,8 @@
   [db-ident]
   (contains? db-property-type/value-ref-property-types
              (get-in built-in-properties [db-ident :schema :type])))
+
+(defn deprecated?
+  "Whether the property has been deprecated"
+  [property]
+  (:logseq.property/deprecated? property))

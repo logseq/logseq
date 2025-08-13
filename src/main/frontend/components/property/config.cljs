@@ -538,7 +538,7 @@
           (p/then remove!)))))
 
 (rum/defc property-type-sub-pane
-  [property {:keys [id set-sub-open! _position]}]
+  [property {:keys [id set-sub-open! _position owner-block]}]
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
                            (p/let [property' (db-property-handler/upsert-property!
@@ -549,7 +549,14 @@
                              (set-sub-open! false)
                              (restore-root-highlight-item! id)
                              ;; redirect to the new property page
-                             (route-handler/redirect-to-page! (:block/uuid new-property)))))
+                             (when (= (state/get-current-page) (str (:block/uuid property)))
+                               (route-handler/redirect-to-page! (:block/uuid new-property)))
+                             ;; set value to empty
+                             (when owner-block
+                               (db-property-handler/set-block-property! (:db/id owner-block) (:db/ident new-property)
+                                                                        (if (= (keyword v) :checkbox)
+                                                                          false
+                                                                          :logseq.property/empty-placeholder))))))
         item-props {:on-select handle-select!}
         schema-types (->> db-property-type/user-built-in-property-types
                           (map (fn [type]
@@ -613,7 +620,7 @@
                                          (str property-type-label'))
                                  :disabled? disabled?
                                  :submenu-content (fn [ops]
-                                                    (property-type-sub-pane property ops))})
+                                                    (property-type-sub-pane property (assoc ops :owner-block owner-block)))})
 
       (when (and (= property-type :node)
                  (not (contains? #{:logseq.property.class/extends} (:db/ident property))))

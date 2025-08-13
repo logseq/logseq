@@ -220,7 +220,7 @@
                                                     (let [v' (cond
                                                                (de/entity? v)
                                                                (or (:db/id v) (:db/ident v))
-                                                               (every? de/entity? v)
+                                                               (and (coll? v) (every? de/entity? v))
                                                                (map (fn [v] (or (:db/id v) (:db/ident v))) v)
                                                                :else
                                                                v)]
@@ -390,19 +390,21 @@
   "Converts a ref property's value whether it's an integer or a string. Creates
    a property ref value for a string value if necessary"
   [conn property-id v property-type]
-  (let [number-property? (= property-type :number)]
-    (if (and (integer? v)
-             (or (not number-property?)
-               ;; Allows :number property to use number as a ref (for closed value) or value
-                 (and number-property?
-                      (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
-                          (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
-      v
-      ;; only value-ref-property types should call this
-      (when-let [v' (if (and number-property? (string? v))
-                      (parse-double v)
-                      v)]
-        (find-or-create-property-value conn property-id v')))))
+  (if (= :logseq.property/empty-placeholder v)
+    v
+    (let [number-property? (= property-type :number)]
+      (if (and (integer? v)
+               (or (not number-property?)
+                 ;; Allows :number property to use number as a ref (for closed value) or value
+                   (and number-property?
+                        (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                            (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
+        v
+        ;; only value-ref-property types should call this
+        (when-let [v' (if (and number-property? (string? v))
+                        (parse-double v)
+                        v)]
+          (find-or-create-property-value conn property-id v'))))))
 
 (defn- throw-error-if-self-value
   [block value ref?]
@@ -500,9 +502,6 @@
       (validate-batch-deletion-of-property [block] property-id))
     (when block
       (cond
-        (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
-        nil
-
         (= :logseq.property/status property-id)
         (ldb/transact! conn
                        [[:db/retract (:db/id block) property-id]
