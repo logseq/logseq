@@ -289,7 +289,7 @@
   [rename-db-ident-ops-map]
   (keep (fn [[op-type op]]
           (when (keyword-identical? :rename-db-ident op-type)
-            [:rename-db-ident (select-keys (last op) [:db-ident :new-db-ident])]))
+            [:rename-db-ident (select-keys (last op) [:db-ident-or-block-uuid :new-db-ident])]))
         rename-db-ident-ops-map))
 
 (defn- gen-rename-db-ident-remote-ops
