@@ -745,17 +745,9 @@
   [repo model-name]
   (js/Promise. (embedding/task--load-model repo model-name)))
 
-(def-thread-api :thread-api/vec-search-embedding-stale-blocks
-  [repo]
-  (embedding/embedding-stale-blocks! repo))
-
-(def-thread-api :thread-api/vec-search-re-embedding-graph-data
-  [repo]
-  (embedding/re-embedding-graph-data! repo))
-
 (def-thread-api :thread-api/vec-search-embedding-graph
-  [repo]
-  (embedding/embedding-graph! repo))
+  [repo opts]
+  (embedding/embedding-graph! repo opts))
 
 (def-thread-api :thread-api/vec-search-search
   [repo query-string nums-neighbors]
