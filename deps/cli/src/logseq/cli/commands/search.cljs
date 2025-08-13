@@ -1,9 +1,12 @@
 (ns logseq.cli.commands.search
   "Search command"
-  (:require [clojure.pprint :as pprint]
+  (:require ["fs" :as fs]
+            [clojure.pprint :as pprint]
             [clojure.string :as string]
-            [logseq.cli.util :as cli-util]
+            [datascript.core :as d]
             [logseq.cli.text-util :as cli-text-util]
+            [logseq.cli.util :as cli-util]
+            [logseq.db.common.sqlite-cli :as sqlite-cli]
             [promesa.core :as p]))
 
 (defn- highlight
@@ -23,21 +26,42 @@
           (recur new-result)
           new-result)))))
 
-(defn search
-  [{{:keys [search-terms api-query-token raw limit]} :opts}]
-  (-> (p/let [resp (cli-util/api-fetch api-query-token
-                                       "logseq.app.search"
-                                       [(string/join " " search-terms) {:limit limit}])]
+(defn- format-results
+  "Results are a list of strings. Handles highlighting search term in results and printing options like :raw"
+  [results search-term {:keys [raw api?]}]
+  (println "Search found" (count results) "results:")
+  (if raw
+    (pprint/pprint results)
+    (let [highlight-fn (if api?
+                         highlight-content-query
+                         #(string/replace % search-term (highlight search-term)))]
+      (println (string/join "\n"
+                           (->> results
+                                (map #(string/replace % "\n" "\\\\n"))
+                                (map highlight-fn)))))))
+
+(defn- api-search
+  [search-term {{:keys [api-query-token raw limit]} :opts}]
+  (-> (p/let [resp (cli-util/api-fetch api-query-token "logseq.app.search" [search-term {:limit limit}])]
         (if (= 200 (.-status resp))
           (p/let [body (.json resp)]
             (let [{:keys [blocks]} (js->clj body :keywordize-keys true)]
-              (println "Search found" (count blocks) "results:")
-              (if raw
-                (pprint/pprint blocks)
-                (println (string/join "\n"
-                                      (->> blocks
-                                           (map :block/title)
-                                           (map #(string/replace % "\n" "\\\\n"))
-                                           (map highlight-content-query)))))))
+              (format-results (map :block/title blocks) search-term {:raw raw :api? true})))
           (cli-util/api-handle-error-response resp)))
       (p/catch cli-util/command-catch-handler)))
+
+(defn- local-search [search-term {{:keys [graph raw limit]} :opts}]
+  (if (fs/existsSync (cli-util/get-graph-dir graph))
+    (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          nodes (->> (d/datoms @conn :aevt :block/title)
+                     (filter (fn [datom]
+                               (string/includes? (:v datom) search-term)))
+                     (take limit)
+                     (map :v))]
+      (format-results nodes search-term {:raw raw}))
+    (cli-util/error "Graph" (pr-str graph) "does not exist")))
+
+(defn search [{{:keys [graph search-terms api-query-token]} :opts :as m}]
+  (if api-query-token
+    (api-search (string/join " " (into [graph] search-terms)) m)
+    (local-search (string/join " " search-terms) m)))
