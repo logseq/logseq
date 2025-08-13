@@ -466,7 +466,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                      (filter #(= :block/uuid (:a %)))
                                      (map :e)
                                      (set))
-                                (->> (filter (fn [d] (and (= :logseq.property/deprecated? (:a d)) (false? (:added d)))) datoms)
+                                (->> (filter (fn [d] (and (= :logseq.property/deprecated? (:a d)) (true? (:added d)))) datoms)
                                      (map :e)
                                      (set)))
           blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
