@@ -229,9 +229,23 @@
         new-db-ident (:db-ident m)
         new-property-tx-data (:tx-data m)
         db @conn
-        retract-old-tx-data (->> (d/datoms db :avet db-ident)
-                                 (map (fn [d]
-                                        [:db/retract (:e d) db-ident])))
+        property-value-datoms (d/datoms db :avet db-ident)
+        retract-old-tx-data (concat
+                             ;; remove kv pairs
+                             (->> property-value-datoms
+                                  (map (fn [d] [:db/retract (:e d) db-ident])))
+                             ;; remove property history
+                             (map (fn [d] [:db/retractEntity (:e d)])
+                                  (d/datoms @conn :avet :logseq.property.history/property db-ident))
+                             ;; remove :default && :value values
+                             (when (contains? {:default :url} (:logseq.property/type property))
+                               (let [property-value-blocks (seq (keep (fn [d]
+                                                                        (when-let [block (and (integer? (:v d))
+                                                                                              (d/entity db (:v d)))]
+                                                                          (when-not (or (entity-util/page? block) (ldb/closed-value? block))
+                                                                            block)))
+                                                                      property-value-datoms))]
+                                 (:tx-data (outliner-core/delete-blocks @conn property-value-blocks)))))
         mark-old-property-as-deprecated [{:db/id (:db/id property)
                                           :logseq.property/deprecated? true}]
         class-properties-tx-data (->> (d/datoms db :avet :logseq.property.class/properties (:db/id property))
