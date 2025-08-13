@@ -76,14 +76,14 @@
        {:size :sm
         :class "mx-2"
         :on-click (fn [_]
-                    (state/<invoke-db-worker :thread-api/vec-search-embedding-stale-blocks repo))}
-       "embedding-stale-blocks")
+                    (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {}))}
+       "embedding-blocks")
       (shui/button
        {:size :sm
         :class "mx-2"
         :on-click (fn [_]
-                    (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo))}
-       "force-embedding-all-graph-blocks")
+                    (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true}))}
+       "full-embedding-blocks")
       (when (get-in vec-search-state [:repo->index-info repo :indexing?])
         (shui/button
          {:size :sm

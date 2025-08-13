@@ -26,7 +26,7 @@
       (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
       (state/set-current-repo! graph)
       (persist-db/<export-db graph {})
-      (db/transact! graph (sqlite-util/import-tx :sqlite-db))
+      (db/transact! graph (sqlite-util/import-tx :sqlite-db) {:import-db? true})
       (finished-ok-handler))
      (p/catch
       (fn [e]
@@ -44,7 +44,7 @@
                              :datoms datoms})
      (state/add-repo! {:url graph})
      (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
-     (db/transact! graph (sqlite-util/import-tx :debug-transit))
+     (db/transact! graph (sqlite-util/import-tx :debug-transit) {:import-db? true})
      (state/set-current-repo! graph)
      (finished-ok-handler))))
 
@@ -61,7 +61,8 @@
     ;; (cljs.pprint/pprint _txs)
     (if error
       (notification/show! error :error)
-      (let [tx-meta {::sqlite-export/imported-data? true}
+      (let [tx-meta {::sqlite-export/imported-data? true
+                     :import-db? true}
             repo (state/get-current-repo)]
         (p/do
           (db/transact! repo init-tx tx-meta)
