@@ -556,7 +556,8 @@
                                (db-property-handler/set-block-property! (:db/id owner-block) (:db/ident new-property)
                                                                         (if (= (keyword v) :checkbox)
                                                                           false
-                                                                          :logseq.property/empty-placeholder))))))
+                                                                          :logseq.property/empty-placeholder)))
+                             (shui/popup-hide-all!))))
         item-props {:on-select handle-select!}
         schema-types (->> db-property-type/user-built-in-property-types
                           (map (fn [type]

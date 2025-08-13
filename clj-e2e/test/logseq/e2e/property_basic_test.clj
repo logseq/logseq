@@ -6,8 +6,7 @@
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
             [logseq.e2e.util :as util]
-            [wally.main :as w]
-            [wally.repl :as repl]))
+            [wally.main :as w]))
 
 (use-fixtures :once fixtures/open-page)
 
@@ -66,12 +65,13 @@
     (w/click (loc/and "span" (util/get-by-text "Text" true)))
     (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
     (util/input "Text")
-    (k/esc)
-    (repl/pause)
-    (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
-    (w/click (w/get-by-text "Property type"))
-    (w/click (loc/and "span" (util/get-by-text "Number" true)))
-    (k/esc)
-    (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
-    (assert/assert-is-visible (w/get-by-text "Property type"))
-    (assert/assert-is-visible (w/get-by-text "Number"))))
+    (util/double-esc)
+    (doseq [property-type (rest property-types)]
+      (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
+      (w/click (w/get-by-text "Property type"))
+      (w/click (loc/and "span" (util/get-by-text property-type true)))
+      (k/esc)
+      (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
+      (assert/assert-is-visible (w/get-by-text "Property type"))
+      (assert/assert-is-visible (w/get-by-text property-type))
+      (k/esc))))

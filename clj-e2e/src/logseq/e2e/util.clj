@@ -72,10 +72,10 @@
 (defn double-esc
   "Exits editing mode and ensure there's no action bar"
   []
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (.isVisible (.first (w/-query "div[data-radix-popper-content-wrapper]")))
     (k/esc))
   (exit-edit)
-  (when (w/visible? "div[data-radix-popper-content-wrapper]")
+  (when (.isVisible (.first (w/-query "div[data-radix-popper-content-wrapper]")))
     (k/esc)))
 
 (defn search
@@ -103,6 +103,10 @@
 (defn wait-editor-visible
   []
   (w/wait-for ".editor-wrapper textarea"))
+
+(defn wait-popup-visible
+  []
+  (w/wait-for "div[data-radix-popper-content-wrapper]"))
 
 (defn count-elements
   [q]
