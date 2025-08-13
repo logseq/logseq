@@ -201,7 +201,7 @@
       (when (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)
         (when (or reset-embedding?
                   ;; embedding not exists yet
-                  (empty (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)))
+                  (empty? (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)))
           ;; reset embedding
           (let [mark-embedding-tx-data (->>
                                         (d/datoms @conn :avet :block/title)
