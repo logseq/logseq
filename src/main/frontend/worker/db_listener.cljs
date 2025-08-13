@@ -31,29 +31,13 @@
         (shared-service/broadcast-to-clients! :sync-db-changes data))
 
       (when-not from-disk?
-        ;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
-        (when (and
-               (d/entity @conn :logseq.property.embedding/hnsw-label-updated-at)
-               (some (fn [d] (and (= (:a d) :db/ident) (= (:v d) :logseq.kv/import-type))) (:tx-data tx-report'))) ; imported graph
-          (let [tx-data (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
-                             (map (fn [d]
-                                    [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at])))]
-            (d/transact! conn tx-data {:skip-refresh? true})))
-
         (p/do!
          ;; Sync SQLite search
          (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
            (when (seq blocks-to-remove-set)
              ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
            (when (seq blocks-to-add)
-             ((@thread-api/*thread-apis :thread-api/search-upsert-blocks) repo blocks-to-add)))
-
-         ;; Mark vector embedding
-         (let [mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
-                                                               (:e datom))) (:tx-data tx-report'))
-                                           ;; mark block embedding to be computed
-                                           (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))]
-           (d/transact! conn mark-embedding-tx-data {:skip-refresh? true})))))
+             ((@thread-api/*thread-apis :thread-api/search-upsert-blocks) repo blocks-to-add))))))
     tx-report'))
 
 (comment
@@ -87,6 +71,22 @@
       (d/listen! conn ::listen-db-changes!
                  (fn listen-db-changes!-inner
                    [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
+                   (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
+                         remove-old-hnsw-tx-data (when (:import-db? tx-meta)
+                                                   (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
+                                                        (map (fn [d]
+                                                               [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
+                         ;; Mark vector embedding
+                         mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
+                                                                         (:e datom))) tx-data)
+                                                     ;; mark block embedding to be computed
+                                                     (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
+                         tx-data (concat (remove-old-hnsw-tx-data mark-embedding-tx-data))]
+                     (when (seq tx-data)
+                       (d/transact! conn tx-data
+                                    {:skip-refresh? true
+                                     :pipeline-replace? true})))
+
                    (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
                          pipeline-replace? (:pipeline-replace? tx-meta)
                          in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]
