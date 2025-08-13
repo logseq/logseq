@@ -80,13 +80,16 @@
 
 (defn- stale-block-lazy-seq
   [db reset?]
-  (->> (rseq (d/index-range db :block/updated-at nil nil))
-       (sequence
-        (comp (map #(d/entity db (:e %)))
-              (filter (stale-block-filter-preds reset?))
-              (map (fn [b]
-                     (assoc b :block.temp/text-to-embedding
-                            (db-content/recur-replace-uuid-in-block-title b)
+  (let [datoms (if reset?
+                 (rseq (d/index-range db :block/updated-at nil nil))
+                 (d/datoms db :avet :logseq.property.embedding/hnsw-label-updated-at 0))]
+    (->> datoms
+         (sequence
+          (comp (map #(d/entity db (:e %)))
+                (filter (stale-block-filter-preds reset?))
+                (map (fn [b]
+                       (assoc b :block.temp/text-to-embedding
+                              (db-content/recur-replace-uuid-in-block-title b)
                             ;; FIXME: tags and properties can affect sorting
                             ;; (str (db-content/recur-replace-uuid-in-block-title b)
                             ;;      (let [tags (->> (:block/tags b)
@@ -95,7 +98,7 @@
                             ;;          (str " " (string/join ", " (map (fn [t] (str "#" t)) tags)))))
                             ;;      (when-let [desc (:block/title (:logseq.property/description b))]
                             ;;        (str "\nDescription: " desc)))
-                            )))))))
+                              ))))))))
 (defn- partition-by-text-size
   [text-size]
   (let [*current-size (volatile! 0)
@@ -155,13 +158,15 @@
 (defn- task--embedding-stale-blocks!
   "embedding outdated block-data
   outdate rule: block/updated-at > :logseq.property.embedding/hnsw-label-updated-at"
-  [repo]
+  [repo reset-embedding?]
   (m/sp
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (when-let [conn (worker-state/get-datascript-conn repo)]
         (let [stale-blocks (stale-block-lazy-seq @conn false)]
           (when (seq stale-blocks)
             (m/? (task--update-index-info!* repo infer-worker true))
+            (when reset-embedding?
+              (c.m/<? (.force-reset-index! infer-worker repo)))
             (doseq [stale-block-chunk (sequence (partition-by-text-size (get-partition-size repo)) stale-blocks)]
               (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) stale-block-chunk)
                     _ (when (some (fn [id] (> id 2147483647)) (map :db/id stale-block-chunk))
@@ -175,61 +180,36 @@
                         false))
                     tx-data (labels-update-tx-data @conn e+updated-at-coll)]
                 (d/transact! conn tx-data {:skip-refresh? true})
-                (m/? (task--update-index-info!* repo infer-worker true))))
-            (c.m/<? (.write-index! infer-worker repo))
+                (m/? (task--update-index-info!* repo infer-worker true))
+                (c.m/<? (.write-index! infer-worker repo))))
             (m/? (task--update-index-info!* repo infer-worker false))))))))
 
-(defn- task--re-embedding-graph-data!
-  "force re-embedding all block-data in graph"
-  [repo]
-  (m/sp
-    (when-let [^js infer-worker @worker-state/*infer-worker]
-      (when-let [conn (worker-state/get-datascript-conn repo)]
-        (m/? (task--update-index-info!* repo infer-worker true))
-        (c.m/<? (.force-reset-index! infer-worker repo))
-        (let [all-blocks (stale-block-lazy-seq @conn true)]
-          (doseq [block-chunk (sequence (partition-by-text-size (get-partition-size repo)) all-blocks)]
-            (let [e+updated-at-coll (map (juxt :db/id :block/updated-at) block-chunk)
-                  _ (when (some (fn [id] (> id 2147483647)) (map :db/id block-chunk))
-                      (throw (ex-info "Wrong db/id" {:data (filter (fn [item] (> (:db/id item) 2147483647)) block-chunk)})))
-                  _ (c.m/<?
-                     (.text-embedding+store!
-                      infer-worker repo
-                      (into-array (map :block.temp/text-to-embedding block-chunk))
-                      (into-array (map :db/id block-chunk))
-                      false))
-                  tx-data (labels-update-tx-data @conn e+updated-at-coll)]
-              (d/transact! conn tx-data {:skip-refresh? true})
-              (m/? (task--update-index-info!* repo infer-worker true)))))
-        (c.m/<? (.write-index! infer-worker repo))
-        (m/? (task--update-index-info!* repo infer-worker false))))))
-
-(defn embedding-stale-blocks!
-  [repo]
+(defn- embedding-stale-blocks!
+  [repo reset-embedding?]
   (when-not (indexing? repo)
     (let [canceler (c.m/run-task
                      :embedding-stale-blocks!
-                     (task--embedding-stale-blocks! repo)
-                     :succ (constantly nil))]
-      (reset-*vector-search-state! repo :canceler canceler))))
-
-(defn re-embedding-graph-data!
-  [repo]
-  (when-not (indexing? repo)
-    (let [canceler (c.m/run-task
-                     :re-embedding-graph-data!
-                     (task--re-embedding-graph-data! repo)
+                     (task--embedding-stale-blocks! repo reset-embedding?)
                      :succ (constantly nil))]
       (reset-*vector-search-state! repo :canceler canceler))))
 
 (defn embedding-graph!
-  [repo]
+  [repo {:keys [reset-embedding?]
+         :or {reset-embedding? false}}]
   (when-not (indexing? repo)
     (when-let [conn (worker-state/get-datascript-conn repo)]
       (when (ldb/get-key-value @conn :logseq.kv/graph-text-embedding-model-name)
-        (if (first (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)) ; embedding exists
-          (embedding-stale-blocks! repo)
-          (re-embedding-graph-data! repo))))))
+        (when (or reset-embedding?
+                  ;; embedding not exists yet
+                  (empty? (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)))
+          ;; reset embedding
+          (let [mark-embedding-tx-data (->>
+                                        (d/datoms @conn :avet :block/title)
+                                        (map (fn [d]
+                                               [:db/add (:e d) :logseq.property.embedding/hnsw-label-updated-at 0])))]
+            (d/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
+
+        (embedding-stale-blocks! repo reset-embedding?)))))
 
 (defn task--embedding-model-info
   [repo]

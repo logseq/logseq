@@ -1252,7 +1252,7 @@
                                       (c.m/<?
                                        (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
                                       (c.m/<?
-                                       (state/<invoke-db-worker :thread-api/vec-search-re-embedding-graph-data repo)))
+                                       (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
                                     :succ (constantly nil)))}
                current-model
                (assoc :value current-model))

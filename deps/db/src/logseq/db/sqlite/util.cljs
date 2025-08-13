@@ -133,4 +133,5 @@
            (fn [db-ident] [:db/retractEntity db-ident])
            [:logseq.kv/graph-uuid
             :logseq.kv/graph-local-tx
-            :logseq.kv/remote-schema-version])))
+            :logseq.kv/remote-schema-version
+            :logseq.kv/graph-text-embedding-model-name])))

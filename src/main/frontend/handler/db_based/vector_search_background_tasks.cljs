@@ -25,6 +25,6 @@
         (m/? (m/sleep 1000))
         (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-init-embedding-model repo))
         (m/?< (c.m/clock (* 30 1000)))
-        (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo))
+        (c.m/<? (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {}))
         (catch Cancelled _
           (m/amb)))))))
