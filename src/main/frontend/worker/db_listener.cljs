@@ -8,6 +8,7 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.outliner.batch-tx :as batch-tx]
             [promesa.core :as p]))
 
@@ -71,21 +72,22 @@
       (d/listen! conn ::listen-db-changes!
                  (fn listen-db-changes!-inner
                    [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
-                   (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
-                         remove-old-hnsw-tx-data (when (:import-db? tx-meta)
-                                                   (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
-                                                        (map (fn [d]
-                                                               [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
+                   (when (ldb/db-based-graph? @conn)
+                     (let [;; Remove old :logseq.property.embedding/hnsw-label-updated-at when importing a graph
+                           remove-old-hnsw-tx-data (when (:import-db? tx-meta)
+                                                     (->> (d/datoms @conn :avet :logseq.property.embedding/hnsw-label-updated-at)
+                                                          (map (fn [d]
+                                                                 [:db/retract (:e d) :logseq.property.embedding/hnsw-label-updated-at]))))
                          ;; Mark vector embedding
-                         mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
-                                                                         (:e datom))) tx-data)
+                           mark-embedding-tx-data (->> (keep (fn [datom] (when (and (= :block/title (:a datom)) (:added datom) (not (string/blank? (:v datom))))
+                                                                           (:e datom))) tx-data)
                                                      ;; mark block embedding to be computed
-                                                     (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
-                         tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
-                     (when (seq tx-data)
-                       (d/transact! conn tx-data
-                                    {:skip-refresh? true
-                                     :pipeline-replace? true})))
+                                                       (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
+                           tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
+                       (when (seq tx-data)
+                         (d/transact! conn tx-data
+                                      {:skip-refresh? true
+                                       :pipeline-replace? true}))))
 
                    (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
                          pipeline-replace? (:pipeline-replace? tx-meta)
