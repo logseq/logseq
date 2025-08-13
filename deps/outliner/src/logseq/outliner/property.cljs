@@ -198,54 +198,60 @@
       {:db-ident db-ident'
        :tx-data tx-data})))
 
-(defn- update-property
-  [conn db-ident property schema {:keys [property-name properties]}]
-  (if (not= (:logseq.property/type schema) (:logseq.property/type property))
-    ;; Property type changed
+(defn- update-property-type!
+  [conn property schema db-ident]
+  ;; Property type changed
     ;; 1. create a new property
     ;; 2. remove all existing property datoms
     ;; 3. update tag properties to the new one
     ;; 4. mark the old one deprecated
-    (let [new-db-ident' (create-user-property-ident-from-name (:block/title property))
-          m (create-property conn new-db-ident' nil
-                             (-> (select-keys schema [:logseq.property/type])
-                                 (assoc :db/cardinality (:db/cardinality property)))
-                             {:property-name (:block/title property)
-                              :properties (->> (dissoc (:block/properties property)
-                                                       :logseq.property/type
-                                                       :db.type/ref
-                                                       :db/cardinality
-                                                       :logseq.property/default-value
-                                                       :logseq.property/scalar-default-value)
-                                               (map (fn [[k v]]
-                                                      (let [v' (cond
-                                                                 (de/entity? v)
-                                                                 (or (:db/id v) (:db/ident v))
-                                                                 (every? de/entity? v)
-                                                                 (map (fn [v] (or (:db/id v) (:db/ident v))) v)
-                                                                 :else
-                                                                 v)]
-                                                        [k v'])))
-                                               (into {}))})
-          new-db-ident (:db-ident m)
-          new-property-tx-data (:tx-data m)
-          db @conn
-          retract-old-tx-data (->> (d/datoms db :avet db-ident)
-                                   (map (fn [d]
-                                          [:db/retract (:e d) db-ident])))
-          mark-old-property-as-deprecated [{:db/id (:db/id property)
-                                            :logseq.property/deprecated? true}]
-          class-properties-tx-data (->> (d/datoms db :avet :logseq.property.class/properties (:db/id property))
-                                        (mapcat (fn [d]
-                                                  [[:db/retract (:e d) :logseq.property.class/properties (:db/id property)]
-                                                   [:db/add (:e d) :logseq.property.class/properties new-db-ident]])))
-          full-tx-data (concat
-                        new-property-tx-data
-                        retract-old-tx-data
-                        mark-old-property-as-deprecated
-                        class-properties-tx-data)]
-      (ldb/transact! conn full-tx-data {:outliner-op :update-property-type})
-      (d/entity @conn new-db-ident))
+  (let [new-db-ident' (create-user-property-ident-from-name (:block/title property))
+        m (create-property conn new-db-ident' nil
+                           (-> (select-keys schema [:logseq.property/type])
+                               (assoc :db/cardinality (:db/cardinality property)))
+                           {:property-name (:block/title property)
+                            :properties (->> (dissoc (:block/properties property)
+                                                     :logseq.property/type
+                                                     :db.type/ref
+                                                     :db/cardinality
+                                                     :logseq.property/default-value
+                                                     :logseq.property/scalar-default-value)
+                                             (map (fn [[k v]]
+                                                    (let [v' (cond
+                                                               (de/entity? v)
+                                                               (or (:db/id v) (:db/ident v))
+                                                               (every? de/entity? v)
+                                                               (map (fn [v] (or (:db/id v) (:db/ident v))) v)
+                                                               :else
+                                                               v)]
+                                                      [k v'])))
+                                             (into {}))})
+        new-db-ident (:db-ident m)
+        new-property-tx-data (:tx-data m)
+        db @conn
+        retract-old-tx-data (->> (d/datoms db :avet db-ident)
+                                 (map (fn [d]
+                                        [:db/retract (:e d) db-ident])))
+        mark-old-property-as-deprecated [{:db/id (:db/id property)
+                                          :logseq.property/deprecated? true}]
+        class-properties-tx-data (->> (d/datoms db :avet :logseq.property.class/properties (:db/id property))
+                                      (mapcat (fn [d]
+                                                [[:db/retract (:e d) :logseq.property.class/properties (:db/id property)]
+                                                 [:db/add (:e d) :logseq.property.class/properties new-db-ident]])))
+        full-tx-data (concat
+                      new-property-tx-data
+                      retract-old-tx-data
+                      mark-old-property-as-deprecated
+                      class-properties-tx-data)]
+    (ldb/transact! conn full-tx-data {:outliner-op :update-property-type})
+    (d/entity @conn new-db-ident)))
+
+(defn- update-property
+  [conn db-ident property schema {:keys [property-name properties]}]
+  (if (and (:logseq.property/type schema)
+           (not= (:logseq.property/type schema)
+                 (:logseq.property/type property)))
+    (update-property-type! conn property schema db-ident)
     (do
       (when (and (some? property-name) (not= property-name (:block/title property)))
         (outliner-validate/validate-page-title property-name {:node property})
