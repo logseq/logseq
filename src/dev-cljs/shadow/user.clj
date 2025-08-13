@@ -19,11 +19,7 @@
 ;; Get the runtime id from http://localhost:9630/runtimes, pick the one which shows `browser-worker`
 (defn worker-repl
   ([]
-   (when-let [runtime-id (->> (api/repl-runtimes :workers)
-                              (filter (fn [runtime] (= :browser-worker (:host runtime))))
-                              (map :client-id)
-                              (apply max))]
-     (worker-repl runtime-id)))
+   (worker-repl :old))
   ([runtime-id-or-which]
    (assert runtime-id-or-which "runtime-id shouldn't be empty")
    (if

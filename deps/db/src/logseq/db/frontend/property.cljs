@@ -543,9 +543,6 @@
      :logseq.property.history/scalar-value {:title "History scalar value"
                                             :schema {:type :any
                                                      :hide? true}}
-     :logseq.property/created-by {:title "Node created by(deprecated)"
-                                  :schema {:type :string
-                                           :hide? true}}
      :logseq.property/created-by-ref {:title "Node created by"
                                       :schema {:type :entity
                                                :hide? true}
