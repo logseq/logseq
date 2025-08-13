@@ -480,7 +480,7 @@
                                                    (:logseq.property.view/feature-type view-entity))
                                         (:logseq.property/query view-entity))
                                    [{:id :block/page
-                                     :name "Block Page"}])
+                                     :name "Page"}])
                                  (filter (fn [column]
                                            (when (:id column)
                                              (when-let [p (db/entity (:id column))]
