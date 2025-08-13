@@ -69,12 +69,12 @@
     :args->opts [:graphs] :coerce {:graphs []} :require [:graphs]}
    {:cmds ["search"]
     :fn (lazy-load-fn 'logseq.cli.commands.search/search)
-    :desc "Search current DB graph"
-    :args->opts [:search-terms] :coerce {:search-terms []} :require [:search-terms]
+    :desc "Search DB graph"
+    :args->opts [:graph :search-terms] :coerce {:search-terms []} :require [:graph]
     :spec cli-spec/search}
    {:cmds ["query"] :desc "Query DB graph(s)"
     :fn (lazy-load-fn 'logseq.cli.commands.query/query)
-    :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph :args]
+    :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph]
     :spec cli-spec/query}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)

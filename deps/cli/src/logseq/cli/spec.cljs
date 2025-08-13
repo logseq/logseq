@@ -28,12 +28,13 @@
    :properties-readable {:alias :p
                          :coerce :boolean
                          :desc "Make properties on entity queries show property values instead of ids"}
+   :title-query {:alias :t
+                 :desc "Invokes local query on :block/title"}
    :api-query-token {:alias :a
                      :desc "Query current graph with api server token"}})
 
 (def search
   {:api-query-token {:alias :a
-                     :require true
                      :desc "Api server token"}
    :raw {:alias :r
          :desc "Print raw response"}
