@@ -167,10 +167,6 @@
                     (not (mobile-util/native-platform?))))
      (def web-platform? nfs?)
      (def plugin-platform? (or (and web-platform? (not common-config/PUBLISHING)) (electron?)))))
-#?(:cljs
-   (defn file-protocol?
-     []
-     (string/starts-with? js/window.location.href "file://")))
 
 #?(:cljs
    (def format common-util/format))
@@ -1104,7 +1100,7 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-;; FIXME: drain-chan was copied from frontend.worker.util due to shadow-cljs compile bug
+;; FIXME: drain-chan was copied from frontend.worker-common.util due to shadow-cljs compile bug
 #?(:cljs
    (defn drain-chan
      "drop all stuffs in CH, and return all of them"

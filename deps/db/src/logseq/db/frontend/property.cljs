@@ -543,9 +543,6 @@
      :logseq.property.history/scalar-value {:title "History scalar value"
                                             :schema {:type :any
                                                      :hide? true}}
-     :logseq.property/created-by {:title "Node created by(deprecated)"
-                                  :schema {:type :string
-                                           :hide? true}}
      :logseq.property/created-by-ref {:title "Node created by"
                                       :schema {:type :entity
                                                :hide? true}
@@ -559,7 +556,14 @@
                                            :schema {:type :class
                                                     :cardinality :many
                                                     :public? true}
-                                           :queryable? true})))
+                                           :queryable? true}
+     :logseq.property.embedding/hnsw-label-updated-at {:title "HNSW label updated-at"
+                                                       :schema {:type :datetime
+                                                                :public? false
+                                                                :hide? true}
+                                                       :rtc {:rtc/ignore-attr-when-init-upload true
+                                                             :rtc/ignore-attr-when-init-download true
+                                                             :rtc/ignore-attr-when-syncing true}})))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
@@ -611,7 +615,7 @@
     "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table" "logseq.property.node"
     "logseq.property.code" "logseq.property.repeat"
     "logseq.property.journal" "logseq.property.class" "logseq.property.view"
-    "logseq.property.user" "logseq.property.history"})
+    "logseq.property.user" "logseq.property.history" "logseq.property.embedding"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

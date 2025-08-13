@@ -330,9 +330,13 @@
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
         has-children? (db/has-children? (:block/uuid current-block))
+        library? (:library? config)
         sibling? (cond
                    ref-query-top-block?
                    false
+
+                   (and library? (ldb/page? current-block))
+                   true
 
                    (boolean? sibling?)
                    sibling?
@@ -342,7 +346,6 @@
 
                    :else
                    (not has-children?))
-        library? (:library? config)
         new-block' (if library?
                      (-> new-block
                          (-> (assoc :block/tags #{:logseq.class/Page}
@@ -857,7 +860,7 @@
                        (ui-outliner-tx/transact!
                         transact-opts
                         (when (seq children)
-                          (outliner-op/move-blocks! children prev-block false))
+                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
                         (delete-block-aux! block)
                         (save-block! repo prev-block new-content {})))))
 
@@ -867,11 +870,29 @@
                    (delete-block-aux! block)))))))))))
 
 (defn move-blocks!
-  [blocks target sibling?]
+  [blocks target opts]
   (when (seq blocks)
     (ui-outliner-tx/transact!
      {:outliner-op :move-blocks}
-     (outliner-op/move-blocks! blocks target sibling?))))
+     (outliner-op/move-blocks! blocks target opts))))
+
+(defn move-selected-blocks
+  [e]
+  (util/stop e)
+  (let [block-ids (or (seq (state/get-selection-block-ids))
+                      (when-let [id (:block/uuid (state/get-edit-block))]
+                        [id]))]
+    (if (seq block-ids)
+      (let [blocks (->> (map (fn [id] (db/entity [:block/uuid id])) block-ids)
+                        block-handler/get-top-level-blocks)]
+        (route-handler/go-to-search! :nodes
+                                     {:action :move-blocks
+                                      :blocks blocks
+                                      :trigger (fn [chosen]
+                                                 (state/pub-event! [:editor/hide-action-bar])
+                                                 (state/clear-selection!)
+                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))}))
+      (notification/show! "There's no block selected, please select blocks first." :warning))))
 
 (defn delete-block!
   [repo]
@@ -1281,6 +1302,10 @@
   (some->> (shui-popup/get-popups)
            (some #(some-> % (:id) (str) (string/includes? (str id))))))
 
+(defn dialog-exists?
+  [id]
+  (shui-dialog/get-modal id))
+
 (defn show-action-bar!
   [& {:keys [delay]
       :or {delay 200}}]
@@ -1641,7 +1666,12 @@
 (defn get-matched-classes
   "Return matched classes except the root tag"
   [q]
-  (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+  (let [editing-block (some-> (state/get-edit-block) :db/id db/entity)
+        non-page-block? (and editing-block (not (ldb/page? editing-block)))
+        all-classes (cond-> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                      non-page-block?
+                      (conj (db/entity :logseq.class/Page)))
+        classes (->> all-classes
                      (mapcat (fn [class]
                                (conj (:block/alias class) class)))
                      (common-util/distinct-by :db/id)
@@ -3337,18 +3367,19 @@
 
 (defn open-selected-block!
   [direction e]
-  (let [selected-blocks (state/get-selection-blocks)
-        f (case direction :left first :right last)
-        node (some-> selected-blocks f)]
-    (if (some-> node (dom/has-class? "block-add-button"))
-      (.click node)
-      (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
-        (util/stop e)
-        (let [block {:block/uuid block-id}
-              left? (= direction :left)
-              opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
-                    :event e}]
-          (edit-block! block (if left? 0 :max) opts))))))
+  (when-not (auto-complete?)
+    (let [selected-blocks (state/get-selection-blocks)
+          f (case direction :left first :right last)
+          node (some-> selected-blocks f)]
+      (if (some-> node (dom/has-class? "block-add-button"))
+        (.click node)
+        (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
+          (util/stop e)
+          (let [block {:block/uuid block-id}
+                left? (= direction :left)
+                opts {:container-id (some-> node (dom/attr "containerid") (parse-long))
+                      :event e}]
+            (edit-block! block (if left? 0 :max) opts)))))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
@@ -3957,8 +3988,8 @@
         (p/do!
          (when (seq children)
            (if-let [today-last-child (last (ldb/sort-by-order (:block/_parent today)))]
-             (move-blocks! children today-last-child true)
-             (move-blocks! children today false)))
+             (move-blocks! children today-last-child {:sibling? true})
+             (move-blocks! children today {:sibling? false})))
          (state/close-modal!)
          (mobile-state/set-popup! nil)
          (when (seq children)

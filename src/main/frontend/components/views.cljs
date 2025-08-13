@@ -293,7 +293,8 @@
         (let [render (fn [block]
                        [:div
                         (inline-title
-                         {:table? true}
+                         {:table? true
+                          :block/uuid (:block/uuid block)}
                          (some->> (:block/title block)
                                   string/trim
                                   string/split-lines
@@ -979,7 +980,7 @@
    {:value "Custom date"
     :label "Custom date"}])
 
-(rum/defc filter-property < rum/static
+(rum/defc ^:large-vars/cleanup-todo filter-property < rum/static
   [view-entity columns {:keys [data-fns] :as table} opts]
   (let [[property set-property!] (rum/use-state nil)
         [values set-values!] (rum/use-state nil)
@@ -1075,7 +1076,24 @@
                                                              :filters filters'})))})))
                    :else
                    option)]
-      (select/select option))))
+      (if (and property (not (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
+        [:div.flex.flex-col.gap-1.text-sm
+         (select/select option)
+         (shui/button {:variant :ghost :size :sm :class "justify-start"
+                       :on-click (fn []
+                                   (let [filters' (conj (:filters filters) [(:db/ident property) :is :empty])]
+                                     (set-filters! {:or? (:or? filters)
+                                                    :filters filters'})))}
+                      [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                       "Is Empty"])
+         (shui/button {:variant :ghost :size :sm :class "justify-start"
+                       :on-click (fn []
+                                   (let [filters' (conj (:filters filters) [(:db/ident property) :is-not :empty])]
+                                     (set-filters! {:or? (:or? filters)
+                                                    :filters filters'})))}
+                      [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                       "Is Not Empty"])]
+        (select/select option)))))
 
 (rum/defc filter-properties < rum/static
   [view-entity columns table opts]
@@ -1110,11 +1128,13 @@
 
 (defn get-property-operators
   [property]
-  (if (datetime-property? property)
+  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
     [:before :after]
     (concat
      [:is :is-not]
      (case (:logseq.property/type property)
+       (:datetime)
+       [:before :after]
        (:default :url :node)
        [:text-contains :text-not-contains]
        (:date)
@@ -1280,8 +1300,22 @@
                                         many?
                                         (assoc
                                          :multiple-choices? true
-                                         :selected-choices value))]
-                           (select/select option)))
+                                         :selected-choices (when (coll? value) value)))]
+                           (if (and (contains? #{:is :is-not} operator)
+                                    (not (contains? #{:block/created-at :block/updated-at} (:db/ident property))))
+                             [:div.flex.flex-col.gap-1
+                              (select/select option)
+                              (shui/button {:variant :ghost :size :sm :class "justify-start"
+                                            :on-click (fn []
+                                                        (let [new-filters (update filters :filters
+                                                                                  (fn [col]
+                                                                                    (update col idx
+                                                                                            (fn [[property operator _value]]
+                                                                                              [property operator :empty]))))]
+                                                          (set-filters! new-filters)))}
+                                           [:span.opacity-75.hover:opacity-100.font-normal.text-sm
+                                            "Empty"])]
+                             (select/select option))))
                        {:align :start})))}
        (let [value (cond
                      (uuid? value)
@@ -1304,6 +1338,9 @@
 
             (boolean? value)
             [:div (str value)]
+
+            (= value :empty)
+            [:div "Empty"]
 
             (seq value)
             (->> (map (fn [v] [:div (get-property-value-content v)]) value)

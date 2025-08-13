@@ -44,8 +44,9 @@
                                                 (into {}))]
                              [[:db/add (:db/id entity) :logseq.property.table/sized-columns new-value]])
 
-                           (:block.temp/fully-loaded? entity)
-                           [[:db/retract (:db/id entity) :block.temp/fully-loaded?]]
+                           (some (fn [k] (= "block.temp" (namespace k))) (keys entity))
+                           (let [ks (filter (fn [k] (= "block.temp" (namespace k))) (keys entity))]
+                             (mapv (fn [k] [:db/retract (:db/id entity) k]) ks))
                            (and (:block/page entity) (not (:block/parent entity)))
                            [[:db/add (:db/id entity) :block/parent (:db/id (:block/page entity))]]
                            (and (not (:block/page entity)) (not (:block/parent entity)) (not (:block/name entity)))
@@ -56,6 +57,10 @@
                            [[:db/add (:db/id entity) :logseq.property.class/extends :logseq.class/Root]]
                            (and (or (ldb/class? entity) (ldb/property? entity)) (ldb/internal-page? entity))
                            [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
+
+                           (and (:logseq.property.asset/remote-metadata entity) (nil? (:logseq.property.asset/type entity)))
+                           [[:db/retractEntity (:db/id entity)]]
+
                            :else
                            nil)))
                      errors)
@@ -82,7 +87,7 @@
                                                 [[:db/retract (:e d) (:a d) (:v d)]]))))))
         tx-data (concat fix-tx-data class-as-properties)]
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:fix-db? true}))))
+      (d/transact! conn tx-data {:fix-db? true}))))
 
 (defn validate-db
   [conn]

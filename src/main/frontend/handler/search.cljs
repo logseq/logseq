@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
             [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -11,7 +12,9 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
+            [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
 (defn sanity-search-content
@@ -115,11 +118,22 @@
    (rebuild-indices! false))
   ([notice?]
    (println "Starting to rebuild search indices!")
-   (p/let [_ (search/rebuild-indices!)]
-     (when notice?
-       (notification/show!
-        "Search indices rebuilt successfully!"
-        :success)))))
+   (when-let [repo (state/get-current-repo)]
+     (p/do!
+      (search/rebuild-indices!)
+      (when (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)
+        (c.m/run-task
+          ::rebuild-embeddings
+          (m/sp
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
+          :succ (constantly nil)))
+      (when notice?
+        (notification/show!
+         "Search indices rebuilt successfully!"
+         :success))))))
 
 (defn highlight-exact-query
   [content q]

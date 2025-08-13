@@ -13,7 +13,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
-(defonce db-version-prefix "logseq_db_")
+(defonce db-version-prefix common-config/db-version-prefix)
 
 (def ^:private write-handlers (cljs-bean.transit/writer-handlers))
 (def ^:private read-handlers {})
@@ -133,4 +133,5 @@
            (fn [db-ident] [:db/retractEntity db-ident])
            [:logseq.kv/graph-uuid
             :logseq.kv/graph-local-tx
-            :logseq.kv/remote-schema-version])))
+            :logseq.kv/remote-schema-version
+            :logseq.kv/graph-text-embedding-model-name])))

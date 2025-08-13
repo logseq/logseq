@@ -81,6 +81,8 @@
     (or (block-title pvalue)
         (:logseq.property/value pvalue))))
 
+(defonce ignored-properties [:logseq.property/created-by-ref :logseq.property.embedding/hnsw-label-updated-at])
+
 (defn- buildable-properties
   "Originally copied from db-test/readable-properties. Modified so that property values are
    valid sqlite.build EDN"
@@ -104,7 +106,7 @@
                           ent-properties (when (and (not (:block/closed-value-property pvalue)) (seq ent-properties*))
                                            (buildable-properties db' ent-properties* properties-config' options'))]
                       (build-pvalue-entity-default db ent-properties pvalue options'))))))]
-    (->> ent-properties
+    (->> (apply dissoc ent-properties ignored-properties)
          (map (fn [[k v]]
                 [k
                  ;; handle user closed value properties. built-ins have idents and shouldn't be handled here

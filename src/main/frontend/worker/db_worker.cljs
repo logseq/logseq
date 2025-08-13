@@ -1,6 +1,6 @@
 (ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
-  (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
+  (:require ["@sqlite.org/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
             [cljs.cache :as cache]
@@ -13,11 +13,13 @@
             [frontend.common.graph-view :as graph-view]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db.validate :as worker-db-validate]
+            [frontend.worker.embedding :as embedding]
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.file.reset :as file-reset]
@@ -31,7 +33,6 @@
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
             [frontend.worker.thread-atom]
-            [frontend.worker.util :as worker-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
@@ -69,8 +70,8 @@
   [graph]
   (when-not @*publishing?
     (or (worker-state/get-opfs-pool graph)
-        (p/let [^js pool (.installOpfsSAHPoolVfs @*sqlite #js {:name (worker-util/get-pool-name graph)
-                                                               :initialCapacity 20})]
+        (p/let [^js pool (.installOpfsSAHPoolVfs ^js @*sqlite #js {:name (worker-util/get-pool-name graph)
+                                                                   :initialCapacity 20})]
           (swap! *opfs-pools assoc graph pool)
           pool))))
 
@@ -78,17 +79,10 @@
   []
   (when-not @*sqlite
     (p/let [href (.. js/location -href)
-            electron? (string/includes? href "electron=true")
             publishing? (string/includes? href "publishing=true")
-
-            _ (reset! *publishing? publishing?)
-            base-url (str js/self.location.protocol "//" js/self.location.host)
-            sqlite-wasm-url (if electron?
-                              (js/URL. "sqlite3.wasm" (.. js/location -href))
-                              (str base-url (string/replace js/self.location.pathname "db-worker.js" "")))
-            sqlite (sqlite3InitModule (clj->js {:url sqlite-wasm-url
-                                                :print js/console.log
+            sqlite (sqlite3InitModule (clj->js {:print js/console.log
                                                 :printErr js/console.error}))]
+      (reset! *publishing? publishing?)
       (reset! *sqlite sqlite)
       nil)))
 
@@ -196,7 +190,7 @@
   (when search (.close search))
   (when client-ops (.close client-ops))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool))
+    (.pauseVfs pool))
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
@@ -230,7 +224,7 @@
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
-                (.acquireAccessHandles pool))
+                (.unpauseVfs pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
             search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
             client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops-" repo-path))]
@@ -340,9 +334,7 @@
             db-dirs (filter (fn [file]
                               (string/starts-with? (.-name file) db-dir-prefix))
                             current-dir-dirs)]
-      (prn :debug
-           :db-dirs (map #(.-name %) db-dirs)
-           :all-dirs (map #(.-name %) current-dir-dirs))
+      (log/info :db-dirs (map #(.-name %) db-dirs) :all-dirs (map #(.-name %) current-dir-dirs))
       (p/all (map (fn [dir]
                     (p/let [graph-name (-> (.-name dir)
                                            (string/replace-first ".logseq-pool-" "")
@@ -388,8 +380,14 @@
   (reset! worker-state/*rtc-ws-url rtc-ws-url)
   (init-sqlite-module!))
 
+(def-thread-api :thread-api/set-infer-worker-proxy
+  [infer-worker-proxy]
+  (reset! worker-state/*infer-worker infer-worker-proxy)
+  nil)
+
 ;; [graph service]
 (defonce *service (atom []))
+
 (defonce fns {"remoteInvoke" thread-api/remote-function})
 
 (defn- start-db!
@@ -411,6 +409,12 @@
   [repo inputs]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (apply d/q (first inputs) @conn (rest inputs))))
+
+(def-thread-api :thread-api/datoms
+  [repo & args]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [result (apply d/datoms @conn args)]
+      (map (fn [d] [(:e d) (:a d) (:v d) (:tx d) (:added d)]) result))))
 
 (def-thread-api :thread-api/pull
   [repo selector id]
@@ -458,24 +462,25 @@
 
 (defn- search-blocks
   [repo q option]
-  (p/let [search-db (get-search-db repo)
-          conn (worker-state/get-datascript-conn repo)]
+  (let [search-db (get-search-db repo)
+        conn (worker-state/get-datascript-conn repo)]
     (search/search-blocks repo conn search-db q option)))
 
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
-  (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [db @conn
-          block (d/entity db id)]
-      (if unlinked?
-        (p/let [title (string/lower-case (:block/title block))
-                result (search-blocks repo title {:limit 100})]
-          (boolean (some (fn [b]
-                           (let [block (d/entity db (:db/id b))]
-                             (and (not= id (:db/id block))
-                                  (not ((set (map :db/id (:block/refs block))) id))
-                                  (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-        (some? (first (common-initial-data/get-block-refs db (:db/id block))))))))
+  (m/sp
+    (when-let [conn (worker-state/get-datascript-conn repo)]
+      (let [db @conn
+            block (d/entity db id)]
+        (if unlinked?
+          (let [title (string/lower-case (:block/title block))
+                result (m/? (search-blocks repo title {:limit 100}))]
+            (boolean (some (fn [b]
+                             (let [block (d/entity db (:db/id b))]
+                               (and (not= id (:db/id block))
+                                    (not ((set (map :db/id (:block/refs block))) id))
+                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -545,7 +550,7 @@
 (def-thread-api :thread-api/release-access-handles
   [repo]
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
-    (.releaseAccessHandles pool)
+    (.pauseVfs pool)
     nil))
 
 (def-thread-api :thread-api/db-exists
@@ -724,6 +729,34 @@
       (gc-sqlite-dbs! db client-ops conn {:full-gc? true})
       nil)))
 
+(def-thread-api :thread-api/vec-search-embedding-model-info
+  [repo]
+  (embedding/task--embedding-model-info repo))
+
+(def-thread-api :thread-api/vec-search-init-embedding-model
+  [repo]
+  (js/Promise. (embedding/task--init-embedding-model repo)))
+
+(def-thread-api :thread-api/vec-search-load-model
+  [repo model-name]
+  (js/Promise. (embedding/task--load-model repo model-name)))
+
+(def-thread-api :thread-api/vec-search-embedding-graph
+  [repo opts]
+  (embedding/embedding-graph! repo opts))
+
+(def-thread-api :thread-api/vec-search-search
+  [repo query-string nums-neighbors]
+  (embedding/task--search repo query-string nums-neighbors))
+
+(def-thread-api :thread-api/vec-search-cancel-indexing
+  [repo]
+  (embedding/cancel-indexing repo))
+
+(def-thread-api :thread-api/vec-search-update-index-info
+  [repo]
+  (js/Promise. (embedding/task--update-index-info! repo)))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -830,8 +863,9 @@
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
-                                (or (contains? #{:thread-api/sync-app-state} method-k)
-                                    (nil? service))
+                                (or
+                                 (contains? #{:thread-api/set-infer-worker-proxy :thread-api/sync-app-state} method-k)
+                                 (nil? service))
                                 ;; only proceed down this branch before shared-service is initialized
                                 (apply f args)
 

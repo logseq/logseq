@@ -6,8 +6,6 @@
             ["path" :as node-path]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            ;; FIXME: datascript.core has to come before datascript.storage or else nbb fails
-            [datascript.core]
             [datascript.storage :refer [IStorage]]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.file-based.schema :as file-schema]
@@ -114,4 +112,5 @@
                              ;; $ORIGINAL_PWD used by bb tasks to correct current dir
                                (node-path/join (or js/process.env.ORIGINAL_PWD ".") %))]
         ((juxt node-path/dirname node-path/basename) (resolve-path' graph-dir-or-path)))
+      ;; TODO: Reuse with get-db-graphs-dir when there is a db ns that is usable by electron i.e. no better-sqlite3
       [(node-path/join (os/homedir) "logseq" "graphs") graph-dir-or-path])))

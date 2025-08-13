@@ -249,8 +249,7 @@
        (p/do!
         (ui-outliner-tx/transact!
          {:outliner-op :save-block}
-         (doseq [block blocks]
-           (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)))
+         (db-property-handler/batch-delete-property-value! (map :db/id blocks) (:db/ident property) value))
         (when (or (not many?)
                   ;; values will be cleared
                   (and many? (<= (count (get block (:db/ident property))) 1)))
@@ -440,9 +439,11 @@
                          hours (.getHours date)
                          minutes (.getMinutes date)]
                      [:span.select-none
-                      (str (util/zero-pad hours)
-                           ":"
-                           (util/zero-pad minutes))])]]
+                      (if (= 0 hours minutes)
+                        (ui/icon "edit" {:size 14 :class "text-muted-foreground hover:text-foreground align-middle"})
+                        (str (util/zero-pad hours)
+                             ":"
+                             (util/zero-pad minutes)))])]]
       (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} property-id))
         (overdue date content)
         content))))
@@ -696,10 +697,13 @@
                   excluded-options)
 
                 (contains? #{:class :property} property-type)
-                (let [classes (model/get-all-classes
-                               repo
-                               {:except-root-class? true
-                                :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})]
+                (let [classes (cond->
+                               (model/get-all-classes
+                                repo
+                                {:except-root-class? true
+                                 :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                                (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
+                                (conj (db/entity :logseq.class/Page)))]
                   (if (= property-type :class)
                     classes
                     (property-handler/get-class-property-choices)))
@@ -746,22 +750,22 @@
                                     node)
                              id (:db/id node)
                              [header label] (if (integer? id)
-                                              (let [node-title (if (seq (:logseq.property/classes property))
-                                                                 (db-content/recur-replace-uuid-in-block-title node)
-                                                                 (block-handler/block-unique-title node))
-                                                    title (subs node-title 0 256)
-                                                    node (or (db/entity id) node)
-                                                    icon (get-node-icon node)
-                                                    header (when-not (db/page? node)
-                                                             (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-                                                               [:div.text-xs.opacity-70
-                                                                (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
-                                                    label [:div.flex.flex-row.items-center.gap-1
-                                                           (when-not (or (:logseq.property/classes property)
-                                                                         (contains? #{:class :property} (:logseq.property/type property)))
-                                                             (ui/icon icon {:size 14}))
-                                                           [:div title]]]
-                                                [header label])
+                                              (when-let [node-title (if (seq (:logseq.property/classes property))
+                                                                      (db-content/recur-replace-uuid-in-block-title node)
+                                                                      (block-handler/block-unique-title node))]
+                                                (let [title (subs node-title 0 256)
+                                                      node (or (db/entity id) node)
+                                                      icon (get-node-icon node)
+                                                      header (when-not (db/page? node)
+                                                               (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+                                                                 [:div.text-xs.opacity-70
+                                                                  (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
+                                                      label [:div.flex.flex-row.items-center.gap-1
+                                                             (when-not (or (:logseq.property/classes property)
+                                                                           (contains? #{:class :property} (:logseq.property/type property)))
+                                                               (ui/icon icon {:size 14}))
+                                                             [:div title]]]
+                                                  [header label]))
                                               [nil (:block/title node)])]
                          (assoc node
                                 :header header
@@ -769,7 +773,8 @@
                                 :label label
                                 :value id
                                 :disabled? (and tags? (contains?
-                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard} ldb/internal-tags)
+                                                       (set/union #{:logseq.class/Journal :logseq.class/Whiteboard}
+                                                                  (set/difference ldb/internal-tags #{:logseq.class/Page}))
                                                        (:db/ident node)))))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
@@ -786,13 +791,12 @@
                                               "Set alias"
                                               :else
                                               (str "Set " (:block/title property)))
-                 :show-new-when-not-exact-match? (if (or extends-property?
-                                                         ;; Don't allow creating private tags
-                                                         (and (= :block/tags (:db/ident property))
-                                                              (seq (set/intersection (set (map :db/ident classes'))
-                                                                                     ldb/private-tags))))
-                                                   false
-                                                   true)
+                 :show-new-when-not-exact-match? (not
+                                                  (or (and extends-property? (contains? (set children-pages) (:db/id block)))
+                                                      ;; Don't allow creating private tags
+                                                      (and (= :block/tags (:db/ident property))
+                                                           (seq (set/intersection (set (map :db/ident classes'))
+                                                                                  ldb/private-tags)))))
                  :extract-chosen-fn :value
                  :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
@@ -822,6 +826,10 @@
                                          :label (:block/title e)}))))
                                   (when-not add-tag-property?
                                     (log/error :msg "No :db/id found or created for chosen" :chosen chosen)))))})
+
+                (= :block/tags (:db/ident property))
+                (assoc :exact-match-exclude-items
+                       (set (map (fn [ident] (:block/title (db/entity ident))) ldb/private-tags)))
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
@@ -1035,6 +1043,7 @@
              (blocks-container config (ldb/sort-by-order value-block))
              (rum/with-key
                (block-container (assoc config
+                                       :block/uuid (:block/uuid value-block)
                                        :property-default-value? default-value?) value-block)
                (str (:db/id block) "-" (:db/id property) "-" (:db/id value-block)))))]
 
@@ -1236,12 +1245,16 @@
         set-property-value! (fn [value & {:keys [exit-editing?]
                                           :or {exit-editing? true}}]
                               (p/do!
-                               (when (and (not (string/blank? value))
-                                          (not= (string/trim (str number-value))
-                                                (string/trim (str value))))
-                                 (db-property-handler/set-block-property! (:db/id block)
-                                                                          (:db/ident property)
-                                                                          value))
+                               (if (string/blank? value)
+                                 (db-property-handler/remove-block-property! (:db/id block) (:db/ident property))
+                                 (when (not= (string/trim (str number-value))
+                                             (string/trim (str value)))
+                                   (db-property-handler/set-block-property! (:db/id block)
+                                                                            (:db/ident property)
+                                                                            value)))
+
+                               (set-value! (str (db-property/property-value-content
+                                                 (get (db/entity (:db/id block)) (:db/ident property)))))
 
                                (when exit-editing?
                                  (set-editing! false))))]
@@ -1266,9 +1279,7 @@
                       (reset! *value (util/evalue e)))
          :on-blur (fn [_e]
                     (p/do!
-                     (set-property-value! value)
-                     (when (not= value (db-property/property-value-content (db/entity (:db/id value-block))))
-                       (set-value! (db-property/property-value-content value-block)))))
+                     (set-property-value! value)))
          :on-key-down (fn [e]
                         (let [input (rum/deref *input-ref)
                               pos (cursor/pos input)

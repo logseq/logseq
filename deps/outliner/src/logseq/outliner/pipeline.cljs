@@ -50,7 +50,7 @@
                                    (recur (into parent-refs (:block-ref-ids parent))
                                           (:parent-id parent))
                                    ;; exits when top-level parent is reached
-                                   parent-refs)))})
+                                   (remove nil? parent-refs))))})
                            children-maps)]
     children-refs))
 
@@ -87,10 +87,13 @@
                        old-refs (if db-before
                                   (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
                                   #{})
-                       new-refs (set (concat
-                                      (some-> (:db/id (:block/page block)) vector)
-                                      (map :db/id (:block/refs block))
-                                      parents-refs))
+                       new-refs (->>
+                                 (concat
+                                  (some-> (:db/id (:block/page block)) vector)
+                                  (map :db/id (:block/refs block))
+                                  parents-refs)
+                                 (remove nil?)
+                                 set)
                        refs-changed? (not= old-refs new-refs)
                        children (when refs-changed?
                                   (when-not page?
@@ -181,18 +184,12 @@
                                              (and (coll? v) (every? page-or-object? v))
                                              (map :db/id v)
 
+                                             (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident (d/entity db property)))
+                                             (when-let [journal-day (get-journal-day-from-long db v)]
+                                               [journal-day])
+
                                              :else
-                                             (let [datetime? (= :datetime (:logseq.property/type (d/entity db property)))]
-                                               (cond
-                                                 (and datetime? (coll? v))
-                                                 (keep #(get-journal-day-from-long db %) v)
-
-                                                 datetime?
-                                                 (when-let [journal-day (get-journal-day-from-long db v)]
-                                                   [journal-day])
-
-                                                 :else
-                                                 nil))))))
+                                             nil))))
 
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]

@@ -351,3 +351,20 @@
            #"Extends cycle"
            (outliner-property/set-block-property! conn (:db/id class3) :logseq.property.class/extends (:db/id class1)))
           "Extends cycle"))))
+
+(deftest delete-property-value!
+  (let [conn (db-test/create-conn-with-blocks
+              {:classes {:C1 {}
+                         :C2 {}
+                         :C3 {:build/class-extends [:C1 :C2]}}})]
+    (outliner-property/delete-property-value! conn :user.class/C3 :logseq.property.class/extends
+                                              (:db/id (d/entity @conn :user.class/C2)))
+    (is (= [:user.class/C1]
+           (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
+        "Specific property value is deleted")
+
+    (outliner-property/delete-property-value! conn :user.class/C3 :logseq.property.class/extends
+                                              (:db/id (d/entity @conn :user.class/C1)))
+    (is (= [:logseq.class/Root]
+           (:logseq.property.class/extends (db-test/readable-properties (d/entity @conn :user.class/C3))))
+        "Extends property is restored back to Root")))

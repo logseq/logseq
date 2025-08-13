@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker-common.util :as worker-util]
             [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
@@ -20,7 +21,6 @@
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.util :as worker-util]
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
@@ -41,7 +41,7 @@
   and filter messages with :req-id=
   - `push-updates`
   - `online-users-updated`.
-  - `push-asset-upload-updates`"
+  - `push-asset-block-updates`"
   [get-ws-create-task]
   (m/ap
     (loop []
@@ -52,7 +52,7 @@
                                  (contains?
                                   #{"online-users-updated"
                                     "push-updates"
-                                    "push-asset-upload-updates"}
+                                    "push-asset-block-updates"}
                                   (:req-id data))))
                        (ws/recv-flow ws)))
                 (catch js/CloseEvent _
@@ -123,7 +123,7 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
-  `:remote-asset-update`: remote asset-updates from server
+  `:remote-asset-block-update`: remote asset-updates from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
   `:online-users-updated`: online users info updated
   `:pull-remote-updates`: pull remote updates
@@ -134,7 +134,7 @@
                                     (case (:req-id data)
                                       "push-updates" {:type :remote-update :value data}
                                       "online-users-updated" {:type :online-users-updated :value data}
-                                      "push-asset-upload-updates" {:type :remote-asset-update :value data})))
+                                      "push-asset-block-updates" {:type :remote-asset-block-update :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
@@ -259,15 +259,12 @@
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
-               :remote-update
+               (:remote-update :remote-asset-block-update)
                (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
                     (catch :default e
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
                               repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
-               :remote-asset-update
-               (m/? (r.asset/new-task--emit-remote-asset-updates-from-push-asset-upload-updates
-                     repo @conn (:value event)))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
@@ -307,10 +304,11 @@
    :canceler nil
    :*last-stop-exception nil})
 
+(def ^:private rtc-loop-metadata-keys (set (keys empty-rtc-loop-metadata)))
+
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata
                                             :validator
-                                            (fn [v] (= (set (keys empty-rtc-loop-metadata))
-                                                       (set (keys v))))))
+                                            (fn [v] (= rtc-loop-metadata-keys (set (keys v))))))
 
 (defn- validate-rtc-start-conditions
   "Return exception if validation failed"

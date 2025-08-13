@@ -56,7 +56,7 @@
     }
 
     h1.cp__settings-category-title {
-      @apply text-xl lowercase;
+      @apply text-xl;
     }
 
     h1.cp__settings-modal-title:first-letter,

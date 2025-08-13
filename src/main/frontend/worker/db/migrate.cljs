@@ -4,7 +4,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker-common.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -343,6 +343,17 @@
                      sqlite-create-graph/mark-block-as-built-in))]
     [page]))
 
+(defn- add-missing-page-name
+  [db]
+  (let [pages (d/datoms db :avet :block/name "")]
+    (keep
+     (fn [d]
+       (let [page (d/entity db (:e d))]
+         (when-not (string/blank? (:block/title page))
+           {:db/id (:db/id page)
+            :block/name (common-util/page-name-sanity-lc (:block/title page))})))
+     pages)))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -354,7 +365,9 @@
    ["65.4" {:fix fix-using-properties-as-tags}]
    ["65.5" {:fix remove-block-order-for-tags}]
    ["65.6" {:fix update-extends-to-cardinality-many}]
-   ["65.7" {:fix add-quick-add-page}]])
+   ["65.7" {:fix add-quick-add-page}]
+   ["65.8" {:fix add-missing-page-name}]
+   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

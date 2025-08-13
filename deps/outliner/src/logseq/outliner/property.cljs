@@ -411,7 +411,9 @@
   (let [eid (->eid eid)
         block (d/entity @conn eid)
         property (d/entity @conn property-id)]
-    (validate-batch-deletion-of-property [block] property-id)
+    ;; Can skip for extends b/c below tx ensures it has a default value
+    (when-not (= :logseq.property.class/extends property-id)
+      (validate-batch-deletion-of-property [block] property-id))
     (when block
       (cond
         (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
@@ -518,22 +520,31 @@
                          {:outliner-op :upsert-property}))
         (d/entity @conn db-ident')))))
 
+(defn batch-delete-property-value!
+  "batch delete value when a property has multiple values"
+  [conn block-eids property-id property-value]
+  (when-let [property (d/entity @conn property-id)]
+    (when (and (db-property/many? property)
+               (not (some #(= property-id (:db/ident (d/entity @conn %))) block-eids)))
+      (when (= property-id :block/tags)
+        (outliner-validate/validate-tags-property-deletion @conn block-eids property-value))
+      (if (= property-id :block/tags)
+        (let [tx-data (map (fn [id] [:db/retract id property-id property-value]) block-eids)]
+          (ldb/transact! conn tx-data {:outliner-op :save-block}))
+        (doseq [block-eid block-eids]
+          (when-let [block (d/entity @conn block-eid)]
+            (let [current-val (get block property-id)
+                  fv (first current-val)]
+              (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
+                (remove-block-property! conn (:db/id block) property-id)
+                (ldb/transact! conn
+                               [[:db/retract (:db/id block) property-id property-value]]
+                               {:outliner-op :save-block})))))))))
+
 (defn delete-property-value!
   "Delete value if a property has multiple values"
   [conn block-eid property-id property-value]
-  (when-let [property (d/entity @conn property-id)]
-    (let [block (d/entity @conn block-eid)]
-      (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
-        (when (= property-id :block/tags)
-          (outliner-validate/validate-tags-property-deletion @conn [block-eid] property-value))
-
-        (let [current-val (get block property-id)
-              fv (first current-val)]
-          (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
-            (remove-block-property! conn (:db/id block) property-id)
-            (ldb/transact! conn
-                           [[:db/retract (:db/id block) property-id property-value]]
-                           {:outliner-op :save-block})))))))
+  (batch-delete-property-value! conn [block-eid] property-id property-value))
 
 (defn ^:api get-classes-parents
   [tags]
