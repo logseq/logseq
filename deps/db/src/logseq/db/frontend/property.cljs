@@ -563,11 +563,7 @@
                                                                 :hide? true}
                                                        :rtc {:rtc/ignore-attr-when-init-upload true
                                                              :rtc/ignore-attr-when-init-download true
-                                                             :rtc/ignore-attr-when-syncing true}}
-     ;; TODO: remove later
-     :logseq.property/test1 {:title "test1 property"
-                             :schema {:type :default
-                                      :public? true}})))
+                                                             :rtc/ignore-attr-when-syncing true}})))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"

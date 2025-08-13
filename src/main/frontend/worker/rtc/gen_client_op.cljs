@@ -171,11 +171,12 @@
 
 (defn generate-rtc-rename-db-ident-ops
   [rename-db-idents]
-  (assert (every? (fn [{:keys [db-ident new-db-ident]}]
-                    (and (keyword? db-ident) (keyword? new-db-ident)))
+  (assert (every? (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+                    (and (or (keyword? db-ident-or-block-uuid) (uuid? db-ident-or-block-uuid))
+                         (keyword? new-db-ident)))
                   rename-db-idents)
           rename-db-idents)
   (map
-   (fn [{:keys [db-ident new-db-ident]}]
-     [:rename-db-ident 0 {:db-ident db-ident :new-db-ident new-db-ident}])
+   (fn [{:keys [db-ident-or-block-uuid new-db-ident]}]
+     [:rename-db-ident 0 {:db-ident-or-block-uuid db-ident-or-block-uuid :new-db-ident new-db-ident}])
    rename-db-idents))

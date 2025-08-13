@@ -25,7 +25,7 @@
      [:op :keyword]
      [:t :int]
      [:value [:map
-              [:db-ident :keyword]
+              [:db-ident-or-block-uuid [:or :keyword :uuid]]
               [:new-db-ident :keyword]]]]]
    [:move
     [:catn
@@ -87,6 +87,7 @@
   and move it to its own namespace."
   {:block/uuid {:db/unique :db.unique/identity}
    :db-ident {:db/unique :db.unique/identity}
+   :db-ident-or-block-uuid {:db/unique :db.unique/identity}
    :local-tx {:db/index true}
    :graph-uuid {:db/index true}
    :aes-key-jwk {:db/index true}
@@ -249,19 +250,19 @@
   [ops]
   (let [op-type :rename-db-ident
         sorted-ops (sort-by second ops)
-        db-ident->op
+        db-ident-or-block-uuid->op
         (reduce
          (fn [r op]
            (let [[_op-type _t value] op
-                 db-ident (:db-ident value)]
-             (assoc r db-ident op)))
+                 db-ident-or-block-uuid (:db-ident-or-block-uuid value)]
+             (assoc r db-ident-or-block-uuid op)))
          {} sorted-ops)]
     (mapcat
-     (fn [[db-ident op]]
-       (let [tmpid (str db-ident "-rename-db-ident")]
-         [[:db/add tmpid :db-ident db-ident]
+     (fn [[db-ident-or-block-uuid op]]
+       (let [tmpid (str db-ident-or-block-uuid "-rename-db-ident")]
+         [[:db/add tmpid :db-ident-or-block-uuid db-ident-or-block-uuid]
           [:db/add tmpid op-type op]]))
-     db-ident->op)))
+     db-ident-or-block-uuid->op)))
 
 (defn- partition-ops
   "Return [:update-kv-value-ops :rename-db-ident-ops block-ops]"
@@ -328,18 +329,18 @@
 
 (defn- get-all-rename-db-ident-ops*
   [db]
-  (let [db-ident-datoms (d/datoms db :avet :db-ident)
-        es (map :e db-ident-datoms)]
+  (let [db-ident-or-block-uuid-datoms (d/datoms db :avet :db-ident-or-block-uuid)
+        es (map :e db-ident-or-block-uuid-datoms)]
     (->> (map (fn [e] [e (d/datoms db :eavt e)]) es)
          (keep (fn [[e datoms]]
                  (let [op-map (into {}
                                     (keep (fn [datom]
                                             (let [a (:a datom)]
-                                              (when (or (keyword-identical? :db-ident a)
+                                              (when (or (keyword-identical? :db-ident-or-block-uuid a)
                                                         (contains? db-ident-rename-op-types a))
                                                 [a (:v datom)]))))
                                     datoms)]
-                   (when (and (:db-ident op-map) (> (count op-map) 1))
+                   (when (and (:db-ident-or-block-uuid op-map) (> (count op-map) 1))
                      [e op-map]))))
          (into {}))))
 
