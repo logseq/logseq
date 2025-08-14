@@ -69,7 +69,8 @@
 (rum/defc popup < rum/reactive
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
-        quick-add? (= :ls-quick-add (:id opts))]
+        quick-add? (= :ls-quick-add (:id opts))
+        action-sheet? (= :action-sheet (:type opts))]
 
     (when open?
       (state/clear-edit!)
@@ -81,13 +82,13 @@
        :onPresentedChange (fn [v?]
                             (when (false? v?)
                               (js/setTimeout
-                                #(mobile-state/set-popup! nil) 300)
+                               #(mobile-state/set-popup! nil) 300)
                               (state/clear-edit!)
                               (state/pub-event! [:mobile/keyboard-will-hide])))}
-       (:modal-props opts))
-      (silkhq/bottom-sheet-portal
-        (silkhq/bottom-sheet-view
-          {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
+      (:modal-props opts))
+     (silkhq/bottom-sheet-portal
+      (silkhq/bottom-sheet-view
+       {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
         :inertOutside false
         :onTravelEnd (fn []
                        (when quick-add?
@@ -98,18 +99,18 @@
                                         (let [progress (gobj/get data "progress")]
                                           (js/Math.min (* progress 0.9) 0.9)))}}))
        (silkhq/bottom-sheet-content
-        {:class "flex flex-col items-center p-2"}
+        {:class (str "flex flex-col items-center p-2"
+                     (when-not (or quick-add? action-sheet?) " h-2/5"))}
         (silkhq/bottom-sheet-handle)
-         (let [title (or (:title opts) (when (string? content-fn) content-fn))
-               content (if (fn? content-fn) (content-fn)
-                         (if-let [buttons (and (= :action-sheet (:type opts))
-                                            (:buttons opts))]
-                           [:div.-mx-2
-                            (for [{:keys [role text]} buttons]
-                              (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
-                                             :data-role role}
-                                [:span.text-lg.flex.items-center text]))]
-                           (when-not (string? content-fn) content-fn)))]
-           [:div.w-full.app-silk-popup-content-inner.p-2
-            (when title [:h2.py-2.opacity-40 title])
-            content])))))))
+        (let [title (or (:title opts) (when (string? content-fn) content-fn))
+              content (if (fn? content-fn) (content-fn)
+                          (if-let [buttons (and action-sheet? (:buttons opts))]
+                            [:div.-mx-2
+                             (for [{:keys [role text]} buttons]
+                               (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
+                                              :data-role role}
+                                             [:span.text-lg.flex.items-center text]))]
+                            (when-not (string? content-fn) content-fn)))]
+          [:div.w-full.app-silk-popup-content-inner.p-2
+           (when title [:h2.py-2.opacity-40 title])
+           content])))))))
