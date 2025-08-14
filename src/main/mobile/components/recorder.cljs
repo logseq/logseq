@@ -54,7 +54,7 @@
             {:page (date/today)
              :container-id :unknown-container}))))))
 
-(rum/defc audio-recorder-aux
+(rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
   [{:keys [open?]}]
   (let [*wave-ref (rum/use-ref nil)
         *micid-ref (rum/use-ref nil)
