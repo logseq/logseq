@@ -48,6 +48,7 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
+      [:db/ident {:optional true} :keyword]
       [:page-name :string]
       [:block/title :string]]]]
    [:remove-page
