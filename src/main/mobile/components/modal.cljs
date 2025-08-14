@@ -17,7 +17,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc block-modal
+(rum/defc ^:large-vars/cleanup-todo block-modal
   []
   (let [[{:keys [open? block]}] (mobile-state/use-singleton-modal)
         close! #(reset! mobile-state/*singleton-modal nil)
