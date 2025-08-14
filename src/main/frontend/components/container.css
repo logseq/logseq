@@ -203,7 +203,7 @@
           }
 
           > strong {
-            @apply text-xs font-medium;
+            @apply sm:text-xs text-base font-medium;
           }
         }
 
