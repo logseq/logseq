@@ -18,8 +18,6 @@ html.is-native-android {
   --silk-topbar-inner-padding-top: 10px;
   --silk-topbar-inner-height: 40px;
   --silk-topbar-inner-padding-bottom: 6px;
-
-  .app-silk-topbar {}
 }
 
 #mobile-editor-toolbar {
@@ -386,11 +384,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply flex items-center gap-2 px-2;
 
     .ui__button {
-      @apply opacity-70 px-1;
-
-      &:active {
-        @apply opacity-80;
-      }
+      @apply px-1;
     }
   }
 
@@ -400,7 +394,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
   .title {
     @apply font-semibold overflow-hidden text-ellipsis whitespace-nowrap col-span-4
-    block text-center text-lg pl-1 opacity-90 tracking-wide;
+    block text-center text-lg pl-1 tracking-wide;
   }
 }
 
