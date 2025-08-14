@@ -7,6 +7,7 @@
   --ls-page-title-size: 26px;
   --silk-topbar-inner-height: 32px;
   --silk-tabbar-bottom-paddding: 12px;
+  --silk-100-lvh-dvh-pct: max(100%,100vh);
 }
 
 html.is-native-ios {
@@ -77,7 +78,11 @@ html {
 body {
   @apply relative overflow-hidden;
 
-  .SheetWithDepth-stackSceneryContainer, > .SheetWithDepth-view {
+  .SheetWithDepth-stackSceneryContainer {
+    @apply overflow-hidden;
+  }
+
+  .SheetWithDepth-stackSceneryContainer > .SheetWithDepth-view {
     height: var(--ls-full-screen-height, "auto");
   }
 }
@@ -300,6 +305,11 @@ a, button {
 }
 
 /* silk styles */
+.app-silk-index-scroll-view {
+  /* NOTE: fix for the depth sheet view style? */
+  padding-top: 2px;
+}
+
 .app-silk-index-scroll-content {
   @apply bg-gray-01 min-h-[100svh] overflow-x-hidden;
 }
