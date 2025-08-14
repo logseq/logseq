@@ -7,19 +7,20 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [mobile.components.ui :as mobile-ui]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [mobile.components.ui :as mobile-ui]
             [rum.core :as rum]))
 
 (rum/defc page-blocks
   [page]
   (let [[scroll-container set-scroll-container] (rum/use-state nil)
         *ref (rum/use-ref nil)]
-    (rum/use-effect!
-      #(set-scroll-container (rum/deref *ref))
-      [])
+    (hooks/use-effect!
+     #(set-scroll-container (rum/deref *ref))
+     [])
     [:div.content-inner
      {:ref *ref}
      (when scroll-container
@@ -43,12 +44,12 @@
       (let [mobile? (util/mobile?)
             add-button [:div
                         (shui/button
-                          {:variant :default
-                           :size :sm
-                           :on-click (fn [_e]
-                                       (editor-handler/quick-add-blocks!))}
-                          (when-not mobile? (shui/shortcut ["mod" "e"]))
-                          "Add to today")]]
+                         {:variant :default
+                          :size :sm
+                          :on-click (fn [_e]
+                                      (editor-handler/quick-add-blocks!))}
+                         (when-not mobile? (shui/shortcut ["mod" "e"]))
+                         "Add to today")]]
         [:div.ls-quick-add.flex.flex-1.flex-col.w-full.gap-4
          [:div.border-b.pb-4.flex.flex-row.justify-between.gap-4.items-center
           [:div.font-medium
@@ -56,7 +57,7 @@
           (when mobile? add-button)]
          (if mobile?
            (mobile-ui/classic-app-container-wrap
-             (page-blocks add-page))
+            (page-blocks add-page))
            [:div.content {:class "block -ml-6"}
             (page-blocks add-page)])
          (when-not mobile? add-button)]))))

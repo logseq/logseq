@@ -104,12 +104,10 @@
        (doall items)))))
 
 (defonce *modals (atom []))
-(defonce ^:private *id (atom 0))
-(defonce ^:private gen-id #(reset! *id (inc @*id)))
 
 (rum/defc x-modal
   [{:keys [close! _as-page? type on-action title buttons _inputs modal-props]} content]
-  (let [{:keys [class header]} modal-props]
+  (let [{:keys [_class header]} modal-props]
     (case type
       :action-sheet
       (silkhq/bottom-sheet
@@ -153,26 +151,10 @@
      (some->> (medley/indexed @*modals)
               (filter #(= id (:id (second %)))) (first)))))
 
-(defn- upsert-modal!
-  [config]
-  (when-let [id (:id config)]
-    (if-let [[index config'] (get-modal id)]
-      (swap! *modals assoc index (merge config' config))
-      (swap! *modals conj config)) id))
-
 (defn- delete-modal!
   [id]
   (when-let [[index _] (get-modal id)]
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
-
-(defn open-modal!
-  [content & {:keys [id type] :as props}]
-  (upsert-modal!
-   (merge props
-          {:id (or id (gen-id))
-           :type (or type :default)                             ;; :alert :confirm :page
-           :as-page? (= type :page)
-           :content content})))
 
 (defn close-modal!
   ([] (some-> @*modals (last) :id (close-modal!)))

@@ -1237,7 +1237,7 @@
               ;; start? selection
                  (or (not start?) (zero? (get-selection-start el))))
         (when-let [scroll-node (app-scroll-container-node el)]
-          (let [scroll-top (.-scrollTop scroll-node)
+          (let [scroll-top' (.-scrollTop scroll-node)
                 vw-height (if (mobile-util/native-platform?)
                             (- (.-height js/window.screen) (or @keyboard-height 312))
                             (or (.-height js/window.visualViewport)
@@ -1249,7 +1249,7 @@
             (when (> inset 0)
               (js/setTimeout
                #(set! (.-scrollTop scroll-node)
-                      (+ scroll-top inset (if (false? start?) 96 64))) 16))))))))
+                      (+ scroll-top' inset (if (false? start?) 96 64))) 16))))))))
 
 #?(:cljs
    (do
