@@ -150,6 +150,10 @@ a, button {
   }
 
   .app-silk-depth-sheet-content {}
+
+  .app-silk-scroll-content {
+    @apply min-h-screen;
+  }
 }
 
 .block-content-or-editor-inner {
@@ -425,7 +429,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     transition: padding 0.1s ease-in-out;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[8px] opacity-60;
+      @apply absolute left-2.5 top-[9px] opacity-60;
     }
 
     .cancel {
@@ -468,7 +472,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 
   > .bd {
-    @apply -mx-4 pt-5;
+    @apply -mx-4 pt-8;
 
     ul {
       &.as-results > li {
