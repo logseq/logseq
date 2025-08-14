@@ -40,7 +40,6 @@
      (shui/button
       {:variant :text
        :size :sm
-       :class "ml-1 text-base"
        :on-click (fn []
                    (let [buttons (concat
                                   (->>
@@ -52,33 +51,33 @@
                                            "+ Add new graph"]
                                     :role "add-new-graph"}])]
                      (ui-component/open-popup! "Switch graph"
-                       {:modal-props {:class "graph-switcher"}
-                        :buttons buttons
-                        :on-action (fn [e]
-                                     (when-let [role (:role e)]
-                                       (if (= "add-new-graph" role)
-                                         (state/pub-event! [:graph/new-db-graph])
-                                         (when (string/starts-with? role "logseq_db_")
-                                           (state/pub-event! [:graph/switch role]))))
-                                     (ui-component/close-popup!))
-                        :type :action-sheet})))}
-       [:span.flex.items-center.gap-2.pt-1
-        [:strong.overflow-hidden.text-ellipsis.block.font-medium
-         {:style {:max-width "40vw"}}
-         short-repo-name]])]))
+                                               {:modal-props {:class "graph-switcher"}
+                                                :buttons buttons
+                                                :on-action (fn [e]
+                                                             (when-let [role (:role e)]
+                                                               (if (= "add-new-graph" role)
+                                                                 (state/pub-event! [:graph/new-db-graph])
+                                                                 (when (string/starts-with? role "logseq_db_")
+                                                                   (state/pub-event! [:graph/switch role]))))
+                                                             (ui-component/close-popup!))
+                                                :type :action-sheet})))}
+      [:span.flex.items-center.pt-1
+       [:span.overflow-hidden.text-ellipsis.block.text-base
+        {:style {:max-width "40vw"}}
+        short-repo-name]])]))
 
 (rum/defc journal-calendar-btn
   []
   (shui/button
-    {:variant :text
-     :size :sm
-     :on-click (fn []
-                 (let [apply-date! (fn [date]
-                                     (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                                       (if-let [journal (db/get-page page-name)]
-                                         (mobile-state/open-block-modal! journal)
-                                         (-> (page-handler/<create! page-name {:redirect? false})
-                                           (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
+   {:variant :text
+    :size :sm
+    :on-click (fn []
+                (let [apply-date! (fn [date]
+                                    (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                                      (if-let [journal (db/get-page page-name)]
+                                        (mobile-state/open-block-modal! journal)
+                                        (-> (page-handler/<create! page-name {:redirect? false})
+                                            (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
                   (-> (.showDatePicker mobile-util/ui-local)
                       (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
    [:span.mt-1
@@ -109,7 +108,8 @@
       :title (app-graphs-select)
       :right-render [:div.flex.items-center.gap-1
                      (journal-calendar-btn)
-                     (rtc-indicator-btn)])
+                     (rtc-indicator-btn)]
+      :center-title? true)
 
      (= tab "settings")
      (assoc
