@@ -2,7 +2,6 @@
   "App top header"
   (:require [clojure.string :as string]
             [frontend.components.rtc.indicator :as rtc-indicator]
-            [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
@@ -14,6 +13,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.date :as gdate]
+            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [mobile.components.ui :as ui-component]
@@ -32,7 +32,9 @@
                 (if (seq remote-graphs)
                   (repo-handler/combine-local-&-remote-graphs graphs remote-graphs)
                   graphs)
-                (filter (fn [item] (config/db-based-graph? (:url item)))))
+                (filter (fn [item]
+                          (and (string? (:url item))
+                               (string/starts-with? (:url item) common-config/db-version-prefix)))))
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
