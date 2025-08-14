@@ -27,7 +27,7 @@
                           (cmdk/block-item repo block nil input))) blocks)]
     items))
 
-(rum/defc search
+(rum/defc ^:large-vars/cleanup-todo search
   []
   (let [*ref (hooks/use-ref nil)
         [input set-input!] (hooks/use-state "")
