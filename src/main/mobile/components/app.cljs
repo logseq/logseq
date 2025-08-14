@@ -2,10 +2,12 @@
   "App root"
   (:require ["../externals.js"]
             [frontend.components.journal :as journal]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.user :as user-handler]
             [frontend.rum :as frum]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.util :as util]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.popup.core :as shui-popup]
@@ -137,7 +139,11 @@
         *home (rum/use-ref nil)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo)
-    (hooks/use-effect! (fn [] (setup-sidebar-touch-swipe!)) [])
+    (hooks/use-effect!
+     (fn []
+       (setup-sidebar-touch-swipe!)
+       (when-let [element (util/mobile-page-scroll)]
+         (common-handler/listen-to-scroll! element))) [])
     (silkhq/depth-sheet-stack
      {:as-child true}
      (silkhq/depth-sheet-scenery-outlets
