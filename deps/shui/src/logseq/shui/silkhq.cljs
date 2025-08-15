@@ -56,7 +56,8 @@
 (def depth-sheet-backdrop (silkhq-wrap "SheetWithDepth.Backdrop"))
 (def depth-sheet-view (silkhq-wrap "SheetWithDepth.View"))
 (def depth-sheet-stack (silkhq-wrap "SheetWithDepthStack.Root"))
-(def depth-sheet-scenery-outlets (silkhq-wrap "SheetWithDepthStack.SceneryOutlets"))
+(def depth-sheet-scenery-outlets
+  (silkhq-wrap "SheetWithDepthStack.SceneryOutlets" {:static? true}))
 
 (def detent-sheet (silkhq-wrap "SheetWithDetent.Root"))
 (def detent-sheet-portal (silkhq-wrap "SheetWithDetent.Portal"))
