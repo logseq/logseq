@@ -4,11 +4,11 @@
 - For :result-transform evaluation
 - For cljs evaluation in Src blocks
 - For evaluating {{function }} under query tables"
-  (:require [sci.core :as sci]
-            [frontend.util :as util]
+  (:require [frontend.util :as util]
             [goog.dom]
             [goog.object]
-            [goog.string]))
+            [goog.string]
+            [sci.core :as sci]))
 
 ;; Helper fns for eval-string
 ;; ==========================
@@ -40,7 +40,8 @@
                                                 'log js/console.log
                                                 'pprint util/pp-str
                                                 ;; Provide to all evals as it useful in most contexts
-                                                'call-api call-api}}
+                                                'call-api call-api}
+                                     :classes {'js #js {:Date js/Date} :allow :all}}
                                     options))
      (catch :default e
        (println "Query: sci eval failed:")
