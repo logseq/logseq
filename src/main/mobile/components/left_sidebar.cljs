@@ -18,7 +18,7 @@
           {:class "app-silk-sidebar-sheet-view"}
           (silkhq/sidebar-sheet-backdrop)
           (silkhq/sidebar-sheet-content
-            {:class "flex flex-col items-center p-2"}
+            {:class "app-silk-sidebar-sheet-content"}
             (silkhq/sidebar-sheet-handle)
             [:div.w-full.app-silk-popup-content-inner.p-2
              [:div.left-sidebar-inner
