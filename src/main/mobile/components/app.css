@@ -506,6 +506,10 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 }
 
+.app-silk-sidebar-sheet-content {
+  @apply bg-gray-01 dark:bg-gray-02 flex flex-col items-center p-2;
+}
+
 .left-sidebar-inner {
   @apply -mx-4;
 
