@@ -112,6 +112,7 @@
                                   (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
                                   "Delete"])])
                              {:title "Actions"
+                              :default-height false
                               :type :action-sheet}))}
                (shui/tabler-icon "dots-vertical" {:size 20}))]]
 

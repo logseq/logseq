@@ -133,5 +133,6 @@
                                         (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
                                         "Report bug"])])
                       {:title "Actions"
+                       :default-height false
                        :type :action-sheet}))}
         (shui/tabler-icon "dots" {:size 23}))]))))

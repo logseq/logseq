@@ -70,7 +70,8 @@
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         quick-add? (= :ls-quick-add (:id opts))
-        action-sheet? (= :action-sheet (:type opts))]
+        action-sheet? (= :action-sheet (:type opts))
+        default-height (:default-height opts)]
 
     (when open?
       (state/clear-edit!)
@@ -103,7 +104,9 @@
         (silkhq/bottom-sheet-handle)
         (let [title (or (:title opts) (when (string? content-fn) content-fn))
               content (if (fn? content-fn)
-                        [:div {:style {:min-height 300}}
+                        [:div {:style (cond-> {}
+                                        (or (nil? default-height) (number? default-height))
+                                        (assoc :min-height (or default-height 300)))}
                          (content-fn)]
                         (if-let [buttons (and action-sheet? (:buttons opts))]
                           [:div.-mx-2
