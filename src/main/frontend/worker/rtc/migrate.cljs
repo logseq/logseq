@@ -14,7 +14,8 @@
            (fn [{:keys [tx-data db-before db-after migrate-updates]}]
              (let [*tx-data (atom [])]
                (when-let [rename-db-idents (:rename-db-idents migrate-updates)]
-                 (swap! *tx-data apply-conj (gen-client-op/generate-rtc-rename-db-ident-ops rename-db-idents)))
+                 (swap! *tx-data apply-conj
+                        (gen-client-op/generate-rtc-rename-db-ident-ops rename-db-idents)))
                (when (:fix migrate-updates)
                  (let [{:keys [same-entity-datoms-coll id->same-entity-datoms]}
                        (gen-client-op/group-datoms-by-entity tx-data)
