@@ -473,7 +473,9 @@
                data)
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
-    r))
+    (assoc r :migrate-updates
+           ;; fake it as a normal :fix type migration
+           {:fix (constantly :ensure-built-in-data-exists!)})))
 
 (defn- upgrade-version!
   "Return tx-data"
@@ -500,7 +502,8 @@
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
         [rename-db-idents-tx-data rename-db-idents-coll]
-        (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents)
+        (when rename-db-idents
+          (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents))
         fixes (when (fn? fix)
                 (fix db))
         tx-data (if db-based?
@@ -511,7 +514,7 @@
                   tx-data)
         r (ldb/transact! conn tx-data' {:db-migrate? true})
         migrate-updates (cond-> migrate-updates
-                          (seq rename-db-idents-coll) (assoc :rename-db-idents rename-db-idents-coll))]
+                          rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
     (println "DB schema migrated to" version)
     (assoc r :migrate-updates migrate-updates)))
 
