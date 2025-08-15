@@ -69,7 +69,7 @@
                :class "-ml-2"}
               (shui/tabler-icon "chevron-down" {:size 24}))
 
-             [:span.flex.items-center
+             [:span.flex.items-center.-mr-2
               (when-let [block-id-str (str (:block/uuid block))]
                 (shui/button
                  {:variant :text
