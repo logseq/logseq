@@ -82,9 +82,11 @@
          :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
          :block/title (name prop-name)
          :db/index true
-         :db/cardinality (if (#{:many :db.cardinality/many} (:db/cardinality prop-schema))
-                           :db.cardinality/many
-                           :db.cardinality/one)
+         :db/cardinality (if (= :checkbox prop-type)
+                           :db.cardinality/one
+                           (if (#{:many :db.cardinality/many} (:db/cardinality prop-schema))
+                             :db.cardinality/many
+                             :db.cardinality/one))
          :block/order (db-order/gen-key)}
          (or ref-type? (contains? db-property-type/all-ref-property-types prop-type))
          (assoc :db/valueType :db.type/ref)

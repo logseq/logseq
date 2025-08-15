@@ -451,7 +451,10 @@
         :container-id container-id
         :show-tag-and-property-classes? true
         :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
-       page)]]))
+       page)
+      (when (:logseq.property/deprecated? page)
+        [:span.warning.text-sm
+         "Deprecated"])]]))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]

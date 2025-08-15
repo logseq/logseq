@@ -538,16 +538,26 @@
           (p/then remove!)))))
 
 (rum/defc property-type-sub-pane
-  [property {:keys [id set-sub-open! _position]}]
+  [property {:keys [id set-sub-open! _position owner-block]}]
   (let [handle-select! (fn [^js e]
                          (when-let [v (some-> (.-target e) (.-dataset) (.-value))]
-                           (p/do!
-                            (db-property-handler/upsert-property!
-                             (:db/ident property)
-                             {:logseq.property/type (keyword v)}
-                             {})
-                            (set-sub-open! false)
-                            (restore-root-highlight-item! id))))
+                           (p/let [property' (db-property-handler/upsert-property!
+                                              (:db/ident property)
+                                              {:logseq.property/type (keyword v)}
+                                              {})
+                                   new-property (db/entity (:db/id property'))]
+                             (set-sub-open! false)
+                             (restore-root-highlight-item! id)
+                             ;; redirect to the new property page
+                             (when (= (state/get-current-page) (str (:block/uuid property)))
+                               (route-handler/redirect-to-page! (:block/uuid new-property)))
+                             ;; set value to empty
+                             (when owner-block
+                               (db-property-handler/set-block-property! (:db/id owner-block) (:db/ident new-property)
+                                                                        (if (= (keyword v) :checkbox)
+                                                                          false
+                                                                          :logseq.property/empty-placeholder)))
+                             (shui/popup-hide-all!))))
         item-props {:on-select handle-select!}
         schema-types (->> db-property-type/user-built-in-property-types
                           (map (fn [type]
@@ -601,18 +611,17 @@
       (when-not special-built-in-prop?
         (dropdown-editor-menuitem {:icon :pencil :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                    :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))}))
-      (let [disabled?' (or disabled? (and property-type (seq values)))]
-        (dropdown-editor-menuitem {:icon :letter-t
-                                   :title "Property type"
-                                   :desc (if disabled?'
-                                           (ui/tooltip
-                                            [:span (str property-type-label')]
-                                            [:div.w-96
-                                             "The type of this property is locked once you start using it. This is to make sure all your existing information stays correct if the property type is changed later. To unlock, all uses of a property must be deleted."])
-                                           (str property-type-label'))
-                                   :disabled? disabled?'
-                                   :submenu-content (fn [ops]
-                                                      (property-type-sub-pane property ops))}))
+      (dropdown-editor-menuitem {:icon :letter-t
+                                 :title "Property type"
+                                 :desc (if disabled?
+                                         (ui/tooltip
+                                          [:span (str property-type-label')]
+                                          [:div.w-96
+                                           "The type of this property is locked."])
+                                         (str property-type-label'))
+                                 :disabled? disabled?
+                                 :submenu-content (fn [ops]
+                                                    (property-type-sub-pane property (assoc ops :owner-block owner-block)))})
 
       (when (and (= property-type :node)
                  (not (contains? #{:logseq.property.class/extends} (:db/ident property))))

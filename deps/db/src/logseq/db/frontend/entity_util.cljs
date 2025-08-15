@@ -68,7 +68,8 @@
      (if (string? page)
        (string/starts-with? page "$$$")
        (when (or (map? page) (de/entity? page))
-         (:logseq.property/hide? page))))))
+         (or (:logseq.property/hide? page)
+             (:logseq.property/deprecated? page)))))))
 
 (defn object?
   [node]
