@@ -672,7 +672,7 @@
  :whiteboard/pan                                    "Mover"
  :whiteboard/paste                                  "Pegar"
  :whiteboard/paste-as-link                          "Pegar como enlace"
- :whiteboard/rectangle                              "Recargar"
+ :whiteboard/rectangle                              "Rectángulo"
  :whiteboard/redo                                   "Rehacer"
  :whiteboard/references                             "Referencias"
  :whiteboard/reload                                 "Recargar"
