@@ -508,6 +508,14 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 .app-silk-sidebar-sheet-content {
   @apply bg-gray-01 dark:bg-gray-02 flex flex-col items-center p-2;
+  box-sizing: border-box;
+  height: 100%;
+  max-width: 800px;
+
+  /* APPEARANCE */
+  border-radius: 0;
+  overflow: hidden;
+  background-color: white;
 }
 
 .left-sidebar-inner {
@@ -520,4 +528,9 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       display: flex !important;
     }
   }
+}
+
+.Sidebar-hidden {
+    box-shadow: none;
+    background: transparent;
 }
