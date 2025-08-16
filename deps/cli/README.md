@@ -12,7 +12,7 @@ This section assumes you have installed the CLI from npm or via the [dev
 setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
 `node.cli.mjs -h`.
 
-All commands excepts for `search` can be used offline or on CI. The `search` command and any command that has an api-query-token option require the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
+All commands can be used offline or on CI. The `search` command and any command that has an api-query-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
 
 Now let's use it!
 
@@ -54,11 +54,18 @@ $ logseq show db-test
 |      Graph created by commit | https://github.com/logseq/logseq/commit/3c93fd2637 |
 |            Graph imported by |                                  :cli/create-graph |
 
-# Search your current graph and print results one per line like grep
+# Search your current graph and print highlighted results one per line like grep
 $ logseq search woot -a my-token
 Search found 100 results:
 dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
 dev:db-diff woot woot2
+...
+
+# Search a local graph
+$ logseq search woot page
+Search found 23 results:
+Node page
+Annotation page
 ...
 
 # Query a graph locally using `d/entity` id(s) like an integer or a :db/ident

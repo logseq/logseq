@@ -64,20 +64,34 @@
               m)))
        args))
 
+(defn- local-datalog-query [db query*]
+  (let [query (into query* [:in '$ '%]) ;; assumes no :in are in queries
+        res (d/q query db (rules/extract-rules rules/db-query-dsl-rules))]
+    ;; Remove nesting for most queries which just have one :find binding
+    (if (= 1 (count (first res))) (mapv first res) res)))
+
 (defn- local-query
-  [{{:keys [graph args graphs properties-readable]} :opts}]
+  [{{:keys [graph args graphs properties-readable title-query]} :opts}]
   (let [graphs' (into [graph] graphs)]
     (doseq [graph' graphs']
       (if (fs/existsSync (cli-util/get-graph-dir graph'))
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
               query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
-              ;; If datalog query detected run it or else default to entity lookups
-              results (if (and (vector? query*) (= :find (first query*)))
-                          ;; assumes no :in are in queries
-                        (let [query' (into query* [:in '$ '%])
-                              res (d/q query' @conn (rules/extract-rules rules/db-query-dsl-rules))]
+              results (cond
+                        ;; Run datalog query if detected
+                        (and (vector? query*) (= :find (first query*)))
+                        (local-datalog-query @conn query*)
+                        ;; Runs predefined title query. Predefined queries could better off in a separate command
+                        ;; since they could be more powerful and have different args than query command
+                        title-query
+                        (let [query '[:find (pull ?b [*])
+                                      :in $ % ?search-term
+                                      :where (block-content ?b ?search-term)]
+                              res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)
+                                       (string/join " " args))]
                           ;; Remove nesting for most queries which just have one :find binding
                           (if (= 1 (count (first res))) (mapv first res) res))
+                        :else
                         (local-entities-query @conn properties-readable args))]
           (when (> (count graphs') 1)
             (println "Results for graph" (pr-str graph')))
