@@ -19,19 +19,23 @@
   [data]
   (reset! *popup-data data))
 
-(defonce *left-sidebar-open? (atom false))
+(defonce *left-sidebar-detent (atom 0))
 
-(defn toggle-left-sidebar!
-  []
-  (swap! *left-sidebar-open? not))
+(defn use-left-sidebar-detent [] (r/use-atom *left-sidebar-detent))
 
 (defn open-left-sidebar!
   []
-  (reset! *left-sidebar-open? true))
+  (reset! *left-sidebar-detent 3))
 
 (defn close-left-sidebar!
   []
-  (reset! *left-sidebar-open? false))
+  (reset! *left-sidebar-detent 1))
+
+(defn toggle-left-sidebar!
+  []
+  (if (contains? #{0 1} @*left-sidebar-detent)
+    (open-left-sidebar!)
+    (close-left-sidebar!)))
 
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))

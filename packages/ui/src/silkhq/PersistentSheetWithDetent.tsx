@@ -109,9 +109,10 @@ const PersistentSheetWithDetentView = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof Sheet.View> & {
     dimmingColor?: string;
   }
->(({ children, className, dimmingColor, ...restProps }, ref) => {
+>(({ children, className, dimmingColor, onTravel, ...restProps }, ref) => {
   const viewRef = useRef<HTMLDivElement>(null);
-  const [inertOutside, setInertOutside] = useState(false);
+  const [inertOutside, setInertOutside] = useState(restProps.inertOutside);
+  console.log('inertOutside' + inertOutside);
   const {
     range,
     setRange,
@@ -156,6 +157,8 @@ const PersistentSheetWithDetentView = React.forwardRef<
     };
   }, [range.start, range.end]);
 
+  useEffect(() => {setInertOutside(restProps.inertOutside)}, [restProps.inertOutside]);
+
   //
   // Travel handler
 
@@ -170,7 +173,12 @@ const PersistentSheetWithDetentView = React.forwardRef<
 
   const travelHandler: NonNullable<React.ComponentProps<typeof Sheet.View>["onTravel"]> =
     useCallback(
-      ({ progress, range, progressAtDetents }) => {
+      (data) => {
+        if (typeof onTravel === 'function') {
+          onTravel(data)
+        }
+
+        const { progress, range, progressAtDetents } = data
         if (!progressAtDetents) return;
 
         if (range.end > 1) {
