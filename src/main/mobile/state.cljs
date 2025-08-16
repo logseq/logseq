@@ -20,16 +20,17 @@
   (reset! *popup-data data))
 
 (defonce *left-sidebar-detent (atom 0))
-
-(defn use-left-sidebar-detent [] (r/use-atom *left-sidebar-detent))
+(defonce *left-sidebar-inert-outside? (atom false))
 
 (defn open-left-sidebar!
   []
-  (reset! *left-sidebar-detent 3))
+  (reset! *left-sidebar-inert-outside? true)
+  (reset! *left-sidebar-detent 2))
 
 (defn close-left-sidebar!
   []
-  (reset! *left-sidebar-detent 1))
+  (reset! *left-sidebar-inert-outside? false)
+  (reset! *left-sidebar-detent 0))
 
 (defn toggle-left-sidebar!
   []

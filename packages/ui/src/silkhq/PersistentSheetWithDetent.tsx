@@ -112,7 +112,7 @@ const PersistentSheetWithDetentView = React.forwardRef<
 >(({ children, className, dimmingColor, onTravel, ...restProps }, ref) => {
   const viewRef = useRef<HTMLDivElement>(null);
   const [inertOutside, setInertOutside] = useState(restProps.inertOutside);
-  console.log('inertOutside' + inertOutside);
+
   const {
     range,
     setRange,
