@@ -721,7 +721,9 @@
                (reset! *page (db/entity (:db/id page-block)))
                (when page-block
                  (when-not (or preview-or-sidebar? (:tag-dialog? option))
-                   (if-let [page-uuid (and (not (:db/id page*)) (not page-uuid?) (:block/uuid page-block))]
+                   (if-let [page-uuid (and (not (:db/id page*))
+                                           (and page-name (not page-uuid?))
+                                           (:block/uuid page-block))]
                      (route-handler/redirect-to-page! (str page-uuid) {:push false})
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state

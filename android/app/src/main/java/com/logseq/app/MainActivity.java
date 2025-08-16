@@ -2,6 +2,7 @@ package com.logseq.app;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.View;
 import android.webkit.ValueCallback;
 
 import com.getcapacitor.BridgeActivity;
@@ -16,6 +17,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UILocal.class);
 
         super.onCreate(savedInstanceState);
+        this.bridge.getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         new Timer().schedule(new TimerTask() {
             @Override
