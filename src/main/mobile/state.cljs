@@ -10,8 +10,9 @@
 (defn set-singleton-modal! [data] (reset! *singleton-modal data))
 (defn open-block-modal!
   [block]
-  (set-singleton-modal! {:open? true
-                         :block block}))
+  (when block
+    (set-singleton-modal! {:open? true
+                           :block block})))
 (defn use-singleton-modal [] (r/use-atom *singleton-modal))
 
 (defonce *popup-data (atom nil))
