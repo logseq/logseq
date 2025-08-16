@@ -531,6 +531,6 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 }
 
 .Sidebar-hidden {
+    @apply bg-transparent dark:bg-transparent;
     box-shadow: none;
-    background: transparent;
 }
