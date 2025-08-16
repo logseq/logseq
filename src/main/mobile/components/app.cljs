@@ -47,7 +47,7 @@
 
    ;; main content
    (if db-restoring?
-     [:div.space-y-2.my-4.mx-0
+     [:div.space-y-2.mt-8.mx-0.opacity-75
       (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
       (shui/skeleton {:class "h-6 w-full bg-gray-200"})
       (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
