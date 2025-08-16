@@ -3,13 +3,16 @@
   (:require ["react-dom/client" :as rdc]
             [frontend.background-tasks]
             [frontend.components.page :as page]
+            [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.state :as state]
             [frontend.util :as util]
             [mobile.components.app :as app]
             [mobile.events]
             [mobile.init :as init]
-            [mobile.state :as state]
+            [mobile.state :as mobile-state]
+            [promesa.core :as p]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]))
 
@@ -35,9 +38,14 @@
      (when (= :page (get-in route [:data :name]))
        (let [id-str (get-in route [:path-params :name])]
          (when (util/uuid-string? id-str)
-           (let [page-uuid (uuid id-str)]
-             (state/set-singleton-modal! {:open? true
-                                          :block {:block/uuid page-uuid}}))))))
+           (let [page-uuid (uuid id-str)
+                 repo (state/get-current-repo)]
+             (when (and repo page-uuid)
+               (p/let [entity (db-async/<get-block repo page-uuid
+                                                   {:children? false
+                                                    :skip-refresh? true})]
+                 (when entity
+                   (mobile-state/open-block-modal! entity)))))))))
 
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
