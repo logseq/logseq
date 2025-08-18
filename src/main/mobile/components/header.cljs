@@ -106,7 +106,7 @@
                      :size :sm
                      :on-click (fn []
                                  (mobile-state/clear-blocks-modal!)
-                                 (mobile-state/toggle-left-sidebar!))}
+                                 (mobile-state/open-left-sidebar!))}
                     [:span.mt-2
                      (shui/tabler-icon "menu" {:size 24})])
       :title (app-graphs-select)
