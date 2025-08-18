@@ -37,7 +37,7 @@
       :activeDetent detent
       :onActiveDetentChange (fn [v]
                               (when v
-                                (set-detent! v)))}
+                                (set-detent! (if (zero? v) 1 v))))}
      (silkhq/persistent-sheet-portal
       (silkhq/persistent-sheet-view
        {:class "app-silk-sidebar-sheet-view"
