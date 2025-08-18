@@ -407,7 +407,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
-    @apply opacity-50 active:opacity-70;
+    @apply opacity-60 active:opacity-90;
 
     &.active {
       @apply text-accent-10 opacity-100;
