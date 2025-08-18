@@ -144,7 +144,7 @@
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
-      (modal/block-modal)
+      (modal/blocks-modal)
       (popup/popup)))))
 
 (rum/defc main < rum/reactive
