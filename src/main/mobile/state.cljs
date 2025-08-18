@@ -6,14 +6,21 @@
 (defn set-tab! [tab] (reset! *tab tab))
 (defn use-tab [] (r/use-atom *tab))
 
-(defonce *singleton-modal (atom nil))
-(defn set-singleton-modal! [data] (reset! *singleton-modal data))
+(defonce *modal-blocks (atom []))
 (defn open-block-modal!
   [block]
   (when block
-    (set-singleton-modal! {:open? true
-                           :block block})))
-(defn use-singleton-modal [] (r/use-atom *singleton-modal))
+    (swap! *modal-blocks conj block)))
+
+(defn close-block-modal!
+  [block]
+  (reset! *modal-blocks (vec (remove (fn [b] (= (:db/id block) (:db/id b))) @*modal-blocks))))
+
+(defn clear-blocks-modal!
+  []
+  (reset! *modal-blocks []))
+
+(defn use-modal-blocks [] (r/use-atom *modal-blocks))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
