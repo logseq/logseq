@@ -38,7 +38,8 @@
 
     (when-not open?
       (silkhq/persistent-sheet
-       {:presented true
+       {:key "left sidebar"
+        :presented true
         :onPresentedChange (fn [_v])
         :activeDetent detent
         :onActiveDetentChange (fn [v]
@@ -64,9 +65,17 @@
                                   (do
                                     (dom/add-class! ref "Sidebar-hidden")
                                     (setInertOutside! false)))))))
-          :onClickOutside (fn [e]
-                            (util/stop e)
-                            (bean/->js {:dismiss false}))
+          :onClickOutside (fn []
+                            (js/setTimeout
+                             (fn []
+                               (mobile-state/set-singleton-modal! {:open? true})
+                               (util/schedule
+                                (fn []
+                                  (mobile-state/set-singleton-modal! nil)
+                                  (mobile-state/close-left-sidebar!))))
+                             300)
+                            (bean/->js {:dismiss true
+                                        :stopOverlayPropagation true}))
 
           :inertOutside inertOutside}
          (silkhq/persistent-sheet-content
