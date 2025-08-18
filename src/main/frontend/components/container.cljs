@@ -135,9 +135,9 @@
     ;; TODO: move to standalone component
       [:a.link-item.group
        (if (util/mobile?)
-         {:on-pointer-down (fn [e]
-                             (util/stop-propagation e)
-                             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
+         {:on-pointer-down util/stop-propagation
+          :on-pointer-up (fn [_e]
+                           (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
          (cond->
           {:on-click
            (fn [e]
