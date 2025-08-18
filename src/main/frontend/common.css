@@ -112,14 +112,17 @@ body {
   }
 
   blockquote, .block-content-or-editor-wrap[data-node-type='quote'] {
-    display: block;
     text-indent: 0;
-    padding: 8px 20px;
+    padding: 8px 16px;
     border-left: 4px solid;
     background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+
+    &:has(.positioned-properties) {
+      padding-left: 10px;
+    }
   }
 
   html blockquote, .block-content-or-editor-wrap[data-node-type='quote']  {
