@@ -20,8 +20,6 @@
   []
   (reset! *modal-blocks []))
 
-(defn use-modal-blocks [] (r/use-atom *modal-blocks))
-
 (defonce *popup-data (atom nil))
 (defn set-popup!
   [data]
@@ -43,12 +41,6 @@
   (reset! *left-sidebar-inert-outside? false)
   (reset! *left-sidebar-detent 1)
   (js/setTimeout #(reset! *left-sidebar-open? true) 300))
-
-(defn toggle-left-sidebar!
-  []
-  (if (contains? #{0 1} @*left-sidebar-detent)
-    (open-left-sidebar!)
-    (close-left-sidebar!)))
 
 (defn left-sidebar-open?
   []
