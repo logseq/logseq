@@ -45,6 +45,12 @@
                                                    {:children? false
                                                     :skip-refresh? true})]
                  (when entity
+                   ;; close sidebar
+                   (when (mobile-state/left-sidebar-open?)
+                     (mobile-state/close-left-sidebar!))
+                   (when (state/get-edit-block)
+                     (state/clear-edit!))
+
                    (mobile-state/open-block-modal! entity)))))))))
 
    ;; set to false to enable HistoryAPI

@@ -134,21 +134,24 @@
 
     ;; TODO: move to standalone component
       [:a.link-item.group
-       (cond->
-        {(if (util/mobile?)
-           :on-pointer-up :on-click)
-         (fn [e]
-           (if (gobj/get e "shiftKey")
-             (open-in-sidebar)
-             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-         :on-context-menu (fn [^js e]
-                            (shui/popup-show! e (x-menu-content)
-                              {:as-dropdown? true
-                               :content-props {:on-click (fn [] (shui/popup-hide!))
-                                               :class "w-60"}})
-                            (util/stop e))}
-         (ldb/object? page)
-         (assoc :title (block-handler/block-unique-title page)))
+       (if (util/mobile?)
+         {:on-pointer-down (fn [e]
+                             (util/stop-propagation e)
+                             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
+         (cond->
+          {:on-click
+           (fn [e]
+             (if (gobj/get e "shiftKey")
+               (open-in-sidebar)
+               (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+           :on-context-menu (fn [^js e]
+                              (shui/popup-show! e (x-menu-content)
+                                                {:as-dropdown? true
+                                                 :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                 :class "w-60"}})
+                              (util/stop e))}
+           (ldb/object? page)
+           (assoc :title (block-handler/block-unique-title page))))
        [:span.page-icon {:key "page-icon"} icon]
        [:span.page-title {:key "title"
                           :class (when untitled? "opacity-50")
