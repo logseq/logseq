@@ -12,10 +12,11 @@
 
 (rum/defc sidebar-content
   []
-  [:div.w-full.app-silk-popup-content-inner.p-2
+  [:div.w-full.app-silk-popup-content-inner.px-2
    [:div.left-sidebar-inner
-    [:div.sidebar-contents-container.mt-8
-     {:on-pointer-down
+    [:div.sidebar-contents-container
+     {:class "!gap-4"
+      :on-pointer-down
       (fn [^js e]
         (when (some-> (.-target e) (.closest ".link-item"))
           (mobile-state/close-left-sidebar!)))}
