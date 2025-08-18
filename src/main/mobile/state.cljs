@@ -10,11 +10,16 @@
 (defn open-block-modal!
   [block]
   (when block
-    (swap! *modal-blocks conj block)))
+    (if (= 3 (count @*modal-blocks))    ; sheet stack max 3 items
+      (reset! *modal-blocks (conj (vec (butlast @*modal-blocks)) block))
+      (swap! *modal-blocks conj block))))
 
 (defn close-block-modal!
+  "Close top block sheet"
   [block]
-  (reset! *modal-blocks (vec (remove (fn [b] (= (:db/id block) (:db/id b))) @*modal-blocks))))
+  (when (and block (= (:db/id block)
+                      (:db/id (last @*modal-blocks))))
+    (swap! *modal-blocks pop)))
 
 (defn clear-blocks-modal!
   []
