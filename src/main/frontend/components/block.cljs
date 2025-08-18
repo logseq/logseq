@@ -3648,7 +3648,8 @@
                            (block-handler/on-touch-start event uuid)))
        :on-touch-end (fn [event]
                        (when-not @*dragging?
-                         (block-handler/on-touch-end event)))
+                         (block-handler/on-touch-end event))
+                       (reset! *dragging? false))
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
 

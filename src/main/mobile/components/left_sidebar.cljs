@@ -61,16 +61,14 @@
                                   (do
                                     (dom/add-class! ref "Sidebar-hidden")
                                     (setInertOutside! false)))))))
-          :onClickOutside (fn [e]
+          :onClickOutside (fn []
                             (if (and (> detent 1)
                                      (not (dom/has-class? (.-current *ref) "Sidebar-hidden")))
                               (do
                                 (mobile-state/close-left-sidebar!)
                                 (bean/->js {:dismiss true}))
-                              (do
-                                (util/stop e)
-                                (bean/->js {:dismiss false
-                                            :stopOverlayPropagation​ false}))))
+                              (bean/->js {:dismiss false
+                                          :stopOverlayPropagation​ false})))
 
           :inertOutside inertOutside}
          (silkhq/persistent-sheet-content
