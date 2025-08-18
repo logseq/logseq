@@ -4,6 +4,7 @@
             [dommy.core :as dom]
             [frontend.components.container :as container]
             [frontend.rum :as r]
+            [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.silkhq :as silkhq]
             [mobile.state :as mobile-state]
@@ -58,14 +59,16 @@
                                 (do
                                   (dom/add-class! ref "Sidebar-hidden")
                                   (setInertOutside! false)))))))
-        :onClickOutside (fn []
+        :onClickOutside (fn [e]
                           (if (and (> detent 1)
                                    (not (dom/has-class? (.-current *ref) "Sidebar-hidden")))
                             (do
                               (mobile-state/close-left-sidebar!)
                               (bean/->js {:dismiss true}))
-                            (bean/->js {:dismiss false
-                                        :stopOverlayPropagation​ false})))
+                            (do
+                              (some-> e util/stop)
+                              (bean/->js {:dismiss false
+                                          :stopOverlayPropagation​ false}))))
 
         :inertOutside inertOutside}
        (silkhq/persistent-sheet-content
