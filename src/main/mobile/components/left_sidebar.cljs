@@ -4,7 +4,6 @@
             [dommy.core :as dom]
             [frontend.components.container :as container]
             [frontend.rum :as r]
-            [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.silkhq :as silkhq]
             [mobile.state :as mobile-state]
@@ -33,6 +32,7 @@
 
     (silkhq/persistent-sheet
      {:key "left sidebar"
+      :sheetRole "alertdialog"
       :presented true
       :onPresentedChange (fn [_v])
       :activeDetent detent
@@ -59,17 +59,6 @@
                                 (do
                                   (dom/add-class! ref "Sidebar-hidden")
                                   (setInertOutside! false)))))))
-        :onClickOutside (fn [e]
-                          (if (and (> detent 1)
-                                   (not (dom/has-class? (.-current *ref) "Sidebar-hidden")))
-                            (do
-                              (mobile-state/close-left-sidebar!)
-                              (bean/->js {:dismiss true}))
-                            (do
-                              (some-> e util/stop)
-                              (bean/->js {:dismiss false
-                                          :stopOverlayPropagation​ false}))))
-
         :inertOutside inertOutside}
        (silkhq/persistent-sheet-content
         {:ref *ref
