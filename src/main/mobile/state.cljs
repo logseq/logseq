@@ -1,7 +1,6 @@
 (ns mobile.state
   "Mobile state"
-  (:require [frontend.rum :as r]
-            [frontend.util :as util]))
+  (:require [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))
 (defn set-tab! [tab] (reset! *tab tab))
