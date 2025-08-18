@@ -15,19 +15,15 @@
   [:div.w-full.app-silk-popup-content-inner.px-2
    [:div.left-sidebar-inner
     [:div.sidebar-contents-container
-     {:class "!gap-4"
-      :on-pointer-down
-      (fn [^js e]
-        (when (some-> (.-target e) (.closest ".link-item"))
-          (mobile-state/close-left-sidebar!)))}
+     {:class "!gap-4"}
      (container/sidebar-favorites)
      (container/sidebar-recent-pages)]]])
 
-(rum/defc left-sidebar
+(rum/defc left-sidebar-inner
   []
   (let [*ref (hooks/use-ref nil)
         [detent set-detent!] (r/use-atom mobile-state/*left-sidebar-detent)
-        [{:keys [open? _block]}] (mobile-state/use-singleton-modal)
+        modal-open? (:open? (mobile-state/use-singleton-modal))
         [inertOutside setInertOutside!] (r/use-atom mobile-state/*left-sidebar-inert-outside?)]
 
     (hooks/use-effect!
@@ -36,14 +32,14 @@
          (set-detent! 1)))
      [])
 
-    (when-not open?
+    (when-not modal-open?
       (silkhq/persistent-sheet
        {:key "left sidebar"
         :presented true
         :onPresentedChange (fn [_v])
         :activeDetent detent
         :onActiveDetentChange (fn [v]
-                                (when (and v (not= v detent))
+                                (when v
                                   (set-detent! v)))}
        (silkhq/persistent-sheet-portal
         (silkhq/persistent-sheet-view
@@ -51,7 +47,7 @@
           :contentPlacement "left"
           :detents ["25px" "min(90vw, 325px)"]
           :onTravel (fn [v]
-                      (when-not open?
+                      (when-not modal-open?
                         (let [{:keys [range]} (bean/->clj v)
                               {:keys [start end]} range
                               ref (.-current *ref)]
@@ -65,17 +61,16 @@
                                   (do
                                     (dom/add-class! ref "Sidebar-hidden")
                                     (setInertOutside! false)))))))
-          :onClickOutside (fn []
-                            (js/setTimeout
-                             (fn []
-                               (mobile-state/set-singleton-modal! {:open? true})
-                               (util/schedule
-                                (fn []
-                                  (mobile-state/set-singleton-modal! nil)
-                                  (mobile-state/close-left-sidebar!))))
-                             300)
-                            (bean/->js {:dismiss true
-                                        :stopOverlayPropagation true}))
+          :onClickOutside (fn [e]
+                            (if (and (> detent 1)
+                                     (not (dom/has-class? (.-current *ref) "Sidebar-hidden")))
+                              (do
+                                (mobile-state/close-left-sidebar!)
+                                (bean/->js {:dismiss true}))
+                              (do
+                                (util/stop e)
+                                (bean/->js {:dismiss false
+                                            :stopOverlayPropagation​ false}))))
 
           :inertOutside inertOutside}
          (silkhq/persistent-sheet-content
@@ -83,3 +78,8 @@
            :class "app-silk-sidebar-sheet-content Sidebar-content Sidebar-hidden"}
           (silkhq/persistent-sheet-expanded-content
            (sidebar-content)))))))))
+
+(rum/defc left-sidebar < rum/reactive
+  []
+  (when (rum/react mobile-state/*left-sidebar-open?)
+    (left-sidebar-inner)))
