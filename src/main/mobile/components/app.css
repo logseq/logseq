@@ -381,7 +381,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 
   > .as-left, .as-right {
-    @apply flex items-center gap-2 px-2;
+    @apply flex items-center gap-2 px-3;
 
     .ui__button {
       @apply px-1;
