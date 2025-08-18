@@ -3,26 +3,53 @@
   (:require [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))
-(defonce *tabs-el (atom nil))
-(defn set-tab!
-  [tab ^js tabs]
-  (reset! *tab tab)
-  (reset! *tabs-el tabs))
+(defn set-tab! [tab] (reset! *tab tab))
 (defn use-tab [] (r/use-atom *tab))
 
-(defonce *modal-data (atom nil))
-(defn set-modal!
-  [data]
-  (reset! *modal-data data))
+(defonce *modal-blocks (atom []))
 (defn open-block-modal!
   [block]
-  (set-modal! {:open? true
-               :block block}))
+  (when block
+    (if (= 3 (count @*modal-blocks))    ; sheet stack max 3 items
+      (reset! *modal-blocks (conj (vec (butlast @*modal-blocks)) block))
+      (swap! *modal-blocks conj block))))
+
+(defn close-block-modal!
+  "Close top block sheet"
+  [block]
+  (when (and block (= (:db/id block)
+                      (:db/id (last @*modal-blocks))))
+    (swap! *modal-blocks pop)))
+
+(defn clear-blocks-modal!
+  []
+  (reset! *modal-blocks []))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
   [data]
   (reset! *popup-data data))
 
+(defonce *left-sidebar-open? (atom true))
+(defonce *left-sidebar-detent (atom 0))
+(defonce *left-sidebar-inert-outside? (atom false))
+
+(defn open-left-sidebar!
+  []
+  (reset! *left-sidebar-open? true)
+  (reset! *left-sidebar-inert-outside? true)
+  (reset! *left-sidebar-detent 2))
+
+(defn close-left-sidebar!
+  []
+  (reset! *left-sidebar-open? false)
+  (reset! *left-sidebar-inert-outside? false)
+  (reset! *left-sidebar-detent 1)
+  (js/setTimeout #(reset! *left-sidebar-open? true) 300))
+
+(defn left-sidebar-open?
+  []
+  (not (contains? #{0 1} @*left-sidebar-detent)))
+
 (defn redirect-to-tab! [name]
-  (some-> @*tabs-el (.select name)))
+  (set-tab! (str name)))
