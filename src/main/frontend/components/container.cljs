@@ -81,7 +81,7 @@
        [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
 
-(rum/defc page-name < rum/reactive db-mixins/query
+(rum/defc ^:large-vars/cleanup-todo page-name < rum/reactive db-mixins/query
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
@@ -134,20 +134,24 @@
 
     ;; TODO: move to standalone component
       [:a.link-item.group
-       (cond->
-        {:on-click
-         (fn [e]
-           (if (gobj/get e "shiftKey")
-             (open-in-sidebar)
-             (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
-         :on-context-menu (fn [^js e]
-                            (shui/popup-show! e (x-menu-content)
-                                              {:as-dropdown? true
-                                               :content-props {:on-click (fn [] (shui/popup-hide!))
-                                                               :class "w-60"}})
-                            (util/stop e))}
-         (ldb/object? page)
-         (assoc :title (block-handler/block-unique-title page)))
+       (if (util/mobile?)
+         {:on-pointer-down util/stop-propagation
+          :on-pointer-up (fn [_e]
+                           (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?}))}
+         (cond->
+          {:on-click
+           (fn [e]
+             (if (gobj/get e "shiftKey")
+               (open-in-sidebar)
+               (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+           :on-context-menu (fn [^js e]
+                              (shui/popup-show! e (x-menu-content)
+                                                {:as-dropdown? true
+                                                 :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                                 :class "w-60"}})
+                              (util/stop e))}
+           (ldb/object? page)
+           (assoc :title (block-handler/block-unique-title page))))
        [:span.page-icon {:key "page-icon"} icon]
        [:span.page-title {:key "title"
                           :class (when untitled? "opacity-50")
@@ -444,7 +448,7 @@
      [close-signal])
 
     [:<>
-     [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
+     [:div.left-sidebar-inner.as-container.flex-1.flex.flex-col.min-h-0
       {:key "left-sidebar"
        :ref ref-el
        :style (cond-> {}

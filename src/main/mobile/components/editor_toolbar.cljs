@@ -77,6 +77,7 @@
                  (= "app-keep-keyboard-open-input" (some-> js/document.activeElement (.-id)))))
     (let [commands' (commands)]
       [:div#mobile-editor-toolbar
+       {:on-click #(util/stop %)}
        [:div.toolbar-commands
         ;; (command (editor-handler/move-up-down true) {:icon "arrow-bar-to-up"})
         ;; (command (editor-handler/move-up-down false) {:icon "arrow-bar-to-down"})
