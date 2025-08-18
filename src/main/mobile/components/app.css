@@ -192,8 +192,8 @@ a, button {
     .menu-link {
       @apply border-b -mx-2 py-3;
 
-      .text-lg {
-        @apply inline-block w-full text-center text-xl;
+      span {
+        @apply inline-block w-full text-center;
       }
 
       .ui__icon {
@@ -476,7 +476,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 
   > .bd {
-    @apply -mx-4 pt-8;
+    @apply -mx-4 pt-4;
 
     ul {
       &.as-results > li {
