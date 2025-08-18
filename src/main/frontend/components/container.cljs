@@ -81,7 +81,7 @@
        [:span.b (or more (ui/icon "chevron-right" {:class "more" :size 15}))]]
       (when child [:div.bd child])]]))
 
-(rum/defc page-name < rum/reactive db-mixins/query
+(rum/defc ^:large-vars/cleanup-todo page-name < rum/reactive db-mixins/query
   [page recent?]
   (when-let [id (:db/id page)]
     (let [page (db/sub-block id)
