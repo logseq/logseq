@@ -104,7 +104,9 @@
       :left-render (shui/button
                     {:variant :text
                      :size :sm
-                     :on-click mobile-state/toggle-left-sidebar!}
+                     :on-click (fn []
+                                 (mobile-state/clear-blocks-modal!)
+                                 (mobile-state/toggle-left-sidebar!))}
                     [:span.mt-2
                      (shui/tabler-icon "menu" {:size 24})])
       :title (app-graphs-select)
