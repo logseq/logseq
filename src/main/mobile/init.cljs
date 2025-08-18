@@ -3,15 +3,16 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
-            [mobile.components.ui :as cc-ui]
-            [mobile.state :as mobile-state]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.shui.dialog.core :as shui-dialog]
+            [mobile.components.ui :as cc-ui]
+            [mobile.state :as mobile-state]))
 
 (def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -44,15 +45,21 @@
                            (js/document.querySelector ".pswp")
                            (some-> js/window.photoLightbox (.destroy))
 
-                ;; TODO: move ui-related code to mobile events
-                           (not-empty (cc-ui/get-modal))
-                           (cc-ui/close-modal!)
+                           (shui-dialog/has-modal?)
+                           (shui-dialog/close!)
 
-                           (not-empty @mobile-state/*modal-data)
-                           :skip
+                           (not-empty @mobile-state/*popup-data)
+                           (mobile-state/set-popup! nil)
 
                            (not-empty (state/get-selection-blocks))
                            (editor-handler/clear-selection!)
+
+                           (seq @mobile-state/*modal-blocks)
+                           (mobile-state/clear-blocks-modal!)
+
+                           ;; TODO: move ui-related code to mobile events
+                           (not-empty (cc-ui/get-modal))
+                           (cc-ui/close-modal!)
 
                            (state/editing?)
                            (editor-handler/escape-editing)

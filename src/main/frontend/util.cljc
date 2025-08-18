@@ -92,23 +92,20 @@
 #?(:cljs (defonce ^js sem-ver semver))
 #?(:cljs (defonce ^js full-path-extname pathCompleteExtname))
 #?(:cljs
-   (defn current-page-scroll
-     []
-     (some-> (or
-              (js/document.querySelector "ion-modal.show-modal")
-              (js/document.querySelector ".ion-page:not(.ion-page-hidden)"))
-             (.querySelector "ion-content.scrolling")
-             (.-shadowRoot)
-             (.querySelector "[part=scroll]"))))
+   (defn mobile-page-scroll
+     ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
+     ([el] (when el
+             (some-> (or (.closest el ".app-silk-scroll-content")
+                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
             (if (capacitor-new?)
-              (current-page-scroll)
+              (mobile-page-scroll)
               (gdom/getElement "main-content-container")))
            ([el]
             (if (capacitor-new?)
-              (current-page-scroll)
+              (mobile-page-scroll el)
               (if (.closest el "#main-content-container")
                 (app-scroll-container-node)
                 (or
@@ -1231,47 +1228,28 @@
            (= button 2)))))
 
 (def keyboard-height (atom nil))
-#?(:cljs
-   (defn mobile-get-scroll
-     [^js/HTMLElement el]
-     (when (and el (mobile?))
-       (let [box-rect    (.getBoundingClientRect el)
-             box-top     (.-top box-rect)
-             box-bottom  (.-bottom box-rect)
-             current-pos (get-selection-start el)
-             grapheme-pos (get-graphemes-pos (.-value el) current-pos)
-             mock-text   (some-> (gdom/getElement "mock-text")
-                                 gdom/getChildren
-                                 array-seq
-                                 (nth-safe grapheme-pos))
-             offset-top   (and mock-text (.-offsetTop mock-text))
-             offset-height (and mock-text (.-offsetHeight mock-text))
-
-             cursor-y    (if offset-top (+ offset-top box-top offset-height 2) box-bottom)
-             vw-height   (or (.-height js/window.visualViewport)
-                             (.-clientHeight js/document.documentElement))]
-         {:scroll (- cursor-y (- vw-height (+ @keyboard-height (+ 40 4))))
-          :cursor-y cursor-y
-          :offset-height offset-height}))))
 
 #?(:cljs
    (defn scroll-editor-cursor
-     [^js/HTMLElement el]
-     (when (and el (mobile?))
-       (let [header-height (or (some-> (gdom/getElementByClass "cp__header") (.-clientHeight)) 24)
-             main-node   (app-scroll-container-node el)
-             scroll-top'  (.-scrollTop main-node)
-             {:keys [scroll offset-height cursor-y]} (mobile-get-scroll el)]
-         (cond
-           (and (< cursor-y (+ header-height offset-height 4)) ;; 4 is top+bottom padding for per line
-                (>= cursor-y header-height))
-           (.scrollBy main-node (bean/->js {:top (- (+ offset-height 4))}))
-
-           (> scroll 0)
-           (set! (.-scrollTop main-node) (+ scroll-top' scroll))
-
-           :else
-           nil)))))
+     ([el] (scroll-editor-cursor el true))
+     ([^js/HTMLElement el start?]
+      (when (and el (mobile?)
+              ;; start? selection
+                 (or (not start?) (zero? (get-selection-start el))))
+        (when-let [scroll-node (app-scroll-container-node el)]
+          (let [scroll-top' (.-scrollTop scroll-node)
+                vw-height (if (mobile-util/native-platform?)
+                            (- (.-height js/window.screen) (or @keyboard-height 312))
+                            (or (.-height js/window.visualViewport)
+                                (.-clientHeight js/document.documentElement)))
+                ^js box-rect (.getBoundingClientRect el)
+                box-top (.-top box-rect)
+                top-offset 84
+                inset (- box-top (- vw-height top-offset))]
+            (when (> inset 0)
+              (js/setTimeout
+               #(set! (.-scrollTop scroll-node)
+                      (+ scroll-top' inset (if (false? start?) 96 64))) 16))))))))
 
 #?(:cljs
    (do
