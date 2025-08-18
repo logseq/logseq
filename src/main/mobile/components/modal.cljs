@@ -98,13 +98,7 @@
      (fn []
        (when open?
          (state/clear-edit!)
-         (init/keyboard-hide))
-       (let [light-theme? (= "light" (:ui/theme @state/state))]
-         (if open?
-           (when light-theme?
-             (util/set-theme-dark))
-           (when light-theme?
-             (util/set-theme-light)))))
+         (init/keyboard-hide)))
      [open?])
 
     (silkhq/depth-sheet
@@ -134,6 +128,11 @@
 
 (rum/defc blocks-modal < rum/reactive
   []
-  (let [blocks (rum/react mobile-state/*modal-blocks)]
+  (let [blocks (rum/react mobile-state/*modal-blocks)
+        light-theme? (= "light" (:ui/theme @state/state))]
+    (when light-theme?
+      (if (seq blocks)
+        (util/set-theme-dark)
+        (util/set-theme-light)))
     (for [block blocks]
       (block-sheet block))))
