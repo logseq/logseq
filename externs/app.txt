@@ -84,3 +84,6 @@ setOption
 string
 dispose
 path
+Capacitor
+Clipboard
+clipboard
