@@ -51,7 +51,7 @@
   [config]
   (if (:sidebar? config)
     (dom/sel1 ".sidebar-item-list")
-    (util/app-scroll-container-node)))
+    (util/app-scroll-container-node (:viewel config))))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!] :as table}]
@@ -1583,37 +1583,48 @@
 
 (rum/defc table-body < rum/static
   [table option rows *scroller-ref set-items-rendered!]
-  (let [[scrolling? set-scrolling!] (hooks/use-state false)]
-    (when (seq rows)
+  (let [[scrolling? set-scrolling!] (hooks/use-state false)
+        [ready? set-ready!] (hooks/use-state false)]
+
+    (hooks/use-effect!
+      (fn [] (util/schedule #(set-ready! true)))
+      [])
+
+    (when (and ready? (seq rows))
       (ui/virtualized-list
-       {:ref #(reset! *scroller-ref %)
-        :increase-viewport-by {:top 300 :bottom 300}
-        :custom-scroll-parent (get-scroll-parent (:config option))
-        :compute-item-key (fn [idx]
-                            (let [block-id (util/nth-safe rows idx)]
-                              (str "table-row-" block-id)))
-        :skipAnimationFrameInResizeObserver true
-        :total-count (count rows)
-        :context {:scrolling scrolling?}
-        :is-scrolling set-scrolling!
-        :item-content (fn [idx _user ^js context]
-                        (let [option (assoc option
-                                            :scrolling? (.-scrolling context)
-                                            :table-view? true)]
-                          (lazy-item (:data table) idx option
-                                     (fn [row]
-                                       (table-row table row {} option)))))
-        :items-rendered (fn [props]
-                          (when (seq props)
-                            (set-items-rendered! true)))}))))
+        {:ref #(reset! *scroller-ref %)
+         :increase-viewport-by {:top 300 :bottom 300}
+         :custom-scroll-parent (get-scroll-parent
+                                 (-> (:config option)
+                                   (assoc :viewel (js/document.getElementById (:viewid option)))))
+         :compute-item-key (fn [idx]
+                             (let [block-id (util/nth-safe rows idx)]
+                               (str "table-row-" block-id)))
+         :skipAnimationFrameInResizeObserver true
+         :total-count (count rows)
+         :context {:scrolling scrolling?}
+         :is-scrolling set-scrolling!
+         :item-content (fn [idx _user ^js context]
+                         (let [option (assoc option
+                                        :scrolling? (.-scrolling context)
+                                        :table-view? true)]
+                           (lazy-item (:data table) idx option
+                             (fn [row]
+                               (table-row table row {} option)))))
+         :items-rendered (fn [props]
+                           (when (seq props)
+                             (set-items-rendered! true)))}))))
 
 (rum/defc table-view < rum/static
   [table option row-selection *scroller-ref]
   (let [selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        [items-rendered? set-items-rendered!] (hooks/use-state false)]
+        [items-rendered? set-items-rendered!] (hooks/use-state false)
+        [viewid] (hooks/use-state #(random-uuid))
+        option (assoc option :viewid viewid)]
     (shui/table
      (let [rows (:rows table)]
        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+        {:id viewid}
         [:div.relative
          (table-header table option selected-rows)
 

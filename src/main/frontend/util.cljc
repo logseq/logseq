@@ -94,9 +94,10 @@
 #?(:cljs
    (defn mobile-page-scroll
      ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
-     ([el] (when el
+     ([el] (if el
              (some-> (or (.closest el ".app-silk-scroll-content")
-                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))))))
+                       (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
+             (mobile-page-scroll)))))
 
 #?(:cljs (defn app-scroll-container-node
            ([]
@@ -106,7 +107,7 @@
            ([el]
             (if (capacitor-new?)
               (mobile-page-scroll el)
-              (if (.closest el "#main-content-container")
+              (if (some-> el (.closest "#main-content-container"))
                 (app-scroll-container-node)
                 (or
                  (gdom/getElementByClass "sidebar-item-list")
