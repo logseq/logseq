@@ -101,14 +101,17 @@
 
 (declare page-cp)
 
-(rum/defc add-button
-  [block {:keys [container-id] :as config*}]
+(rum/defc add-button-inner
+  [block {:keys [container-id editing?] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
-        opacity-class (if has-children? "opacity-0" "opacity-50")
+        opacity-class (cond
+                        (and (util/mobile?) (not editing?)) "opacity-50"
+                        has-children? "opacity-0"
+                        :else "opacity-50")
         config (dissoc config* :page)]
-    (when page?
+    (when (or page? (util/mobile?))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
         :parentblockid (:db/id block)
@@ -138,9 +141,16 @@
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
-                                         :margin-left (if (util/mobile?) 0 22)}}
+                                         :margin-left (if (util/mobile?)
+                                                        (if page? 0 18)
+                                                        22)}}
          [:span.bullet-container
           [:span.bullet]]]]])))
+
+(rum/defc add-button < rum/reactive
+  [block config]
+  (let [editing? (state/sub :editor/editing?)]
+    (add-button-inner block (assoc config :editing? editing?))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -189,7 +199,7 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when-not (and (util/capacitor-new?) (seq blocks))
+           (when (or (util/mobile?) (empty? blocks))
              (add-button block config))])))))
 
 (rum/defc today-queries < rum/reactive
