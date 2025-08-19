@@ -1,6 +1,7 @@
 (ns mobile.components.modal
   "Mobile modal"
   (:require ["../externals.js"]
+            [cljs-bean.core :as bean]
             [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -88,7 +89,7 @@
                        :type :action-sheet}))}
         (shui/tabler-icon "dots-vertical" {:size 20}))]]
 
-                   ;; block page content
+     ;; block page content
      [:div.block-modal-page-content
       (mobile-ui/classic-app-container-wrap
        (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]))
@@ -161,7 +162,9 @@
      (silkhq/depth-sheet-portal
       (silkhq/depth-sheet-view
        {:class "block-modal-page"
-        :inertOutside false}
+        :inertOutside true
+        :onClickOutside (bean/->js {:dismiss false
+                                    :stopOverlayPropagation false})}
        (silkhq/depth-sheet-backdrop)
        (silkhq/depth-sheet-content
         {:class "app-silk-depth-sheet-content"}
