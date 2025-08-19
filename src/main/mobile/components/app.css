@@ -531,3 +531,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply bg-transparent dark:bg-transparent;
     box-shadow: none;
 }
+
+#app-main-content {
+    padding-bottom: 200px;
+}
