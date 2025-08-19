@@ -18,17 +18,28 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(rum/defc back-or-close-button < rum/reactive
+  []
+  (let [block-modal (rum/react mobile-state/*modal-blocks)
+        blocks-history (rum/react mobile-state/*blocks-navigation-history)
+        back? (and (seq block-modal)
+                   (> (count blocks-history) 1))]
+    (shui/button
+     {:variant :text
+      :size :sm
+      :on-click (fn [_e]
+                  (if back?
+                    (mobile-state/pop-navigation-history!)
+                    (mobile-state/close-block-modal!)))
+      :class "-ml-2"}
+     (shui/tabler-icon (if back? "arrow-left" "chevron-down") {:size 24}))))
+
 (rum/defc block-cp
   [block {:keys [favorited? set-favorited!]}]
   (let [close! mobile-state/close-block-modal!]
     [:div.app-silk-scroll-content-inner
      [:div.flex.justify-between.items-center.block-modal-page-header
-      (shui/button
-       {:variant :text
-        :size :sm
-        :on-click close!
-        :class "-ml-2"}
-       (shui/tabler-icon "chevron-down" {:size 24}))
+      (back-or-close-button)
 
       [:span.flex.items-center.-mr-2
        (when-let [block-id-str (str (:block/uuid block))]

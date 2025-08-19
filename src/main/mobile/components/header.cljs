@@ -94,6 +94,18 @@
                 (user-handler/logged-in?))
        (rtc-indicator/indicator))]))
 
+(rum/defc menu-button
+  []
+  (shui/button
+   {:variant :text
+    :size :sm
+    :on-pointer-down (fn [e]
+                       (util/stop e)
+                       (mobile-state/close-block-modal!)
+                       (mobile-state/open-left-sidebar!))}
+   [:span.mt-2
+    (shui/tabler-icon "menu" {:size 24})]))
+
 (rum/defc header
   [tab login?]
   (ui-silk/app-silk-topbar
@@ -101,15 +113,7 @@
             :props {:class (str tab)}}
      (= tab "home")
      (assoc
-      :left-render (shui/button
-                    {:variant :text
-                     :size :sm
-                     :on-pointer-down (fn [e]
-                                        (util/stop e)
-                                        (mobile-state/close-block-modal!)
-                                        (mobile-state/open-left-sidebar!))}
-                    [:span.mt-2
-                     (shui/tabler-icon "menu" {:size 24})])
+      :left-render (menu-button)
       :title (app-graphs-select)
       :right-render [:div.flex.items-center.gap-1
                      (journal-calendar-btn)
