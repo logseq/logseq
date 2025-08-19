@@ -2,6 +2,7 @@
   "Mobile search"
   (:require [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
+            [frontend.db.async :as db-async]
             [frontend.handler.search :as search-handler]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -122,7 +123,12 @@
          (let [block (or source-page source-block)]
            [:li.flex.gap-1
             {:on-click (fn []
-                         (mobile-state/open-block-modal! block))}
+                         (when-let [id (:block/uuid block)]
+                           (p/let [block (db-async/<get-block (state/get-current-repo) id
+                                                              {:children? false
+                                                               :skip-transact? true
+                                                               :skip-refresh? true})]
+                             (when block (mobile-state/open-block-modal! block)))))}
             [:div.flex.flex-col.gap-1.py-1
              (when header
                [:div.opacity-50.text-sm
