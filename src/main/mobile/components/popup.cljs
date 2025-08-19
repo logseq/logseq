@@ -82,8 +82,10 @@
       {:presented (boolean open?)
        :onPresentedChange (fn [v?]
                             (when (false? v?)
-                              (js/setTimeout
-                               #(mobile-state/set-popup! nil) 300)
+                              (if quick-add?
+                                (mobile-state/set-popup! nil)
+                                (js/setTimeout
+                                 #(mobile-state/set-popup! nil) 300))
                               (state/clear-edit!)
                               (state/pub-event! [:mobile/keyboard-will-hide])))}
       (:modal-props opts))

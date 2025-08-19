@@ -42,6 +42,7 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -111,7 +112,8 @@
                         has-children? "opacity-0"
                         :else "opacity-50")
         config (dissoc config* :page)]
-    (when (or page? (util/mobile?))
+    (when (and (or page? (util/mobile?))
+               (not= (:block/title block) common-config/quick-add-page-name))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
         :parentblockid (:db/id block)
