@@ -20,7 +20,7 @@
 
 (rum/defc block-cp
   [block {:keys [favorited? set-favorited!]}]
-  (let [close! #(mobile-state/close-block-modal! block)]
+  (let [close! mobile-state/close-block-modal!]
     [:div.app-silk-scroll-content-inner
      [:div.flex.justify-between.items-center.block-modal-page-header
       (shui/button
@@ -82,12 +82,51 @@
       (mobile-ui/classic-app-container-wrap
        (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]))
 
+(defn setup-sidebar-touch-swipe! []
+  (let [touch-start-x (atom 0)
+        touch-start-y (atom 0)
+        has-triggered? (atom false)
+        edge-threshold 30
+        swipe-trigger-distance 50
+        max-vertical-drift 50
+
+        on-touch-start (fn [^js e]
+                         (let [touch (aget e "touches" 0)]
+                           (reset! touch-start-x (.-pageX touch))
+                           (reset! touch-start-y (.-pageY touch))
+                           (reset! has-triggered? false)))
+
+        on-touch-move (fn [^js e]
+                        (when-not @has-triggered?
+                          (let [touch (aget e "touches" 0)
+                                delta-x (- (.-pageX touch) @touch-start-x)
+                                delta-y (js/Math.abs (- (.-pageY touch) @touch-start-y))
+                                started-from-edge (<= @touch-start-x edge-threshold)
+                                is-horizontal-swipe (and (> delta-x swipe-trigger-distance)
+                                                         (< delta-y max-vertical-drift))]
+                            (when (and started-from-edge is-horizontal-swipe)
+                              (reset! has-triggered? true)
+                              (mobile-state/pop-navigation-history!)))))]
+
+    (.addEventListener js/document "touchstart" on-touch-start #js {:passive true})
+    (.addEventListener js/document "touchmove" on-touch-move #js {:passive true})
+
+    ;; Return cleanup function
+    #(do
+       (.removeEventListener js/document "touchstart" on-touch-start)
+       (.removeEventListener js/document "touchmove" on-touch-move))))
+
 (rum/defc block-sheet
   [block]
   (let [block (when-let [id (:block/uuid block)]
                 (db/entity [:block/uuid id]))
         open? (boolean block)
         [favorited? set-favorited!] (hooks/use-state false)]
+
+    (hooks/use-effect!
+     (fn []
+       (setup-sidebar-touch-swipe!))
+     [])
 
     (hooks/use-effect!
      (fn []
@@ -105,7 +144,7 @@
      {:presented (boolean open?)
       :onPresentedChange (fn [v?]
                            (when (false? v?)
-                             (mobile-state/close-block-modal! block)
+                             (mobile-state/close-block-modal!)
                              (state/clear-edit!)
                              (state/pub-event! [:mobile/keyboard-will-hide])))}
      (silkhq/depth-sheet-portal
@@ -134,5 +173,4 @@
       (if (seq blocks)
         (util/set-theme-dark)
         (util/set-theme-light)))
-    (for [block blocks]
-      (block-sheet block))))
+    (block-sheet (first blocks))))

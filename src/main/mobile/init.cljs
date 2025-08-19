@@ -55,7 +55,7 @@
                            (editor-handler/clear-selection!)
 
                            (seq @mobile-state/*modal-blocks)
-                           (mobile-state/clear-blocks-modal!)
+                           (mobile-state/close-block-modal!)
 
                            ;; TODO: move ui-related code to mobile events
                            (not-empty (cc-ui/get-modal))
