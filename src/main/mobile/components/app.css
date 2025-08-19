@@ -331,6 +331,7 @@ ul {
   overflow: hidden;
   overflow: clip;
   position: relative;
+  padding-bottom: 200px;
 }
 
 html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
