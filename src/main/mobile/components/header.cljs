@@ -106,7 +106,7 @@
                      :size :sm
                      :on-pointer-down (fn [e]
                                         (util/stop e)
-                                        (mobile-state/clear-blocks-modal!)
+                                        (mobile-state/close-block-modal!)
                                         (mobile-state/open-left-sidebar!))}
                     [:span.mt-2
                      (shui/tabler-icon "menu" {:size 24})])

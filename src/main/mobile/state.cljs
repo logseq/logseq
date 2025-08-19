@@ -7,27 +7,26 @@
 (defn use-tab [] (r/use-atom *tab))
 
 (defonce *modal-blocks (atom []))
+(defonce *blocks-navigation-history (atom []))
 (defn open-block-modal!
   [block]
-  (when block
-    (cond
-      (= (:db/id (last @*modal-blocks)) (:db/id block)) ; already opened
-      nil
-      (= 3 (count @*modal-blocks))    ; sheet stack max 3 items
-      (reset! *modal-blocks (conj (vec (butlast @*modal-blocks)) block))
-      :else
-      (swap! *modal-blocks conj block))))
+  (when (:db/id block)
+    (reset! *modal-blocks [block])
+    (when-not (= (:db/id block) (:db/id (last @*blocks-navigation-history)))
+      (swap! *blocks-navigation-history conj block))))
 
 (defn close-block-modal!
   "Close top block sheet"
-  [block]
-  (when (and block (= (:db/id block)
-                      (:db/id (last @*modal-blocks))))
-    (swap! *modal-blocks pop)))
-
-(defn clear-blocks-modal!
   []
-  (reset! *modal-blocks []))
+  (reset! *modal-blocks [])
+  (reset! *blocks-navigation-history []))
+
+(defn pop-navigation-history!
+  []
+  (let [stack (swap! *blocks-navigation-history pop)]
+    (if (empty? stack)
+      (close-block-modal!)
+      (reset! *modal-blocks [(last stack)]))))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
