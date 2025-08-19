@@ -1,9 +1,5 @@
 import path from 'path'
 
-// TODO split the capacitor abilities to a separate file for capacitor APIs
-import { Capacitor } from '@capacitor/core'
-import { Clipboard as CapacitorClipboard } from '@capacitor/clipboard'
-
 if (typeof window === 'undefined') {
   global.window = {}
 }
@@ -265,11 +261,6 @@ export const getClipText = (cb, errorHandler) => {
 }
 
 export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
-    if (Capacitor.isNativePlatform()) {
-        CapacitorClipboard.write({ string: text });
-        return
-    }
-
     const navigator = (ownerWindow || window).navigator
 
     navigator.permissions.query({

@@ -6,6 +6,8 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
+            ["@capacitor/core" :refer [Capacitor]]
+            ["@capacitor/clipboard" :as CapacitorClipboard]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["sanitize-filename" :as sanitizeFilename]
             ["check-password-strength" :refer [passwordStrength]]
@@ -96,7 +98,7 @@
      ([] (some-> (js/document.querySelector ".app-silk-index-scroll-content") (.-parentNode)))
      ([el] (if el
              (some-> (or (.closest el ".app-silk-scroll-content")
-                       (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
+                         (.closest el ".app-silk-index-scroll-content")) (.-parentNode))
              (mobile-page-scroll)))))
 
 #?(:cljs (defn app-scroll-container-node
@@ -778,6 +780,14 @@
 #?(:cljs (def clear-selection! selection/clearSelection))
 
 #?(:cljs
+   (defn write-clipboard
+     ([data] (write-clipboard data nil))
+     ([data owner-window]
+      (if (.isNativePlatform ^js Capacitor)
+        (.write (gobj/get CapacitorClipboard "Clipboard") #js {:string (gobj/get data "text")})
+        (utils/writeClipboard data owner-window)))))
+
+#?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks embed-block? owner-window]}]
      (let [blocks (map (fn [block] (if (de/entity? block)
@@ -795,8 +805,8 @@
                                :embed-block? embed-block?
                                :blocks (mapv #(dissoc % :block.temp/load-status %) blocks)}))}))]
        (if owner-window
-         (utils/writeClipboard data owner-window)
-         (utils/writeClipboard data)))))
+         (write-clipboard data owner-window)
+         (write-clipboard data)))))
 
 (defn drop-nth [n coll]
   (keep-indexed #(when (not= %1 n) %2) coll))
