@@ -306,7 +306,7 @@ ul {
 }
 
 .app-silk-index-scroll-content {
-  @apply bg-gray-01 min-h-[100svh] overflow-x-hidden;
+  @apply bg-gray-01 min-h-[100svh] overflow-hidden;
 }
 
 .app-silk-depth-sheet-content {
