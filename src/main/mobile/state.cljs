@@ -10,8 +10,12 @@
 (defn open-block-modal!
   [block]
   (when block
-    (if (= 3 (count @*modal-blocks))    ; sheet stack max 3 items
+    (cond
+      (= (:db/id (last @*modal-blocks)) (:db/id block)) ; already opened
+      nil
+      (= 3 (count @*modal-blocks))    ; sheet stack max 3 items
       (reset! *modal-blocks (conj (vec (butlast @*modal-blocks)) block))
+      :else
       (swap! *modal-blocks conj block))))
 
 (defn close-block-modal!
