@@ -76,6 +76,9 @@
     :fn (lazy-load-fn 'logseq.cli.commands.query/query)
     :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph]
     :spec cli-spec/query}
+   {:cmds ["export"] :desc "Export DB graph as MD"
+    :fn (lazy-load-fn 'logseq.cli.commands.export/export)
+    :args->opts [:graph] :require [:graph]}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
     :args->opts [:graph] :require [:graph]
