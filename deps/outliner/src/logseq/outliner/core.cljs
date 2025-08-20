@@ -918,43 +918,39 @@
                                    :as opts}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (try
-    (let [db @conn
-          top-level-blocks (filter-top-level-blocks db blocks)
-          [target-block sibling?] (get-target-block db top-level-blocks target-block opts)
-          non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-          top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
-          blocks (->> (if non-consecutive?
-                        (sort-non-consecutive-blocks db top-level-blocks)
-                        top-level-blocks)
-                      (map (fn [block]
-                             (if (de/entity? block)
-                               block
-                               (d/entity db (:db/id block))))))
-          original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
-      (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
-                 (not original-position?))
-        (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
-                            (map :db/id)
-                            (set))
-              move-parents-to-child? (some parents' (map :db/id blocks))]
-          (when-not move-parents-to-child?
-            (batch-tx/with-batch-tx-mode conn {:outliner-op :move-blocks}
-              (doseq [[idx block] (map vector (range (count blocks)) blocks)]
-                (let [first-block? (zero? idx)
-                      sibling? (if first-block? sibling? true)
-                      target-block (if first-block? target-block
-                                       (d/entity @conn (:db/id (nth blocks (dec idx)))))
-                      block (d/entity @conn (:db/id block))]
-                  (when-not (move-to-original-position? [block] target-block sibling? false)
-                    (let [tx-data (move-block @conn block target-block sibling?)]
+  (let [db @conn
+        top-level-blocks (filter-top-level-blocks db blocks)
+        [target-block sibling?] (get-target-block db top-level-blocks target-block opts)
+        non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
+        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+        blocks (->> (if non-consecutive?
+                      (sort-non-consecutive-blocks db top-level-blocks)
+                      top-level-blocks)
+                    (map (fn [block]
+                           (if (de/entity? block)
+                             block
+                             (d/entity db (:db/id block))))))
+        original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
+    (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
+               (not original-position?))
+      (let [parents' (->> (ldb/get-block-parents db (:block/uuid target-block) {})
+                          (map :db/id)
+                          (set))
+            move-parents-to-child? (some parents' (map :db/id blocks))]
+        (when-not move-parents-to-child?
+          (batch-tx/with-batch-tx-mode conn {:outliner-op :move-blocks}
+            (doseq [[idx block] (map vector (range (count blocks)) blocks)]
+              (let [first-block? (zero? idx)
+                    sibling? (if first-block? sibling? true)
+                    target-block (if first-block? target-block
+                                     (d/entity @conn (:db/id (nth blocks (dec idx)))))
+                    block (d/entity @conn (:db/id block))]
+                (when-not (move-to-original-position? [block] target-block sibling? false)
+                  (let [tx-data (move-block @conn block target-block sibling?)]
                     ;; (prn "==>> move blocks tx:" tx-data)
-                      (ldb/transact! conn tx-data {:sibling? sibling?
-                                                   :outliner-op (or outliner-op :move-blocks)}))))))
-            nil))))
-    (catch :default e
-      (when-not (= "not-allowed-move-block-page" (.-message e))
-        (throw e)))))
+                    (ldb/transact! conn tx-data {:sibling? sibling?
+                                                 :outliner-op (or outliner-op :move-blocks)}))))))
+          nil)))))
 
 (defn- move-blocks-up-down
   "Move blocks up/down."
@@ -1066,11 +1062,15 @@
 (defn- op-transact!
   [f & args]
   {:pre [(fn? f)]}
-  (let [result (apply f args)]
-    (when result
-      (let [tx-meta (assoc (:tx-meta result) :skip-store? true)]
-        (ldb/transact! (second args) (:tx-data result) tx-meta)))
-    result))
+  (try
+    (let [result (apply f args)]
+      (when result
+        (let [tx-meta (assoc (:tx-meta result) :skip-store? true)]
+          (ldb/transact! (second args) (:tx-data result) tx-meta)))
+      result)
+    (catch :default e
+      (when-not (= "not-allowed-move-block-page" (.-message e))
+        (throw e)))))
 
 (let [f (fn [repo conn date-formatter block opts]
           (save-block repo @conn date-formatter block opts))]
