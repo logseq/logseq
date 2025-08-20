@@ -107,7 +107,7 @@
         has-children? (:block/_parent block)
         page? (ldb/page? block)
         opacity-class (cond
-                        editing? "opacity-0"
+                        (and editing? has-children?) "opacity-0"
                         (util/mobile?) "opacity-50"
                         has-children? "opacity-0"
                         :else "opacity-50")
