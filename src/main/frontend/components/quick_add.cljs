@@ -24,8 +24,7 @@
     [:div.content-inner
      {:ref *ref}
      (when scroll-container
-       (page/page-blocks-cp page {:scroll-container scroll-container
-                                  :hide-add-button? true}))]))
+       (page/page-blocks-cp page {:scroll-container scroll-container}))]))
 
 (rum/defc quick-add <
   {:will-mount (fn [state]
