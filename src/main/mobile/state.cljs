@@ -23,10 +23,12 @@
 
 (defn pop-navigation-history!
   []
-  (let [stack (swap! *blocks-navigation-history pop)]
-    (if (empty? stack)
-      (close-block-modal!)
-      (reset! *modal-blocks [(last stack)]))))
+  (if (seq @*blocks-navigation-history)
+    (let [stack (swap! *blocks-navigation-history pop)]
+      (if (empty? stack)
+        (close-block-modal!)
+        (reset! *modal-blocks [(last stack)])))
+    (close-block-modal!)))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!

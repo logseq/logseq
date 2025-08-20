@@ -4393,14 +4393,16 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
-                                                 (if (:journals? config)
-                                                   (< (count blocks) 50)
-                                                   (< (count blocks) 10))
-                                                 (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
-                                                 (and (:block-children? config)
+  (let [mobile? (util/mobile?)
+        [ready? set-ready?] (hooks/use-state (not mobile?))
+        [virtualized? _] (hooks/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
+                                                   (if (:journals? config)
+                                                     (< (count blocks) 50)
+                                                     (< (count blocks) 10))
+                                                 ;; (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
+                                                   (and (:block-children? config)
                                                       ;; zoom-in block's children
-                                                      (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
+                                                        (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
@@ -4414,7 +4416,9 @@
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent (or (:scroll-container config)
-                                                  (util/app-scroll-container-node))
+                                                  (if-let [node (js/document.getElementById (:blocks-node-id config))]
+                                                    (util/app-scroll-container-node node)
+                                                    (util/app-scroll-container-node)))
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4433,6 +4437,7 @@
         *wrap-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
+       (when mobile? (util/schedule #(set-ready? true)))
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4461,22 +4466,29 @@
     [:div.blocks-list-wrap
      {:data-level (or (:level config) 0)
       :ref *wrap-ref}
-     (cond
-       virtualized?
-       (ui/virtualized-list virtual-opts)
-       :else
-       (map-indexed (fn [idx block]
-                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-                    blocks))]))
+     (when ready?
+       (cond
+         virtualized?
+         (ui/virtualized-list virtual-opts)
+         :else
+         (map-indexed (fn [idx block]
+                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                      blocks)))]))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
+  {:init (fn [state]
+           (assoc state ::id (str (random-uuid))))}
   [state config blocks]
-  (let [doc-mode? (:document/mode? config)]
+  (let [doc-mode? (:document/mode? config)
+        id (::id state)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
-       {:class (when doc-mode? "document-mode")
+       {:id id
+        :class (when doc-mode? "document-mode")
         :containerid (:container-id state)}
-       (block-list (assoc config :container-id (:container-id state))
+       (block-list (assoc config
+                          :blocks-node-id id
+                          :container-id (:container-id state))
                    blocks)])))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
