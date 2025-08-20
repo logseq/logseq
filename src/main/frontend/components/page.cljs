@@ -103,11 +103,12 @@
 (declare page-cp)
 
 (rum/defc add-button-inner
-  [block {:keys [container-id] :as config*}]
+  [block {:keys [container-id editing?] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
         opacity-class (cond
+                        editing? "opacity-0"
                         (util/mobile?) "opacity-50"
                         has-children? "opacity-0"
                         :else "opacity-50")
@@ -119,20 +120,22 @@
         :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
-                    (util/stop e)
-                    (state/set-state! :editor/container-id container-id)
-                    (editor-handler/api-insert-new-block! "" (merge config
-                                                                    {:block-uuid (:block/uuid block)})))
+                    (when-not (and (util/mobile?) editing?)
+                      (util/stop e)
+                      (state/set-state! :editor/container-id container-id)
+                      (editor-handler/api-insert-new-block! "" (merge config
+                                                                      {:block-uuid (:block/uuid block)}))))
         :on-mouse-over (fn []
-                         (let [ref (rum/deref *ref)
-                               prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
-                           (cond
-                             (and prev-block (dom/has-class? prev-block "is-blank"))
-                             (dom/add-class! ref "opacity-0")
-                             (and prev-block has-children?)
-                             (dom/add-class! ref "opacity-50")
-                             :else
-                             (dom/add-class! ref "opacity-100"))))
+                         (when-not (and (util/mobile?) editing?)
+                           (let [ref (rum/deref *ref)
+                                 prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                             (cond
+                               (and prev-block (dom/has-class? prev-block "is-blank"))
+                               (dom/add-class! ref "opacity-0")
+                               (and prev-block has-children?)
+                               (dom/add-class! ref "opacity-50")
+                               :else
+                               (dom/add-class! ref "opacity-100")))))
         :on-mouse-leave #(do
                            (dom/remove-class! (rum/deref *ref) "opacity-50")
                            (dom/remove-class! (rum/deref *ref) "opacity-100"))
@@ -151,8 +154,8 @@
 
 (rum/defc add-button < rum/reactive
   [block config]
-  (when-not (state/sub :editor/editing?)
-    (add-button-inner block config)))
+  (let [editing? (state/sub :editor/editing?)]
+    (add-button-inner block (assoc config :editing? editing?))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
