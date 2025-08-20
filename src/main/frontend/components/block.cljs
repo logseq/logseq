@@ -4394,14 +4394,14 @@
 (rum/defc block-list
   [config blocks]
   (let [mobile? (util/mobile?)
-        [ready? set-ready?] (hooks/use-state (not mobile?))
+        [ready? set-ready?] (hooks/use-state
+                             (not (and mobile? (not (:journals? config)))))
         [virtualized? _] (hooks/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
                                                    (if (:journals? config)
                                                      (< (count blocks) 50)
                                                      (< (count blocks) 10))
-                                                 ;; (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
                                                    (and (:block-children? config)
-                                                      ;; zoom-in block's children
+                                                        ;; zoom-in block's children
                                                         (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
