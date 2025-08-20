@@ -82,20 +82,17 @@
       {:presented (boolean open?)
        :onPresentedChange (fn [v?]
                             (when (false? v?)
-                              (if quick-add?
-                                (mobile-state/set-popup! nil)
-                                (js/setTimeout
-                                 #(mobile-state/set-popup! nil) 300))
-                              (state/clear-edit!)
-                              (state/pub-event! [:mobile/keyboard-will-hide])))}
+                              (js/setTimeout
+                               #(mobile-state/set-popup! nil) 300)))}
       (:modal-props opts))
      (silkhq/bottom-sheet-portal
       (silkhq/bottom-sheet-view
        {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
         :inertOutside false
-        :onTravelEnd (fn []
-                       (when quick-add?
-                         (js/setTimeout #(editor-handler/quick-add-open-last-block!) 50)))}
+        :onTravelStatusChange (fn [status]
+                                (when (and quick-add? (= status "entering"))
+                                  (editor-handler/quick-add-open-last-block!)))
+        :onPresentAutoFocus #js {:focus false}}
        (silkhq/bottom-sheet-backdrop
         (when quick-add?
           {:travelAnimation {:opacity (fn [data]
