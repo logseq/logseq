@@ -299,6 +299,9 @@
            m/?)
           (catch Cancelled e
             (add-log-fn :rtc.asset.log/cancelled {})
+            (throw e))
+          (catch :default e
+            (add-log-fn :rtc.asset.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
             (throw e)))))}))
 
 (comment

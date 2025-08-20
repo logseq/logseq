@@ -286,6 +286,9 @@
           (catch Cancelled e
             (add-log-fn :rtc.log/cancelled {})
             (throw e))
+          (catch :default e
+            (add-log-fn :rtc.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
+            (throw e))
           (finally
             (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
