@@ -118,14 +118,20 @@
 
   ;; Ensure :block/order is unique for any block that has :block/parent
   (when (or (:dev? context) (exists? js/process))
-    (let [order-datoms (filter (fn [d] (= :block/order (:a d))) (:tx-data tx-report))]
+    (let [order-datoms (filter (fn [d] (= :block/order (:a d)))
+                               (:tx-data tx-report))]
       (doseq [datom order-datoms]
-        (let [entity (d/entity @conn (:db/id datom))
+        (let [entity (d/entity @conn (:e datom))
               parent (:block/parent entity)]
           (when parent
-            (let [children (:block/_parent parent)]
-              (assert (= (count (distinct (map :block/order children))) (count children))
-                      (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
+            (let [children (:block/_parent parent)
+                  order-different? (= (count (distinct (map :block/order children))) (count children))]
+              (when-not order-different?
+                (throw (ex-info (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))
+                                {:children (->> (map (fn [b] (select-keys b [:db/id :block/title :block/order])) children)
+                                                (sort-by :block/order))
+                                 :tx-meta tx-meta
+                                 :tx-data (:tx-data tx-report)}))))))))))
 
 (defn- toggle-page-and-block
   [conn {:keys [db-before db-after tx-data tx-meta]}]
