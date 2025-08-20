@@ -22,7 +22,9 @@
   []
   (let [*ref (hooks/use-ref nil)
         [detent set-detent!] (r/use-atom mobile-state/*left-sidebar-detent)
-        [inertOutside setInertOutside!] (r/use-atom mobile-state/*left-sidebar-inert-outside?)]
+        [inertOutside setInertOutside!] (r/use-atom mobile-state/*left-sidebar-inert-outside?)
+        left-padding 25
+        [first-detent set-first-detent!] (hooks/use-state left-padding)]
 
     (hooks/use-effect!
      (fn []
@@ -43,22 +45,25 @@
       (silkhq/persistent-sheet-view
        {:class "app-silk-sidebar-sheet-view"
         :contentPlacement "left"
-        :detents ["25px" "min(90vw, 325px)"]
+        :detents [(str first-detent "px") "min(90vw, 325px)"]
         :onTravel (fn [v]
                     (when (empty? @mobile-state/*modal-blocks)
                       (let [{:keys [range]} (bean/->clj v)
                             {:keys [start end]} range
                             ref (.-current *ref)]
                         (when ref
-                          (cond (and (= start 1) (= end 2))
-                                (do
-                                  (dom/remove-class! ref "Sidebar-hidden")
-                                  (setInertOutside! true))
+                          (cond
+                            (and (= start 1) (= end 2))
+                            (do
+                              (dom/remove-class! ref "Sidebar-hidden")
+                              (setInertOutside! true)
+                              (set-first-detent! 0))
 
-                                (and (<= start 1) (<= end 1))
-                                (do
-                                  (dom/add-class! ref "Sidebar-hidden")
-                                  (setInertOutside! false)))))))
+                            (and (<= start 1) (<= end 1))
+                            (do
+                              (dom/add-class! ref "Sidebar-hidden")
+                              (setInertOutside! false)
+                              (set-first-detent! left-padding)))))))
         :inertOutside inertOutside}
        (silkhq/persistent-sheet-content
         {:ref *ref
