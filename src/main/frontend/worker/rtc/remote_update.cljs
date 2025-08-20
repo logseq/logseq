@@ -104,7 +104,12 @@ so need to pull earlier remote-data from websocket."})
     :transact-opts {:repo repo
                     :conn conn}}
    (let [opts' (assoc opts :keep-block-order? true)]
-     (outliner-core/insert-blocks! repo conn blocks target opts'))))
+     (outliner-core/insert-blocks! repo conn blocks target opts')))
+  (doseq [block blocks]
+    (assert (some? (d/entity @conn [:block/uuid (:block/uuid block)]))
+            {:msg "insert-block failed"
+             :block block
+             :target target})))
 
 (defmethod transact-db! :insert-no-order-blocks [_ conn block-uuid+parent-coll]
   (ldb/transact! conn
@@ -546,6 +551,7 @@ so need to pull earlier remote-data from websocket."})
         ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
         ;; if there's already existing same name page
         (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
+        (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})
         (update-block-attrs repo conn self op-value)))))
 
 (defn- ensure-refed-blocks-exist
