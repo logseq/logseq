@@ -103,12 +103,12 @@
 (declare page-cp)
 
 (rum/defc add-button-inner
-  [block {:keys [container-id editing?] :as config*}]
+  [block {:keys [container-id] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
         opacity-class (cond
-                        (and (util/mobile?) (not editing?)) "opacity-50"
+                        (util/mobile?) "opacity-50"
                         has-children? "opacity-0"
                         :else "opacity-50")
         config (dissoc config* :page)]
@@ -151,8 +151,8 @@
 
 (rum/defc add-button < rum/reactive
   [block config]
-  (let [editing? (state/sub :editor/editing?)]
-    (add-button-inner block (assoc config :editing? editing?))))
+  (when-not (state/sub :editor/editing?)
+    (add-button-inner block config)))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -201,8 +201,7 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when (or (util/mobile?) (empty? blocks))
-             (add-button block config))])))))
+           (add-button block config)])))))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
