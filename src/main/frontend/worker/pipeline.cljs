@@ -383,7 +383,8 @@
        :pages pages
        :blocks blocks})
     (catch :default e
-      (js/console.error e))))
+      (js/console.error e)
+      (throw e))))
 
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
