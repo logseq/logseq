@@ -1069,7 +1069,7 @@
           (ldb/transact! (second args) (:tx-data result) tx-meta)))
       result)
     (catch :default e
-      (when-not (= "not-allowed-move-block-page" (.-message e))
+      (when-not (= "not-allowed-move-block-page" (ex-message e))
         (throw e)))))
 
 (let [f (fn [repo conn date-formatter block opts]
