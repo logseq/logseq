@@ -10,7 +10,10 @@
   (:import [missionary Cancelled]))
 
 (def rtc-log-flow
-  (m/watch (:rtc/log @state/state)))
+  (->> (m/watch (:rtc/log @state/state))
+       (m/eduction
+        (remove #(and (= :skip (:sub-type %))
+                      (= :rtc.log/apply-remote-update (:type %)))))))
 
 (def rtc-download-log-flow
   (m/eduction

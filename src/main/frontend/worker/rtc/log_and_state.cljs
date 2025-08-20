@@ -24,6 +24,7 @@
        :rtc.log/download {:doc "rtc log type for upload-graph."}
        :rtc.log/cancelled {:doc "rtc has been cancelled"}
        :rtc.log/apply-remote-update {:doc "apply remote updates to local graph"}
+       :rtc.log/pull-remote-data {:doc "pull remote updates"}
        :rtc.log/push-local-update {:doc "push local updates to remote graph"}
        :rtc.log/higher-remote-schema-version-exists {:doc "remote-graph with larger schema-version exists"}
        :rtc.log/branch-graph {:doc "rtc log type for creating a new graph branch"}

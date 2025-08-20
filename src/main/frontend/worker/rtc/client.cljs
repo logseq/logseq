@@ -431,7 +431,7 @@
                                                         :graph-uuid graph-uuid :schema-version (str major-schema-version)
                                                         :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
-        (do (add-log-fn :rtc.log/push-local-update (assoc remote-ex :sub-type :pull-remote-data))
+        (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
             (case (:type remote-ex)
               :graph-lock-failed nil
               :graph-lock-missing (throw r.ex/ex-remote-graph-lock-missing)
@@ -440,6 +440,4 @@
               (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
         (do (assert (pos? (:t r)) r)
             (r.remote-update/apply-remote-update
-             graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-            (add-log-fn :rtc.log/push-local-update {:sub-type :pull-remote-data
-                                                    :remote-t (:t r) :local-t local-tx}))))))
+             graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn))))))
