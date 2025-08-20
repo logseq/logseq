@@ -108,6 +108,10 @@
         page? (ldb/page? block)
         opacity-class (cond
                         (and editing? has-children?) "opacity-0"
+                        (and (util/mobile?)
+                             (or (some-> (:block/title (last (ldb/sort-by-order (:block/_parent block)))) string/blank?)
+                                 (and (not has-children?) (string/blank? (:block/title block)))))
+                        "opacity-0"
                         (util/mobile?) "opacity-50"
                         has-children? "opacity-0"
                         :else "opacity-50")
