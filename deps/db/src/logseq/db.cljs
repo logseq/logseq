@@ -136,8 +136,8 @@
              :as opts}]
   (if-let [children (sort-by-order
                      (if include-property-block?
-                       (:block/_raw-parent entity)
-                       (:block/_parent entity)))]
+                       (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)
+                       (entity-plus/lookup-kv-then-entity entity :block/_parent)))]
     (cons entity (mapcat #(get-block-and-children-aux % opts) children))
     [entity]))
 
