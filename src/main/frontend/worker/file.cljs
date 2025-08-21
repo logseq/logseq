@@ -7,7 +7,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.async-util :as async-util]
-            [frontend.common.file.core :as common-file]
+            [logseq.cli.common.file :as common-file]
             [frontend.common.file.util :as wfu]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.state :as worker-state]

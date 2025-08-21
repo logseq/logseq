@@ -1448,21 +1448,6 @@ Arg *stop: atom, reset to true to stop the loop"
                (async/<! (async/timeout 5000))
                (recur))))))))
 
-(defmacro concatv
-  "Vector version of concat. non-lazy"
-  [& args]
-  `(vec (concat ~@args)))
-
-(defmacro mapcatv
-  "Vector version of mapcat. non-lazy"
-  [f coll & colls]
-  `(vec (mapcat ~f ~coll ~@colls)))
-
-(defmacro removev
-  "Vector version of remove. non-lazy"
-  [pred coll]
-  `(vec (remove ~pred ~coll)))
-
 ;; from rum
 #?(:cljs
    (def schedule
