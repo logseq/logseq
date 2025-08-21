@@ -14,7 +14,8 @@
              logseq.cli.commands.graph cli-graph
              logseq.cli.common.graph cli-common-graph
              logseq.cli.common.export.text cli-export-text
-            ;;  logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.file common-file
              logseq.cli.util cli-util
              logseq.cli.text-util cli-text-util
              logseq.common.config common-config

@@ -6,7 +6,8 @@
   (:require [cljs.core.match :refer [match]]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.cli.common.file :as cli-common-file]
+            [logseq.cli.common.file :as common-file]
+            [logseq.cli.common.util :as cli-common-util :refer-macros [removev concatv mapcatv]]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -51,40 +52,15 @@
     :keep-only-level<=N :all
     :newline-after-block false}})
 
-;; Fn workarounds
-;; ==============
-
+;; Global vars that are not explicitly passed in all fns
+;; These vars must be bound in order to use most fns in this namespace
 (def ^:dynamic *current-db* nil)
 (def ^:dynamic *current-repo* nil)
+;; Config used by logseq.cli.common.file fns
 (def ^:dynamic *content-config* nil)
 
-(defn get-block-by-uuid
-  [id]
-  (d/entity *current-db* [:block/uuid (if (uuid? id) id (uuid id))]))
-
-(defn zero-pad
-  [n]
-  (if (< n 10)
-    (str "0" n)
-    (str n)))
-
-(defmacro concatv
-  "Vector version of concat. non-lazy"
-  [& args]
-  `(vec (concat ~@args)))
-
-(defmacro mapcatv
-  "Vector version of mapcat. non-lazy"
-  [f coll & colls]
-  `(vec (mapcat ~f ~coll ~@colls)))
-
-(defmacro removev
-  "Vector version of remove. non-lazy"
-  [pred coll]
-  `(vec (remove ~pred ~coll)))
-
 ;;; internal utils
-(defn- get-blocks-contents
+(defn ^:api get-blocks-contents
   [repo root-block-uuid & {:keys [init-level]
                            :or {init-level 1}}]
   (let [block (d/entity *current-db* [:block/uuid root-block-uuid])
@@ -93,22 +69,16 @@
         root-id (:block/uuid block')
         blocks (ldb/get-block-and-children *current-db* root-id)
         tree (otree/blocks->vec-tree repo *current-db* blocks root-id {:link link})]
-    (cli-common-file/tree->file-content *current-repo* *current-db* tree
-                                        {:init-level init-level :link link}
-                                        *content-config*)))
-
-;; (defn root-block-uuids->content
-;;   [repo root-block-uuids]
-;;   (let [contents (mapv (fn [id]
-;;                          (get-blocks-contents repo id)) root-block-uuids)]
-;;     (string/join "\n" (mapv string/trim-newline contents))))
+    (common-file/tree->file-content *current-repo* *current-db* tree
+                                    {:init-level init-level :link link}
+                                    *content-config*)))
 
 (declare remove-block-ast-pos Properties-block-ast?)
 
 (defn- block-uuid->ast
   [block-uuid]
-  (let [block (into {} (get-block-by-uuid block-uuid))
-        content (cli-common-file/tree->file-content *current-repo* *current-db* [block] {:init-level 1} *content-config*)
+  (let [block (into {} (d/entity *current-db* [:block/uuid block-uuid]))
+        content (common-file/tree->file-content *current-repo* *current-db* [block] {:init-level 1} *content-config*)
         format :markdown]
     (when content
       (removev Properties-block-ast?
@@ -124,13 +94,9 @@
                (mapv remove-block-ast-pos
                      (gp-mldoc/->edn *current-repo* content format))))))
 
-(defn get-page-content
+(defn ^:api get-page-content
   [page-uuid]
-  (let [repo *current-repo*
-        db *current-db*]
-    (cli-common-file/block->content repo db page-uuid
-                                    nil
-                                    *content-config*)))
+  (common-file/block->content *current-repo* *current-db* page-uuid nil *content-config*))
 
 (defn- page-name->ast
   [page-name]
@@ -160,9 +126,9 @@
   [inline-coll meta]
   (with-meta ["Paragraph" inline-coll] meta))
 
-;; ;;; internal utils (ends)
+;;; internal utils (ends)
 
-;; ;;; utils
+;;; utils
 
 (defn priority->string
   [priority]
@@ -184,8 +150,8 @@
         repetition (if repetition
                      (str " " (repetition-to-string repetition))
                      "")
-        hour (when hour (zero-pad hour))
-        min  (when min (zero-pad min))
+        hour (when hour (cli-common-util/zero-pad hour))
+        min  (when min (cli-common-util/zero-pad min))
         time (cond
                (and hour min)
                (common-util/format " %s:%s" hour min)
@@ -196,12 +162,13 @@
     (common-util/format "%s%s-%s-%s %s%s%s%s"
                         open
                         (str year)
-                        (zero-pad month)
-                        (zero-pad day)
+                        (cli-common-util/zero-pad month)
+                        (cli-common-util/zero-pad day)
                         wday
                         time
                         repetition
                         close)))
+
 (defn hashtag-value->string
   [inline-coll]
   (reduce str
@@ -217,32 +184,9 @@
                  ast-content)))
            inline-coll)))
 
-;; (defn <get-all-pages
-;;   [repo]
-;;   (state/<invoke-db-worker :thread-api/export-get-all-pages repo))
+;;; utils (ends)
 
-;; (defn <get-debug-datoms
-;;   [repo]
-;;   (state/<invoke-db-worker :thread-api/export-get-debug-datoms repo))
-
-;; (defn <get-all-page->content
-;;   [repo options]
-;;   (state/<invoke-db-worker :thread-api/export-get-all-page->content repo options))
-
-;; (defn <get-file-contents
-;;   [repo suffix]
-;;   (p/let [page->content (<get-all-page->content repo
-;;                                                 {:export-bullet-indentation (state/get-export-bullet-indentation)})]
-;;     (clojure.core/map (fn [[page-title content]]
-;;                         {:path (str page-title "." suffix)
-;;                          :content content
-;;                          :title page-title
-;;                          :format :markdown})
-;;                       page->content)))
-
-;; ;;; utils (ends)
-
-;; ;;; replace block-ref, block-embed, page-embed
+;;; replace block-ref, block-embed, page-embed
 
 (defn- replace-block-reference-in-heading
   [{:keys [title] :as ast-content}]
@@ -534,7 +478,7 @@
         (if (get-in *state* [:replace-ref-embed :block&page-embed-replaced?])
           (do (set! *state* (assoc-in *state* [:replace-ref-embed :block&page-embed-replaced?] false))
               (recur block-ast-coll result-block-ast-tcoll
-                     (vec (concat block-ast-coll-to-replace-references block-ast-coll-replaced))
+                     (concatv block-ast-coll-to-replace-references block-ast-coll-replaced)
                      (vec other-block-asts-to-replace-embed)))
           (recur block-ast-coll (reduce conj! result-block-ast-tcoll block-ast-coll-replaced)
                  (vec block-ast-coll-to-replace-references) (vec other-block-asts-to-replace-embed))))
@@ -547,7 +491,7 @@
                  (conj block-ast-coll-to-replace-references block-ast)
                  (vec block-ast-coll-to-replace-embeds)))))))
 
-;; ;;; replace block-ref, block-embed, page-embed (ends)
+;;; replace block-ref, block-embed, page-embed (ends)
 
 (def remove-block-ast-pos
   "[[ast-type ast-content] _pos] -> [ast-type ast-content]"
@@ -595,7 +539,7 @@
       :result-ast-tcoll
       persistent!))
 
-;; ;;; inline transformers
+;;; inline transformers
 
 (defn remove-emphasis
   ":mapcat-fns-on-inline-ast"
@@ -654,9 +598,9 @@
     {:r [] :after-break-line? true}
     inline-coll)))
 
-;; ;;; inline transformers (ends)
+;;; inline transformers (ends)
 
-;; ;;; walk on block-ast, apply inline transformers
+;;; walk on block-ast, apply inline transformers
 
 (defn- walk-block-ast-helper
   [inline-coll map-fns-on-inline-ast mapcat-fns-on-inline-ast fns-on-inline-coll]
@@ -726,9 +670,9 @@
        ;; else
       block-ast)))
 
-;; ;;; walk on block-ast, apply inline transformers (ends)
+;;; walk on block-ast, apply inline transformers (ends)
 
-;; ;;; simple ast
+;;; simple ast
 (def simple-ast-malli-schema
   (mu/closed-schema
    [:or
@@ -763,7 +707,7 @@
     :indent (reduce str (concatv (repeat (:level simple-ast) "\t")
                                  (repeat (:extra-space-count simple-ast) " ")))))
 
-(defn- merge-adjacent-spaces&newlines
+(defn- ^:large-vars/cleanup-todo merge-adjacent-spaces&newlines
   [simple-ast-coll]
   (loop [r                             (transient [])
          last-ast                      nil
