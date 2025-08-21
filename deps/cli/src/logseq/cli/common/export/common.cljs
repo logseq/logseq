@@ -150,8 +150,8 @@
         repetition (if repetition
                      (str " " (repetition-to-string repetition))
                      "")
-        hour (when hour (cli-common-util/zero-pad hour))
-        min  (when min (cli-common-util/zero-pad min))
+        hour (when hour (common-util/zero-pad hour))
+        min  (when min (common-util/zero-pad min))
         time (cond
                (and hour min)
                (common-util/format " %s:%s" hour min)
@@ -162,8 +162,8 @@
     (common-util/format "%s%s-%s-%s %s%s%s%s"
                         open
                         (str year)
-                        (cli-common-util/zero-pad month)
-                        (cli-common-util/zero-pad day)
+                        (common-util/zero-pad month)
+                        (common-util/zero-pad day)
                         wday
                         time
                         repetition

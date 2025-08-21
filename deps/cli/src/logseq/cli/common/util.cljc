@@ -18,12 +18,6 @@
                   content)))
        zip)))
 
-(defn zero-pad
-  [n]
-  (if (< n 10)
-    (str "0" n)
-    (str n)))
-
 ;; Macros are defined at top-level for frontend and nbb
 
 (defmacro concatv
