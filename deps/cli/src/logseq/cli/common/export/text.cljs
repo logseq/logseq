@@ -1,25 +1,15 @@
 (ns logseq.cli.common.export.text
+  "Common fns between frontend and CLI for exporting as markdown"
   (:require [clojure.string :as string]
-            [logseq.cli.common.export.common :as common :refer
+            [logseq.cli.common.export.common :as cli-export-common :refer
              [*state* newline* indent raw-text space simple-asts->string]]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [logseq.cli.common.util :refer-macros [removev concatv mapcatv]]
+            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.graph-parser.schema.mldoc :as mldoc-schema]))
 
-(defmacro concatv
-  "Vector version of concat. non-lazy"
-  [& args]
-  `(vec (concat ~@args)))
+;;; block-ast, inline-ast -> simple-ast
 
-(defmacro mapcatv
-  "Vector version of mapcat. non-lazy"
-  [f coll & colls]
-  `(vec (mapcat ~f ~coll ~@colls)))
-
-(defmacro removev
-  "Vector version of remove. non-lazy"
-  [pred coll]
-  `(vec (remove ~pred ~coll)))
-
-(defn indent-with-2-spaces
+(defn ^:api indent-with-2-spaces
   "also consider (get-in *state* [:export-options :indent-style])"
   [level]
   (let [indent-style (get-in *state* [:export-options :indent-style])]
@@ -34,7 +24,7 @@
 (defn- block-heading
   [{:keys [title _tags marker level _numbering priority _anchor _meta _unordered size]}]
   (let [indent-style (get-in *state* [:export-options :indent-style])
-        priority* (and priority (raw-text (common/priority->string priority)))
+        priority* (and priority (raw-text (cli-export-common/priority->string priority)))
         heading* (if (= indent-style "dashes")
                    [(indent (dec level) 0) (raw-text "-")]
                    [(indent (dec level) 0)])
@@ -293,13 +283,13 @@
   [ast-content]
   (let [[type timestamp-content] ast-content]
     (-> (case type
-          "Scheduled" ["SCHEDULED: " (common/timestamp-to-string timestamp-content)]
-          "Deadline" ["DEADLINE: " (common/timestamp-to-string timestamp-content)]
-          "Date" [(common/timestamp-to-string timestamp-content)]
-          "Closed" ["CLOSED: " (common/timestamp-to-string timestamp-content)]
-          "Clock" ["CLOCK: " (common/timestamp-to-string (second timestamp-content))]
+          "Scheduled" ["SCHEDULED: " (cli-export-common/timestamp-to-string timestamp-content)]
+          "Deadline" ["DEADLINE: " (cli-export-common/timestamp-to-string timestamp-content)]
+          "Date" [(cli-export-common/timestamp-to-string timestamp-content)]
+          "Closed" ["CLOSED: " (cli-export-common/timestamp-to-string timestamp-content)]
+          "Clock" ["CLOCK: " (cli-export-common/timestamp-to-string (second timestamp-content))]
           "Range" (let [{:keys [start stop]} timestamp-content]
-                    [(str (common/timestamp-to-string start) "--" (common/timestamp-to-string stop))]))
+                    [(str (cli-export-common/timestamp-to-string start) "--" (cli-export-common/timestamp-to-string stop))]))
         string/join
         raw-text
         vector)))
@@ -344,9 +334,9 @@
        (when (> current-level 1)
          (indent-with-2-spaces (dec current-level)))))])
 
-;; {:malli/schema ...} only works on public vars, so use m/=> here
-;; (m/=> block-ast->simple-ast [:=> [:cat mldoc-schema/block-ast-schema] [:sequential simple-ast-malli-schema]])
-(defn- block-ast->simple-ast
+;; {:malli/schema ...} only works on public vars so make this public
+(defn ^:large-vars/cleanup-todo ^:api block-ast->simple-ast
+  {:malli/schema [:=> [:cat mldoc-schema/block-ast-schema] [:sequential cli-export-common/simple-ast-malli-schema]]}
   [block]
   (let [newline-after-block? (get-in *state* [:export-options :newline-after-block])]
     (removev
@@ -406,7 +396,7 @@
          (block-hiccup ast-content)
          (assert false (print-str :block-ast->simple-ast ast-type "not implemented yet")))))))
 
-(defn- inline-ast->simple-ast
+(defn- ^:large-vars/cleanup-todo inline-ast->simple-ast
   [inline]
   (let [[ast-type ast-content] inline]
     (case ast-type
@@ -419,7 +409,7 @@
       "Code"
       [(raw-text "`" ast-content "`")]
       "Tag"
-      [(raw-text (str "#" (common/hashtag-value->string ast-content)))]
+      [(raw-text (str "#" (cli-export-common/hashtag-value->string ast-content)))]
       "Spaces"                          ; what's this ast-type for ?
       nil
       "Plain"
@@ -458,8 +448,9 @@
       nil
       (assert false (print-str :inline-ast->simple-ast ast-type "not implemented yet")))))
 
+;;; block-ast, inline-ast -> simple-ast (ends)
 
-(defn export-helper
+(defn ^:large-vars/cleanup-todo export-helper
   [repo content format options]
   (let [remove-options (set (:remove-options options))
         other-options (:other-options options)]
@@ -473,30 +464,30 @@
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
       (let [ast (gp-mldoc/->edn repo content format)
-            ast (mapv common/remove-block-ast-pos ast)
-            ast (vec (remove common/Properties-block-ast? ast))
-            ast* (common/replace-block&page-reference&embed ast)
+            ast (mapv cli-export-common/remove-block-ast-pos ast)
+            ast (removev cli-export-common/Properties-block-ast? ast)
+            ast* (cli-export-common/replace-block&page-reference&embed ast)
             keep-level<=n (get-in *state* [:export-options :keep-only-level<=N])
             ast* (if (pos? keep-level<=n)
-                   (common/keep-only-level<=n ast* keep-level<=n)
+                   (cli-export-common/keep-only-level<=n ast* keep-level<=n)
                    ast*)
             ast** (if (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                    (mapv common/replace-Heading-with-Paragraph ast*)
+                    (mapv cli-export-common/replace-Heading-with-Paragraph ast*)
                     ast*)
             config-for-walk-block-ast (cond-> {}
                                         (get-in *state* [:export-options :remove-emphasis?])
-                                        (update :mapcat-fns-on-inline-ast conj common/remove-emphasis)
+                                        (update :mapcat-fns-on-inline-ast conj cli-export-common/remove-emphasis)
 
                                         (get-in *state* [:export-options :remove-page-ref-brackets?])
-                                        (update :map-fns-on-inline-ast conj common/remove-page-ref-brackets)
+                                        (update :map-fns-on-inline-ast conj cli-export-common/remove-page-ref-brackets)
 
                                         (get-in *state* [:export-options :remove-tags?])
-                                        (update :mapcat-fns-on-inline-ast conj common/remove-tags)
+                                        (update :mapcat-fns-on-inline-ast conj cli-export-common/remove-tags)
 
                                         (= "no-indent" (get-in *state* [:export-options :indent-style]))
-                                        (update :fns-on-inline-coll conj common/remove-prefix-spaces-in-Plain))
+                                        (update :fns-on-inline-coll conj cli-export-common/remove-prefix-spaces-in-Plain))
             ast*** (if-not (empty? config-for-walk-block-ast)
-                     (mapv (partial common/walk-block-ast config-for-walk-block-ast) ast**)
+                     (mapv (partial cli-export-common/walk-block-ast config-for-walk-block-ast) ast**)
                      ast**)
-            simple-asts (vec (mapcat block-ast->simple-ast ast***))]
+            simple-asts (mapcatv block-ast->simple-ast ast***)]
         (simple-asts->string simple-asts)))))
