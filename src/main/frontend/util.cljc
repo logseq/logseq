@@ -257,11 +257,7 @@
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
 
-(defn zero-pad
-  [n]
-  (if (< n 10)
-    (str "0" n)
-    (str n)))
+#?(:cljs (def zero-pad common-util/zero-pad))
 
 #?(:cljs
    (defn safe-parse-int
