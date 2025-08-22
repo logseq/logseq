@@ -1,6 +1,14 @@
 .action-bar {
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
-  shadow-lg bg-[var(--ls-secondary-background-color)] z-[99999] border;
+  bg-[var(--ls-secondary-background-color)] z-[99999];
+
+  box-shadow:
+      /* bottom = shadow-lg */
+      0 10px 15px -3px rgba(0,0,0,0.1),
+      0 4px 6px -4px rgba(0,0,0,0.1),
+      /* top = lighter (closer to shadow-md) */
+      0 -6px 10px -4px rgba(0,0,0,0.08),
+      0 -2px 4px -4px rgba(0,0,0,0.08);
 
   .action-bar-commands {
     @apply relative flex w-full;
