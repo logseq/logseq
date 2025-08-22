@@ -287,7 +287,8 @@
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands conn tx-report))
-        insert-templates-tx (insert-tag-templates repo tx-report)
+        insert-templates-tx (when-not (:rtc-tx? tx-meta)
+                              (insert-tag-templates repo tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
     (concat toggle-page-and-block-tx-data display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
 
