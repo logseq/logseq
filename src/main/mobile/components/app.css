@@ -136,7 +136,7 @@ ul {
 .block-modal-page {
   &-header {
     @apply pt-5 pb-1 px-4 flex justify-between bg-gray-01
-    absolute top-0 left-0 w-full z-[1] overflow-hidden;
+    absolute top-0 left-0 w-full z-[10] overflow-hidden;
 
     border-radius: 26px 26px 0 0;
   }
