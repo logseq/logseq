@@ -253,6 +253,9 @@
 
            (utils/<restore-proxy-settings)
 
+           ;; Initialize system certificate support
+           (utils/init-system-certificates!)
+
            (js-utils/disableXFrameOptions win)
 
            (db/ensure-graphs-dir!)

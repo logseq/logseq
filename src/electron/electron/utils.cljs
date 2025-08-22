@@ -28,6 +28,16 @@
 (defonce _fetch (js/require "node-fetch"))
 (defonce extract-zip (js/require "extract-zip"))
 
+(defn init-system-certificates!
+  "Initialize additional certificates using environment variables"
+  []
+  ;; Support NODE_EXTRA_CA_CERTS environment variable
+  (when-let [extra-ca-certs (.-NODE_EXTRA_CA_CERTS js/process.env)]
+    (try
+      (logger/info "Using additional CA certificates from:" extra-ca-certs)
+      (catch :default e
+        (logger/warn "Failed to use NODE_EXTRA_CA_CERTS:" e)))))
+
 (defn fetch
   ([url] (fetch url nil))
   ([url options]
