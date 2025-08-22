@@ -128,6 +128,7 @@
               "Delete local graph"))
            (when (and db-based? root
                       (user-handler/logged-in?)
+                      (user-handler/rtc-group?)
                       (not remote?)
                       (= url (state/get-current-repo)))
              (shui/dropdown-menu-item
