@@ -2,7 +2,7 @@
   "Mobile left sidebar"
   (:require [cljs-bean.core :as bean]
             [dommy.core :as dom]
-            [frontend.components.container :as container]
+            [frontend.components.left-sidebar :as app-left-sidebar]
             [frontend.rum :as r]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.silkhq :as silkhq]
@@ -15,8 +15,8 @@
    [:div.left-sidebar-inner
     [:div.sidebar-contents-container
      {:class "!gap-4"}
-     (container/sidebar-favorites)
-     (container/sidebar-recent-pages)]]])
+     (app-left-sidebar/sidebar-favorites)
+     (app-left-sidebar/sidebar-recent-pages)]]])
 
 (rum/defc left-sidebar-inner
   []
