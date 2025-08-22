@@ -180,6 +180,11 @@
               "Delete from server")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
+  {:will-mount (fn [state]
+                 (let [login? (:auth/id-token @state/state)]
+                   (when (and login? (user-handler/rtc-group?))
+                     (rtc-handler/<get-remote-graphs)))
+                 state)}
   []
   (let [login? (boolean (state/sub :auth/id-token))
         repos (state/sub [:me :repos])
