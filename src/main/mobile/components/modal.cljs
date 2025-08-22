@@ -36,63 +36,12 @@
      (shui/tabler-icon (if back? "arrow-left" "chevron-down") {:size 24}))))
 
 (rum/defc block-cp
-  [block {:keys [favorited? set-favorited!]}]
-  (let [close! mobile-state/close-block-modal!]
-    [:div.app-silk-scroll-content-inner
-     [:div.flex.justify-between.items-center.block-modal-page-header
-      (back-or-close-button)
-
-      [:span.flex.items-center.-mr-2
-       (when-let [block-id-str (str (:block/uuid block))]
-         (shui/button
-          {:variant :text
-           :size :sm
-           :class (when favorited? "!text-yellow-800")
-           :on-click #(-> (if favorited?
-                            (page-handler/<unfavorite-page! block-id-str)
-                            (page-handler/<favorite-page! block-id-str))
-                          (p/then (fn [] (set-favorited! (not favorited?)))))}
-          (shui/tabler-icon (if favorited? "star-filled" "star") {:size 20})))
-       (shui/button
-        {:variant :text
-         :size :sm
-         :on-click (fn []
-                     (mobile-ui/open-popup!
-                      (fn []
-                        [:div.-mx-2
-                         (ui/menu-link
-                          {:on-click #(mobile-ui/close-popup!)}
-                          [:span.text-lg.flex.gap-2.items-center
-                           (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
-                           "Copy"])
-
-                         (ui/menu-link
-                          {:on-click #(-> (shui/dialog-confirm!
-                                           (str "⚠️ Are you sure you want to delete this "
-                                                (if (entity-util/page? block) "page" "block")
-                                                "?"))
-                                          (p/then
-                                           (fn []
-                                             (mobile-ui/close-popup!)
-                                             (some->
-                                              (:block/uuid block)
-                                              (page-handler/<delete!
-                                               (fn [] (close!))
-                                               {:error-handler
-                                                (fn [{:keys [msg]}]
-                                                  (notification/show! msg :warning))})))))}
-                          [:span.text-lg.flex.gap-2.items-center.text-red-700
-                           (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
-                           "Delete"])])
-                      {:title "Actions"
-                       :default-height false
-                       :type :action-sheet}))}
-        (shui/tabler-icon "dots-vertical" {:size 20}))]]
-
-     ;; block page content
-     [:div.block-modal-page-content
-      (mobile-ui/classic-app-container-wrap
-       (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]))
+  [block]
+  [:div.app-silk-scroll-content-inner
+   ;; block page content
+   [:div.block-modal-page-content
+    (mobile-ui/classic-app-container-wrap
+      (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
 
 (defn setup-sidebar-touch-swipe! []
   (let [touch-start-x (atom 0)
@@ -127,6 +76,60 @@
     #(do
        (.removeEventListener js/document "touchstart" on-touch-start)
        (.removeEventListener js/document "touchmove" on-touch-move))))
+
+(rum/defc block-sheet-topbar
+  [block {:keys [favorited? set-favorited!]}]
+
+  (let [close! mobile-state/close-block-modal!]
+    [:div.flex.justify-between.items-center.block-modal-page-header
+     (back-or-close-button)
+
+     [:span.flex.items-center.-mr-2
+      (when-let [block-id-str (str (:block/uuid block))]
+        (shui/button
+          {:variant :text
+           :size :sm
+           :class (when favorited? "!text-yellow-800")
+           :on-click #(-> (if favorited?
+                            (page-handler/<unfavorite-page! block-id-str)
+                            (page-handler/<favorite-page! block-id-str))
+                        (p/then (fn [] (set-favorited! (not favorited?)))))}
+          (shui/tabler-icon (if favorited? "star-filled" "star") {:size 20})))
+      (shui/button
+        {:variant :text
+         :size :sm
+         :on-click (fn []
+                     (mobile-ui/open-popup!
+                       (fn []
+                         [:div.-mx-2
+                          (ui/menu-link
+                            {:on-click #(mobile-ui/close-popup!)}
+                            [:span.text-lg.flex.gap-2.items-center
+                             (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
+                             "Copy"])
+
+                          (ui/menu-link
+                            {:on-click #(-> (shui/dialog-confirm!
+                                              (str "⚠️ Are you sure you want to delete this "
+                                                (if (entity-util/page? block) "page" "block")
+                                                "?"))
+                                          (p/then
+                                            (fn []
+                                              (mobile-ui/close-popup!)
+                                              (some->
+                                                (:block/uuid block)
+                                                (page-handler/<delete!
+                                                  (fn [] (close!))
+                                                  {:error-handler
+                                                   (fn [{:keys [msg]}]
+                                                     (notification/show! msg :warning))})))))}
+                            [:span.text-lg.flex.gap-2.items-center.text-red-700
+                             (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
+                             "Delete"])])
+                       {:title "Actions"
+                        :default-height false
+                        :type :action-sheet}))}
+        (shui/tabler-icon "dots-vertical" {:size 20}))]]))
 
 (rum/defc block-sheet
   [block]
@@ -166,18 +169,19 @@
         :onClickOutside (bean/->js {:dismiss false
                                     :stopOverlayPropagation false})}
        (silkhq/depth-sheet-backdrop)
-       (silkhq/depth-sheet-content
-        {:class "app-silk-depth-sheet-content"}
-        (silkhq/scroll
-         {:as-child true}
-         (silkhq/scroll-view
-          {:class "app-silk-scroll-view"
-           :scrollGestureTrap {:yEnd true}}
-          (silkhq/scroll-content
-           {:class "app-silk-scroll-content"}
+        (silkhq/depth-sheet-content
+          {:class "app-silk-depth-sheet-content"}
+          (block-sheet-topbar block {:favorited? favorited?
+                                     :set-favorited! set-favorited!})
+          (silkhq/scroll
+            {:as-child true}
+            (silkhq/scroll-view
+              {:class "app-silk-scroll-view"
+               :scrollGestureTrap {:yEnd true}}
+              (silkhq/scroll-content
+                {:class "app-silk-scroll-content"}
 
-           (block-cp block {:favorited? favorited?
-                            :set-favorited! set-favorited!}))))))))))
+                (block-cp block))))))))))
 
 (rum/defc blocks-modal < rum/reactive
   []
