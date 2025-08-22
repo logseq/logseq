@@ -1,19 +1,17 @@
 (ns mobile.components.header
   "App top header"
-  (:require [clojure.string :as string]
+  (:require [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.conn :as db-conn]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.date :as gdate]
-            [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.shui.ui :as shui]
             [mobile.components.ui :as ui-component]
@@ -22,19 +20,9 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc app-graphs-select < rum/reactive
+(rum/defc app-graphs-select
   []
   (let [current-repo (state/get-current-repo)
-        graphs (->> (state/sub [:me :repos])
-                    (util/distinct-by :url))
-        remote-graphs (state/sub :rtc/graphs)
-        graphs (->>
-                (if (seq remote-graphs)
-                  (repo-handler/combine-local-&-remote-graphs graphs remote-graphs)
-                  graphs)
-                (filter (fn [item]
-                          (and (string? (:url item))
-                               (string/starts-with? (:url item) common-config/db-version-prefix)))))
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
                           "Select a Graph")]
@@ -42,27 +30,13 @@
      (shui/button
       {:variant :text
        :size :sm
-       :on-click (fn []
-                   (let [buttons (concat
-                                  (->>
-                                   (for [repo graphs]
-                                     {:text (some-> (:url repo) (string/replace #"^logseq_db_" ""))
-                                      :role (:url repo)})
-                                   (remove (fn [{:keys [text]}] (string/blank? text))))
-                                  [{:text [:div.text-gray-09.pb-4.active:opacity-80.flex.justify-center
-                                           "+ Add new graph"]
-                                    :role "add-new-graph"}])]
-                     (ui-component/open-popup! "Switch graph"
-                                               {:modal-props {:class "graph-switcher"}
-                                                :buttons buttons
-                                                :on-action (fn [e]
-                                                             (when-let [role (:role e)]
-                                                               (if (= "add-new-graph" role)
-                                                                 (state/pub-event! [:graph/new-db-graph])
-                                                                 (when (string/starts-with? role "logseq_db_")
-                                                                   (state/pub-event! [:graph/switch role]))))
-                                                             (ui-component/close-popup!))
-                                                :type :action-sheet})))}
+       :on-click (fn [e]
+                   (shui/popup-show! (.-target e)
+                                     (fn [{:keys [id]}]
+                                       (repo/repos-dropdown-content {:contentid id}))
+                                     {:id :switch-graph
+                                      :default-height false
+                                      :content-props {:class "repos-list"}}))}
       [:span.flex.items-center.pt-1
        [:span.overflow-hidden.text-ellipsis.block.text-base
         {:style {:max-width "40vw"}}

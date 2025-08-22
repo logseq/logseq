@@ -2,12 +2,13 @@
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
             [frontend.background-tasks]
-            [frontend.components.page :as page]
+            [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [mobile.components.app :as app]
             [mobile.events]
             [mobile.init :as init]
@@ -26,32 +27,48 @@
   [["/"
     {:name :home}]
    ["/page/:name"
-    {:name :page
-     :view (fn [route-match]
-             (page/page-cp (assoc route-match :current-page? true)))}]])
+    {:name :page}]
+   ["/graphs"
+    {:name :graphs}]
+   ["/import"
+    {:name :import}]])
 
 (defn set-router!
   []
   (rfe/start!
    (rf/router routes nil)
    (fn [route]
-     (when (= :page (get-in route [:data :name]))
-       (let [id-str (get-in route [:path-params :name])]
-         (when (util/uuid-string? id-str)
-           (let [page-uuid (uuid id-str)
-                 repo (state/get-current-repo)]
-             (when (and repo page-uuid)
-               (p/let [entity (db-async/<get-block repo page-uuid
-                                                   {:children? false
-                                                    :skip-refresh? true})]
-                 (when entity
-                   ;; close sidebar
-                   (when (mobile-state/left-sidebar-open?)
-                     (mobile-state/close-left-sidebar!))
-                   (when (state/get-edit-block)
-                     (state/clear-edit!))
+     (let [route-name (get-in route [:data :name])]
+       (case route-name
+         :page
+         (let [id-str (get-in route [:path-params :name])]
+           (when (util/uuid-string? id-str)
+             (let [page-uuid (uuid id-str)
+                   repo (state/get-current-repo)]
+               (when (and repo page-uuid)
+                 (p/let [entity (db-async/<get-block repo page-uuid
+                                                     {:children? false
+                                                      :skip-refresh? true})]
+                   (when entity
+                     ;; close sidebar
+                     (when (mobile-state/left-sidebar-open?)
+                       (mobile-state/close-left-sidebar!))
+                     (when (state/get-edit-block)
+                       (state/clear-edit!))
 
-                   (mobile-state/open-block-modal! entity)))))))))
+                     (mobile-state/open-block-modal! entity)))))))
+
+         :graphs
+         (mobile-state/redirect-to-tab! "settings")
+
+         :import
+         (js/setTimeout
+          #(shui/popup-show! nil (fn []
+                                   (imports/importer {}))
+                             {:id :import})
+          500)
+
+         nil)))
 
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
