@@ -98,6 +98,10 @@
 
        (let [db-graph? (config/db-based-graph? url)
              manager? (and db-graph? (user-handler/manager? url))]
+         (prn "debug"
+              ":repo " (str repo)
+              ":db-graph? " db-graph?
+              "manager? " manager?)
          (shui/dropdown-menu
           (shui/dropdown-menu-trigger
            {:asChild true}
