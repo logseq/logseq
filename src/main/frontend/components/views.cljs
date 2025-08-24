@@ -969,9 +969,7 @@
   [table row props option]
   (let [block (db/sub-block (:db/id row))
         row' (some->
-              (if (:block.temp/load-status block)
-                (assoc block :block.temp/refs-count (:block.temp/refs-count row))
-                row)
+              (if (:block.temp/load-status block) block row)
               (update :block/tags (fn [tags]
                                     (keep (fn [tag]
                                             (when-let [id (:db/id tag)]

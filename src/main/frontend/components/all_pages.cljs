@@ -27,7 +27,7 @@
         {:id :block.temp/refs-count
          :name (t :page/backlinks)
          :cell (fn [_table row _column]
-                 (:block.temp/refs-count row))
+                 (or (:block.temp/refs-count row) 0))
          :type :number}]
        (remove nil?)
        vec))
