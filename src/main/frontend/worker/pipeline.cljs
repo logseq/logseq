@@ -117,7 +117,7 @@
         (throw (ex-info "Invalid data" {:graph repo})))))
 
   ;; Ensure :block/order is unique for any block that has :block/parent
-  (when (or (:dev? context) (exists? js/process))
+  (when (:dev? context)
     (let [order-datoms (filter (fn [d] (= :block/order (:a d)))
                                (:tx-data tx-report))]
       (doseq [datom order-datoms]
