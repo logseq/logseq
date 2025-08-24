@@ -65,7 +65,8 @@
 (defn get-ws-url
   [token]
   (assert (some? token))
-  (gstring/format @worker-state/*rtc-ws-url token))
+  (when-let [url @worker-state/*rtc-ws-url]
+    (gstring/format url token)))
 
 (defn- gen-get-ws-create-map
   "Return a map with atom *current-ws and a task
