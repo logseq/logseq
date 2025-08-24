@@ -814,7 +814,10 @@
      (when-not (:import-type start-opts)
        (c.m/<? (start-db! repo start-opts))
        (assert (some? (worker-state/get-datascript-conn repo))))
-     (m/? (rtc.core/new-task--rtc-start true)))))
+     ;; Don't wait for rtc started because the app will be slow to be ready
+     ;; for users.
+     (when @worker-state/*rtc-ws-url
+       (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
@@ -859,7 +862,9 @@
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
                                   (p/let [service (<init-service! graph opts)]
+                                    (prn :debug :x1)
                                     (get-in service [:status :ready])
+                                    (prn :debug :x2)
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
