@@ -186,10 +186,10 @@
                     (set (map :db/ident tags))
                     :else
                     #{:logseq.class/Page})
-        existing-page-id (first (ldb/page-exists? db title types))]
-    (if existing-page-id
-      (let [existing-page (d/entity db existing-page-id)
-            tx-meta {:persist-op? persist-op?
+        existing-page-id (first (ldb/page-exists? db title types))
+        existing-page (some->> existing-page-id (d/entity db))]
+    (if (and existing-page (not (:block/parent existing-page)))
+      (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
         (when (and class?
                    (not (ldb/class? existing-page))
