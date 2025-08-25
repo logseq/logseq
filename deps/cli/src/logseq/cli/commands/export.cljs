@@ -1,5 +1,5 @@
 (ns logseq.cli.commands.export
-  "Export command"
+  "Export MD command"
   (:require ["fs" :as fs]
             [cljs.pprint]
             [clojure.string :as string]
@@ -53,7 +53,7 @@
 
 (defn- export-repo-as-markdown!
   "Modified version of handler.export.text/export-repo-as-markdown for the CLI"
-  [repo db]
+  [repo db {:keys [file]}]
   (let [content-config (get-content-config db)
         files* (get-file-contents repo db content-config "md")]
     (when (seq files*)
@@ -62,14 +62,19 @@
                             cli-export-common/*content-config* content-config]
                     (export-files-as-markdown repo files* nil))
             repo' (string/replace repo common-config/db-version-prefix "")
-            zip-file-name (str repo' "_markdown_" (quot (common-util/time-ms) 1000))
-            zip (cli-common-util/make-export-zip zip-file-name files)]
+            zip-file-name (if file
+                            (string/replace-first file #"(?i)\.zip$" "")
+                            (str repo' "_markdown_" (quot (common-util/time-ms) 1000)))
+            file-name (or file (str zip-file-name ".zip"))
+            zip (cli-common-util/make-export-zip zip-file-name files)
+            ;; matches behavior in make-export-zip
+            exported-files (remove #(string/blank? (second %)) files)]
         (-> (.generateNodeStream zip #js {:streamFiles true :type "nodebuffer"})
-            (.pipe (fs/createWriteStream (str zip-file-name ".zip"))))
-        (println "Exported graph to" (str zip-file-name ".zip"))))))
+            (.pipe (fs/createWriteStream file-name)))
+        (println "Exported" (count exported-files) "pages to" file-name)))))
 
-(defn export [{{:keys [graph]} :opts}]
+(defn export [{{:keys [graph] :as opts} :opts}]
   (if (fs/existsSync (cli-util/get-graph-dir graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
-      (export-repo-as-markdown! (str common-config/db-version-prefix graph) @conn))
+      (export-repo-as-markdown! (str common-config/db-version-prefix graph) @conn opts))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
