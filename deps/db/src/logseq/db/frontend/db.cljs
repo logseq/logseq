@@ -42,7 +42,10 @@
 (defn get-all-properties
   [db]
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
-       (map (fn [d] (d/entity db (:e d))))))
+       (keep (fn [d]
+               (let [e (d/entity db (:e d))]
+                 (when-not (:logseq.property/deprecated? e)
+                   e))))))
 
 (defn get-page-parents
   [node]

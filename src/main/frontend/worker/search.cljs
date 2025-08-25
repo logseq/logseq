@@ -224,7 +224,8 @@ DROP TRIGGER IF EXISTS blocks_au;
   (or (ldb/hidden? entity)
       (let [page (:block/page entity)]
         (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
+             (not= (:block/title page) common-config/quick-add-page-name)))
+      (:logseq.property/deprecated? entity)))
 
 (defn- page-or-object?
   [entity]
@@ -464,10 +465,14 @@ DROP TRIGGER IF EXISTS blocks_au;
     (let [blocks-to-add-set (->> (filter :added datoms)
                                  (map :e)
                                  (set))
-          blocks-to-remove-set (->> (remove :added datoms)
-                                    (filter #(= :block/uuid (:a %)))
-                                    (map :e)
-                                    (set))
+          blocks-to-remove-set (set/union
+                                (->> (remove :added datoms)
+                                     (filter #(= :block/uuid (:a %)))
+                                     (map :e)
+                                     (set))
+                                (->> (filter (fn [d] (and (= :logseq.property/deprecated? (:a d)) (true? (:added d)))) datoms)
+                                     (map :e)
+                                     (set)))
           blocks-to-add-set' (if (and (sqlite-util/db-based-graph? repo) (seq blocks-to-add-set))
                                (->> blocks-to-add-set
                                     (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db-after id)))))
@@ -486,7 +491,7 @@ DROP TRIGGER IF EXISTS blocks_au;
         datoms (filter
                 (fn [datom]
                   ;; Capture any direct change on page display title, page ref or block content
-                  (contains? #{:block/uuid :block/name :block/title :block/properties} (:a datom)))
+                  (contains? #{:block/uuid :block/name :block/title :block/properties :logseq.property/deprecated?} (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl repo tx-report datoms))))
