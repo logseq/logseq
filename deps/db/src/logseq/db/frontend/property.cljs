@@ -580,6 +580,7 @@
                                                        :schema {:type :datetime
                                                                 :public? false
                                                                 :hide? true}
+                                                       :queryable? false
                                                        :rtc property-ignore-rtc})))
 
 (def db-attribute-properties
