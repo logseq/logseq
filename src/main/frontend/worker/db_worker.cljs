@@ -862,9 +862,7 @@
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
                                   (p/let [service (<init-service! graph opts)]
-                                    (prn :debug :x1)
                                     (get-in service [:status :ready])
-                                    (prn :debug :x2)
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
 
