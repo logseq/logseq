@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.cli.spec :as cli-spec]
+            [logseq.cli.text-util :as cli-text-util]
             [nbb.error]
             [promesa.core :as p]))
 
@@ -45,7 +46,9 @@
                                         (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
                 (when (:spec cmd-map)
                   (str " [options]\n\nOptions:\n"
-                       (cli/format-opts {:spec (:spec cmd-map)}))))))
+                       (cli/format-opts {:spec (:spec cmd-map)})))
+                (when (:description cmd-map)
+                  (str "\n\nDescription:\n" (cli-text-util/wrap-text (:description cmd-map) 80))))))
 
 (defn- help-command [{{:keys [command]} :opts}]
   (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
@@ -68,22 +71,27 @@
   [{:cmds ["list"] :desc "List graphs"
     :fn (lazy-load-fn 'logseq.cli.commands.graph/list-graphs)}
    {:cmds ["show"] :desc "Show DB graph(s) info"
+    :description "For each graph, prints information related to a graph's creation and anything that is helpful for debugging."
     :fn (lazy-load-fn 'logseq.cli.commands.graph/show-graph)
     :args->opts [:graphs] :coerce {:graphs []} :require [:graphs]}
    {:cmds ["search"]
     :fn (lazy-load-fn 'logseq.cli.commands.search/search)
     :desc "Search DB graph"
+    :description "Search a local graph or the current in-app graph if --api-server-token is given. For a local graph it only searches the :block/title of blocks."
     :args->opts [:graph :search-terms] :coerce {:search-terms []} :require [:graph]
     :spec cli-spec/search}
    {:cmds ["query"] :desc "Query DB graph(s)"
+    :description "Query a local graph or the current in-app graph if --api-server-token is given. For a local graph, queries are a datalog query or an entity query. A datalog query can use built-in rules. An entity query consists of one or more integers, uuids or :db/ident keywords. For an in-app query, queries can be an advanced or simple query."
     :fn (lazy-load-fn 'logseq.cli.commands.query/query)
     :args->opts [:graph :args] :coerce {:args []} :no-keyword-opts true :require [:graph]
     :spec cli-spec/query}
-   {:cmds ["export"] :desc "Export DB graph as MD"
+   {:cmds ["export"] :desc "Export DB graph as Markdown"
+    :description "Export a graph to Markdown like the in-app graph export."
     :fn (lazy-load-fn 'logseq.cli.commands.export/export)
     :args->opts [:graph] :require [:graph]
     :spec cli-spec/export}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
+    :description "Export a graph to EDN like the in-app graph EDN export. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
     :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
