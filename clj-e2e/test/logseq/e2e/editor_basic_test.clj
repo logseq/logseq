@@ -66,6 +66,7 @@
     (w/fill "input[placeholder=\"Move blocks to\"]" "Target page 2")
     (w/wait-for (w/get-by-test-id "Target page 2"))
     (.focus (w/-query ".cp__cmdk-search-input"))
+    (k/arrow-down)
     (k/enter)
     (assert/assert-have-count ".ls-page-blocks .page-blocks-inner .ls-block" 0)))
 
