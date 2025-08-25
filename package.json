@@ -107,6 +107,7 @@
         "postinstall": "yarn tldraw:build && yarn amplify:build && yarn ui:build"
     },
     "dependencies": {
+        "@capacitor-community/safe-area": "7.0.0-alpha.1",
         "@capacitor/action-sheet": "7.0.1",
         "@capacitor/android": "7.2.0",
         "@capacitor/app": "7.0.1",
@@ -121,7 +122,6 @@
         "@capacitor/share": "7.0.1",
         "@capacitor/splash-screen": "7.0.1",
         "@capacitor/status-bar": "7.0.1",
-        "@capacitor-community/safe-area": "7.0.0-alpha.1",
         "@capawesome/capacitor-background-task": "7.0.1",
         "@capgo/capacitor-navigation-bar": "7.1.2",
         "@dnd-kit/core": "^6.0.8",
@@ -187,7 +187,7 @@
         "react-virtuoso": "4.12.5",
         "remove-accents": "0.4.2",
         "sanitize-filename": "1.6.3",
-        "send-intent": "^5.0.0",
+        "send-intent": "^7.0.0",
         "shepherd.js": "^9.1.0",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",

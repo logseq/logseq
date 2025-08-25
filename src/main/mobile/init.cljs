@@ -65,10 +65,7 @@
                            (editor-handler/escape-editing)
 
                            :else false))
-                    (prn "TODO: handle back button in Android"))))
-
-  (.addEventListener js/window "sendIntentReceived"
-                     #(intent/handle-received)))
+                    (prn "TODO: handle back button in Android")))))
 
 (defn- app-state-change-handler
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
@@ -110,7 +107,13 @@
   (.addListener Network "networkStatusChange" #(reset! mobile-flows/*mobile-network-status %)))
 
 (defn init! []
+  (.addEventListener js/window "sendIntentReceived" intent/handle-received)
+
+  ;; handle share for code start
+  (intent/handle-received)
+
   (reset! mobile-flows/*network Network)
+
   (when (mobile-util/native-android?)
     (android-init))
 
