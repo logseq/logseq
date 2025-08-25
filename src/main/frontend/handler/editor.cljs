@@ -891,7 +891,7 @@
                                       :trigger (fn [chosen]
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
-                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))}))
+                                                 (move-blocks! blocks (:source-block chosen) {:bottom? true}))}))
       (notification/show! "There's no block selected, please select blocks first." :warning))))
 
 (defn delete-block!
