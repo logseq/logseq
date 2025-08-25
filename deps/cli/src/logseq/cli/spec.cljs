@@ -28,10 +28,10 @@
 (def query
   {:graphs {:alias :g
             :coerce []
-            :desc "Additional graphs to query"}
+            :desc "Additional graphs to local query"}
    :properties-readable {:alias :p
                          :coerce :boolean
-                         :desc "Make properties on entity queries show property values instead of ids"}
+                         :desc "Make properties on local, entity queries show property values instead of ids"}
    :title-query {:alias :t
                  :desc "Invoke local query on :block/title"}
    :api-server-token {:alias :a
