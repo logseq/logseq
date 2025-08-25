@@ -718,15 +718,17 @@
                        (if-let [eid (or (:db/id b)
                                         (when-let [id (:block/uuid b)]
                                           [:block/uuid id]))]
-                         (->
-                          (if-let [e (if (de/entity? b) b (d/entity db eid))]
-                            (merge
-                             (into {} e)
-                             {:db/id (:db/id e)
-                              :block/title (or (:block/raw-title e) (:block/title e))}
-                             b)
-                            b)
-                          (dissoc :block/tx-id :block/refs :block/path-refs))
+                         (let [b (if-let [e (if (de/entity? b) b (d/entity db eid))]
+                                   (merge
+                                    (into {} e)
+                                    {:db/id (:db/id e)
+                                     :block/title (or (:block/raw-title e) (:block/title e))}
+                                    b)
+                                   b)
+                               dissoc-keys (concat [:block/tx-id :block/path-refs]
+                                                   (when (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                     [:block/refs]))]
+                           (apply dissoc b dissoc-keys))
                          b))
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)

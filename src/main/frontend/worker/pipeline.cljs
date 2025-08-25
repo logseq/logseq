@@ -93,7 +93,8 @@
                                        (let [result (outliner-core/insert-blocks
                                                      repo db template-blocks object
                                                      {:sibling? false
-                                                      :keep-uuid? journal-template?})]
+                                                      :keep-uuid? journal-template?
+                                                      :outliner-op :insert-template-blocks})]
                                          (:tx-data result)))))))]
     tx-data))
 

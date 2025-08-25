@@ -597,31 +597,31 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (merge new-block other-attrs)
-              [block-m sibling?] (cond
-                                   before?
-                                   (let [left-or-parent (or (ldb/get-left-sibling block)
-                                                            (:block/parent block))
-                                         sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
-                                                    false sibling?)]
-                                     [left-or-parent sibling?])
+              [target-block sibling?] (cond
+                                        before?
+                                        (let [left-or-parent (or (ldb/get-left-sibling block)
+                                                                 (:block/parent block))
+                                              sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
+                                                         false sibling?)]
+                                          [left-or-parent sibling?])
 
-                                   sibling?
-                                   [(db/entity (:db/id block)) sibling?]
+                                        sibling?
+                                        [(db/entity (:db/id block)) sibling?]
 
-                                   last-block
-                                   [last-block true]
+                                        last-block
+                                        [last-block true]
 
-                                   block
-                                   [(db/entity (:db/id block)) sibling?]
+                                        block
+                                        [(db/entity (:db/id block)) sibling?]
 
-                                   ;; FIXME: assert
-                                   :else
-                                   nil)]
-          (when block-m
+                                        ;; FIXME: assert
+                                        :else
+                                        nil)]
+          (when target-block
             (p/do!
              (ui-outliner-tx/transact!
               {:outliner-op :insert-blocks}
-              (outliner-insert-block! config block-m new-block
+              (outliner-insert-block! config target-block new-block
                                       {:sibling? sibling?
                                        :keep-uuid? true
                                        :ordered-list? ordered-list?
