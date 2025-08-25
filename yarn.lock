@@ -240,7 +240,7 @@
     tslib "^2.8.1"
     xml2js "^0.6.2"
 
-"@capacitor/cli@^5.0.0", "@capacitor/cli@^5.3.0":
+"@capacitor/cli@^5.3.0":
   version "5.7.8"
   resolved "https://registry.yarnpkg.com/@capacitor/cli/-/cli-5.7.8.tgz#0fd28569b286192db71335dbd16222c341322785"
   integrity sha512-qN8LDlREMhrYhOvVXahoJVNkP8LP55/YPRJrzTAFrMqlNJC18L3CzgWYIblFPnuwfbH/RxbfoZT/ydkwgVpMrw==
@@ -263,6 +263,29 @@
     tslib "^2.4.0"
     xml2js "^0.5.0"
 
+"@capacitor/cli@^7.0.0":
+  version "7.4.3"
+  resolved "https://registry.yarnpkg.com/@capacitor/cli/-/cli-7.4.3.tgz#4f8be36a89c2671c2eb681b714f67fcc3b6ebc9c"
+  integrity sha512-SWozpdDgrbQ/ry1nIapugDFvE9z+l22BmU/+fpgL2Zv5487hGdXvCX5+1SluuFBP3IPpx6b4LjsKnBigyJoUWg==
+  dependencies:
+    "@ionic/cli-framework-output" "^2.2.8"
+    "@ionic/utils-subprocess" "^3.0.1"
+    "@ionic/utils-terminal" "^2.3.5"
+    commander "^12.1.0"
+    debug "^4.4.0"
+    env-paths "^2.2.0"
+    fs-extra "^11.2.0"
+    kleur "^4.1.5"
+    native-run "^2.0.1"
+    open "^8.4.0"
+    plist "^3.1.0"
+    prompts "^2.4.2"
+    rimraf "^6.0.1"
+    semver "^7.6.3"
+    tar "^6.1.11"
+    tslib "^2.8.1"
+    xml2js "^0.6.2"
+
 "@capacitor/clipboard@7.0.1":
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/clipboard/-/clipboard-7.0.1.tgz#159fefa56b7d23632e9d08c9efd9cbd75a868b21"
@@ -272,13 +295,6 @@
   version "7.2.0"
   resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-7.2.0.tgz#fdd1c5d2fbfa257887ce6065f66151a51f0e6d1b"
   integrity sha512-2zCnA6RJeZ9ec4470o8QMZEQTWpekw9FNoqm5TLc10jeCrhvHVI8MPgxdZVc3mOdFlyieYu4AS1fNxSqbS57Pw==
-  dependencies:
-    tslib "^2.1.0"
-
-"@capacitor/core@^5.0.0":
-  version "5.7.8"
-  resolved "https://registry.yarnpkg.com/@capacitor/core/-/core-5.7.8.tgz#584d5ac2754501ef1443ab4bf182d8f5be16f65e"
-  integrity sha512-rrZcm/2vJM0WdWRQup1TUidbjQV9PfIadSkV4rAGLD7R6PuzZSMPGT0gmoZzCRlXkqrazrWWDkurei3ozU02FA==
   dependencies:
     tslib "^2.1.0"
 
@@ -9012,13 +9028,12 @@ semver@^7.3.2, semver@^7.3.4, semver@^7.3.5, semver@^7.3.7, semver@^7.5.4, semve
   resolved "https://registry.yarnpkg.com/semver/-/semver-7.7.2.tgz#67d99fdcd35cec21e6f8b87a7fd515a33f982b58"
   integrity sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==
 
-send-intent@^5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/send-intent/-/send-intent-5.0.0.tgz#95d00455a7db4d95d9f79f8203698e96760c7408"
-  integrity sha512-d3moLwVdQlv/lWPR8MYPUv3HufOrfcbyAvELla8DnJZwzLD9vYWF4UlgsEp/l5ADOyNW0KuvRVIE2cuCZqZLxA==
+send-intent@^7.0.0:
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/send-intent/-/send-intent-7.0.0.tgz#792c1e72ca42ca98f4d94a31fb74eb13b319fcb9"
+  integrity sha512-J37bBkKdLYEsv1wHfrOFVfXqOLXgl3ced8Y9+WXgcZ3vLeCVTfmMrAbo0tBfU5x53fyjuZ8UkJfUkneAfrIqIg==
   dependencies:
-    "@capacitor/cli" "^5.0.0"
-    "@capacitor/core" "^5.0.0"
+    "@capacitor/cli" "^7.0.0"
 
 serialize-error@^7.0.1:
   version "7.0.1"

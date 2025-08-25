@@ -34,7 +34,7 @@ PODS:
     - Capacitor
   - JcesarmobileSslSkip (0.4.0):
     - Capacitor
-  - SendIntent (0.0.1):
+  - SendIntent (7.0.0):
     - Capacitor
 
 DEPENDENCIES:
@@ -117,8 +117,8 @@ SPEC CHECKSUMS:
   CapawesomeCapacitorBackgroundTask: 834d797abc9933fac4354490d1a2f3c0e389b98d
   CapgoCapacitorNavigationBar: 3a0e93a40b7da3d3cb74c0410bb761a1525406be
   JcesarmobileSslSkip: b0f921e9d397a57f7983731209ca1ee244119c1f
-  SendIntent: 0a17b6984c4f27e9dfa56513267ba2c044a5a6c8
+  SendIntent: 1f4f65c7103eb423067c566682dfcda973b5fb29
 
-PODFILE CHECKSUM: b39c58d1809083b0ebe56edcfe13ef1d4d568b1e
+PODFILE CHECKSUM: ff3bf6a88afbe92d5ba5070b8809418a3e98ead6
 
 COCOAPODS: 1.16.2
