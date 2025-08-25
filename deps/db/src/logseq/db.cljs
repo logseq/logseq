@@ -218,7 +218,7 @@
 (defn page-exists?
   "Returns truthy value if page exists.
    For db graphs, returns all page db ids that given title and one of the given `tags`.
-   For file graphs, returns page entity if it exists"
+   For file graphs, returns page db/id vector if it exists"
   [db page-name tags]
   (when page-name
     (if (db-based-graph? db)
@@ -249,7 +249,8 @@
             db
             (common-util/page-name-sanity-lc page-name)
             tags'))))
-      (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
+      (when-let [id (:db/id (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
+        [id]))))
 
 (defn get-page
   "Get a page given its unsanitized name or uuid"
