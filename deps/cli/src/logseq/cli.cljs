@@ -38,15 +38,18 @@
                      (aget "version")))))
     (help m)))
 
-(defn- command-help [{{:keys [command]} :opts}]
+(defn- print-command-help [command cmd-map]
+  (println (str "Usage: logseq " command
+                (when (:args->opts cmd-map)
+                  (str " " (string/join " "
+                                        (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
+                (when (:spec cmd-map)
+                  (str " [options]\n\nOptions:\n"
+                       (cli/format-opts {:spec (:spec cmd-map)}))))))
+
+(defn- help-command [{{:keys [command]} :opts}]
   (if-let [cmd-map (and command (some #(when (= command (first (:cmds %))) %) table))]
-    (println (str "Usage: logseq " command
-                  (when (:args->opts cmd-map)
-                    (str " " (string/join " "
-                                          (map #(str "[" (name %) "]") (:args->opts cmd-map)))))
-                  (when (:spec cmd-map)
-                    (str " [options]\n\nOptions:\n"
-                         (cli/format-opts {:spec (:spec cmd-map)})))))
+    (print-command-help command cmd-map)
     (println "Command" (pr-str command) "does not exist")))
 
 (defn- lazy-load-fn
@@ -84,7 +87,7 @@
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
     :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
-   {:cmds ["help"] :fn command-help :desc "Print a command's help"
+   {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []
     :spec default-spec
@@ -105,9 +108,14 @@
                   {:error-fn (fn [{:keys [cause msg option] type' :type :as data}]
                                (if (and (= :org.babashka/cli type')
                                         (= :require cause))
-                                 (println "Error: Command missing required"
-                                          (if (get-in data [:spec option]) "option" "argument")
-                                          option)
+                                 (do
+                                   (println "Error: Command missing required"
+                                            (if (get-in data [:spec option]) "option" "argument")
+                                            (pr-str (name option)))
+                                   (when-let [cmd-m (some #(when (= {:spec (:spec %)
+                                                                     :require (:require %)}
+                                                                    (select-keys data [:spec :require])) %) table)]
+                                     (print-command-help (-> cmd-m :cmds first) cmd-m)))
                                  (throw (ex-info msg data)))
                                (js/process.exit 1))})
     (catch ^:sci/error js/Error e
