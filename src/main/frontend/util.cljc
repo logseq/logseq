@@ -216,17 +216,13 @@
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (when (mobile-util/native-android?)
-        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
+      (.setStyle StatusBar (clj->js {:style (.-Light Style)})))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (when (mobile-util/native-android?)
-        (.setBackgroundColor StatusBar (clj->js {:color "#000000"}))))))
+      (.setStyle StatusBar (clj->js {:style (.-Dark Style)})))))
 
 (defn find-first
   [pred coll]
