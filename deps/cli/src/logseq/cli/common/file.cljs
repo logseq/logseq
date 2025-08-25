@@ -1,11 +1,12 @@
-(ns frontend.common.file.core
-  "Convert blocks to file content. Used for exports and saving file to disk. Shared
-  by worker and frontend namespaces"
+(ns logseq.cli.common.file
+  "Convert blocks to file content for file and DB graphs. Used for exports and
+  saving file to disk. Shared by CLI, worker and frontend namespaces"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
@@ -29,7 +30,7 @@
     :else
     content))
 
-(defn- transform-content
+(defn- ^:large-vars/cleanup-todo transform-content
   [repo db {:block/keys [collapsed? format pre-block? properties] :as b} level {:keys [heading-to-list?]} context {:keys [db-based?]}]
   (let [title (or (:block/raw-title b) (:block/title b))
         block-ref-not-saved? (and (not db-based?)
@@ -91,6 +92,7 @@
               (if-let [children (seq (:block/children f))]
                 (cons content (tree->file-content-aux repo db children {:init-level (inc level)} context))
                 [content])]
+          #_:clj-kondo/ignore
           (conj! block-contents new-content)
           (recur r level))))))
 
@@ -120,3 +122,18 @@
     (tree->file-content repo db tree
                         (assoc tree->file-opts :init-level init-level)
                         context)))
+
+(defn get-all-page->content
+  "Exports a graph's pages as tuples of page name and page content"
+  [repo db options]
+  (let [filter-fn (if (ldb/db-based-graph? db)
+                    (fn [ent]
+                      (or (not (:logseq.property/built-in? ent))
+                          (contains? sqlite-create-graph/built-in-pages-names (:block/title ent))))
+                    (constantly true))]
+    (->> (d/datoms db :avet :block/name)
+         (map #(d/entity db (:e %)))
+         (filter filter-fn)
+         (map (fn [e]
+                [(:block/title e)
+                 (block->content repo db (:block/uuid e) {} options)])))))

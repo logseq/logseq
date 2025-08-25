@@ -257,11 +257,7 @@
                            (.then #(on-ok %)))
                        (on-failed resp)))))))))
 
-(defn zero-pad
-  [n]
-  (if (< n 10)
-    (str "0" n)
-    (str n)))
+#?(:cljs (def zero-pad common-util/zero-pad))
 
 #?(:cljs
    (defn safe-parse-int
@@ -1447,21 +1443,6 @@ Arg *stop: atom, reset to true to stop the loop"
                (vreset! *last-activated-at now-epoch)
                (async/<! (async/timeout 5000))
                (recur))))))))
-
-(defmacro concatv
-  "Vector version of concat. non-lazy"
-  [& args]
-  `(vec (concat ~@args)))
-
-(defmacro mapcatv
-  "Vector version of mapcat. non-lazy"
-  [f coll & colls]
-  `(vec (mapcat ~f ~coll ~@colls)))
-
-(defmacro removev
-  "Vector version of remove. non-lazy"
-  [pred coll]
-  `(vec (remove ~pred ~coll)))
 
 ;; from rum
 #?(:cljs

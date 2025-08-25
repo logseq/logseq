@@ -1,5 +1,5 @@
 (ns ^:node-only logseq.cli.util
-  "Util fns"
+  "CLI only util fns"
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]

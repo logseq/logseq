@@ -72,7 +72,6 @@
              frontend.commands commands
              frontend.common.file-based.db common-file-db
              frontend.common.date common-date
-             frontend.common.file.core common-file
              frontend.common.file.util wfu
              frontend.common.missionary-util c.m
              frontend.common.schema-register sr
@@ -167,6 +166,9 @@
              lambdaisland.glogi log
              logseq.cli.common.graph cli-common-graph
              logseq.cli.text-util cli-text-util
+             logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.export.text cli-export-text
+             logseq.cli.common.file common-file
              logseq.common.config common-config
              logseq.common.date-time-util date-time-util
              logseq.common.graph common-graph

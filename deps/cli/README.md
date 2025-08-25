@@ -110,7 +110,11 @@ $ logseq query '(task DOING)' -a my-token
   :uuid "68795144-e5f6-48e8-849d-79cd6473b952"}
   ...
 
-# Export your DB graph as EDN
+# Export DB graph as markdown
+$ logseq export yep
+Exported 41 pages to yep_markdown_1756128259.zip
+
+# Export DB graph as EDN
 $ logseq export-edn woot -f woot.edn
 Exported 16 properties, 16 classes and 36 pages
 ```
