@@ -34,12 +34,12 @@
                          :desc "Make properties on entity queries show property values instead of ids"}
    :title-query {:alias :t
                  :desc "Invoke local query on :block/title"}
-   :api-query-token {:alias :a
-                     :desc "Query current graph with api server token"}})
+   :api-server-token {:alias :a
+                     :desc "API server token to query current graph"}})
 
 (def search
-  {:api-query-token {:alias :a
-                     :desc "Api server token"}
+  {:api-server-token {:alias :a
+                     :desc "API server token to search current graph"}
    :raw {:alias :r
          :desc "Print raw response"}
    :limit {:alias :l

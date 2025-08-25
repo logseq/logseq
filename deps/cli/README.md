@@ -12,7 +12,7 @@ This section assumes you have installed the CLI from npm or via the [dev
 setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
 `node.cli.mjs -h`.
 
-All commands can be used offline or on CI. The `search` command and any command that has an api-query-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
+All commands can be used offline or on CI. The `search` command and any command that has an api-server-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
 
 Now let's use it!
 
