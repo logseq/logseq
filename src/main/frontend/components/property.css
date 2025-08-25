@@ -88,7 +88,7 @@
     }
 
     .property-value {
-      @apply pl-1;
+      @apply pl-1 min-h-[28px];
 
       .jtrigger-id {
         @apply left-[-34px] top-[2px];
