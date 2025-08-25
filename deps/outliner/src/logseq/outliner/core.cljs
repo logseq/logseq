@@ -617,6 +617,7 @@
                      (when (:block/uuid target-block)
                        (d/entity db [:block/uuid (:block/uuid target-block)])))]
     (let [linked (:block/link block)
+          library? (ldb/library? block)
           up-down? (= outliner-op :move-blocks-up-down)
           [block sibling?] (cond
                              up-down?
@@ -648,7 +649,7 @@
                                  [last-child true]
                                  [block false])
                                :else
-                               [block sibling?])
+                               [block (if library? false sibling?)])
 
                              linked
                              (get-last-child-or-self db linked)
