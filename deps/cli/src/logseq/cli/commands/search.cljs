@@ -41,8 +41,8 @@
                                 (map highlight-fn)))))))
 
 (defn- api-search
-  [search-term {{:keys [api-query-token raw limit]} :opts}]
-  (-> (p/let [resp (cli-util/api-fetch api-query-token "logseq.app.search" [search-term {:limit limit}])]
+  [search-term {{:keys [api-server-token raw limit]} :opts}]
+  (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.app.search" [search-term {:limit limit}])]
         (if (= 200 (.-status resp))
           (p/let [body (.json resp)]
             (let [{:keys [blocks]} (js->clj body :keywordize-keys true)]
@@ -61,7 +61,7 @@
       (format-results nodes search-term {:raw raw}))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
-(defn search [{{:keys [graph search-terms api-query-token]} :opts :as m}]
-  (if api-query-token
+(defn search [{{:keys [graph search-terms api-server-token]} :opts :as m}]
+  (if api-server-token
     (api-search (string/join " " (into [graph] search-terms)) m)
     (local-search (string/join " " search-terms) m)))

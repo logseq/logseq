@@ -1,6 +1,7 @@
 ## 0.2.0
 * Add export command to export graph as markdown
 * Like export command, export-edn command defaults to exporting to file
+* Rename --api-query-token options to --api-server-token
 
 ## 0.1.0
 
