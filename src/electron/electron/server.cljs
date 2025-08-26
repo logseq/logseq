@@ -1,17 +1,17 @@
 (ns electron.server
-  (:require ["fastify" :as Fastify]
-            ["@fastify/cors" :as FastifyCORS]
+  (:require ["@fastify/cors" :as FastifyCORS]
             ["electron" :refer [ipcMain]]
+            ["fastify" :as Fastify]
             ["fs-extra" :as fs-extra]
             ["path" :as node-path]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
-            [electron.logger :as logger]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.configs :as cfgs]
-            [electron.window :as window]))
+            [electron.logger :as logger]
+            [electron.utils :as utils]
+            [electron.window :as window]
+            [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
@@ -106,7 +106,10 @@
   (if-let [^js body (.-body req)]
     (if-let [method (resolve-real-api-method (.-method body))]
       (-> (invoke-logseq-api! method (.-args body))
-          (p/then #(.send rep %))
+          (p/then #(do
+                     ;; Responses with an :error key are unexpected failures from electron.listener
+                     (when (aget % "error") (.code rep 500))
+                     (.send rep %)))
           (p/catch #(.send rep %)))
       (-> rep
           (.code 400)

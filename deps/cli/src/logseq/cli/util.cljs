@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
+            [promesa.core :as p]
             [nbb.error]))
 
 (defn get-graph-dir
@@ -26,11 +27,17 @@
                                        :args args}))})))
 
 (defn api-handle-error-response
-  "Handles a non 200 response"
+  "Handles a non 200 response. For 500 return full response to provide more detail"
   [resp]
-  (js/console.error "Error: API Server responded with status" (.-status resp)
-                    (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
-  (js/process.exit 1))
+  (if (= 500 (.-status resp))
+    (p/let [body (.text resp)]
+      (js/console.error "Error: API Server responded with status" (.-status resp)
+                        "\nAPI Response:" (pr-str body))
+      (js/process.exit 1))
+    (do
+      (js/console.error "Error: API Server responded with status" (.-status resp)
+                        (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
+      (js/process.exit 1))))
 
 (defn command-catch-handler
   "Default p/catch handler for commands which handles sci errors and HTTP API Server connections gracefully"
