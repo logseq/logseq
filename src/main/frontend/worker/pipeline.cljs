@@ -137,10 +137,10 @@
 
 (defn- fix-page-tags
   "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
-  [conn {:keys [db-after tx-data tx-meta]}]
+  [{:keys [db-after tx-data tx-meta]}]
   (when-not (:rtc-op? tx-meta)
-    (let [page-tag (d/entity @conn :logseq.class/Page)
-          tag (d/entity @conn :logseq.class/Tag)]
+    (let [page-tag (d/entity db-after :logseq.class/Page)
+          tag (d/entity db-after :logseq.class/Tag)]
       (assert page-tag "Page tag doesn't exist")
       (->>
        (keep
@@ -330,7 +330,7 @@
 (defn- compute-extra-tx-data
   [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
-        fix-page-tags-tx-data (fix-page-tags conn tx-report)
+        fix-page-tags-tx-data (fix-page-tags tx-report)
         toggle-page-and-block-tx-data (toggle-page-and-block conn tx-report)
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
