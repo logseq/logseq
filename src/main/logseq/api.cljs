@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -1078,15 +1079,22 @@
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
-          page?           (not (util/uuid-string? uuid-or-page-name))
-          page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
-          _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
-                                                                      {:redirect?           false
-                                                                       :format              (state/get-preferred-format)}))]
-    (when-let [block (db-model/get-page uuid-or-page-name)]
-      (let [target   (str (:block/uuid block))]
-        (insert_block target content opts)))))
+  (let [current-page? (or (and (nil? content) (nil? opts))
+                          (and (nil? opts) (some->> content (instance? js/Object))))
+        opts (if current-page? content opts)
+        content (if current-page? uuid-or-page-name content)
+        uuid-or-page-name (if current-page?
+                            (or (state/get-current-page) (date/today))
+                            uuid-or-page-name)]
+    (p/let [_ (<ensure-page-loaded uuid-or-page-name)
+            page? (not (util/uuid-string? uuid-or-page-name))
+            page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+            _ (and page-not-exist? (page-handler/<create! uuid-or-page-name
+                                                          {:redirect? false
+                                                           :format (state/get-preferred-format)}))]
+      (when-let [block (db-model/get-page uuid-or-page-name)]
+        (let [target (str (:block/uuid block))]
+          (insert_block target content opts))))))
 
 ;; plugins
 (defn ^:export validate_external_plugins [urls]
