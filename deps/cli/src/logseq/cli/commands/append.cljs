@@ -11,8 +11,7 @@
           (if (= 200 (.-status resp))
             (p/let [body (.json resp)]
               (if (.-error body)
-                (cli-util/error (str "Failed to append. Ensure the app is in a specific page.\n"
-                                     "API Response: "
+                (cli-util/error (str "Failed to append.\nAPI Error: "
                                      (string/replace (.-error body) "\n" "\\\\n")))
                 (println "Success!")))
             (cli-util/api-handle-error-response resp)))

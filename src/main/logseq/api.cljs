@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -1082,8 +1083,9 @@
                           (and (nil? opts) (some->> content (instance? js/Object))))
         opts (if current-page? content opts)
         content (if current-page? uuid-or-page-name content)
-        uuid-or-page-name (if current-page? (state/get-current-page)
-                              uuid-or-page-name)]
+        uuid-or-page-name (if current-page?
+                            (or (state/get-current-page) (date/today))
+                            uuid-or-page-name)]
     (p/let [_ (<ensure-page-loaded uuid-or-page-name)
             page? (not (util/uuid-string? uuid-or-page-name))
             page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
