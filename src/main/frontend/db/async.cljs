@@ -80,7 +80,7 @@
                              (assoc opts :property-ident property-id))))
 
 (defn <get-block
-  [graph id-uuid-or-name & {:keys [children? skip-transact? skip-refresh? children-only? properties]
+  [graph id-uuid-or-name & {:keys [children? include-collapsed-children? skip-transact? skip-refresh? properties]
                             :or {children? true}
                             :as opts}]
 
@@ -101,7 +101,8 @@
         load-status (:block.temp/load-status e)]
     (cond
       (and (or (= load-status :full)
-               (and (= load-status :self) (not children?) (not children-only?)))
+               (and (= load-status :children) (not include-collapsed-children?))
+               (and (= load-status :self) (not children?)))
            (not (some #{:block.temp/refs-count} properties)))
       (p/promise e)
 
@@ -114,16 +115,20 @@
            (let [conn (db/get-db graph false)
                  block-and-children (if block (cons block children) children)
                  affected-keys [[:frontend.worker.react/block (:db/id block)]]
-                 tx-data (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b)))) block-and-children)
-                              (common-util/fast-remove-nils)
-                              (remove empty?))]
+                 tx-data (concat
+                          (->> (remove (fn [b] (:block.temp/load-status (db/entity (:db/id b))))
+                                       block-and-children)
+                               (common-util/fast-remove-nils)
+                               (remove empty?))
+                          (when (and (:db/id block) children? include-collapsed-children?
+                                     (not= :full (:block.temp/load-status (some-> (:db/id block) db/entity))))
+                            [{:db/id (:db/id block)
+                              :block.temp/load-status :full}]))]
              (when (seq tx-data) (d/transact! conn tx-data))
              (when-not skip-refresh?
                (react/refresh-affected-queries! graph affected-keys {:skip-kv-custom-keys? true}))))
 
-         (if children-only?
-           children
-           (if skip-transact? block (db/entity (:db/id block)))))
+         (if skip-transact? block (db/entity (:db/id block))))
        (p/catch (fn [error]
                   (js/console.error error)
                   (throw (ex-info "get-block error" {:block id-uuid-or-name}))))))))
