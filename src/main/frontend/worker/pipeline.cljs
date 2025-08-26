@@ -14,6 +14,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -133,6 +134,46 @@
                                                 (sort-by :block/order))
                                  :tx-meta tx-meta
                                  :tx-data (:tx-data tx-report)}))))))))))
+
+(defn- fix-page-tags
+  "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
+  [conn {:keys [db-after tx-data tx-meta]}]
+  (when-not (:rtc-op? tx-meta)
+    (let [page-tag (d/entity @conn :logseq.class/Page)
+          tag (d/entity @conn :logseq.class/Tag)]
+      (assert page-tag "Page tag doesn't exist")
+      (->>
+       (keep
+        (fn [datom]
+          (cond
+            ;; add missing :db/ident and :logseq.property.class/extends for new tag
+            (and (= :block/tags (:a datom))
+                 (:added datom)
+                 (= (:v datom) (:db/id tag)))
+            (let [t (d/entity db-after (:e datom))]
+              (when (not (:db/ident t)) ; new tag without db/ident
+                (let [eid (:db/id t)]
+                  [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title t))]
+                   [:db/add eid :logseq.property.class/extends :logseq.class/Root]
+                   [:db/retract eid :block/tags :logseq.class/Page]])))
+
+            ;; remove #Page from tags/journals/whitebaords, etc.
+            (and (= :block/tags (:a datom))
+                 (:added datom)
+                 (= (:db/id page-tag) (:v datom)))
+            (let [tags (->> (d/entity db-after (:e datom))
+                            :block/tags
+                            (map :db/ident)
+                            (remove #{:logseq.class/Page}))]
+              (when (and (seq tags)
+                         ;; has other page-classes other than `:logseq.class/Page`
+                         (some db-class/page-classes tags))
+                [[:db/retract (:e datom) :block/tags :logseq.class/Page]]))
+
+            :else
+            nil))
+        tx-data)
+       (apply concat)))))
 
 (defn- toggle-page-and-block
   [conn {:keys [db-before db-after tx-data tx-meta]}]
@@ -289,6 +330,7 @@
 (defn- compute-extra-tx-data
   [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
+        fix-page-tags-tx-data (fix-page-tags conn tx-report)
         toggle-page-and-block-tx-data (toggle-page-and-block conn tx-report)
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
@@ -296,7 +338,12 @@
         insert-templates-tx (when-not (:rtc-tx? tx-meta)
                               (insert-tag-templates repo tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
-    (concat toggle-page-and-block-tx-data display-blocks-tx-data commands-tx insert-templates-tx created-by-tx)))
+    (concat toggle-page-and-block-tx-data
+            display-blocks-tx-data
+            commands-tx
+            insert-templates-tx
+            created-by-tx
+            fix-page-tags-tx-data)))
 
 (defn- undo-tx-data-if-disallowed!
   [conn {:keys [tx-data]}]
