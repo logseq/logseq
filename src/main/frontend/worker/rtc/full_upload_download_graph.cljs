@@ -17,6 +17,7 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.schema :as db-schema]
@@ -24,6 +25,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
+            [malli.error :as me]
             [malli.transform :as mt]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -324,8 +326,15 @@
         card-one-attrs (blocks->card-one-attrs blocks)
         blocks1 (worker-util/profile :convert-card-one-value-from-value-coll
                                      (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
-        blocks2 (worker-util/profile :normalize-remote-blocks
-                                     (normalized-remote-blocks-coercer blocks1))
+        blocks2 (try
+                  (worker-util/profile :normalize-remote-blocks
+                                       (normalized-remote-blocks-coercer blocks1))
+                  (catch :default e
+                    (log/error :rtc-malli-coerce-failed e)
+                    (prn :debug :coerce-errors
+                         (me/humanize (get-in (ex-data e) [:data :explain]))
+                         :data (:data (ex-data e)))
+                    (throw e)))
         blocks (sequence
                 (comp
                  ;;TODO: remove this
