@@ -408,11 +408,10 @@
       (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)
-              (when (util/mobile?)
-                (shui/popup-hide! :download-rtc-graph)
-                ;; TODO: notify error
-                )))))
+              (log/error :rtc-download-graph-failed e)
+              (shui/popup-hide! :download-rtc-graph)
+              ;; TODO: notify error
+              ))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
