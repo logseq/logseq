@@ -21,3 +21,23 @@
             [b-cut m-cut e-cut])
           [b-cut m-cut nil]))
       [value nil nil])))
+
+(defn wrap-text
+  "Wraps a string to a given width without breaking words. Returns a single string with newlines."
+  [s width]
+  (->> (loop [remaining (string/trim s)
+              acc []]
+         (if (empty? remaining)
+           acc
+           (if (<= (count remaining) width)
+             (conj acc remaining)
+             (let [substring (subs remaining 0 width)
+                   split-idx (or (string/last-index-of substring \space)
+                                 (string/last-index-of substring \tab)
+                                 ;; fallback: hard split
+                                 80)
+                   line (subs remaining 0 split-idx)
+                   rest' (subs remaining split-idx)]
+               (recur (string/triml rest')
+                      (conj acc line))))))
+       (string/join "\n")))
