@@ -113,7 +113,6 @@
       (js->clj :keywordize-keys true)))
 
 (defn zero-pad
-  "Copy of frontend.util/zero-pad. Too basic to couple to main app"
   [n]
   (if (< n 10)
     (str "0" n)

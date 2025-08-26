@@ -1,9 +1,8 @@
 (ns frontend.worker.export
   "Export data"
   (:require [datascript.core :as d]
-            [frontend.common.file.core :as common-file]
+            [logseq.cli.common.file :as common-file]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.property :as gp-property]
             [logseq.outliner.tree :as otree]))
 
@@ -43,19 +42,7 @@
                     page' (safe-keywordize page)]
                 (assoc page' :block/children children))))))
 
-(defn get-all-page->content
-  [repo db options]
-  (let [filter-fn (if (ldb/db-based-graph? db)
-                    (fn [ent]
-                      (or (not (:logseq.property/built-in? ent))
-                          (contains? sqlite-create-graph/built-in-pages-names (:block/title ent))))
-                    (constantly true))]
-    (->> (d/datoms db :avet :block/name)
-         (map #(d/entity db (:e %)))
-         (filter filter-fn)
-         (map (fn [e]
-                [(:block/title e)
-                 (common-file/block->content repo db (:block/uuid e) {} options)])))))
+(def get-all-page->content common-file/get-all-page->content)
 
 (defn get-debug-datoms
   [conn]
