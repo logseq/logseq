@@ -61,6 +61,9 @@ Search found 100 results:
 dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
 dev:db-diff woot woot2
 ...
+# Can also authenticate api with $LOGSEQ_API_SERVER_TOKEN
+$ LOGSEQ_API_SERVER_TOKEN=my-token logseq search woot
+...
 
 # Search a local graph
 $ logseq search woot page

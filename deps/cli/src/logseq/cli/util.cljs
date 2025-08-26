@@ -18,7 +18,8 @@
 (defn api-fetch [token method args]
   (js/fetch "http://127.0.0.1:12315/api"
             (clj->js {:method "POST"
-                      :headers {"Authorization" (str "Bearer " token)
+                      :headers {"Authorization"
+                                (str "Bearer " (or token js/process.env.LOGSEQ_API_SERVER_TOKEN))
                                 "Content-Type" "application/json"}
                       :body (js/JSON.stringify
                              (clj->js {:method method
