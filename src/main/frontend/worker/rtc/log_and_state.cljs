@@ -102,7 +102,7 @@
         current-remote-t (get @*graph-uuid->remote-t graph-uuid)
         current-local-t (get @*graph-uuid->local-t graph-uuid)]
     (when (and current-remote-t current-local-t)
-      (assert (and (>= remote-t current-remote-t) (>= remote-t current-local-t))
+      (assert (and remote-t (>= remote-t current-remote-t) (>= remote-t current-local-t))
               {:remote-t remote-t
                :current-local-t current-local-t
                :current-remote-t current-remote-t}))
