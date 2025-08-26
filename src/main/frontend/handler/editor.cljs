@@ -3730,27 +3730,33 @@
 
 (defn collapse-all-selection!
   []
-  (p/let [blocks (p/all
+  (p/let [result (p/all
                   (map #(<all-blocks-with-level {:incremental? false
                                                  :expanded? true
                                                  :root-block %})
                        (get-selected-toplevel-block-uuids)))
-          block-ids (->> blocks
+          block-ids (->> result
+                         (apply concat)
                          (map :block/uuid)
                          distinct)]
     (set-blocks-collapsed! block-ids true)))
 
 (defn expand-all-selection!
   []
-  (let [blocks (p/all
-                (map #(<all-blocks-with-level {:incremental? false
-                                               :expanded? true
-                                               :root-block %})
-                     (get-selected-toplevel-block-uuids)))
-        block-ids (->> blocks
-                       (map :block/uuid)
-                       distinct)]
-    (set-blocks-collapsed! block-ids false)))
+  (->
+   (p/let [select-ids (get-selected-toplevel-block-uuids)
+           result (p/all
+                   (map #(<all-blocks-with-level {:incremental? false
+                                                  :collapse? true
+                                                  :root-block %})
+                        select-ids))
+           block-ids (->> result
+                          (apply concat)
+                          (map :block/uuid)
+                          distinct)]
+     (set-blocks-collapsed! block-ids false))
+   (p/catch (fn [e]
+              (js/console.error e)))))
 
 (defn toggle-open! []
   (p/let [blocks (<all-blocks-with-level {:incremental? false
@@ -3762,7 +3768,8 @@
 
 (defn toggle-open-block-children! [block-id]
   (p/let [blocks (<all-blocks-with-level {:incremental? false
-                                          :collapse? true})
+                                          :collapse? true
+                                          :root-block block-id})
           all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all! block-id {:collapse-self? false})
