@@ -95,6 +95,10 @@
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
     :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
+   {:cmds ["append"] :desc "Appends text to current page"
+    :fn (lazy-load-fn 'logseq.cli.commands.append/append)
+    :args->opts [:args] :require [:args] :coerce {:args []}
+    :spec cli-spec/append}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []
