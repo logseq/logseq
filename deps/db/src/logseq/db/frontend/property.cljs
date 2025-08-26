@@ -9,16 +9,13 @@
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.type :as db-property-type]))
 
-;; Main property vars
-;; ==================
-
-;; Ignore this property when rtc,
-;; since users frequently click the sort button to view table content temporarily,
-;; but this action does not need to be synchronized with other clients.
-(def property-ignore-rtc
+(def ^:private property-ignore-rtc
   {:rtc/ignore-attr-when-init-upload true
    :rtc/ignore-attr-when-init-download true
    :rtc/ignore-attr-when-syncing true})
+
+;; Main property vars
+;; ==================
 
 (def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs with their :db/ident as keys.
@@ -209,7 +206,7 @@
                                  {:logseq.property/description "Provides a way for a page to associate to another page i.e. backward compatible tagging."}}
      :logseq.property/background-color {:title "Background color"
                                         :schema {:type :default :hide? true}}
-   ;; number (1-6) or boolean for auto heading
+     ;; number (1-6) or boolean for auto heading
      :logseq.property/heading {:title "Heading"
                                :schema {:type :any :hide? true}
                                :queryable? true}
@@ -222,8 +219,8 @@
      :logseq.property/asset   {:title "Asset"
                                :schema {:type :entity
                                         :hide? true}}
-   ;; used by pdf and whiteboard
-   ;; TODO: remove ls-type
+     ;; used by pdf and whiteboard
+     ;; TODO: remove ls-type
      :logseq.property/ls-type {:schema {:type :keyword
                                         :hide? true}}
 
@@ -248,7 +245,7 @@
                                     :schema {:type :entity :hide? true}}
      :logseq.property.pdf/hl-value {:title "Annotation data"
                                     :schema {:type :map :hide? true}}
-   ;; FIXME: :logseq.property/order-list-type should updated to closed values
+     ;; FIXME: :logseq.property/order-list-type should updated to closed values
      :logseq.property/order-list-type {:title "List type"
                                        :schema {:type :default
                                                 :hide? true}}
@@ -268,7 +265,7 @@
                                     :schema {:type :map
                                              :hide? true}}
 
-   ;; Journal props
+     ;; Journal props
      :logseq.property.journal/title-format {:title "Title Format"
                                             :schema
                                             {:type :string
@@ -383,7 +380,7 @@
       :schema {:type :property
                :hide? true}}
 
-;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
+     ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
      :logseq.property/icon {:title "Icon"
                             :schema {:type :map}}
