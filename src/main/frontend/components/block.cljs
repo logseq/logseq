@@ -1017,10 +1017,13 @@
                           page) children label)
 
       (:block/name page)
-      [:span (str (when tag? "#")
-                  (when-not tag? page-ref/left-brackets)
-                  (:block/name page)
-                  (when-not tag? page-ref/right-brackets))]
+      [:span
+       (when tag? "#")
+       (when-not tag?
+         [:span.text-gray-500.bracket page-ref/left-brackets])
+       (or label (:block/name page))
+       (when-not tag?
+         [:span.text-gray-500.bracket page-ref/right-brackets])]
 
       :else
       nil)))
