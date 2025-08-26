@@ -161,11 +161,16 @@
 
                    ;; block->page
                    (and (:added datom) block-before (not (ldb/page? block-before))) ; block->page
-                   (let [->page-tx [{:db/id id
-                                     :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
-                                    [:db/retract id :block/page]]
-                         move-parent-to-library-tx (let [block (d/entity db-after (:e datom))
-                                                         block-parent (:block/parent block)]
+                   (let [block (d/entity db-after (:e datom))
+                         block-parent (:block/parent block)
+                         ->page-tx (concat
+                                    [{:db/id id
+                                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
+                                     [:db/retract id :block/page]]
+                                    (when (or (ldb/class? block-parent) (ldb/property? block-parent))
+                                      [[:db/retract id :block/parent]
+                                       [:db/retract id :block/order]]))
+                         move-parent-to-library-tx (do
                                                      (assert (ldb/page? block-parent))
                                                      (when (and (nil? (:block/parent block-parent))
                                                                 block-parent
