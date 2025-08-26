@@ -61,6 +61,8 @@
     (page/new-page "test-block-apis")
     (ls-api-call! :ui.showMsg "hello world" "info")
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-apis" "append-block-in-page-0")
+          ret1 (ls-api-call! :editor.appendBlockInPage "append-block-in-current-page-0")
+          _ (assert-api-ls-block! ret1)
           uuid' (assert-api-ls-block! ret)]
       (-> (ls-api-call! :editor.insertBlock uuid' "insert-0")
           (assert-api-ls-block!))
