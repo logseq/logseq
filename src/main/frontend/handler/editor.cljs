@@ -3504,12 +3504,18 @@
                       (state/get-current-page)
                       (date/today))]
     (p/let [block-id (or root-block (parse-uuid page))
-            page-id (when-not block-id
-                      (:db/id (db/get-page page)))
+            page-id (let [page-entity (db/get-page page)]
+                      (if (config/db-based-graph?)
+                        (when (ldb/page? page-entity)
+                          (:block/uuid page-entity))
+                        (when-not block-id
+                          (:block/uuid page-entity))))
             repo (state/get-current-repo)
-            result (db-async/<get-block repo (or block-id page-id)
-                                        {:children-only? true
-                                         :include-collapsed-children? true})
+            _ (db-async/<get-block repo (or block-id page-id)
+                                   {:children? true
+                                    :include-collapsed-children? true})
+            entity (db/entity [:block/uuid (or block-id page-id)])
+            result (or (:block/_page entity) (:block/_parent entity))
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
@@ -3585,7 +3591,7 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children-only? true
+     (db-async/<get-block repo block-id {:children? true
                                          :include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
@@ -3693,11 +3699,6 @@
                (doseq [block-id block-ids] (expand-block! block-id))
                (doseq [block-id block-ids] (collapse-block! block-id))))))
        (and clear-selection? (clear-selection!)))
-
-     (whiteboard?)
-      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
-      ;; Leaving unimplemented for now.
-     nil
 
      :else
       ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
