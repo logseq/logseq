@@ -12,6 +12,14 @@
 ;; Main property vars
 ;; ==================
 
+;; Ignore this property when rtc,
+;; since users frequently click the sort button to view table content temporarily,
+;; but this action does not need to be synchronized with other clients.
+(def property-ignore-rtc
+  {:rtc/ignore-attr-when-init-upload true
+   :rtc/ignore-attr-when-init-download true
+   :rtc/ignore-attr-when-syncing true})
+
 (def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs with their :db/ident as keys.
    Each property has a config map with the following keys:
@@ -431,27 +439,21 @@
                                                     {:type :property
                                                      :hide? true
                                                      :public? false}
-                                                    :rtc {:rtc/ignore-attr-when-init-upload true
-                                                          :rtc/ignore-attr-when-init-download true
-                                                          :rtc/ignore-attr-when-syncing true}}
+                                                    :rtc property-ignore-rtc}
      :logseq.property.view/sort-groups-desc? {:title "View sort groups DESC"
                                               :schema
                                               {:type :checkbox
                                                :hide? true
                                                :public? false}
                                               :properties {:logseq.property/scalar-default-value true}
-                                              :rtc {:rtc/ignore-attr-when-init-upload true
-                                                    :rtc/ignore-attr-when-init-download true
-                                                    :rtc/ignore-attr-when-syncing true}}
+                                              :rtc property-ignore-rtc}
 
      :logseq.property.table/sorting {:title "View sorting"
                                      :schema
                                      {:type :coll
                                       :hide? true
                                       :public? false}
-                                     :rtc {:rtc/ignore-attr-when-init-upload true
-                                           :rtc/ignore-attr-when-init-download true
-                                           :rtc/ignore-attr-when-syncing true}}
+                                     :rtc property-ignore-rtc}
 
      :logseq.property.table/filters {:title "View filters"
                                      :schema
@@ -506,17 +508,13 @@
                                              :schema {:type :raw-number
                                                       :hide? true
                                                       :public? false}
-                                             :rtc {:rtc/ignore-attr-when-init-upload true
-                                                   :rtc/ignore-attr-when-init-download true
-                                                   :rtc/ignore-attr-when-syncing true}}
+                                             :rtc property-ignore-rtc}
      :logseq.property.asset/remote-metadata {:title "File remote metadata"
                                              :schema
                                              {:type :map
                                               :hide? true
                                               :public? false}
-                                             :rtc {:rtc/ignore-attr-when-init-upload true
-                                                   :rtc/ignore-attr-when-init-download true
-                                                   :rtc/ignore-attr-when-syncing true}}
+                                             :rtc property-ignore-rtc}
      :logseq.property.asset/resize-metadata {:title "Asset resize metadata"
                                              :schema {:type :map
                                                       :hide? true
@@ -583,9 +581,7 @@
                                                                 :public? false
                                                                 :hide? true}
                                                        :queryable? false
-                                                       :rtc {:rtc/ignore-attr-when-init-upload true
-                                                             :rtc/ignore-attr-when-init-download true
-                                                             :rtc/ignore-attr-when-syncing true}})))
+                                                       :rtc property-ignore-rtc})))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
