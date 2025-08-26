@@ -3429,11 +3429,11 @@
   [^js e block *control-show? block-id doc-mode?]
   (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
         block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+    (reset! *control-show? true)
     (when (and mouse-moving?
                (not @*dragging?)
                (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
       (.preventDefault e)
-      (reset! *control-show? true)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
           (when doc-mode?
