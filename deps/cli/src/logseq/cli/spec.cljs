@@ -35,13 +35,17 @@
    :title-query {:alias :t
                  :desc "Invoke local query on :block/title"}
    :api-server-token {:alias :a
-                     :desc "API server token to query current graph"}})
+                      :desc "API server token to query current graph"}})
 
 (def search
   {:api-server-token {:alias :a
-                     :desc "API server token to search current graph"}
+                      :desc "API server token to search current graph"}
    :raw {:alias :r
          :desc "Print raw response"}
    :limit {:alias :l
            :default 100
            :desc "Limit max number of results"}})
+
+(def append
+  {:api-server-token {:alias :a
+                      :desc "API server token to modify current graph"}})
