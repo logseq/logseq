@@ -216,8 +216,8 @@
                   nil))
         block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
-      (prn :debug :get-block (:db/id block) (:block/title block) :children? children?
-           :include-collapsed-children? include-collapsed-children?)
+      ;; (prn :debug :get-block (:db/id block) (:block/title block) :children? children?
+      ;;      :include-collapsed-children? include-collapsed-children?)
       (let [children (when children?
                        (let [children-blocks (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
                              large-page? (>= (count children-blocks) 100)
