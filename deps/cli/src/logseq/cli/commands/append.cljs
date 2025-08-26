@@ -9,10 +9,6 @@
   (let [text (string/join " " args)]
     (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.app.append_block_in_page" [text nil nil])]
           (if (= 200 (.-status resp))
-            (p/let [body (.json resp)]
-              (if (.-error body)
-                (cli-util/error (str "Failed to append.\nAPI Error: "
-                                     (string/replace (.-error body) "\n" "\\\\n")))
-                (println "Success!")))
+            (println "Success!")
             (cli-util/api-handle-error-response resp)))
         (p/catch cli-util/command-catch-handler))))
