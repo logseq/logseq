@@ -175,6 +175,10 @@
            persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
+        tags (if (every? uuid? tags)
+               (map (fn [id] (d/entity db [:block/uuid id])) tags)
+               tags)
+        class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
