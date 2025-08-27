@@ -216,16 +216,15 @@
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
                                        [:db/retract id :block/order]]))
-                         move-parent-to-library-tx (do
-                                                     (assert (ldb/page? block-parent))
-                                                     (when (and (nil? (:block/parent block-parent))
-                                                                block-parent
-                                                                (not= (:db/id block-parent) (:db/id library-page))
-                                                                (not (:db/ident block-parent))
-                                                                (not (ldb/built-in? block-parent)))
-                                                       [{:db/id (:db/id block-parent)
-                                                         :block/parent (:db/id (ldb/get-library-page db-after))
-                                                         :block/order (db-order/gen-key)}]))]
+                         move-parent-to-library-tx (when (and (ldb/page? block-parent)
+                                                              (nil? (:block/parent block-parent))
+                                                              block-parent
+                                                              (not= (:db/id block-parent) (:db/id library-page))
+                                                              (not (:db/ident block-parent))
+                                                              (not (ldb/built-in? block-parent)))
+                                                     [{:db/id (:db/id block-parent)
+                                                       :block/parent (:db/id (ldb/get-library-page db-after))
+                                                       :block/order (db-order/gen-key)}])]
                      (concat ->page-tx move-parent-to-library-tx))
 
                    ;; page->block
