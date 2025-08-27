@@ -202,7 +202,7 @@
                     [:db/retract id :block/page]]
 
                    ;; block->page
-                   (and (:added datom) (not (ldb/page? block-before))) ; block->page
+                   (and (:added datom) (or (nil? block-before) (not (ldb/page? block-before)))) ; block->page
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
                          ;; remove inline #Page from title
