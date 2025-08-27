@@ -6,12 +6,23 @@ import Capacitor
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
-    var backgroundTimeStart: Date?
-    let maxBackgroundTime: TimeInterval = 900 // 15 minutes in seconds
+    let maxBackgroundTime: TimeInterval = 300 // 5 minutes in seconds
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        //...
+
+        // Listen to Memory Constraints to restart the app
+        // Observe for low-memory warnings.
+        NotificationCenter.default.addObserver(self,
+                                            selector: #selector(handleMemoryWarning),
+                                            name: UIApplication.didReceiveMemoryWarningNotification,
+                                            object: nil)
         return true
+    }
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        // Allow Remote Notifications to be handled by the BackgroundRunnerPlugin
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
@@ -22,22 +33,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidEnterBackground(_ application: UIApplication) {
         // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
         // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
-        backgroundTimeStart = Date()
+
+        // Record the Background Enter Date
+        UserDefaults.standard.set(Date(), forKey: "backgroundEnterDate")
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
         // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
-        if let startTime = backgroundTimeStart {
-            let timeInBackground = Date().timeIntervalSince(startTime)
-            if timeInBackground >= maxBackgroundTime {
-                // App was in background for more than the maximum allowed time
+        if let backgroundDate = UserDefaults.standard.object(forKey: "backgroundEnterDate") as? Date {
+            let elapsed = Date().timeIntervalSince(backgroundDate)
+            if elapsed > maxBackgroundTime {
+                // More than N minutes have passed.
+                // Reconstruct your WKWebView (or trigger an app state reset) as needed.
                 restartApplication()
             }
         }
-        backgroundTimeStart = nil
+
+        // Clear the background enter date
+        UserDefaults.standard.removeObject(forKey: "backgroundEnterDate")
+        UserDefaults.standard.synchronize() // Optional, to flush the data right away
     }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
+    func applicationDidBecomeActive(_ e: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     }
 
@@ -56,6 +73,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Feel free to add additional processing here, but if you want the App API to support
         // tracking app url opens, make sure to keep this call
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
     }
 
     func restartApplication() {
@@ -85,5 +110,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 NotificationCenter.default.post(name: Notification.Name("AppRestartRequired"), object: nil)
             }
         }
+    }
+
+    // Called when the app receives a low memory warning.
+    @objc func handleMemoryWarning() {
+        // Only kill the app if it's in the background.
+        if UIApplication.shared.applicationState == .background {
+            // Set an old date to guarantee a restart next time
+            let staleDate = Date(timeIntervalSinceNow: -(maxBackgroundTime * 2))
+            UserDefaults.standard.set(staleDate, forKey: "backgroundEnterDate")
+            UserDefaults.standard.synchronize() // Optional, to flush the data right away
+            print("🔴 Memory warning in background: setting stale timestamp \(staleDate)")
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }
