@@ -10,6 +10,7 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
@@ -201,12 +202,16 @@
                     [:db/retract id :block/page]]
 
                    ;; block->page
-                   (and (:added datom) block-before (not (ldb/page? block-before))) ; block->page
+                   (and (:added datom) (not (ldb/page? block-before))) ; block->page
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
+                         ;; remove inline #Page from title
+                         page-title (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+                                        string/trim)
                          ->page-tx (concat
                                     [{:db/id id
-                                      :block/name (common-util/page-name-sanity-lc (:block/title block-after))}
+                                      :block/name (common-util/page-name-sanity-lc page-title)
+                                      :block/title page-title}
                                      [:db/retract id :block/page]]
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
