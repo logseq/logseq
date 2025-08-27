@@ -10,6 +10,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.file-based.schema :as file-schema]
             [logseq.db.frontend.class :as db-class]
@@ -26,6 +27,8 @@
             [logseq.outliner.validate :as outliner-validate]
             [malli.core :as m]
             [malli.util :as mu]))
+
+;; TODO: remove `repo` usage, use db to check `entity-plus/db-based-graph?`
 
 (def ^:private block-map
   (mu/optional-keys
@@ -234,14 +237,38 @@
           [:db/retract eid :block/tags :logseq.class/Page]])))
    tags))
 
+(defn- remove-inline-page-classes
+  [db {:block/keys [tags] :as block}]
+  (let [page-class? (fn [t] (and (map? t) (contains? db-class/page-classes
+                                                     (or (:db/ident t)
+                                                         (when-let [id (:block/uuid t)]
+                                                           (:db/ident (d/entity db [:block/uuid id])))))))
+        page-classes (filter page-class? tags)]
+    (-> block
+        (update :block/tags
+                (fn [tags] (->> (remove page-class? tags)
+                                (remove nil?))))
+        (update :block/refs
+                (fn [refs] (->> (remove page-class? refs)
+                                (remove nil?))))
+        (update :block/title (fn [title]
+                               (reduce
+                                (fn [title page-class]
+                                  (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
+                                      string/trim))
+                                title
+                                page-classes))))))
+
 (extend-type Entity
   otree/INode
   (-save [this *txs-state db repo _date-formatter {:keys [retract-attributes? retract-attributes outliner-op]
                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [data this
-          db-based? (sqlite-util/db-based-graph? repo)
+    (let [db-based? (sqlite-util/db-based-graph? repo)
+          data (cond->> this
+                 db-based?
+                 (remove-inline-page-classes db))
           data' (cond->
                  (if (de/entity? data)
                    (assoc (.-kv ^js data) :db/id (:db/id data))
@@ -536,12 +563,14 @@
 
 (defn- build-insert-blocks-tx
   [db target-block blocks uuids get-new-id {:keys [sibling? outliner-op replace-empty-target? insert-template? keep-block-order?]}]
-  (let [block-ids (set (map :block/uuid blocks))
+  (let [db-based? (entity-plus/db-based-graph? db)
+        block-ids (set (map :block/uuid blocks))
         target-page (get-target-block-page target-block sibling?)
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
-                     (let [top-level? (= (:block/level block) 1)
+                     (let [block (if db-based? (remove-inline-page-classes db block) block)
+                           top-level? (= (:block/level block) 1)
                            parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
 
                            order (nth orders idx)
