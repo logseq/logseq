@@ -239,25 +239,31 @@
 
 (defn- remove-inline-page-classes
   [db {:block/keys [tags] :as block}]
-  (let [page-class? (fn [t] (and (map? t) (contains? db-class/page-classes
-                                                     (or (:db/ident t)
-                                                         (when-let [id (:block/uuid t)]
-                                                           (:db/ident (d/entity db [:block/uuid id])))))))
-        page-classes (filter page-class? tags)]
-    (-> block
-        (update :block/tags
-                (fn [tags] (->> (remove page-class? tags)
-                                (remove nil?))))
-        (update :block/refs
-                (fn [refs] (->> (remove page-class? refs)
-                                (remove nil?))))
-        (update :block/title (fn [title]
-                               (reduce
-                                (fn [title page-class]
-                                  (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
-                                      string/trim))
-                                title
-                                page-classes))))))
+  (if (ldb/page? block)
+    block
+    (let [page-class? (fn [t]
+                        (and (map? t) (contains? db-class/page-classes
+                                                 (or (:db/ident t)
+                                                     (when-let [id (:block/uuid t)]
+                                                       (:db/ident (d/entity db [:block/uuid id])))))))
+          page-classes (filter page-class? tags)]
+      (if (seq page-classes)
+        (-> block
+            (update :block/tags
+                    (fn [tags]
+                      (->> (remove page-class? tags)
+                           (remove nil?))))
+            (update :block/refs
+                    (fn [refs] (->> (remove page-class? refs)
+                                    (remove nil?))))
+            (update :block/title (fn [title]
+                                   (reduce
+                                    (fn [title page-class]
+                                      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
+                                          string/trim))
+                                    title
+                                    page-classes))))
+        block))))
 
 (extend-type Entity
   otree/INode
