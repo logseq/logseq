@@ -567,7 +567,7 @@
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
-        show-properties? (or sidebar-properties? tag-dialog? page-title?)
+        show-properties? (or sidebar-properties? tag-dialog?)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
@@ -611,7 +611,7 @@
                                      (nil? (get block property-id))
                                      :else
                                      ;; sidebar or tag dialog properties ignore these checks
-                                     (when-not show-properties?
+                                     (when-not (or show-properties? page-title?)
                                        (cond
                                          root-block?
                                          false
