@@ -152,7 +152,8 @@
                  (:added datom)
                  (= (:v datom) (:db/id tag)))
             (let [t (d/entity db-after (:e datom))]
-              (when (not (:db/ident t)) ; new tag without db/ident
+              (when (and (not (ldb/inline-tag? (:block/raw-title t) tag))
+                         (not (:db/ident t))) ; new tag without db/ident
                 (let [eid (:db/id t)]
                   [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title t))]
                    [:db/add eid :logseq.property.class/extends :logseq.class/Root]
@@ -173,6 +174,39 @@
 
             :else
             nil))
+        tx-data)
+       (apply concat)))))
+
+(defn- remove-inline-page-class-from-title
+  "Remove inline page tag from title"
+  [block page-tag]
+  (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
+      string/trim))
+
+(defn- fix-inline-built-in-page-classes
+  [{:keys [db-after tx-data tx-meta]}]
+  (when-not (:rtc-op? tx-meta)
+    (let [classes (->> (remove #{:logseq.class/Page} db-class/page-classes)
+                       (map #(d/entity db-after %)))
+          class-ids (set (map :db/id classes))]
+      (->>
+       (keep
+        (fn [datom]
+          (when (and (= :block/tags (:a datom))
+                     (:added datom)
+                     (contains? class-ids (:v datom)))
+            (let [id (:e datom)
+                  entity (d/entity db-after id)
+                  title (or (:block/raw-title entity) (:block/title entity))
+                  page-tag (d/entity db-after (:v datom))]
+              (when (and title
+                         (string/includes? title "#[[")
+                         (ldb/inline-tag? title page-tag))
+                (let [title (remove-inline-page-class-from-title entity page-tag)]
+                  [{:db/id id
+                    :block/title title}
+                   [:db/retract id :block/tags (:v datom)]
+                   [:db/retract id :block/tags :logseq.class/Page]])))))
         tx-data)
        (apply concat)))))
 
@@ -206,8 +240,7 @@
                    (let [block (d/entity db-after (:e datom))
                          block-parent (:block/parent block)
                          ;; remove inline #Page from title
-                         page-title (-> (string/replace (:block/raw-title block) (str "#" (page-ref/->page-ref (:block/uuid page-tag))) "")
-                                        string/trim)
+                         page-title (remove-inline-page-class-from-title block page-tag)
                          ->page-tx (concat
                                     [{:db/id id
                                       :block/name (common-util/page-name-sanity-lc page-title)
@@ -335,7 +368,9 @@
   [repo conn tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         fix-page-tags-tx-data (fix-page-tags tx-report)
-        toggle-page-and-block-tx-data (toggle-page-and-block conn tx-report)
+        fix-inline-page-tx-data (fix-inline-built-in-page-classes tx-report)
+        toggle-page-and-block-tx-data (when (empty? fix-inline-page-tx-data)
+                                        (toggle-page-and-block conn tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (:rtc-tx? tx-meta))
                       (commands/run-commands conn tx-report))
@@ -347,7 +382,8 @@
             commands-tx
             insert-templates-tx
             created-by-tx
-            fix-page-tags-tx-data)))
+            fix-page-tags-tx-data
+            fix-inline-page-tx-data)))
 
 (defn- undo-tx-data-if-disallowed!
   [conn {:keys [tx-data]}]

@@ -12,7 +12,9 @@
             [frontend.test.fixtures :as fixtures]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.worker.db-listener :as worker-db-listener]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
@@ -536,6 +538,45 @@
     (is (some? (:db/ident audio-tag)) "#audio doesn't have db/ident")
     (is (= [:logseq.class/Tag] (map :db/ident (:block/tags audio-tag)))
         "#audio has wrong tags")))
+
+(deftest do-not-save-inline-page-tag-when-save-block
+  (testing "Inline page class shouldn't be saved when save block"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
+          block (db-test/find-block-by-content @conn "test")
+          block' (d/entity @conn (:db/id block))]
+      (doseq [class-ident db-class/page-classes]
+        (let [class (d/entity @conn class-ident)]
+          (outliner-core/save-block! "logseq_db_test" conn
+                                     "MMM do, yyyy"
+                                     {:block/uuid (:block/uuid block)
+                                      :block/tags [(select-keys class [:block/name :block/title :block/uuid :db/ident])],
+                                      :block/title (common-util/format "test #[[%s]]" (str (:block/uuid class))),
+                                      :db/id (:db/id block)})
+          (is (= "test" (:block/title block')))
+          (is (empty? (:block/tags block'))))))))
+
+(deftest do-not-save-inline-page-tag-when-insert-blocks
+  (testing "Inline page class shouldn't be saved when insert blocks"
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "page1"} :blocks [{:block/title "test"}]}])
+          block (db-test/find-block-by-content @conn "test")]
+      (doseq [class-ident db-class/page-classes]
+        (let [class (d/entity @conn class-ident)
+              new-block-id (random-uuid)
+              _ (outliner-tx/transact!
+                 (transact-opts)
+                 (outliner-core/insert-blocks! "logseq_db_test" conn
+                                               [{:block/uuid new-block-id
+                                                 :block/tags [(select-keys class [:block/name :block/title :block/uuid :db/ident])],
+                                                 :block/title (common-util/format "test #[[%s]]" (str (:block/uuid class))),
+                                                 :block/page (:db/id (:block/page block))}]
+                                               block
+                                               {:sibling? false
+                                                :keep-uuid? true}))
+              block' (d/entity @conn [:block/uuid new-block-id])]
+          (is (= "test" (:block/title block')))
+          (is (empty? (:block/tags block'))))))))
 
 (deftest save-test
   (load-test-files [{:file/path "pages/page1.md"
