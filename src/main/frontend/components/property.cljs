@@ -563,11 +563,11 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [page-title? sidebar-properties? tag-dialog?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
-        show-properties? (or sidebar-properties? tag-dialog?)
+        show-properties? (or sidebar-properties? tag-dialog? page-title?)
         show-empty-and-hidden-properties? (let [{:keys [mode show? ids]} (state/sub :ui/show-empty-and-hidden-properties?)]
                                             (and show?
                                                  (or (= mode :global)
@@ -587,6 +587,7 @@
                           ;; other position
                           (when-not (or show-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
+                                        page-title?
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
 
