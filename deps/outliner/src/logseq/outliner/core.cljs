@@ -239,7 +239,8 @@
 
 (defn- remove-inline-page-classes
   [db {:block/keys [tags] :as block}]
-  (if (ldb/page? block)
+  ;; Notice: should check `page?` for block from the current db
+  (if (ldb/page? (d/entity db (:db/id block)))
     block
     (let [page-class? (fn [t]
                         (and (map? t) (contains? db-class/page-classes
