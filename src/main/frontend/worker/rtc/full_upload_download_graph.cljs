@@ -222,7 +222,7 @@
                       :persist-op? false})))))
 
 (defn- transact-block-refs!
-  [repo]
+  [repo graph-uuid]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn
           ;; get all the block datoms
@@ -235,6 +235,9 @@
                          {:db/id (:db/id block)
                           :block/refs refs})))
                    datoms)]
+      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-5
+                                                    :message (str "transacting block-refs(" (count refs-tx) ")")
+                                                    :graph-uuid graph-uuid})
       (ldb/transact! conn refs-tx (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
                                     rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true))))))
 
@@ -261,7 +264,8 @@
    [[] []] blocks))
 
 (defn- create-graph-for-rtc-test
-  "it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
+  "TODO: remove this fn
+  it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
   [repo init-tx-data other-tx-data]
   (let [conn (d/create-conn db-schema/schema)
         db-initial-data (sqlite-create-graph/build-db-initial-data "")]
@@ -280,7 +284,7 @@
                                      :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
                                      :persist-op? false})
     (transact-remote-schema-version! repo)
-    (transact-block-refs! repo)))
+    (transact-block-refs! repo nil)))
 
 (defn- blocks-resolve-temp-id
   [schema-blocks blocks]
@@ -384,20 +388,29 @@
          (p/do!
           ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
           ((@thread-api/*thread-apis :thread-api/export-db) repo)
+          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-1
+                                                        :message (str "transacting init data(" (count init-tx-data) ")")
+                                                        :graph-uuid graph-uuid})
           ((@thread-api/*thread-apis :thread-api/transact)
            repo init-tx-data
            {:rtc-download-graph? true
             :gen-undo-ops? false
-             ;; only transact db schema, skip validation to avoid warning
+            ;; only transact db schema, skip validation to avoid warning
             :frontend.worker.pipeline/skip-validate-db? true
             :persist-op? false}
            (worker-state/get-context))
+          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
+                                                        :message (str "transacting other data(" (count tx-data) ")")
+                                                        :graph-uuid graph-uuid})
           ((@thread-api/*thread-apis :thread-api/transact)
            repo tx-data {:rtc-download-graph? true
                          :gen-undo-ops? false
                          :persist-op? false} (worker-state/get-context))
+          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-3
+                                                        :message "transacting remote schema version"
+                                                        :graph-uuid graph-uuid})
           (transact-remote-schema-version! repo)
-          (transact-block-refs! repo))))
+          (transact-block-refs! repo graph-uuid))))
       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -465,6 +478,9 @@
             (let [all-blocks (ldb/read-transit-str body)]
               (worker-state/set-rtc-downloading-graph! true)
               (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
+              (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transacted-all-blocks
+                                                            :message "transacted all blocks"
+                                                            :graph-uuid graph-uuid})
               (client-op/update-graph-uuid repo graph-uuid)
               (when-not rtc-const/RTC-E2E-TEST
                 (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
@@ -517,3 +533,39 @@
                                                               :message "branch-graph completed"})
             nil)
           (throw (ex-info "branch-graph failed" {:upload-resp resp})))))))
+
+(comment
+  (do
+    (def repo "logseq_db_test-transact-huge-graph")
+    (def debug-transit (shadow.resource/inline "debug.transit"))
+    (def all-blocks (ldb/read-transit-str debug-transit)))
+  (let [{:keys [remote-t init-tx-data tx-data]}
+        (time (remote-all-blocks->tx-data+t all-blocks "36203c0d-c861-4ce0-a6ba-e355e7750989"))]
+    (def init-tx-data init-tx-data)
+    (def tx-data tx-data))
+
+  (p/do!
+   (prn :xxx1 (js/Date.))
+   ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+   (prn :xxx2 (js/Date.))
+   ((@thread-api/*thread-apis :thread-api/transact)
+    repo init-tx-data
+    {:rtc-download-graph? true
+     :gen-undo-ops? false
+      ;; only transact db schema, skip validation to avoid warning
+     :frontend.worker.pipeline/skip-validate-db? true
+     :persist-op? false}
+    (worker-state/get-context))
+   (prn :xxx3 (js/Date.))
+   ((@thread-api/*thread-apis :thread-api/transact)
+    repo tx-data {:rtc-download-graph? true
+                  :gen-undo-ops? false
+                  :persist-op? false} (worker-state/get-context))
+   (prn :xxx4 (js/Date.))
+   (transact-remote-schema-version! repo)
+   (prn :xxx5 (js/Date.))
+   (transact-block-refs! repo)
+   (prn :xxx6 (js/Date.)))
+
+  (p/do!
+   ((@thread-api/*thread-apis :thread-api/unsafe-unlink-db) repo)))
