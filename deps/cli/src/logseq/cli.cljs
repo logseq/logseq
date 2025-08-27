@@ -131,6 +131,7 @@
                                  (throw (ex-info msg data)))
                                (js/process.exit 1))})
     (catch ^:sci/error js/Error e
-      (nbb.error/print-error-report e))))
+      (nbb.error/print-error-report e)
+      (js/process.exit 1))))
 
 #js {:main -main}
