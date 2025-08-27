@@ -226,7 +226,8 @@
             class? (and db-based?
                         (or (string/includes? chosen (str (t :new-tag) " "))
                             (ldb/class? chosen-result)))
-            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
+            inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete")
+                             (not= chosen "Page"))
             chosen (-> chosen
                        (string/replace-first (str (t :new-tag) " ") "")
                        (string/replace-first (str (t :new-page) " ") ""))

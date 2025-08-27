@@ -254,7 +254,9 @@
                                                                     "Search for a node")]
          :class "black"})
 
-       (when (and db-based? db-tag? (not (string/blank? q)))
+       (when (and db-based? db-tag?
+                  (not (string/blank? q))
+                  (not= "page" (string/lower-case q)))
          [:p.px-1.opacity-50.text-sm
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))
