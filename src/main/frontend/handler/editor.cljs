@@ -3515,7 +3515,8 @@
                                    {:children? true
                                     :include-collapsed-children? true})
             entity (db/entity [:block/uuid (or block-id page-id)])
-            result (or (:block/_page entity) (:block/_parent entity))
+            result (or (:block/_page entity)
+                       (rest (db/get-block-and-children repo (:block/uuid entity))))
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
