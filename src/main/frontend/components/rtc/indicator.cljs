@@ -205,7 +205,7 @@
         (map (fn [logs]
                (when-let [first-log (first logs)]
                  (let [graph-uuid (:graph-uuid first-log)]
-                   (take-while (fn [log] (= graph-uuid (:graph-uuid log))) logs))))))))
+                   (take-while (fn [log] (= (str graph-uuid) (str (:graph-uuid log)))) logs))))))))
 
 (rum/defc downloading-logs
   []
