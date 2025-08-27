@@ -1,3 +1,4 @@
+// code from https://github.com/ionic-team/capacitor/discussions/7097#discussioncomment-12804297
 import UIKit
 import Capacitor
 
@@ -5,10 +6,11 @@ import Capacitor
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+    var backgroundTimeStart: Date?
+    let maxBackgroundTime: TimeInterval = 900 // 15 minutes in seconds
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
-
         return true
     }
 
@@ -20,23 +22,33 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationDidEnterBackground(_ application: UIApplication) {
         // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
         // If your application supports background execution, this method is called instead of applicationWillTerminate: when the user quits.
+        backgroundTimeStart = Date()
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
         // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
+        if let startTime = backgroundTimeStart {
+            let timeInBackground = Date().timeIntervalSince(startTime)
+            if timeInBackground >= maxBackgroundTime {
+                // App was in background for more than the maximum allowed time
+                restartApplication()
+            }
+        }
+        backgroundTimeStart = nil
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
-
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
 
-    func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        return ApplicationDelegateProxy.shared.application(application, open: url, options: options)
+    func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        // Called when the app was launched with a url. Feel free to add additional processing here,
+        // but if you want the App API to support tracking app url opens, make sure to keep this call
+        return ApplicationDelegateProxy.shared.application(app, open: url, options: options)
     }
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
@@ -46,4 +58,32 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return ApplicationDelegateProxy.shared.application(application, continue: userActivity, restorationHandler: restorationHandler)
     }
 
+    func restartApplication() {
+        // Create a simple view controller as a placeholder during transition
+        let viewController = UIViewController()
+        let navCtrl = UINavigationController(rootViewController: viewController)
+
+        guard
+            let window = self.window,
+            let rootViewController = window.rootViewController
+        else {
+            return
+        }
+
+        navCtrl.view.frame = rootViewController.view.frame
+        navCtrl.view.layoutIfNeeded()
+
+        UIView.transition(with: window, duration: 0.3, options: .transitionCrossDissolve, animations: {
+            window.rootViewController = navCtrl
+        }) { _ in
+            // After transition, reload the app by recreating the main view controller
+            let mainStoryboard = UIStoryboard(name: "Main", bundle: nil)
+            if let initialViewController = mainStoryboard.instantiateInitialViewController() {
+                window.rootViewController = initialViewController
+
+                // Post a notification that can be caught in the web view to reload the app state
+                NotificationCenter.default.post(name: Notification.Name("AppRestartRequired"), object: nil)
+            }
+        }
+    }
 }
