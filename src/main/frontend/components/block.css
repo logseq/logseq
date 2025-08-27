@@ -1057,7 +1057,19 @@ html.is-mac {
   height: 38px;
 }
 
-.ls-page-title .positioned-properties svg, .page-ref svg {
+.ls-page-title .positioned-properties.block-left svg,
+.ls-page-title .positioned-properties.block-right svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ls-page-title .ls-properties-area .positioned-properties.block-left svg,
+.ls-page-title .ls-properties-area .positioned-properties.block-right svg {
+  width: initial;
+  height: initial;
+}
+
+.page-ref svg {
   width: 16px;
   height: 16px;
 }
