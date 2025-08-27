@@ -161,6 +161,7 @@
   (events/run!)
 
   (p/do!
+   (prn :debug :start-db-worker)
    (-> (p/let [_ (db-browser/start-db-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
