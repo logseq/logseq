@@ -153,12 +153,13 @@
     (let [day (date-time-util/ms->journal-day v)]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
+
+(def ^:private private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
+                                                 db-property/built-in-properties)))
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
-  (let [private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
-                                          db-property/built-in-properties))
-        ;; explicit lookup in order to be nbb compatible
+  (let [;; explicit lookup in order to be nbb compatible
         properties (->
                     (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
                          (into {}))
@@ -178,11 +179,11 @@
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
                                            (cond
-                                             (page-or-object? v)
-                                             [(:db/id v)]
-
                                              (and (coll? v) (every? page-or-object? v))
                                              (map :db/id v)
+
+                                             (page-or-object? v)
+                                             [(:db/id v)]
 
                                              (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident (d/entity db property)))
                                              (when-let [journal-day (get-journal-day-from-long db v)]
