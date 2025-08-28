@@ -19,6 +19,8 @@
             [logseq.common.util :as common-util]
             [promesa.core :as p]))
 
+(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
+
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
 (comment
@@ -196,11 +198,10 @@
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
     (let [future-days (state/get-scheduled-future-days)
-          date-format (tf/formatter "yyyyMMdd")
-          current-day (tf/parse date-format (str date))
+          current-day (tf/parse yyyyMMdd-formatter (str date))
           future-date (t/plus current-day (t/days future-days))
           future-day (some->> future-date
-                              (tf/unparse date-format)
+                              (tf/unparse yyyyMMdd-formatter)
                               (parse-long))
           start-time (date/journal-day->utc-ms date)
           future-time (tc/to-long future-date)]
