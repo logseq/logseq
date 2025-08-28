@@ -47,6 +47,8 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(def ^:private yyyy-MM-dd-formatter (tf/formatter "yyyy-MM-dd"))
+
 (defn- get-scroll-parent
   [config]
   (if (:sidebar? config)
@@ -1375,7 +1377,7 @@
                      (instance? js/Date value)
                      (some->> (tc/to-date value)
                               (t/to-default-time-zone)
-                              (tf/unparse (tf/formatter "yyyy-MM-dd")))
+                              (tf/unparse yyyy-MM-dd-formatter))
                      (and (coll? value) (every? uuid? value))
                      (keep #(db/entity [:block/uuid %]) value)
                      :else
