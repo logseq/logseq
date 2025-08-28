@@ -227,19 +227,21 @@
     (let [db @conn
           ;; get all the block datoms
           datoms (d/datoms db :avet :block/uuid)
-          refs-tx (keep
+          refs-tx (mapcat
                    (fn [d]
                      (let [block (d/entity @conn (:e d))
                            refs (outliner-pipeline/db-rebuild-block-refs @conn block)]
-                       (when (seq refs)
-                         {:db/id (:db/id block)
-                          :block/refs refs})))
+                       (map
+                        (fn [ref]
+                          [:db/add (:db/id block) :block/refs ref])
+                        refs)))
                    datoms)]
       (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-5
                                                     :message (str "transacting block-refs(" (count refs-tx) ")")
                                                     :graph-uuid graph-uuid})
-      (ldb/transact! conn refs-tx (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
-                                    rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true))))))
+      (doseq [refs-tx* (partition-all 1000 refs-tx)]
+        (ldb/transact! conn refs-tx* (cond-> {:outliner-op :rtc-download-rebuild-block-refs}
+                                       rtc-const/RTC-E2E-TEST (assoc :frontend.worker.pipeline/skip-store-conn true)))))))
 
 (defn- block->schema-map
   [block]
@@ -564,7 +566,7 @@
    (prn :xxx4 (js/Date.))
    (transact-remote-schema-version! repo)
    (prn :xxx5 (js/Date.))
-   (transact-block-refs! repo)
+   (transact-block-refs! repo nil)
    (prn :xxx6 (js/Date.)))
 
   (p/do!
