@@ -6,6 +6,8 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]))
 
+(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
+
 ;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
 (defn safe-journal-title-formatters
   [date-formatter]
@@ -32,7 +34,7 @@
   (when journal-title
     (let [journal-title (common-util/capitalize-all journal-title)]
       (journal-title-> journal-title
-                       #(parse-long (tf/unparse (tf/formatter "yyyyMMdd") %))
+                       #(parse-long (tf/unparse yyyyMMdd-formatter %))
                        formatters))))
 
 (defn format
@@ -51,7 +53,7 @@
 (defn int->journal-title
   [day date-formatter]
   (when day
-    (format (tf/parse (tf/formatter "yyyyMMdd") (str day)) date-formatter)))
+    (format (tf/parse yyyyMMdd-formatter (str day)) date-formatter)))
 
 (defn- get-weekday
   [date]
@@ -94,7 +96,7 @@
   "Converts a journal's :block/journal-day integer into milliseconds"
   [day]
   (when day
-    (-> (tf/parse (tf/formatter "yyyyMMdd") (str day))
+    (-> (tf/parse yyyyMMdd-formatter (str day))
         (tc/to-long))))
 
 (defn ms->journal-day
@@ -103,5 +105,5 @@
   (some->> ms
            tc/from-long
            t/to-default-time-zone
-           (tf/unparse (tf/formatter "yyyyMMdd"))
+           (tf/unparse yyyyMMdd-formatter)
            parse-long))
