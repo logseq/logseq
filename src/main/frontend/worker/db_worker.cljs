@@ -436,14 +436,17 @@
         [db requests]]))
    (fn [db requests]
      (when db
-       (mapv (fn [{:keys [id opts]}]
-               (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                 (-> (common-initial-data/get-block-and-children db id' opts)
-                     (assoc :id id)))) requests)))))
+       (->> requests
+            (mapv (fn [{:keys [id opts]}]
+                    (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                      (-> (common-initial-data/get-block-and-children db id' opts)
+                          (assoc :id id)))))
+            ldb/write-transit-str)))))
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (get-blocks-with-cache repo requests))
+  (let [requests (ldb/read-transit-str requests)]
+    (get-blocks-with-cache repo requests)))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
