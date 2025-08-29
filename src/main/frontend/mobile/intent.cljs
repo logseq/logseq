@@ -182,17 +182,20 @@
                         (common-util/safe-decode-uri-component v)
                         v))])))
 
-(defn- handle-asset-file [url format]
-  (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url-link (assets-handler/get-asset-file-link format url label true)]
-    url-link))
+(defn- handle-asset-file [url _format]
+  (-> (p/let [basename (node-path/basename url)
+              _label (-> basename util/node-path.name)
+              _path (assets-handler/get-asset-path basename)
+              file (.readFile Filesystem #js {:path url})
+              file-base64-str (some-> file (.-data))
+              file (some-> file-base64-str (util/base64string-to-unit8array)
+                     (vector) (clj->js) (js/File. basename #js {}))
+              asset-entity (editor-handler/db-based-save-assets!
+                             (state/get-current-repo) [file] {})
+              asset-entity (some-> asset-entity (first))
+              url-link (util/format "[[%s]]" (:block/uuid asset-entity))]
+        url-link)
+    (p/catch #(js/console.error "Error(handle asset file):" %))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
