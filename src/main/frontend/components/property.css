@@ -196,6 +196,7 @@
 }
 
 .property-value-inner {
+  min-height: 28px;
   .select-item {
     @apply flex items-center shrink whitespace-nowrap;
   }

@@ -24,10 +24,12 @@
         (is (> (:block/updated-at (d/entity @conn :user.property/num))
                old-updated-at)))
 
-      (testing "and change its type from a ref to a non-ref type"
-        (outliner-property/upsert-property! conn :user.property/num {:logseq.property/type :checkbox} {})
-        (is (= :checkbox (:logseq.property/type (d/entity @conn :user.property/num))))
-        (is (= nil (:db/valueType (d/entity @conn :user.property/num)))))))
+      (testing "and change its type from a ref to a non-ref type, this should create a new property"
+        (let [new-property (outliner-property/upsert-property! conn :user.property/num {:logseq.property/type :checkbox} {})]
+          (is (= :checkbox (:logseq.property/type new-property)))
+          (is (not= (:db/ident new-property) :user.property/num))
+          (is (= :number (:logseq.property/type (d/entity @conn :user.property/num))))
+          (is (nil? (:db/valueType new-property)))))))
 
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [conn (db-test/create-conn-with-blocks [])]

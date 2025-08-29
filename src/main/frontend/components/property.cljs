@@ -581,6 +581,8 @@
                        (= id :block/tags)
                        (when-let [ent (db/entity id)]
                          (or
+                          ;; deprecated?
+                          (db-property/deprecated? ent)
                           ;; built-in
                           (and (not (ldb/public-built-in-property? ent))
                                (ldb/built-in? ent))
@@ -678,6 +680,7 @@
 
           (when class?
             (let [properties (->> (:logseq.property.class/properties block)
+                                  (remove db-property/deprecated?)
                                   (map (fn [e] [(:db/ident e)])))
                   opts' (assoc opts :class-schema? true)]
               [:div.flex.flex-col.gap-1
