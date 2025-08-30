@@ -1044,6 +1044,17 @@ html.is-mac {
   height: 18px;
 }
 
+.katex svg {
+  width: initial;
+  height: initial;
+}
+.math-block {
+    @apply w-full;
+    .latex {
+        @apply w-full;
+    }
+}
+
 .ls-small-icon svg {
     width: 12px;
     height: 12px;
