@@ -277,6 +277,7 @@
                                             {:popup? true
                                              :view? true
                                              :table-block-title? true
+                                             :table? true
                                              :on-key-down
                                              (fn [e]
                                                (when (= (util/ekey e) "Enter")
