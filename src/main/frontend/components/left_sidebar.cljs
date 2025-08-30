@@ -214,13 +214,13 @@
 
 (rum/defc ^:large-vars/cleanup-todo sidebar-navigations
   [{:keys [default-home route-match route-name srs-open? db-based? enable-whiteboards?]}]
-  (let [navs (cond-> [:flashcards :graph-view :all-pages]
+  (let [navs (cond-> [:flashcards :all-pages :graph-view]
                db-based?
                (concat [:tag/tasks :tag/assets])
                (not db-based?)
                (#(cons :whiteboards %)))
         [checked-navs set-checked-navs!] (rum/use-state (or (storage/get :ls-sidebar-navigations)
-                                                            [:whiteboards :flashcards :graph-view :all-pages]))]
+                                                            [:whiteboards :flashcards :all-pages :graph-view]))]
 
     (hooks/use-effect!
      (fn []
