@@ -2500,7 +2500,8 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      (latex/latex (:block/title block) true false)
+      [:div.math-block
+       (latex/latex (:block/title block) true true)]
 
       (seq (:logseq.property/_query block'))
       (query-builder-component/builder block' {})
