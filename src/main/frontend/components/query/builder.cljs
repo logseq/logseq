@@ -454,6 +454,12 @@
 
 (declare clauses-group)
 
+(defn- uuid->page-title
+  [s]
+  (if (and (string? s) (common-util/uuid-string? s))
+    (:block/title (db/entity [:block/uuid (uuid s)]))
+    s))
+
 (defn- dsl-human-output
   [clause]
   (let [f (first clause)]
@@ -465,16 +471,16 @@
       (str "Search: " clause)
 
       (= (keyword f) :page-ref)
-      (ref/->page-ref (second clause))
+      (ref/->page-ref (uuid->page-title (second clause)))
 
       (contains? #{:tags :page-tags} (keyword f))
       (cond
         (string? (second clause))
-        (str "#" (second clause))
+        (str "#" (uuid->page-title (second clause)))
         (symbol? (second clause))
-        (str "#" (str (second clause)))
+        (str "#" (uuid->page-title  (str (second clause))))
         :else
-        (str "#" (second (second clause))))
+        (str "#" (uuid->page-title (second (second clause)))))
 
       (contains? #{:property :private-property :page-property} (keyword f))
       (str (if (and (config/db-based-graph? (state/get-current-repo))
@@ -482,15 +488,16 @@
              (:block/title (db/entity (second clause)))
              (some-> (second clause) name))
            ": "
-           (cond
-             (and (vector? (last clause)) (= :page-ref (first (last clause))))
-             (second (last clause))
+           (uuid->page-title
+            (cond
+              (and (vector? (last clause)) (= :page-ref (first (last clause))))
+              (second (last clause))
 
-             (= 2 (count clause))
-             "ALL"
+              (= 2 (count clause))
+              "ALL"
 
-             :else
-             (last clause)))
+              :else
+              (last clause))))
 
       ;; between timestamp start (optional end)
       (and (= (keyword f) :between) (query-dsl/get-timestamp-property clause))
@@ -525,7 +532,7 @@
                         (symbol? (last clause)))
                   (name (last  clause))
                   (second (last clause)))]
-        (str "between: " start " ~ " end))
+        (str "between: " (uuid->page-title start) " ~ " (uuid->page-title end)))
 
       (contains? #{:task :priority} (keyword f))
       (str (name f) ": "
