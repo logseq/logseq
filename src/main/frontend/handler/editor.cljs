@@ -837,32 +837,15 @@
                   nil
 
                   concat-prev-block?
-                  (let [children (:block/_parent (db/entity (:db/id block)))
-                        db-based? (config/db-based-graph? repo)
-                        prev-block-is-not-parent? (empty? (:block/_parent prev-block))
-                        delete-prev-block? (and db-based?
-                                                prev-block-is-not-parent?
-                                                (empty? (:block/tags block))
-                                                (not (:logseq.property.node/display-type block))
-                                                (seq (:block/properties block))
-                                                (empty? (:block/properties prev-block))
-                                                (not (:logseq.property/created-from-property block)))]
-                    (if delete-prev-block?
-                      (p/do!
-                       (state/set-state! :editor/edit-block-fn
-                                         #(edit-block! (assoc block :block/title new-content) (count (:block/title prev-block))))
-                       (ui-outliner-tx/transact!
-                        transact-opts
-                        (delete-block-aux! prev-block)
-                        (save-block! repo block new-content {})))
-                      (p/do!
-                       (state/set-state! :editor/edit-block-fn edit-block-f)
-                       (ui-outliner-tx/transact!
-                        transact-opts
-                        (when (seq children)
-                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
-                        (delete-block-aux! block)
-                        (save-block! repo prev-block new-content {})))))
+                  (let [children (:block/_parent (db/entity (:db/id block)))]
+                    (p/do!
+                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (ui-outliner-tx/transact!
+                      transact-opts
+                      (when (seq children)
+                        (outliner-op/move-blocks! children prev-block {:sibling? false}))
+                      (delete-block-aux! block)
+                      (save-block! repo prev-block new-content {}))))
 
                   :else
                   (p/do!
