@@ -55,12 +55,13 @@
                           frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]
                           frontend.config/REVISION #shadow/env ["LOGSEQ_REVISION" :default "dev"]} ;; set by git-revision-hook
-        
+
         :devtools {:before-load frontend.core/stop          ;; before live-reloading any code call this function
                    :after-load frontend.core/start          ;; after live-reloading finishes call this function
                    :watch-path "/static"
                    :preloads [devtools.preload
                               shadow.remote.runtime.cljs.browser]
+                   :loader-mode :eval
                    ;; :ignore-warnings true
                    }}
 
@@ -98,7 +99,8 @@
                        :after-load frontend.core/start          ;; after live-reloading finishes call this function
                        :watch-path "/static"
                        :preloads [devtools.preload
-                                  shadow.remote.runtime.cljs.browser]}}
+                                  shadow.remote.runtime.cljs.browser]
+                       :loader-mode :eval}}
   :mobile {:target        :browser
            :module-loader true
            :js-options    {:js-provider    :external
