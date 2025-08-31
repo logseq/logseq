@@ -2154,6 +2154,7 @@
   [config properties]
   (->> properties
        (map db/entity)
+       (remove ldb/hidden?)
        (ldb/sort-by-order)
        ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
 
