@@ -36,9 +36,9 @@
       (render! state))
     (when-not @*loading?
       (reset! *loading? true)
-      (loader/load "/js/katex.min.js"
+      (loader/load "./js/katex.min.js"
                    (fn []
-                     (loader/load "/js/mhchem.min.js"
+                     (loader/load "./js/mhchem.min.js"
                                   (fn []
                                     (-> (when-let [enhancers (and config/lsp-enabled?
                                                                   (seq (hook-extensions-enhancers-by-key :katex)))]
