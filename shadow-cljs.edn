@@ -61,6 +61,7 @@
                    }}
 
   :db-worker {:target        :browser
+              :module-loader true
               :js-options    {:js-provider    :external
                               :external-index "target/db-worker.js"
                               :external-index-format :esm
