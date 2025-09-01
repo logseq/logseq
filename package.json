@@ -52,7 +52,7 @@
     "scripts": {
         "watch": "run-p gulp:watch cljs:watch webpack-app-watch",
         "electron-watch": "run-p gulp:watch cljs:electron-watch webpack-app-watch",
-        "app-watch": "run-p gulp:watch webpack-app-watch cljs:app-watch",
+        "app-watch": "run-p gulp:watch cljs:app-watch webpack-app-watch",
         "mobile-watch": "run-p gulp:mobile-watch cljs:mobile-watch webpack-mobile-watch",
         "dev": "run-p gulp:watch gulp:mobile-watch cljs:dev-watch webpack",
         "release": "run-s gulp:build cljs:release webpack-app-build",
