@@ -199,12 +199,7 @@
 
   :publishing {:target :browser
                :module-loader true
-               :js-options {:js-provider    :external
-                            :external-index "target/main.js"
-                            :external-index-format :esm
-                            :entry-keys ["module" "browser" "main"]
-                            :export-conditions ["module" "import", "browser" "require" "default"]
-                            :ignore-asset-requires true
+               :js-options {:ignore-asset-requires true
                             :resolve {"react" {:target :global
                                                :global "React"}
                                       "react-dom" {:target :global
