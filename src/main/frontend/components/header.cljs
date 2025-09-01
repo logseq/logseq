@@ -335,7 +335,9 @@
   [page-name]
   (when-let [page (when (and page-name (common-util/uuid-string? page-name))
                     (db/entity [:block/uuid (uuid page-name)]))]
-    (when (and (ldb/page? page) (:block/parent page))
+    ;; FIXME: in publishing? :block/tags incorrectly returns integer until fully restored
+    (when (and (if config/publishing? (not (state/sub :db/restoring?)) true)
+               (ldb/page? page) (:block/parent page))
       [:div.ls-block-breadcrumb
        [:div.text-sm
         (component-block/breadcrumb {}
