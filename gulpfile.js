@@ -184,14 +184,12 @@ const common = {
   syncWorkersToMobile () {
     return gulp.src([
       path.join(outputPath, 'js/db-worker.js'),
-      path.join(outputPath, 'js/inference-worker.js'),
     ], { base: outputJsPath }).pipe(gulp.dest(mobileJsPath))
   },
 
   keepSyncWorkersToMobile () {
     return gulp.watch([
       path.join(outputPath, 'js/db-worker.js'),
-      path.join(outputPath, 'js/inference-worker.js'),
     ], { ignoreInitial: false }, common.syncWorkersToMobile)
   },
 
