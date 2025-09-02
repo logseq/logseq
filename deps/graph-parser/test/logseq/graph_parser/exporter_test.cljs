@@ -587,16 +587,12 @@
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"multiline block"))))
       (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"logbook block")))))
 
-    (testing ":block/refs and :block/path-refs"
+    (testing ":block/refs"
       (let [page (db-test/find-page-by-title @conn "chat-gpt")]
         (is (set/subset?
              #{"type" "LargeLanguageModel"}
              (->> page :block/refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
-            "Page has correct property and property value :block/refs")
-        (is (set/subset?
-             #{"type" "LargeLanguageModel"}
-             (->> page :block/path-refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
-            "Page has correct property and property value :block/path-refs"))
+            "Page has correct property and property value :block/refs"))
 
       (let [block (db-test/find-block-by-content @conn "old todo block")]
         (is (set/subset?

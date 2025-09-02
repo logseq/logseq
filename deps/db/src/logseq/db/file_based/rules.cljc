@@ -98,5 +98,5 @@
      [?b :block/refs ?r]]
    :page-ref
    '[(page-ref ?b ?page-name)
-     [?b :block/path-refs ?br]
-     [?br :block/name ?page-name]]})
+     [?br :block/name ?page-name]
+     (has-ref ?b ?br)]})

@@ -36,14 +36,6 @@
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
           (:undo? tx-meta) (:redo? tx-meta)))))
 
-(defn- compute-block-path-refs-tx
-  [{:keys [tx-meta] :as tx-report} blocks]
-  (when (or (:rtc-tx? tx-meta)
-            (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
-            (:from-disk? tx-meta)
-            (:new-graph? tx-meta))
-    (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
-
 (defn- rebuild-block-refs
   [repo {:keys [tx-meta db-after]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
@@ -302,19 +294,18 @@
               (:added d))
          (when-let [display-type (ldb/get-display-type-by-class-ident (:db/ident (d/entity db (:v d))))]
            [(cond->
-                {:db/id (:e d)
-                 :logseq.property.node/display-type display-type}
+             {:db/id (:e d)
+              :logseq.property.node/display-type display-type}
               (and (= display-type :code) (d/entity db :logseq.kv/latest-code-lang))
               (assoc :logseq.property.code/lang (:kv/value (d/entity db :logseq.kv/latest-code-lang))))])))
      datoms)))
 
 (defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
-  (let [{:keys [refs-tx-report path-refs-tx-report]}
-        (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
+  (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
         full-tx-data (concat (:tx-data tx-report)
                              (:tx-data refs-tx-report)
-                             (:tx-data path-refs-tx-report))
-        final-tx-report (-> (or path-refs-tx-report refs-tx-report tx-report)
+                             (:tx-data refs-tx-report))
+        final-tx-report (-> (or refs-tx-report tx-report)
                             (assoc :tx-data full-tx-data
                                    :tx-meta tx-meta
                                    :db-before (:db-before tx-report)))]
@@ -447,11 +438,6 @@
                                                            :skip-store? true}))
           replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
                        (concat
-                        ;; block path refs
-                        (when (seq blocks')
-                          (let [blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
-                            (compute-block-path-refs-tx tx-report* blocks')))
-
                         ;; update block/tx-id
                         (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
                                                      (concat pages blocks))
@@ -492,17 +478,7 @@
     (let [{:keys [from-disk? new-graph?]} tx-meta]
       (cond
         (or from-disk? new-graph?)
-        (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-              path-refs (distinct (compute-block-path-refs-tx tx-report blocks))
-              tx-report' (if (seq path-refs)
-                           (ldb/transact! conn path-refs {:pipeline-replace? true})
-                           tx-report)
-              full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
-              final-tx-report (assoc tx-report'
-                                     :tx-meta (:tx-meta tx-report)
-                                     :tx-data full-tx-data
-                                     :db-before (:db-before tx-report))]
-          {:tx-report final-tx-report})
+        {:tx-report tx-report}
 
         (or (::gp-exporter/new-graph? tx-meta) (::sqlite-export/imported-data? tx-meta))
         (invoke-hooks-for-imported-graph conn tx-report)

@@ -293,8 +293,7 @@
          [[:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]
           [:db/add id :logseq.property.class/extends :logseq.class/Root]
           [:db/retract id :block/tags :logseq.class/Page]
-          [:db/retract id :block/refs :logseq.class/Page]
-          [:db/retract id :block/path-refs :logseq.class/Page]]))
+          [:db/retract id :block/refs :logseq.class/Page]]))
      class-ids)))
 
 (defn fix-using-properties-as-tags
