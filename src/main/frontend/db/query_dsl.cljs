@@ -484,7 +484,7 @@
   (let [page-name (-> (page-ref/get-page-name! e)
                       (util/page-name-sanity-lc))]
     {:query (list 'page-ref '?b page-name)
-     :rules [:parent :has-ref :page-ref]}))
+     :rules [:page-ref]}))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
@@ -699,11 +699,16 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! (if (= key :and) (rest result) result) opts)))]
+                      (add-bindings! (if (= key :and) (rest result) result) opts)))
+          extract-rules (fn [rules]
+                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))]
       {:query result'
        :rules (if db-graph?
-                (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
-                (mapv file-rules/query-dsl-rules rules))
+                (extract-rules rules)
+                (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
+                             (when (some #{:page-ref} rules)
+                               (extract-rules [:page-ref])))
+                     vec))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))

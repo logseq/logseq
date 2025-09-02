@@ -247,6 +247,7 @@
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
   {:has-ref #{:parent}
+   :page-ref #{:has-ref}
    :task #{:simple-query-property}
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
