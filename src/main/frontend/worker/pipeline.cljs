@@ -302,9 +302,7 @@
 
 (defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
   (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
-        full-tx-data (concat (:tx-data tx-report)
-                             (:tx-data refs-tx-report)
-                             (:tx-data refs-tx-report))
+        full-tx-data (concat (:tx-data tx-report) (:tx-data refs-tx-report))
         final-tx-report (-> (or refs-tx-report tx-report)
                             (assoc :tx-data full-tx-data
                                    :tx-meta tx-meta
