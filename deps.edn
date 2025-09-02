@@ -5,7 +5,7 @@
                                          :sha     "5d672bf84ed944414b9f61eeb83808ead7be9127"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "2dd2b94561fcad7314f489a60bd1ac508042a222"}
+                                         :sha     "45f6721bf2038c24eb9fe3afb422322ab3f473b5"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.9"}
