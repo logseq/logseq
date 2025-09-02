@@ -58,8 +58,10 @@
 
 (defn- get-path-refs
   [db entity]
-  (->> (mapcat :block/refs (ldb/get-block-parents db (:block/uuid entity)))
-       distinct))
+  (let [refs (mapcat :block/refs (ldb/get-block-parents db (:block/uuid entity)))
+        block-page (:block/page entity)]
+    (->> (cond->> refs (some? block-page) (cons block-page))
+         distinct)))
 
 (defn- get-ref-pages-count
   [db id ref-blocks children-ids]
