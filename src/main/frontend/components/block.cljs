@@ -373,7 +373,8 @@
                                               [:div
                                                {:on-click #(shui/popup-hide!)}
                                                (shui/dropdown-menu-item
-                                                {:on-click #(some-> (db/entity [:block/uuid (get-blockid)]) (editor-handler/edit-block! :max))}
+                                                {:on-click #(some-> (db/entity [:block/uuid (get-blockid)])
+                                                              (editor-handler/edit-block! :max {:container-id :unknown-container}))}
                                                 [:span.flex.items-center.gap-1
                                                  (ui/icon "edit") (t :asset/edit-block)])
                                                (shui/dropdown-menu-item
