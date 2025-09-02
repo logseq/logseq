@@ -56,13 +56,18 @@
            (list 'has-ref '?b '?id)]
           clauses)))
 
+(defn- get-path-refs
+  [db entity]
+  (->> (mapcat :block/refs (ldb/get-block-parents db (:block/uuid entity)))
+       distinct))
+
 (defn- get-ref-pages-count
   [db id ref-blocks children-ids]
   (when (seq ref-blocks)
     (let [children (->> children-ids
                         (map (fn [id] (d/entity db id))))]
-      (->> (concat (mapcat :block/path-refs ref-blocks)
-                   (mapcat :block/refs children))
+      (->> (concat (mapcat #(get-path-refs db %) ref-blocks)
+                   (mapcat :block/refs (concat ref-blocks children)))
            frequencies
            (keep (fn [[ref size]]
                    (when (and (ldb/page? ref)
