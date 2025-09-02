@@ -153,9 +153,32 @@
     (let [day (date-time-util/ms->journal-day v)]
       (:e (first (d/datoms db :avet :block/journal-day day))))))
 
-
 (def ^:private private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
                                                  db-property/built-in-properties)))
+
+(defn- build-journal-refs-for-datetime-properties
+  "For a given property pair, builds a coll of journal refs for select built-in
+  :datetime properties and all user :datetime properties. Otherwise returns nil"
+  [db property v]
+  (let [property-ent (d/entity db property)
+        allowed-datetime? (and (= :datetime (:logseq.property/type property-ent))
+                               ;; Only allow a few built-in properties as some built-in properties
+                               ;; like :logseq.property.embedding/hnsw-label-updated-at create undesirable refs
+                               (if (db-property/internal-property? (:db/ident property-ent))
+                                 (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident property-ent))
+                                 ;; All user properties are allowed to create refs but not plugin properties
+                                 (not (db-property/plugin-property? (:db/ident property-ent)))))]
+    (cond
+      (and allowed-datetime? (coll? v))
+      (keep #(get-journal-day-from-long db %) v)
+
+      allowed-datetime?
+      (when-let [journal-day (get-journal-day-from-long db v)]
+        [journal-day])
+
+      :else
+      nil)))
+
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
@@ -185,13 +208,8 @@
                                              (page-or-object? v)
                                              [(:db/id v)]
 
-                                             (contains? #{:logseq.property/scheduled :logseq.property/deadline} (:db/ident (d/entity db property)))
-                                             (when-let [journal-day (get-journal-day-from-long db v)]
-                                               [journal-day])
-
                                              :else
-                                             nil))))
-
+                                             (build-journal-refs-for-datetime-properties db property v)))))
         property-refs (concat property-key-refs property-value-refs)
         content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))
