@@ -385,7 +385,7 @@ independent of format as format specific heading characters are stripped"
              :where
              (has-ref ?block ?ref-page)]
            db
-           (rules/extract-rules rules/db-query-dsl-rules [:has-ref])
+           (rules/extract-rules rules/db-query-dsl-rules [:parent :has-ref])
            pages
            (butlast file-model/file-graph-block-attrs))
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))

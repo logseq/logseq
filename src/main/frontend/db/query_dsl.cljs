@@ -484,7 +484,7 @@
   (let [page-name (-> (page-ref/get-page-name! e)
                       (util/page-name-sanity-lc))]
     {:query (list 'page-ref '?b page-name)
-     :rules [:page-ref]}))
+     :rules [:parent :has-ref :page-ref]}))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)

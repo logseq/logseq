@@ -196,7 +196,7 @@
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
-          ;; Calculate refs and path-refs like frontend
+          ;; Calculate refs like frontend
           _ (db-pipeline/add-listener conn)
           assets (atom [])
           {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets :convert-all-tags? true})]
@@ -601,14 +601,7 @@
                   :block/refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Block has correct task tag and property :block/refs")
-        (is (set/subset?
-             #{:logseq.property/status :logseq.class/Task}
-             (->> block
-                  :block/path-refs
-                  (map #(:db/ident (d/entity @conn (:db/id %))))
-                  set))
-            "Block has correct task tag and property :block/path-refs")))
+            "Block has correct task tag and property :block/refs")))
 
     (testing "whiteboards"
       (let [block-with-props (db-test/find-block-by-content @conn #"block with props")]
