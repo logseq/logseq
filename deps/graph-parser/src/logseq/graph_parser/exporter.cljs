@@ -800,6 +800,32 @@
         (pr-str (dissoc query-map :title :group-by-page? :collapsed?))
         query-str))))
 
+(declare extract-block-list ast->text)
+(defn- extract-block-list-item
+  [{:keys [content items number checkbox]}]
+  (let [content* (mapcat #(ast->text % {}) content)
+        number* (if number
+                  (str number ". ")
+                  "* ")
+        checkbox* (if (some? checkbox)
+                    (if (boolean checkbox)
+                      "[X]" "[ ]")
+                    "")
+        items* (extract-block-list items :in-list? true)]
+    (concat [number* checkbox* " "]
+            content*
+            ["\n"]
+            items*
+            (when (seq items*) ["\n"]))))
+
+(defn- extract-block-list
+  [l & {:keys [in-list?]}]
+  (vec (concat (when-not in-list? ["\n"])
+               (mapcat extract-block-list-item l)
+               (when (and (pos? (count l))
+                          (not in-list?))
+                 ["\n\n"]))))
+
 (defn- ast->text
   "Given an ast block, convert it to text for use as a block title. This is a
   slimmer version of handler.export.text/export-blocks-as-markdown"
@@ -841,6 +867,14 @@
               (:arguments (second node))
               (and (vector? node) (= (first node) "Example"))
               (second node)
+              (and (vector? node) (= (first node) "Latex_Fragment"))
+              (let [[type' content] (second node)
+                    wrapper (case type' "Inline" "$" "Displayed" "$$")]
+                [wrapper content wrapper])
+              (and (vector? node) (= (first node) "Displayed_Math"))
+              ["$$" (second node) "$$"]
+              (and (vector? node) (= (first node) "List"))
+              (extract-block-list (second node))
               :else
               (do
                 (log-fn :ast->text "Ignored ast node" :node node)
