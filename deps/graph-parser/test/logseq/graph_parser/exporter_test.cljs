@@ -214,7 +214,7 @@
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Task]] @conn))))
       (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Query]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Card]] @conn))))
-      (is (= 3 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
+      (is (= 4 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Quote-block]] @conn))))
       (is (= 2 (count (d/q '[:find ?b :where [?b :block/tags :logseq.class/Pdf-annotation]] @conn))))
 
       ;; Properties and tags aren't included in this count as they aren't a Page
