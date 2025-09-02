@@ -8,7 +8,8 @@
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.rules :as rules]))
 
 (defn get-filters
   [db page]
@@ -36,23 +37,23 @@
                (log/error :syntax/filters e)))))))
 
 (defn- build-include-exclude-query
-  [variable includes excludes]
+  [includes excludes]
   (concat
    (for [include includes]
-     [variable :block/path-refs include])
+     (list 'has-ref '?b include))
    (for [exclude excludes]
-     (list 'not [variable :block/path-refs exclude]))))
+     (list 'not (list 'has-ref '?b exclude)))))
 
 (defn- filter-refs-query
-  [attribute includes excludes class-ids]
+  [includes excludes class-ids]
   (let [clauses (concat
-                 (build-include-exclude-query '?b includes excludes)
+                 (build-include-exclude-query includes excludes)
                  (for [class-id class-ids]
                    (list 'not ['?b :block/tags class-id])))]
     (into [:find '[?b ...]
-           :in '$ '[?id ...]
+           :in '$ '% '[?id ...]
            :where
-           ['?b attribute '?id]]
+           (list 'has-ref '?b '?id)]
           clauses)))
 
 (defn- get-ref-pages-count
@@ -99,7 +100,12 @@
                       (set (conj class-children id))))
         full-ref-block-ids (->> (mapcat (fn [id] (map :db/id (:block/_refs (d/entity db id)))) ids)
                                 set)
-        matched-ref-block-ids (set (d/q (filter-refs-query :block/path-refs includes excludes class-ids) db ids))
+        matched-ref-block-ids (set (d/q (filter-refs-query includes excludes class-ids)
+                                        db
+                                        (rules/extract-rules rules/db-query-dsl-rules
+                                                             [:has-ref]
+                                                             {:deps rules/rules-dependencies})
+                                        ids))
         matched-refs-with-children-ids (let [*result (atom #{})]
                                          (doseq [ref-id matched-ref-block-ids]
                                            (get-block-parents-until-top-ref db id ref-id full-ref-block-ids *result))

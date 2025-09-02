@@ -93,6 +93,9 @@
          ;; For integer pages that aren't strings
          [(contains? ?v ?str-val)])]
 
+   :has-ref
+   '[(has-ref ?b ?r)
+     [?b :block/refs ?r]]
    :page-ref
    '[(page-ref ?b ?page-name)
      [?b :block/path-refs ?br]
