@@ -116,12 +116,7 @@
                                            shadow.remote.runtime.cljs.browser]}}
   :mobile {:target        :browser
            :module-loader true
-           :js-options    {:js-provider    :external
-                           :external-index "target/mobile.js"
-                           :external-index-format :esm
-                           :entry-keys ["module" "browser" "main"]
-                           :export-conditions ["module" "import", "browser" "require" "default"]
-                           :ignore-asset-requires true
+           :js-options    {:ignore-asset-requires true
                            :resolve {"react" {:target :global
                                               :global "React"}
                                      "react-dom" {:target :global
@@ -149,15 +144,12 @@
             frontend.config/ENABLE-FILE-SYNC-PRODUCTION #shadow/env ["ENABLE_FILE_SYNC_PRODUCTION" :as :bool :default true]
             frontend.config/ENABLE-RTC-SYNC-PRODUCTION #shadow/env ["ENABLE_RTC_SYNC_PRODUCTION" :as :bool :default true]}
 
-           ;; NOTE: electron, browser/mobile-app use different asset-paths.
-           ;;   For browser/mobile-app devs, assets are located in /static/js(via HTTP root).
-           ;;   For electron devs, assets are located in ./js(via relative path).
-           ;; :dev      {:asset-path "./js"}
            :devtools {:before-load mobile.core/stop!          ;; before live-reloading any code call this function
                       :after-load mobile.core/render!          ;; after live-reloading finishes call this function
                       :watch-path "/static/mobile"
                       :preloads [devtools.preload
-                                 shadow.remote.runtime.cljs.browser]}}
+                                 shadow.remote.runtime.cljs.browser]
+                      :loader-mode :eval}}
   :electron {:target :node-script
              :output-to "static/electron.js"
              :main electron.core/main
