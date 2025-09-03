@@ -323,7 +323,8 @@
              (let [e (d/entity db (:e datom))]
                (when (and (common-entity-util/page? e)
                           (not (entity-util/hidden? e))
-                          (not (string/blank? (:block/title e))))
+                          (not (string/blank? (:block/title e)))
+                          (not (:logseq.property/deprecated? e)))
                  e))))
      (take 30))))
 

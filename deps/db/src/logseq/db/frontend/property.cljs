@@ -49,6 +49,9 @@
      :logseq.property/public? {:title "Property public?"
                                :schema {:type :checkbox
                                         :hide? true}}
+     :logseq.property/deprecated? {:title "Property already deprecated?"
+                                   :schema {:type :checkbox
+                                            :hide? true}}
      :logseq.property/view-context {:title "Property view context"
                                     :schema {:type :keyword
                                              :hide? true}}
@@ -753,3 +756,8 @@
   [db-ident]
   (contains? db-property-type/value-ref-property-types
              (get-in built-in-properties [db-ident :schema :type])))
+
+(defn deprecated?
+  "Whether the property has been deprecated"
+  [property]
+  (:logseq.property/deprecated? property))

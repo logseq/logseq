@@ -53,7 +53,8 @@
   (or (ldb/hidden? entity)
       (let [page (:block/page entity)]
         (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
+             (not= (:block/title page) common-config/quick-add-page-name)))
+      (:logseq.property/deprecated? entity)))
 
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"

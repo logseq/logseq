@@ -50,3 +50,30 @@
 (deftest new-property-test
   (let [title-prefix "new-property-test"]
     (add-new-properties title-prefix)))
+
+(defn change-property-type
+  [title property-name property-types]
+  (b/new-block title)
+  (w/click (util/get-by-text title true))
+  (k/press "Control+e")
+  (util/input-command "Add new property")
+  (w/click "input[placeholder]")
+  (util/input property-name)
+  (w/click (util/get-by-text "New option:" false))
+  (assert/assert-is-visible (w/get-by-text "Select a property type"))
+  (w/click (loc/and "span" (util/get-by-text (first property-types) true)))
+  (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
+  (util/input "Text")
+  (util/double-esc)
+  (doseq [property-type (rest property-types)]
+    (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
+    (w/click (w/get-by-text "Property type"))
+    (w/click (loc/and "span" (util/get-by-text property-type true)))
+    (k/esc)
+    (w/click (format ".property-pair:has-text('%s') .property-k" property-name))
+    (assert/assert-is-visible (w/get-by-text "Property type"))
+    (assert/assert-is-visible (w/get-by-text property-type))
+    (k/esc)))
+
+(deftest change-property-type-test
+  (change-property-type "change-property-type-test" "p-change-type" property-types))

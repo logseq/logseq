@@ -105,11 +105,12 @@
                                (contains? (set (map :db/id (:property/closed-values property))) val)))
                         validate-fn')]
     (if (db-property/many? property)
-      (or (every? validate-fn'' property-val)
-          (empty-placeholder-value? db property (first property-val)))
-      (or (validate-fn'' property-val)
-          ;; also valid if value is empty-placeholder
-          (empty-placeholder-value? db property property-val)))))
+      (or (empty-placeholder-value? db property (first property-val))
+          (every? validate-fn'' property-val))
+      (or
+       ;; also valid if value is empty-placeholder
+       (empty-placeholder-value? db property property-val)
+       (validate-fn'' property-val)))))
 
 (def required-properties
   "Set of properties required by a schema and that are validated directly in a schema instead

@@ -187,6 +187,14 @@
             (let [{:keys [_local-tx remote-tx]}
                   (rtc/with-wait-tx-updated
                     (property-basic-test/add-new-properties title-prefix))]
+              (reset! *latest-remote-tx remote-tx))))
+        change-prop-type-in-page2
+        (fn [*latest-remote-tx]
+          (w/with-page @*page2
+            (let [{:keys [_local-tx remote-tx]}
+                  (rtc/with-wait-tx-updated
+                    (property-basic-test/change-property-type
+                     "change-property-type-test" "p-change-type" ["Text" "Checkbox"]))]
               (reset! *latest-remote-tx remote-tx))))]
     (testing "add different types user properties on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
@@ -201,6 +209,15 @@
     (testing "perform same operations on page2 while keeping rtc connected on page1"
       (let [*latest-remote-tx (atom nil)]
         (insert-new-property-blocks-in-page2 *latest-remote-tx "rtc-property-test-2")
+        (w/with-page @*page1
+          (rtc/wait-tx-update-to @*latest-remote-tx))
+        (validate-2-graphs)))
+
+    (new-logseq-page)
+
+    (testing "change property type"
+      (let [*latest-remote-tx (atom nil)]
+        (change-prop-type-in-page2 *latest-remote-tx)
         (w/with-page @*page1
           (rtc/wait-tx-update-to @*latest-remote-tx))
         (validate-2-graphs)))))
