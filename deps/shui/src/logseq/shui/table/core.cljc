@@ -145,6 +145,12 @@
                  prop)
      children]))
 
+(defn- remove-sticky-header
+  []
+  (let [existing-headings (dom/sel ".ls-fixed")]
+    (doseq [node existing-headings]
+      (dom/remove-class! node "ls-fixed"))))
+
 (defn- use-sticky-element!
   [^js/HTMLDivElement target-ref container]
   (hooks/use-effect!
@@ -180,37 +186,26 @@
                                 ;; update scroll
                                 (set! (. target -scrollLeft) (.-scrollLeft table)))
                ;; target observer
-               target-observe! (fn []
+               target-observe! (fn [_e]
                                  (let [first-visible-table (some #(when (util/el-visible-in-viewport? % true) %)
                                                                  (dom/sel container ".ls-table-rows"))]
                                    (when (= table first-visible-table)
-                                     (let [scroll-top (js/parseInt (.-scrollTop container))
-                                           table-in-top (+ scroll-top head-height)
-                                           table-bottom (.-bottom (.getBoundingClientRect table))
-                                           table-top (.-top (.getBoundingClientRect table))
-                                           target-top (.-top (.getBoundingClientRect target))
-                                           fixed? (and (> table-bottom (+ head-height 90))
-                                                       (> table-in-top @*el-top))]
-                                       (cond
-                                         (and (pos? target-top) (pos? table-top) (>= target-top table-top))
-                                         (.remove target-cls "ls-fixed")
-                                         fixed?
-                                         (.add target-cls "ls-fixed")
-                                         :else
+                                     (let [table-bottom (.-bottom (.getBoundingClientRect table))
+                                           table-top (.-top (.getBoundingClientRect table))]
+                                       (if (and (< table-top head-height)
+                                                (> table-bottom 100))
+                                         (do
+                                           (remove-sticky-header)
+                                           (.add target-cls "ls-fixed"))
                                          (.remove target-cls "ls-fixed"))
                                        (update-target!)))))
-               target-observe-handle! (fn [^js _e]
-                                        (when (not @*ticking?)
-                                          (js/window.requestAnimationFrame
-                                           #(do (target-observe!) (vreset! *ticking? false)))
-                                          (vreset! *ticking? true)))
                resize-observer (js/ResizeObserver. update-target!)
                page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
            ;; events
            (.observe resize-observer container)
            (.observe resize-observer table)
            (some->> page-el (.observe page-resize-observer))
-           (.addEventListener container "scroll" target-observe-handle!)
+           (.addEventListener container "scroll" target-observe!)
            (.addEventListener table "scroll" update-target!)
            (.addEventListener table "resize" update-target!)
            (update-footer!)
