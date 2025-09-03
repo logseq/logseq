@@ -864,7 +864,10 @@
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph opts)]
+                                  (p/let [service (<init-service! graph opts)
+                                          client-id (:client-id service)]
+                                    (when client-id
+                                      (worker-util/post-message :record-worker-client-id {:client-id client-id}))
                                     (get-in service [:status :ready])
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))
