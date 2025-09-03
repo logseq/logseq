@@ -74,8 +74,17 @@
   (reset! mobile-flows/*mobile-app-state (.-isActive state))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
-      (when-not is-active?
-        (editor-handler/save-current-block!)))))
+      (if (not is-active?)
+        (editor-handler/save-current-block!)
+        ;; check whether db-worker is available
+        (when-let [client-id @state/*db-worker-client-id]
+          (when @state/*db-worker
+            (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                       :ifAvailable true}
+                                        (fn [lock]
+                                          (when lock
+                                            ;; lock acquired, meaning the worker has terminated
+                                            (js/window.location.reload))))))))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"

@@ -33,6 +33,7 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *db-worker-client-id (atom nil))
 (defonce *editor-info (atom nil))
 
 (def db-worker-ready-flow

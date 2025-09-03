@@ -73,20 +73,11 @@
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 
-(defn listen-to-reload-app
-  []
-  (.addEventListener js/window "AppRestartRequired"
-                     (fn []
-                       (prn :debug :app-restarted)
-                       (.reload js/window.location))))
-
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
-
-  (listen-to-reload-app)
 
   (set-router!)
   (init/init!)
