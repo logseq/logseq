@@ -1,11 +1,11 @@
 (ns frontend.handler.editor-test
-  (:require [frontend.handler.editor :as editor]
-            [frontend.db :as db]
-            [clojure.test :refer [deftest is testing are use-fixtures]]
+  (:require [clojure.test :refer [deftest is testing are use-fixtures]]
             [datascript.core :as d]
-            [frontend.test.helper :as test-helper :refer [load-test-files]]
+            [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.handler.editor :as editor]
             [frontend.state :as state]
+            [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.util.cursor :as cursor]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
@@ -239,22 +239,16 @@
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "\n
 - b1 #foo"}])
-  (testing "updating block's content changes content and preserves path-refs"
-   (let [conn (db/get-db test-helper/test-db false)
-         block (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name]}])
-                           :where [?b :block/title "b1 #foo"]]
-                         @conn)
-                    ffirst)
-         prev-path-refs (set (map :block/name (:block/path-refs block)))
-         _ (assert (= #{"page1" "foo"} prev-path-refs)
-                   "block has expected :block/path-refs")
+  (testing "updating block's content changes content"
+    (let [conn (db/get-db test-helper/test-db false)
+          block (->> (d/q '[:find (pull ?b [*])
+                            :where [?b :block/title "b1 #foo"]]
+                          @conn)
+                     ffirst)
          ;; Use same options as edit-box-on-change!
-         _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
-         updated-block (d/pull @conn '[* {:block/path-refs [:block/name]}] [:block/uuid (:block/uuid block)])]
-     (is (= "b12 #foo" (:block/title updated-block)) "Content updated correctly")
-     (is (= prev-path-refs
-            (set (map :block/name (:block/path-refs updated-block))))
-         "Path-refs remain the same"))))
+          _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
+          updated-block (d/pull @conn '[*] [:block/uuid (:block/uuid block)])]
+      (is (= "b12 #foo" (:block/title updated-block)) "Content updated correctly"))))
 
 (deftest save-block!
   (testing "Saving blocks with and without properties"

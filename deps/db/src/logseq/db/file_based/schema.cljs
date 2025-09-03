@@ -28,10 +28,6 @@
    ;; reference blocks
    :block/refs {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
-   ;; referenced pages inherited from the parents
-   :block/path-refs {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
 

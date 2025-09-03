@@ -106,12 +106,6 @@
                                      :cardinality :many
                                      :public? false
                                      :hide? true}}
-     :block/path-refs      {:title "Node path references"
-                            :attribute :block/path-refs
-                            :schema {:type :entity
-                                     :cardinality :many
-                                     :public? false
-                                     :hide? true}}
      :block/link           {:title "Node links to"
                             :attribute :block/link
                             :schema {:type :entity
@@ -584,7 +578,7 @@
   "Internal properties that are also db schema attributes"
   #{:block/alias :block/tags :block/parent
     :block/order :block/collapsed? :block/page
-    :block/refs :block/path-refs :block/link
+    :block/refs :block/link
     :block/title :block/closed-value-property :block/journal-day
     :block/created-at :block/updated-at})
 

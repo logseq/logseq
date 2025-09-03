@@ -20,7 +20,6 @@
     :block/format
     :block/refs
     :block/_refs
-    :block/path-refs
     :block/tags
     :block/link
     :block/title
