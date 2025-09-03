@@ -653,7 +653,8 @@
                (f chosen selected?)))]
     (hooks/use-effect!
      (fn []
-       (set-items! (sort-select-items property selected-choices items)))
+       (when-not (= (count items) (count sorted-items))
+         (set-items! (sort-select-items property selected-choices items))))
      [items])
     (select/select (assoc opts
                           :selected-choices selected-choices
