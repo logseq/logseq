@@ -405,14 +405,41 @@ export const prettifyXml = (sourceXml) => {
 }
 
 export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {
-  const { top, left, bottom, right } = el.getBoundingClientRect()
-  const { innerHeight, innerWidth } = window
-  return partiallyVisible
-    ? ((top > 0 && top < innerHeight) ||
-      (bottom > 0 && bottom < innerHeight)) &&
-    ((left > 0 && left < innerWidth) || (right > 0 && right < innerWidth))
-    : top >= 0 && left >= 0 && bottom <= innerHeight && right <= innerWidth
-}
+  if (!el || el.getClientRects().length === 0) return false;
+
+  // Find nearest scrollable ancestor (null => window)
+  const getScrollRoot = (node) => {
+    let p = node && node.parentElement;
+    while (p) {
+      const cs = getComputedStyle(p);
+      const oy = cs.overflowY || cs.overflow, ox = cs.overflowX || cs.overflow;
+      if (/(auto|scroll|overlay)/.test(`${oy}${ox}`)) return p;
+      p = p.parentElement;
+    }
+    return null;
+  };
+
+  const r = el.getBoundingClientRect();
+  const root = getScrollRoot(el);
+
+  // Viewport rect: either the window or the scroll container’s content box
+  const vp = root
+    ? root.getBoundingClientRect()
+    : { top: 0, left: 0, right: window.innerWidth, bottom: window.innerHeight };
+
+  if (partiallyVisible) {
+    const horizontally = r.left < vp.right && r.right > vp.left;
+    const vertically   = r.top  < vp.bottom && r.bottom > vp.top;
+    return horizontally && vertically;
+  } else {
+    return (
+      r.top    >= vp.top &&
+      r.left   >= vp.left &&
+      r.bottom <= vp.bottom &&
+      r.right  <= vp.right
+    );
+  }
+};
 
 export const convertToLetters = (num) => {
   if (!+num) return false
