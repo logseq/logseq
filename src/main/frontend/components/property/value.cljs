@@ -1525,8 +1525,9 @@
                        {:data-type type
                         :class (str (when empty-value? "empty-value")
                                     (when-not (:other-position? opts) " w-full"))
-                        :on-pointer-down (fn [_]
-                                           (state/clear-selection!))}
+                        :on-pointer-down (fn [e]
+                                           (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                             (state/clear-selection!)))}
                        (cond
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v opts)
