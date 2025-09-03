@@ -1,7 +1,6 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -18,103 +17,6 @@
        {:db/id (:e d)
         :block/uuid (:v d)}))
    datoms))
-
-(defn- calculate-children-refs
-  [db-after children new-refs]
-  (let [;; Builds map of children ids to their parent id and :block/refs ids
-        children-maps (into {}
-                            (keep (fn [id]
-                                    (when-let [entity (d/entity db-after [:block/uuid id])]
-                                      (let [from-property (:logseq.property/created-from-property entity)
-                                            default? (= :default (:logseq.property/type from-property))
-                                            page? (ldb/page? entity)]
-                                        (when-not (or page? (and from-property (not default?)))
-                                          [(:db/id entity)
-                                           {:parent-id (get-in entity [:block/parent :db/id])
-                                            :block-ref-ids (map :db/id (:block/refs entity))}]))))
-                                  children))
-        children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
-                             {:db/id id
-                              ;; Recalculate :block/path-refs as db contains stale data for this attribute
-                              :block/path-refs
-                              (set/union
-                               ;; Refs from top-level parent
-                               new-refs
-                               ;; Refs from current block
-                               block-ref-ids
-                               ;; Refs from parents in between top-level
-                               ;; parent and current block
-                               (loop [parent-refs #{}
-                                      parent-id (:parent-id child-map)]
-                                 (if-let [parent (children-maps parent-id)]
-                                   (recur (into parent-refs (:block-ref-ids parent))
-                                          (:parent-id parent))
-                                   ;; exits when top-level parent is reached
-                                   (remove nil? parent-refs))))})
-                           children-maps)]
-    children-refs))
-
-;; TODO: it'll be great if we can calculate the :block/path-refs before any
-;; outliner transaction, this way we can group together the real outliner tx
-;; and the new path-refs changes, which makes both undo/redo and
-;; react-query/refresh! easier.
-
-;; TODO: also need to consider whiteboard transactions
-
-;; Steps:
-;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
-;; 2. Its children' block/path-refs might need to be updated too.
-(defn- compute-block-path-refs
-  [{:keys [db-before db-after]} blocks*]
-  (let [*computed-ids (atom #{})
-        blocks (remove (fn [block]
-                         (let [from-property (:logseq.property/created-from-property block)
-                               default? (= :default (:logseq.property/type from-property))]
-                           (and from-property (not default?))))
-                       blocks*)]
-    (->>
-     (mapcat (fn [block]
-               (when-not (@*computed-ids (:block/uuid block))
-                 (let [page? (ldb/page? block)
-                       from-property (:logseq.property/created-from-property block)
-                       parents' (when-not page?
-                                  (ldb/get-block-parents db-after (:block/uuid block) {}))
-                       parents-refs (->> (cond->>
-                                          (mapcat :block/path-refs parents')
-                                           from-property
-                                           (remove (fn [parent] (and (ldb/property? parent) (not= (:db/id parent) (:db/id from-property))))))
-                                         (map :db/id))
-                       old-refs (if db-before
-                                  (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
-                                  #{})
-                       new-refs (->>
-                                 (concat
-                                  (some-> (:db/id (:block/page block)) vector)
-                                  (map :db/id (:block/refs block))
-                                  parents-refs)
-                                 (remove nil?)
-                                 set)
-                       refs-changed? (not= old-refs new-refs)
-                       children (when refs-changed?
-                                  (when-not page?
-                                    (ldb/get-block-children-ids db-after (:block/uuid block))))
-                       children-refs (when children
-                                       (calculate-children-refs db-after children new-refs))]
-                   (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
-                   (concat
-                    (when (and (seq new-refs) refs-changed? (d/entity db-after (:db/id block)))
-                      [{:db/id (:db/id block)
-                        :block/path-refs new-refs}])
-                    children-refs))))
-             blocks)
-     distinct)))
-
-(defn ^:api compute-block-path-refs-tx
-  "Main fn for computing path-refs"
-  [tx-report blocks]
-  (let [refs-tx (compute-block-path-refs tx-report blocks)
-        truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)]
-    (concat truncate-refs-tx refs-tx)))
 
 (defn- ref->eid
   "ref: entity, map, int, eid"
@@ -234,17 +136,10 @@
           blocks))
 
 (defn transact-new-db-graph-refs
-  "Transacts :block/refs and :block/path-refs for a new or imported DB graph"
+  "Transacts :block/refs for a new or imported DB graph"
   [conn tx-report]
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
         refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
                          (ldb/transact! conn refs-tx {:pipeline-replace? true
-                                                      ::original-tx-meta (:tx-meta tx-report)}))
-        blocks' (if refs-tx-report
-                  (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
-                  blocks)
-        block-path-refs-tx (distinct (compute-block-path-refs-tx tx-report blocks'))
-        path-refs-tx-report (when (seq block-path-refs-tx)
-                              (ldb/transact! conn block-path-refs-tx {:pipeline-replace? true}))]
-    {:refs-tx-report refs-tx-report
-     :path-refs-tx-export path-refs-tx-report}))
+                                                      ::original-tx-meta (:tx-meta tx-report)}))]
+    refs-tx-report))
