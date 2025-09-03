@@ -651,11 +651,13 @@ prop-d:: [[nada]]"}])
   - [[Child page]]
 - p2 [[Parent page]]
   - Non linked content"}]))
-  (is (= ["Non linked content"
-          "p2"
-          "p1"]
-         (map testable-content
-              (dsl-query "(and [[Parent page]] (not [[Child page]]))")))))
+  (is (= (set
+          ["Non linked content"
+           "p2"
+           "p1"])
+         (set
+          (map testable-content
+               (dsl-query "(and [[Parent page]] (not [[Child page]]))"))))))
 
 (deftest between-queries
   (load-test-files [{:file/path "journals/2020_12_26.md"

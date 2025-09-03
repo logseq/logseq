@@ -285,7 +285,7 @@
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
-                  (dissoc :block/children :block/meta :block/unordered :block/path-refs
+                  (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
                   common-util/remove-nils
@@ -761,7 +761,7 @@
                                      :block/title (or (:block/raw-title e) (:block/title e))}
                                     b)
                                    b)
-                               dissoc-keys (concat [:block/tx-id :block/path-refs]
+                               dissoc-keys (concat [:block/tx-id]
                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
                                                      [:block/refs]))]
                            (apply dissoc b dissoc-keys))

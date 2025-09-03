@@ -141,8 +141,7 @@
             identity
             (fn [e]
               (keep (fn [[k v]]
-                      (when (and (not (contains? #{:block/path-refs} k))
-                                 (or (empty? properties) (properties k)))
+                      (when (or (empty? properties) (properties k))
                         (let [v' (cond
                                    (= k :block/parent)
                                    (:db/id v)

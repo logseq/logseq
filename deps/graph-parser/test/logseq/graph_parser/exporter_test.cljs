@@ -196,7 +196,7 @@
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (db-test/create-conn)
-          ;; Calculate refs and path-refs like frontend
+          ;; Calculate refs like frontend
           _ (db-pipeline/add-listener conn)
           assets (atom [])
           {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets :convert-all-tags? true})]
@@ -587,16 +587,12 @@
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (db-test/find-block-by-content @conn #"multiline block"))))
       (is (= "logbook block" (:block/title (db-test/find-block-by-content @conn #"logbook block")))))
 
-    (testing ":block/refs and :block/path-refs"
+    (testing ":block/refs"
       (let [page (db-test/find-page-by-title @conn "chat-gpt")]
         (is (set/subset?
              #{"type" "LargeLanguageModel"}
              (->> page :block/refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
-            "Page has correct property and property value :block/refs")
-        (is (set/subset?
-             #{"type" "LargeLanguageModel"}
-             (->> page :block/path-refs (map #(:block/title (d/entity @conn (:db/id %)))) set))
-            "Page has correct property and property value :block/path-refs"))
+            "Page has correct property and property value :block/refs"))
 
       (let [block (db-test/find-block-by-content @conn "old todo block")]
         (is (set/subset?
@@ -605,14 +601,7 @@
                   :block/refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
-            "Block has correct task tag and property :block/refs")
-        (is (set/subset?
-             #{:logseq.property/status :logseq.class/Task}
-             (->> block
-                  :block/path-refs
-                  (map #(:db/ident (d/entity @conn (:db/id %))))
-                  set))
-            "Block has correct task tag and property :block/path-refs")))
+            "Block has correct task tag and property :block/refs")))
 
     (testing "whiteboards"
       (let [block-with-props (db-test/find-block-by-content @conn #"block with props")]

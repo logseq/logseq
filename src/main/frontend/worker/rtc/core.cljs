@@ -230,7 +230,7 @@
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
-        get-ws-create-task (r.client/ensure-register-graph-updates
+        get-ws-create-task (r.client/ensure-register-graph-updates--memoized
                             get-ws-create-task graph-uuid major-schema-version
                             repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
