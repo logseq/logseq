@@ -2100,7 +2100,7 @@
                                       (rum/with-key
                                         (ui/foldable
                                          [:div
-                                          {:class (when-not list-view? "my-4")}
+                                          {:class (when-not list-view? "my-2")}
                                           (cond
                                             group-by-page?
                                             (if value
