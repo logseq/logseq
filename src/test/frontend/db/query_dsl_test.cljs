@@ -598,6 +598,7 @@ prop-d:: [[nada]]"}])
                      :file/content "foo:: bar
 - b1 [[page 1]] [[tag2]]
 - b2 [[page 2]] [[tag1]]
+  - b4 [[page 4]] [[tag4]]
 - b3"}])
 
   (testing "page-ref queries"
@@ -625,9 +626,14 @@ prop-d:: [[nada]]"}])
                 (dsl-query "(or [[tag2]] [[page 2]])")))
         "OR query")
 
+    (is (= ["b1" "b4"]
+           (map testable-content
+                (dsl-query "(or [[tag2]] [[page 4]])")))
+        "OR query")
+
     (is (= ["b1"]
            (map testable-content
-                (dsl-query "(or [[tag2]] [[page 3]])")))
+                (dsl-query "(or [[tag2]] [[page not exists]])")))
         "OR query with nonexistent page should return meaningful results")
 
     (is (= (if js/process.env.DB_GRAPH #{"b1" "bar" "b3"} #{"b1" "foo:: bar" "b3"})
