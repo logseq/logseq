@@ -359,7 +359,7 @@
                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1)                ; show switch to if there are multiple repos
-                     [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                     [:div.font-medium.md:text-sm.md:opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
                       [:h4.pb-1 (t :left-side-bar/switch)]
 
                       (when (and (file-sync/enable-sync?) login?)
