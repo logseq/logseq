@@ -41,41 +41,60 @@
    ;; block page content
    [:div.block-modal-page-content
     (mobile-ui/classic-app-container-wrap
-      (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
+     (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
 
-(defn setup-sidebar-touch-swipe! []
+(defn- setup-sidebar-touch-swipe!
+  []
   (let [touch-start-x (atom 0)
         touch-start-y (atom 0)
         has-triggered? (atom false)
-        edge-threshold 30
-        swipe-trigger-distance 50
+        blocking-scroll? (atom false)
+
+        swipe-trigger-distance 50         ;; when to actually open sidebar
+        horiz-intent-threshold 10         ;; when to start blocking scroll
         max-vertical-drift 50
 
         on-touch-start (fn [^js e]
-                         (let [touch (aget e "touches" 0)]
-                           (reset! touch-start-x (.-pageX touch))
-                           (reset! touch-start-y (.-pageY touch))
-                           (reset! has-triggered? false)))
+                         (let [t (aget e "touches" 0)]
+                           (reset! touch-start-x (.-pageX t))
+                           (reset! touch-start-y (.-pageY t))
+                           (reset! has-triggered? false)
+                           (reset! blocking-scroll? false)))
 
         on-touch-move (fn [^js e]
-                        (when-not @has-triggered?
-                          (let [touch (aget e "touches" 0)
-                                delta-x (- (.-pageX touch) @touch-start-x)
-                                delta-y (js/Math.abs (- (.-pageY touch) @touch-start-y))
-                                started-from-edge (<= @touch-start-x edge-threshold)
-                                is-horizontal-swipe (and (> delta-x swipe-trigger-distance)
-                                                         (< delta-y max-vertical-drift))]
-                            (when (and started-from-edge is-horizontal-swipe)
-                              (reset! has-triggered? true)
-                              (mobile-state/pop-navigation-history!)))))]
+                        (let [t (aget e "touches" 0)
+                              dx (- (.-pageX t) @touch-start-x)
+                              dy (js/Math.abs (- (.-pageY t) @touch-start-y))
+                              horizontal-intent (and (> dx horiz-intent-threshold)
+                                                     (> dx dy))
+                              is-horizontal-swipe (and (> dx swipe-trigger-distance)
+                                                       (< dy max-vertical-drift))]
 
-    (.addEventListener js/document "touchstart" on-touch-start #js {:passive true})
-    (.addEventListener js/document "touchmove" on-touch-move #js {:passive true})
+                          ;; as soon as we detect horizontal intent, block vertical scrolling
+                          (when (or @blocking-scroll? horizontal-intent)
+                            (reset! blocking-scroll? true)
+                            (.preventDefault e))       ;; <-- stops page from scrolling
 
-    ;; Return cleanup function
+                          (when (and (not @has-triggered?)
+                                     is-horizontal-swipe)
+                            (reset! has-triggered? true)
+                            (mobile-state/pop-navigation-history!))))
+
+        on-touch-end (fn [_]
+                       (reset! blocking-scroll? false))]
+
+    ;; IMPORTANT: passive:false so preventDefault actually works
+    (.addEventListener js/document "touchstart" on-touch-start #js {:passive false})
+    (.addEventListener js/document "touchmove"  on-touch-move  #js {:passive false})
+    (.addEventListener js/document "touchend"   on-touch-end   #js {:passive false})
+    (.addEventListener js/document "touchcancel" on-touch-end  #js {:passive false})
+
+    ;; cleanup
     #(do
        (.removeEventListener js/document "touchstart" on-touch-start)
-       (.removeEventListener js/document "touchmove" on-touch-move))))
+       (.removeEventListener js/document "touchmove"  on-touch-move)
+       (.removeEventListener js/document "touchend"   on-touch-end)
+       (.removeEventListener js/document "touchcancel" on-touch-end))))
 
 (rum/defc block-sheet-topbar
   [block {:keys [favorited? set-favorited!]}]
@@ -87,49 +106,49 @@
      [:span.flex.items-center.-mr-2
       (when-let [block-id-str (str (:block/uuid block))]
         (shui/button
-          {:variant :text
-           :size :sm
-           :class (when favorited? "!text-yellow-800")
-           :on-click #(-> (if favorited?
-                            (page-handler/<unfavorite-page! block-id-str)
-                            (page-handler/<favorite-page! block-id-str))
-                        (p/then (fn [] (set-favorited! (not favorited?)))))}
-          (shui/tabler-icon (if favorited? "star-filled" "star") {:size 20})))
+         {:variant :text
+          :size :sm
+          :class (when favorited? "!text-yellow-800")
+          :on-click #(-> (if favorited?
+                           (page-handler/<unfavorite-page! block-id-str)
+                           (page-handler/<favorite-page! block-id-str))
+                         (p/then (fn [] (set-favorited! (not favorited?)))))}
+         (shui/tabler-icon (if favorited? "star-filled" "star") {:size 20})))
       (shui/button
-        {:variant :text
-         :size :sm
-         :on-click (fn []
-                     (mobile-ui/open-popup!
-                       (fn []
-                         [:div.-mx-2
-                          (ui/menu-link
-                            {:on-click #(mobile-ui/close-popup!)}
-                            [:span.text-lg.flex.gap-2.items-center
-                             (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
-                             "Copy"])
+       {:variant :text
+        :size :sm
+        :on-click (fn []
+                    (mobile-ui/open-popup!
+                     (fn []
+                       [:div.-mx-2
+                        (ui/menu-link
+                         {:on-click #(mobile-ui/close-popup!)}
+                         [:span.text-lg.flex.gap-2.items-center
+                          (shui/tabler-icon "copy" {:class "opacity-80" :size 22})
+                          "Copy"])
 
-                          (ui/menu-link
-                            {:on-click #(-> (shui/dialog-confirm!
-                                              (str "⚠️ Are you sure you want to delete this "
-                                                (if (entity-util/page? block) "page" "block")
-                                                "?"))
-                                          (p/then
-                                            (fn []
-                                              (mobile-ui/close-popup!)
-                                              (some->
-                                                (:block/uuid block)
-                                                (page-handler/<delete!
-                                                  (fn [] (close!))
-                                                  {:error-handler
-                                                   (fn [{:keys [msg]}]
-                                                     (notification/show! msg :warning))})))))}
-                            [:span.text-lg.flex.gap-2.items-center.text-red-700
-                             (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
-                             "Delete"])])
-                       {:title "Actions"
-                        :default-height false
-                        :type :action-sheet}))}
-        (shui/tabler-icon "dots-vertical" {:size 20}))]]))
+                        (ui/menu-link
+                         {:on-click #(-> (shui/dialog-confirm!
+                                          (str "⚠️ Are you sure you want to delete this "
+                                               (if (entity-util/page? block) "page" "block")
+                                               "?"))
+                                         (p/then
+                                          (fn []
+                                            (mobile-ui/close-popup!)
+                                            (some->
+                                             (:block/uuid block)
+                                             (page-handler/<delete!
+                                              (fn [] (close!))
+                                              {:error-handler
+                                               (fn [{:keys [msg]}]
+                                                 (notification/show! msg :warning))})))))}
+                         [:span.text-lg.flex.gap-2.items-center.text-red-700
+                          (shui/tabler-icon "trash" {:class "opacity-80" :size 22})
+                          "Delete"])])
+                     {:title "Actions"
+                      :default-height false
+                      :type :action-sheet}))}
+       (shui/tabler-icon "dots-vertical" {:size 20}))]]))
 
 (rum/defc block-sheet
   [block]
@@ -169,19 +188,19 @@
         :onClickOutside (bean/->js {:dismiss false
                                     :stopOverlayPropagation false})}
        (silkhq/depth-sheet-backdrop)
-        (silkhq/depth-sheet-content
-          {:class "app-silk-depth-sheet-content"}
-          (block-sheet-topbar block {:favorited? favorited?
-                                     :set-favorited! set-favorited!})
-          (silkhq/scroll
-            {:as-child true}
-            (silkhq/scroll-view
-              {:class "app-silk-scroll-view"
-               :scrollGestureTrap {:yEnd true}}
-              (silkhq/scroll-content
-                {:class "app-silk-scroll-content"}
+       (silkhq/depth-sheet-content
+        {:class "app-silk-depth-sheet-content"}
+        (block-sheet-topbar block {:favorited? favorited?
+                                   :set-favorited! set-favorited!})
+        (silkhq/scroll
+         {:as-child true}
+         (silkhq/scroll-view
+          {:class "app-silk-scroll-view"
+           :scrollGestureTrap {:yEnd true}}
+          (silkhq/scroll-content
+           {:class "app-silk-scroll-content"}
 
-                (block-cp block))))))))))
+           (block-cp block))))))))))
 
 (rum/defc blocks-modal < rum/reactive
   []

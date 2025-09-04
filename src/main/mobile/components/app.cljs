@@ -52,30 +52,32 @@
         max-vertical-drift 50
 
         on-touch-start (fn [^js e]
-                         (let [t (aget e "touches" 0)]
-                           (reset! touch-start-x (.-pageX t))
-                           (reset! touch-start-y (.-pageY t))
-                           (reset! has-triggered? false)
-                           (reset! blocking-scroll? false)))
+                         (when (empty? @mobile-state/*modal-blocks)
+                           (let [t (aget e "touches" 0)]
+                             (reset! touch-start-x (.-pageX t))
+                             (reset! touch-start-y (.-pageY t))
+                             (reset! has-triggered? false)
+                             (reset! blocking-scroll? false))))
 
         on-touch-move (fn [^js e]
-                        (let [t (aget e "touches" 0)
-                              dx (- (.-pageX t) @touch-start-x)
-                              dy (js/Math.abs (- (.-pageY t) @touch-start-y))
-                              horizontal-intent (and (> dx horiz-intent-threshold)
-                                                     (> dx dy))
-                              is-horizontal-swipe (and (> dx swipe-trigger-distance)
-                                                       (< dy max-vertical-drift))]
+                        (when (empty? @mobile-state/*modal-blocks)
+                          (let [t (aget e "touches" 0)
+                                dx (- (.-pageX t) @touch-start-x)
+                                dy (js/Math.abs (- (.-pageY t) @touch-start-y))
+                                horizontal-intent (and (> dx horiz-intent-threshold)
+                                                       (> dx dy))
+                                is-horizontal-swipe (and (> dx swipe-trigger-distance)
+                                                         (< dy max-vertical-drift))]
 
                           ;; as soon as we detect horizontal intent, block vertical scrolling
-                          (when (or @blocking-scroll? horizontal-intent)
-                            (reset! blocking-scroll? true)
-                            (.preventDefault e))       ;; <-- stops page from scrolling
+                            (when (or @blocking-scroll? horizontal-intent)
+                              (reset! blocking-scroll? true)
+                              (.preventDefault e))       ;; <-- stops page from scrolling
 
-                          (when (and (not @has-triggered?)
-                                     is-horizontal-swipe)
-                            (reset! has-triggered? true)
-                            (mobile-state/open-left-sidebar!))))
+                            (when (and (not @has-triggered?)
+                                       is-horizontal-swipe)
+                              (reset! has-triggered? true)
+                              (mobile-state/open-left-sidebar!)))))
 
         on-touch-end (fn [_]
                        (reset! blocking-scroll? false))]
@@ -163,7 +165,6 @@
     (use-theme-effects! current-repo)
     (hooks/use-effect!
      (fn []
-       (setup-sidebar-touch-swipe!)
        (when-let [element (util/mobile-page-scroll)]
          (common-handler/listen-to-scroll! element))) [])
     (silkhq/depth-sheet-stack
