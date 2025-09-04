@@ -526,8 +526,21 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
+      @apply text-base;
       display: flex !important;
     }
+  }
+
+  .cp__sidebar-left-layout a {
+    @apply opacity-100;
+  }
+
+  .wrap-th, .more {
+    @apply !opacity-80;
+  }
+
+  .hd .wrap-th > strong {
+    @apply !text-lg;
   }
 }
 
@@ -538,4 +551,8 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 #app-main-content {
     padding-bottom: 200px;
+}
+
+.menu-link, .cp__repos-quick-actions .ui__button {
+    @apply text-base;
 }
