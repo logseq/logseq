@@ -723,7 +723,8 @@ Some bindings in this fn:
                   (extract-rules rules'))
                 (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
                              (when (some #{:page-ref :self-ref} rules)
-                               (extract-rules (set/intersection (set rules) #{:page-ref :self-ref}))))
+                               (extract-rules [:self-ref :page-ref])))
+                     (remove nil?)
                      vec))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
