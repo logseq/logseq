@@ -531,11 +531,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
   }
 
-  .cp__sidebar-left-layout a {
-    @apply opacity-100;
-  }
-
-  .wrap-th, .more {
+  .cp__sidebar-left-layout a, .wrap-th, .more {
     @apply !opacity-80;
   }
 
