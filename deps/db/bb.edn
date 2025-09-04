@@ -29,7 +29,7 @@
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
           (set
-           (concat (mapcat val (merge file-rules/rules rules/rules))
+           (concat (mapcat val (merge file-rules/rules (dissoc rules/rules :self-ref)))
                    ;; TODO: Update linter to handle false positive on ?str-val for :property
                    (rules/extract-rules (dissoc file-rules/query-dsl-rules :property))
                    ;; TODO: Update linter to handle false positive on :task, :priority, :*property* rules
