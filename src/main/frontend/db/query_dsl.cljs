@@ -714,18 +714,19 @@ Some bindings in this fn:
                                 (keyword (first result)))]
                       (add-bindings! (if (= key :and) (rest result) result) opts)))
           extract-rules (fn [rules]
-                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))]
+                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
+          rules' (if db-graph?
+                   (let [rules' (if (contains? (set rules) :page-ref)
+                                  (conj (set rules) :self-ref)
+                                  rules)]
+                     (extract-rules rules'))
+                   (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
+                                (when (some #{:page-ref :self-ref} rules)
+                                  (extract-rules [:self-ref :page-ref])))
+                        (remove nil?)
+                        vec))]
       {:query result'
-       :rules (if db-graph?
-                (let [rules' (if (contains? (set rules) :page-ref)
-                               (conj (set rules) :self-ref)
-                               rules)]
-                  (extract-rules rules'))
-                (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
-                             (when (some #{:page-ref :self-ref} rules)
-                               (extract-rules [:self-ref :page-ref])))
-                     (remove nil?)
-                     vec))
+       :rules rules'
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))
