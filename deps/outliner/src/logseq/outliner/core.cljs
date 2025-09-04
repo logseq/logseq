@@ -239,25 +239,32 @@
 
 (defn- remove-inline-page-classes
   [db {:block/keys [tags] :as block}]
-  (let [page-class? (fn [t] (and (map? t) (contains? db-class/page-classes
-                                                     (or (:db/ident t)
-                                                         (when-let [id (:block/uuid t)]
-                                                           (:db/ident (d/entity db [:block/uuid id])))))))
-        page-classes (filter page-class? tags)]
-    (-> block
-        (update :block/tags
-                (fn [tags] (->> (remove page-class? tags)
-                                (remove nil?))))
-        (update :block/refs
-                (fn [refs] (->> (remove page-class? refs)
-                                (remove nil?))))
-        (update :block/title (fn [title]
-                               (reduce
-                                (fn [title page-class]
-                                  (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
-                                      string/trim))
-                                title
-                                page-classes))))))
+  ;; Notice: should check `page?` for block from the current db
+  (if (ldb/page? (d/entity db (:db/id block)))
+    block
+    (let [page-class? (fn [t]
+                        (and (map? t) (contains? db-class/page-classes
+                                                 (or (:db/ident t)
+                                                     (when-let [id (:block/uuid t)]
+                                                       (:db/ident (d/entity db [:block/uuid id])))))))
+          page-classes (filter page-class? tags)]
+      (if (seq page-classes)
+        (-> block
+            (update :block/tags
+                    (fn [tags]
+                      (->> (remove page-class? tags)
+                           (remove nil?))))
+            (update :block/refs
+                    (fn [refs] (->> (remove page-class? refs)
+                                    (remove nil?))))
+            (update :block/title (fn [title]
+                                   (reduce
+                                    (fn [title page-class]
+                                      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
+                                          string/trim))
+                                    title
+                                    page-classes))))
+        block))))
 
 (extend-type Entity
   otree/INode
@@ -278,7 +285,7 @@
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
-                  (dissoc :block/children :block/meta :block/unordered :block/path-refs
+                  (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
                   common-util/remove-nils
@@ -754,7 +761,7 @@
                                      :block/title (or (:block/raw-title e) (:block/title e))}
                                     b)
                                    b)
-                               dissoc-keys (concat [:block/tx-id :block/path-refs]
+                               dissoc-keys (concat [:block/tx-id]
                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
                                                      [:block/refs]))]
                            (apply dissoc b dissoc-keys))

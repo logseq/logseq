@@ -47,7 +47,7 @@
 (defonce virtualized-list (r/adapt-class Virtuoso))
 (defonce virtualized-grid (r/adapt-class VirtuosoGrid))
 
-(def ReactTweetEmbed (r/adapt-class (gobj/get react-tweet-embed "default")))
+(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 (def useInView (gobj/get react-intersection-observer "useInView"))
 (defonce _emoji-init-data ((gobj/get emoji-mart "init") #js {:data emoji-data}))
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))

@@ -451,8 +451,12 @@
           filters (or (:logseq.property.table/filters view) filters)
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           query? (= feat-type :query-result)
+          query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
           entities-result (if query?
-                            (keep #(d/entity db %) query-entity-ids)
+                            (keep (fn [id]
+                                    (let [e (d/entity db id)]
+                                      (when-not (contains? query-entity-ids (:db/id (:block/parent e)))
+                                        e))) query-entity-ids)
                             (get-view-entities db view-id opts))
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)

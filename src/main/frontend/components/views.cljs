@@ -47,6 +47,8 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
+(def ^:private yyyy-MM-dd-formatter (tf/formatter "yyyy-MM-dd"))
+
 (defn- get-scroll-parent
   [config]
   (if (:sidebar? config)
@@ -275,6 +277,7 @@
                                             {:popup? true
                                              :view? true
                                              :table-block-title? true
+                                             :table? true
                                              :on-key-down
                                              (fn [e]
                                                (when (= (util/ekey e) "Enter")
@@ -1375,7 +1378,7 @@
                      (instance? js/Date value)
                      (some->> (tc/to-date value)
                               (t/to-default-time-zone)
-                              (tf/unparse (tf/formatter "yyyy-MM-dd")))
+                              (tf/unparse yyyy-MM-dd-formatter))
                      (and (coll? value) (every? uuid? value))
                      (keep #(db/entity [:block/uuid %]) value)
                      :else
@@ -2097,7 +2100,7 @@
                                       (rum/with-key
                                         (ui/foldable
                                          [:div
-                                          {:class (when-not list-view? "my-4")}
+                                          {:class (when-not list-view? "my-2")}
                                           (cond
                                             group-by-page?
                                             (if value
@@ -2151,6 +2154,7 @@
   [config properties]
   (->> properties
        (map db/entity)
+       (remove ldb/hidden?)
        (ldb/sort-by-order)
        ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
 

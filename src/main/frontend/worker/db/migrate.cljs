@@ -293,8 +293,7 @@
          [[:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]
           [:db/add id :logseq.property.class/extends :logseq.class/Root]
           [:db/retract id :block/tags :logseq.class/Page]
-          [:db/retract id :block/refs :logseq.class/Page]
-          [:db/retract id :block/path-refs :logseq.class/Page]]))
+          [:db/retract id :block/refs :logseq.class/Page]]))
      class-ids)))
 
 (defn fix-using-properties-as-tags
@@ -354,6 +353,14 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
+(defn- remove-block-path-refs-datoms
+  [db]
+  (->> (d/datoms db :avet :block/path-refs)
+       (map :e)
+       (distinct)
+       (map (fn [id]
+              [:db/retract id :block/path-refs]))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -368,7 +375,8 @@
    ["65.7" {:fix add-quick-add-page}]
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
-   ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]])
+   ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
+   ["65.11" {:fix remove-block-path-refs-datoms}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

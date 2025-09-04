@@ -78,6 +78,7 @@
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
+
   (set-router!)
   (init/init!)
   (fhandler/start! render!))

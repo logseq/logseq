@@ -563,7 +563,7 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [page-title? sidebar-properties? tag-dialog?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -587,6 +587,7 @@
                           ;; other position
                           (when-not (or show-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
+                                        page-title?
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
 
@@ -610,7 +611,7 @@
                                      (nil? (get block property-id))
                                      :else
                                      ;; sidebar or tag dialog properties ignore these checks
-                                     (when-not show-properties?
+                                     (when-not (or show-properties? page-title?)
                                        (cond
                                          root-block?
                                          false

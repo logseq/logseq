@@ -17,7 +17,10 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
+
+(def ^:private yyyyMMdd-formatter (tf/formatter "yyyyMMdd"))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -108,8 +111,9 @@
 
       :else
       (->
-       (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                               [{:id id :opts opts}])
+       (p/let [result-transit-str (state/<invoke-db-worker-direct-pass :thread-api/get-blocks graph
+                                                                       (ldb/write-transit-str [{:id id :opts opts}]))
+               result (ldb/read-transit-str result-transit-str)
                {:keys [block children]} (first result)]
          (when-not skip-transact?
            (let [conn (db/get-db graph false)
@@ -137,10 +141,14 @@
   [graph ids* & {:as opts}]
   (let [ids (remove (fn [id] (:block.temp/load-status (db/entity id))) ids*)]
     (when (seq ids)
-      (p/let [result (state/<invoke-db-worker :thread-api/get-blocks graph
-                                              (map (fn [id]
-                                                     {:id id :opts (assoc opts :children? false)})
-                                                   ids))]
+      (p/let [result-transit-str
+              (state/<invoke-db-worker-direct-pass :thread-api/get-blocks graph
+                                                   (ldb/write-transit-str
+                                                    (map
+                                                     (fn [id]
+                                                       {:id id :opts (assoc opts :children? false)})
+                                                     ids)))
+              result (ldb/read-transit-str result-transit-str)]
         (let [conn (db/get-db graph false)
               result' (map :block result)]
           (when (seq result')
@@ -196,11 +204,10 @@
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
     (let [future-days (state/get-scheduled-future-days)
-          date-format (tf/formatter "yyyyMMdd")
-          current-day (tf/parse date-format (str date))
+          current-day (tf/parse yyyyMMdd-formatter (str date))
           future-date (t/plus current-day (t/days future-days))
           future-day (some->> future-date
-                              (tf/unparse date-format)
+                              (tf/unparse yyyyMMdd-formatter)
                               (parse-long))
           start-time (date/journal-day->utc-ms date)
           future-time (tc/to-long future-date)]
