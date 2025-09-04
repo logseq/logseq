@@ -381,11 +381,11 @@ independent of format as format specific heading characters are stripped"
          (->>
           (d/q
            '[:find [(pull ?block ?block-attrs) ...]
-             :in $ % [?ref-page ...] ?block-attrs
+             :in $ [?ref-page ...] ?block-attrs
              :where
-             (has-ref ?block ?ref-page)]
+             [?r :block/name ?ref-page]
+             [?block :block/refs ?r]]
            db
-           (rules/extract-rules rules/db-query-dsl-rules [:parent :has-ref])
            pages
            (butlast file-model/file-graph-block-attrs))
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
