@@ -108,7 +108,7 @@ jobs:
           echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
 
       - name: Compile CLJS - app variant, use es6 instead of es-next
-        run: yarn install && yarn release-app
+        run: yarn install && yarn release-mobile
         env:
           LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
@@ -125,15 +125,6 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: logseq
           SENTRY_PROJECT: logseq
-
-      - name: Prepare public Directory
-        run: |
-          cp -r static public/
-          rm -rvf public/js/publishing
-          rm -rvf public/js/*.js.map || true
-          rm -rvf public/*.*
-          rm -rvf public/ios
-          rm -rvf android/app/src/main/assets/public || true
 
       - name: Sync public to Android Project
         run: npx cap sync android

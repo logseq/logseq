@@ -38,11 +38,11 @@ on:
         type: boolean
         required: true
         default: true
-      # build-android:
-      #   description: 'Build Android App'
-      #   type: boolean
-      #   required: true
-      #   default: true
+      build-android:
+        description: 'Build Android App'
+        type: boolean
+        required: true
+        default: true
   # schedule: # Every workday at the 2 P.M. (UTC) we run a scheduled nightly build
   #   - cron: '0 14 * * MON-FRI'
 
@@ -492,17 +492,17 @@ jobs:
           path: builds
 
   # reuse workflow via workflow_call
-  # build-android:
-  #   uses: ./.github/workflows/build-android.yml
-  #   if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
-  #   with:
-  #     build-target: "${{ github.event.inputs.build-target }}"
-  #     # if scheduled, use production mode
-  #     enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
-  #   secrets:
-  #     ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
-  #     ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-  #     SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
+  build-android:
+    uses: ./.github/workflows/build-android.yml
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
+    with:
+      build-target: "${{ github.event.inputs.build-target }}"
+      # if scheduled, use production mode
+      enable-file-sync-production: "${{ github.event_name == 'schedule' || github.event.inputs.enable-file-sync-production == 'true' }}"
+    secrets:
+      ANDROID_KEYSTORE: "${{ secrets.ANDROID_KEYSTORE }}"
+      ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+      SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
   codesign-windows:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
@@ -572,11 +572,11 @@ jobs:
           name: logseq-win64-builds
           path: ./
 
-      # - name: Download Android Artifacts
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: logseq-android-builds
-      #     path: ./
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: logseq-android-builds
+          path: ./
 
       - name: Generate SHA256 checksums
         run: |
@@ -652,12 +652,12 @@ jobs:
           name: logseq-win64-builds
           path: ./
 
-      # - name: Download Android Artifacts
-      #   uses: actions/download-artifact@v4
-      #   if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
-      #   with:
-      #     name: logseq-android-builds
-      #     path: ./
+      - name: Download Android Artifacts
+        uses: actions/download-artifact@v4
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.build-android == 'true' }}
+        with:
+          name: logseq-android-builds
+          path: ./
 
       - name: List files
         run: ls -rl
