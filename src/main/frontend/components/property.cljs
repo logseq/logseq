@@ -563,7 +563,7 @@
              (assoc state
                     ::id (str (random-uuid))
                     ::block block)))}
-  [state _target-block {:keys [page-title? sidebar-properties? tag-dialog?] :as opts}]
+  [state _target-block {:keys [page-title? journal-page? sidebar-properties? tag-dialog?] :as opts}]
   (let [id (::id state)
         db-id (:db/id (::block state))
         block (db/sub-block db-id)
@@ -587,7 +587,7 @@
                           ;; other position
                           (when-not (or show-properties?
                                         (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
-                                        page-title?
+                                        (and page-title? (not journal-page?))
                                         show-empty-and-hidden-properties?)
                             (outliner-property/property-with-other-position? ent))
 
