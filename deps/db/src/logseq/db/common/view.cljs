@@ -456,11 +456,8 @@
                             (keep (fn [id]
                                     (let [e (d/entity db id)]
                                       (when-not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property e)))
-                                        e))
-                                    ;; (let [e (d/entity db id)]
-                                    ;;   (when-not (contains? query-entity-ids (:db/id (:block/parent e)))
-                                    ;;     e))
-                                    )query-entity-ids)
+                                        e)))
+                                  query-entity-ids)
                             (get-view-entities db view-id opts))
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)
