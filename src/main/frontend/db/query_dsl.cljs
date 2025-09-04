@@ -486,6 +486,13 @@
     {:query (list 'page-ref '?b page-name)
      :rules [:page-ref]}))
 
+(defn- build-self-ref
+  [e]
+  (let [page-name (-> (page-ref/get-page-name! e)
+                      (util/page-name-sanity-lc))]
+    {:query (list 'self-ref '?b page-name)
+     :rules [:self-ref]}))
+
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
    :rules [:block-content]})
@@ -532,7 +539,7 @@ Some bindings in this fn:
 * fe - the query operator e.g. `property`"
   ([e env]
    (build-query e (assoc env :vars (atom {})) 0))
-  ([e {:keys [blocks? sample] :as env :or {blocks? (atom nil)}} level]
+  ([e {:keys [form blocks? sample current-filter] :as env :or {blocks? (atom nil)}} level]
    ; {:post [(or (nil? %) (map? %))]}
    (let [fe (first e)
          fe (when fe
@@ -547,7 +554,7 @@ Some bindings in this fn:
      (when (or
             (:db-graph? env)
             (and page-ref?
-                 (not (contains? #{'page-property 'page-tags} (:current-filter env))))
+                 (not (contains? #{'page-property 'page-tags} current-filter)))
             (contains? #{'between 'property 'private-property 'todo 'task 'priority 'page} fe)
             (and (not page-ref?) (string? e)))
        (reset! blocks? true))
@@ -559,8 +566,13 @@ Some bindings in this fn:
        {:query [e]
         :rules []}
 
+       (and (= fe 'and) (every? page-ref/page-ref? (rest e)))
+       (build-query (concat e [(cons 'or (rest e))]) env level)
+
        page-ref?
-       (build-page-ref e)
+       (if (or (= current-filter 'or) (= form e))
+         (build-self-ref e)
+         (build-page-ref e))
 
        (string? e)                      ; block content full-text search, could be slow
        (build-block-content e)
@@ -688,7 +700,8 @@ Some bindings in this fn:
           sample (atom nil)
           form (simplify-query form)
           {result :query rules :rules}
-          (when form (build-query form {:sort-by sort-by
+          (when form (build-query form {:form form
+                                        :sort-by sort-by
                                         :blocks? blocks?
                                         :db-graph? db-graph?
                                         :sample sample
@@ -701,14 +714,19 @@ Some bindings in this fn:
                                 (keyword (first result)))]
                       (add-bindings! (if (= key :and) (rest result) result) opts)))
           extract-rules (fn [rules]
-                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))]
+                          (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies}))
+          rules' (if db-graph?
+                   (let [rules' (if (contains? (set rules) :page-ref)
+                                  (conj (set rules) :self-ref)
+                                  rules)]
+                     (extract-rules rules'))
+                   (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
+                                (when (some #{:page-ref :self-ref} rules)
+                                  (extract-rules [:self-ref :page-ref])))
+                        (remove nil?)
+                        vec))]
       {:query result'
-       :rules (if db-graph?
-                (extract-rules rules)
-                (->> (concat (map file-rules/query-dsl-rules (remove #{:page-ref} rules))
-                             (when (some #{:page-ref} rules)
-                               (extract-rules [:page-ref])))
-                     vec))
+       :rules rules'
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
        :sample sample})))
