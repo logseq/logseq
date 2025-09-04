@@ -35,26 +35,19 @@
   [data]
   (reset! *popup-data data))
 
-(defonce *left-sidebar-open? (atom true))
-(defonce *left-sidebar-detent (atom 0))
-(defonce *left-sidebar-inert-outside? (atom false))
+(defonce *left-sidebar-open? (atom false))
 
 (defn open-left-sidebar!
   []
-  (reset! *left-sidebar-open? true)
-  (reset! *left-sidebar-inert-outside? true)
-  (reset! *left-sidebar-detent 2))
+  (reset! *left-sidebar-open? true))
 
 (defn close-left-sidebar!
   []
-  (reset! *left-sidebar-open? false)
-  (reset! *left-sidebar-inert-outside? false)
-  (reset! *left-sidebar-detent 1)
-  (js/setTimeout #(reset! *left-sidebar-open? true) 300))
+  (reset! *left-sidebar-open? false))
 
 (defn left-sidebar-open?
   []
-  (not (contains? #{0 1} @*left-sidebar-detent)))
+  @*left-sidebar-open?)
 
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))
