@@ -1089,6 +1089,10 @@ html.is-mac {
   .positioned-properties, .time-spent {
     margin-top: 15px;
   }
+
+  .block-tags {
+    margin-top: 17px;
+  }
 }
 
 .ls-page-title .ls-properties-area {
