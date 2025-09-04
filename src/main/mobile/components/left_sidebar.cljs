@@ -53,7 +53,7 @@
                             ref (.-current *ref)]
                         (when ref
                           (cond
-                            (and (= start 1) (= end 2))
+                            (and (>= start 1) (>= end 2))
                             (do
                               (dom/remove-class! ref "Sidebar-hidden")
                               (setInertOutside! true)
