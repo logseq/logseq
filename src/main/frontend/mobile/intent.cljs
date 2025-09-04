@@ -83,18 +83,20 @@
   (let [args (transform-args args)]
     (state/pub-event! [:editor/quick-capture args])))
 
-(defn- embed-asset-file [url format]
+(defn- embed-asset-file [url _format]
   (p/let [basename (node-path/basename url)
-          label (-> basename util/node-path.name)
+          _label (-> basename util/node-path.name)
+          _path (assets-handler/get-asset-path basename)
           time (date/get-current-time)
           date-ref-name (date/today)
-          path (assets-handler/get-asset-path basename)
-          _file (p/catch
-                 (.copy Filesystem (clj->js {:from url :to path}))
-                 (fn [error]
-                   (log/error :copy-file-error {:error error})))
-          url (util/format "../assets/%s" basename)
-          url (assets-handler/get-asset-file-link format url label true)
+          file (.readFile Filesystem #js {:path url})
+          file-base64-str (some-> file (.-data))
+          file (some-> file-base64-str (util/base64string-to-unit8array)
+                 (vector) (clj->js) (js/File. basename #js {}))
+          asset-entity (editor-handler/db-based-save-assets!
+                         (state/get-current-repo) [file] {})
+          asset-entity (some-> asset-entity (first))
+          url (util/format "[[%s]]" (:block/uuid asset-entity))
           template (get-in (state/get-config)
                            [:quick-capture-templates :media]
                            "**{time}** [[quick capture]]: {url}")]
