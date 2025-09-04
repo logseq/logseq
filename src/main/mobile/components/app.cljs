@@ -40,8 +40,64 @@
    [:div.pt-3
     (journal/all-journals)]))
 
+(defn- setup-sidebar-touch-swipe!
+  []
+  (let [touch-start-x (atom 0)
+        touch-start-y (atom 0)
+        has-triggered? (atom false)
+        blocking-scroll? (atom false)
+
+        swipe-trigger-distance 50         ;; when to actually open sidebar
+        horiz-intent-threshold 10         ;; when to start blocking scroll
+        max-vertical-drift 50
+
+        on-touch-start (fn [^js e]
+                         (let [t (aget e "touches" 0)]
+                           (reset! touch-start-x (.-pageX t))
+                           (reset! touch-start-y (.-pageY t))
+                           (reset! has-triggered? false)
+                           (reset! blocking-scroll? false)))
+
+        on-touch-move (fn [^js e]
+                        (let [t (aget e "touches" 0)
+                              dx (- (.-pageX t) @touch-start-x)
+                              dy (js/Math.abs (- (.-pageY t) @touch-start-y))
+                              horizontal-intent (and (> dx horiz-intent-threshold)
+                                                     (> dx dy))
+                              is-horizontal-swipe (and (> dx swipe-trigger-distance)
+                                                       (< dy max-vertical-drift))]
+
+                          ;; as soon as we detect horizontal intent, block vertical scrolling
+                          (when (or @blocking-scroll? horizontal-intent)
+                            (reset! blocking-scroll? true)
+                            (.preventDefault e))       ;; <-- stops page from scrolling
+
+                          (when (and (not @has-triggered?)
+                                     is-horizontal-swipe)
+                            (reset! has-triggered? true)
+                            (mobile-state/open-left-sidebar!))))
+
+        on-touch-end (fn [_]
+                       (reset! blocking-scroll? false))]
+
+    ;; IMPORTANT: passive:false so preventDefault actually works
+    (.addEventListener js/document "touchstart" on-touch-start #js {:passive false})
+    (.addEventListener js/document "touchmove"  on-touch-move  #js {:passive false})
+    (.addEventListener js/document "touchend"   on-touch-end   #js {:passive false})
+    (.addEventListener js/document "touchcancel" on-touch-end  #js {:passive false})
+
+    ;; cleanup
+    #(do
+       (.removeEventListener js/document "touchstart" on-touch-start)
+       (.removeEventListener js/document "touchmove"  on-touch-move)
+       (.removeEventListener js/document "touchend"   on-touch-end)
+       (.removeEventListener js/document "touchcancel" on-touch-end))))
+
 (rum/defc home-inner
   [*page db-restoring? current-tab]
+  (hooks/use-effect!
+   (fn []
+     (setup-sidebar-touch-swipe!)) [])
   [:div {:id "app-main-content"
          :ref *page}
 
@@ -107,6 +163,7 @@
     (use-theme-effects! current-repo)
     (hooks/use-effect!
      (fn []
+       (setup-sidebar-touch-swipe!)
        (when-let [element (util/mobile-page-scroll)]
          (common-handler/listen-to-scroll! element))) [])
     (silkhq/depth-sheet-stack
