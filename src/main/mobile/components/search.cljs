@@ -43,8 +43,8 @@
 
     (hooks/use-effect!
      (fn []
-       (let [*timeout (atom nil)]
-         (when-not (string/blank? input)
+       (when-not (string/blank? input)
+         (let [*timeout (atom nil)]
            (p/let [result (search-blocks input)]
              (set-search-result! result)
              (when (seq result)
@@ -55,9 +55,9 @@
                             (when (and last-input-at (>= (- now last-input-at) 2000))
                               (search-handler/add-recent! input)
                               (set-recents! (search-handler/get-recents)))))
-                        2000)))))
-         #(when-let [timeout @*timeout]
-            (js/clearTimeout timeout))))
+                        2000))))
+           #(when-let [timeout @*timeout]
+              (js/clearTimeout timeout)))))
      [(hooks/use-debounced-value input 150)])
 
     [:div.app-silk-search-page
@@ -71,6 +71,7 @@
         {:ref *ref
          :placeholder "Search"
          :value input
+         :auto-focus true
          :on-focus #(set-focused? true)
          :on-blur #(set-focused? false)
          :on-change (fn [^js e]
@@ -93,27 +94,25 @@
          (shui/tabler-icon "x" {:size 14})])]
 
      [:div.bd
-      (when (string/blank? input)
-        [:<>
-         [:div.mb-4
-          [:div.px-4.text-sm.text-muted-foreground.border-b
-           [:div.flex.flex-item.items-center.justify-between.py-1
-            "Recent search"
-            (when (seq recents)
-              (shui/button
-               {:variant :text
-                :size :sm
-                :class "text-muted-foreground flex justify-end pr-1"
-                :on-click (fn []
-                            (search-handler/clear-recents!)
-                            (set-recents! nil))}
-               "Clear all"))]]
+      (when (and (string/blank? input) (seq recents))
+        [:div.mb-4
+         [:div.px-4.text-sm.text-muted-foreground.border-b
+          [:div.flex.flex-item.items-center.justify-between.py-1
+           "Recent search"
+           (shui/button
+            {:variant :text
+             :size :sm
+             :class "text-muted-foreground flex justify-end pr-1"
+             :on-click (fn []
+                         (search-handler/clear-recents!)
+                         (set-recents! nil))}
+            "Clear all")]]
 
-          [:ul.px-3
-           (for [item recents]
-             [:li.flex.gap-1
-              {:on-click #(set-input! item)}
-              item])]]])
+         [:ul.px-3
+          (for [item recents]
+            [:li.flex.gap-1
+             {:on-click #(set-input! item)}
+             item])]])
 
       [:ul.px-3
        {:class (when (and (not (string/blank? input))
