@@ -8,6 +8,8 @@
   --silk-topbar-inner-height: 32px;
   --silk-tabbar-bottom-paddding: 12px;
   --silk-100-lvh-dvh-pct: max(100%,100vh);
+  --safe-area-inset-top: 40px;
+  --safe-area-inset-bottom: 16px;
 }
 
 html.is-native-ios {
@@ -19,6 +21,12 @@ html.is-native-android {
   --silk-topbar-inner-height: 40px;
   --silk-tabbar-bottom-paddding: 32px;
   --silk-topbar-inner-padding-bottom: 6px;
+
+  .app-silk-search-page {
+    > .hd {
+      padding-top: calc(var(--safe-area-inset-top) + 12px);
+    }
+  }
 }
 
 #mobile-editor-toolbar {
@@ -209,7 +217,7 @@ ul {
       &:last-child {
         @apply -mb-4;
 
-        padding-bottom: calc(env(safe-area-inset-bottom) + 6px);
+        padding-bottom: calc(var(--safe-area-inset-bottom) + 6px);
       }
     }
   }
@@ -352,7 +360,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     --silk-topbar-inner-height: 2px;
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-height) + 22px);
+  padding-top: calc(var(--safe-area-inset-top, 0px) + var(--silk-topbar-inner-height) + 22px);
   padding-bottom: 120px;
 
   #journals {
@@ -371,7 +379,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-padding-top, 2px));
+  padding-top: calc(var(--safe-area-inset-top, 0px) + var(--silk-topbar-inner-padding-top, 2px));
   height: var(--silk-topbar-inner-height, 32px);
 
   padding-bottom: var(--silk-topbar-inner-padding-bottom, 8px);
@@ -404,7 +412,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   bg-gray-02 absolute left-0 -bottom-0 w-full z-[1] dark:bg-gray-01;
 
   padding-top: 6px;
-  padding-bottom: calc(env(safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
+  padding-bottom: calc(var(--safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
 
   > .as-item {
     @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
@@ -428,7 +436,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   > .hd {
     @apply fixed top-0 left-0 px-4 py-2.5 w-full bg-gray-01;
 
-    padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
+    padding-top: calc(var(--safe-area-inset-top, 0px) + 4px);
     z-index: 1;
     transition: padding 0.1s ease-in-out;
 
