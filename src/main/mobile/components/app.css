@@ -40,9 +40,6 @@ html.is-native-android {
   }
 }
 
-#mobile-editor-toolbar {
-}
-
 #main-container {
   overflow-y: visible;
 }
@@ -95,6 +92,8 @@ html {
 
 body {
   @apply relative overflow-hidden;
+
+  min-height: unset !important;
 
   .SheetWithDepth-stackSceneryContainer {
     @apply overflow-hidden;

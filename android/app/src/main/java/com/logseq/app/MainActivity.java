@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.view.View;
 import android.webkit.ValueCallback;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -17,7 +18,10 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(UILocal.class);
 
         super.onCreate(savedInstanceState);
-        this.bridge.getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
+        WebView webView = getBridge().getWebView();
+        webView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+        webView.getSettings().setUseWideViewPort(true);
+        webView.getSettings().setLoadWithOverviewMode(true);
 
         new Timer().schedule(new TimerTask() {
             @Override
