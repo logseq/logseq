@@ -3213,7 +3213,7 @@
 (defn <sync-start
   []
   (go
-    (when-not (or @*sync-starting (util/mobile?) (util/web-platform?))
+    (when-not (or @*sync-starting (util/mobile?) util/web-platform?)
       (reset! *sync-starting true)
       (if-not (and (<! (<should-start-sync?))
                    (<! (<connectivity-testing)))

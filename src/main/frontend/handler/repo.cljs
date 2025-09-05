@@ -172,7 +172,7 @@
                   repos
                   (concat
                    (state/get-rtc-graphs)
-                   (when-not (or (util/mobile?) (util/web-platform?))
+                   (when-not (or (util/mobile?) util/web-platform?)
                      (state/get-remote-file-graphs))))]
     (state/set-repos! repos')
     repos'))
