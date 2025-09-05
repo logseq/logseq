@@ -14,6 +14,8 @@
 
 html.is-native-ios {
   --silk-tabbar-bottom-paddding: 2px;
+  --safe-area-inset-top: 58px;
+  --safe-area-inset-bottom: 24px;
 }
 
 html.is-native-android {
