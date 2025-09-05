@@ -34,16 +34,12 @@
     :auto-capitalize "off"
     :auto-correct "false"}])
 
-(rum/defc journals
-  []
-  (ui-component/classic-app-container-wrap
-   [:div.pt-3
-    (journal/all-journals)]))
-
-(defn- modal-popup-exists?
+(defn- sidebar-not-allowed-to-open?
   []
   (or (seq @mobile-state/*modal-blocks)
-      (seq @mobile-state/*popup-data)))
+      (seq @mobile-state/*popup-data)
+      (:mobile/show-action-bar? @state/state)
+      (state/editing?)))
 
 (defn- setup-sidebar-touch-swipe!
   []
@@ -58,7 +54,7 @@
         max-vertical-drift 50
 
         on-touch-start (fn [^js e]
-                         (when-not (modal-popup-exists?)
+                         (when-not (sidebar-not-allowed-to-open?)
                            (let [t (aget e "touches" 0)]
                              (reset! sidebar-initial-open? (mobile-state/left-sidebar-open?))
                              (reset! touch-start-x (.-pageX t))
@@ -68,7 +64,7 @@
                              (reset! max-x 0))))
 
         on-touch-move (fn [^js e]
-                        (when-not (modal-popup-exists?)
+                        (when-not (sidebar-not-allowed-to-open?)
                           (let [t (aget e "touches" 0)
                                 _ (reset! max-x (max (.-pageX t) @max-x))
                                 dx (- (.-pageX t) @touch-start-x)
@@ -114,11 +110,17 @@
        (.removeEventListener js/document "touchend"   on-touch-end)
        (.removeEventListener js/document "touchcancel" on-touch-end))))
 
-(rum/defc home-inner
-  [*page db-restoring? current-tab]
+(rum/defc journals
+  []
   (hooks/use-effect!
    (fn []
      (setup-sidebar-touch-swipe!)) [])
+  (ui-component/classic-app-container-wrap
+   [:div.pt-3
+    (journal/all-journals)]))
+
+(rum/defc home-inner
+  [*page db-restoring? current-tab]
   [:div {:id "app-main-content"
          :ref *page}
 
