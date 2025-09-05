@@ -60,6 +60,17 @@
               (js/clearTimeout timeout)))))
      [(hooks/use-debounced-value input 150)])
 
+    (hooks/use-effect!
+      (fn []
+        (if focused?
+          (let [input (rum/deref *ref)
+                scroll-cnt (some-> input (.closest ".app-silk-index-scroll-content") (.-parentNode))
+                handle! (fn [] (some-> input (.blur)))]
+            (.addEventListener scroll-cnt "scroll" handle!)
+            #(.removeEventListener scroll-cnt "scroll" handle!))
+          #()))
+      [focused?])
+
     [:div.app-silk-search-page
      [:div.hd
       {:class (when (or focused?
