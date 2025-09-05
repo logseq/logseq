@@ -106,8 +106,12 @@
          (silkhq/scroll-view
           {:class "app-silk-scroll-view overflow-y-scroll"
            :scrollGestureTrap {:yEnd true}
-           :style {:min-height (if (number? default-height)
+           :style {:min-height (cond
+                                 (false? default-height)
+                                 nil
+                                 (number? default-height)
                                  default-height
+                                 :else
                                  400)
                    :max-height "80vh"}}
           (silkhq/scroll-content
