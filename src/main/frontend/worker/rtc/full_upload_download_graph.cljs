@@ -228,10 +228,12 @@
     (let [db @conn
           ;; get all the block datoms
           datoms (d/datoms db :avet :block/uuid)
+          page-or-object?-memoized (memoize outliner-pipeline/page-or-object?-helper)
           refs-tx (mapcat
                    (fn [d]
                      (let [block (d/entity db (:e d))
-                           refs (outliner-pipeline/db-rebuild-block-refs db block)]
+                           refs (outliner-pipeline/db-rebuild-block-refs
+                                 db block :page-or-object?-memoized page-or-object?-memoized)]
                        (map
                         (fn [ref]
                           [:db/add (:db/id block) :block/refs ref])
@@ -577,3 +579,28 @@
 
   (p/do!
    ((@thread-api/*thread-apis :thread-api/unsafe-unlink-db) repo)))
+
+(comment
+
+  (let [db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo))
+        datoms (d/datoms db :avet :block/uuid)
+        page-or-object?-memoized (memoize outliner-pipeline/page-or-object?-helper)
+        refs-tx
+        (time
+         (vec
+          (mapcat
+           (fn [d]
+             (let [block (d/entity db (:e d))
+                   refs (outliner-pipeline/db-rebuild-block-refs
+                         db block :page-or-object?-memoized page-or-object?-memoized)]
+               (map
+                (fn [ref]
+                  [:db/add (:db/id block) :block/refs ref])
+                refs)))
+           datoms)))]
+    (prn ::count (count refs-tx))
+    ;; (prn ::take-20 (take 20 (sort-by second > (into [] (frequencies (map last refs-tx))))))
+    )
+
+
+  )
