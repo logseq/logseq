@@ -361,8 +361,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 }
 
 .app-silk-topbar {
-  @apply fixed top-0 left-0 w-full border-b bg-gray-02 dark:bg-gray-01
-  flex justify-between items-center overflow-hidden;
+  @apply fixed top-0 left-0 w-full flex justify-between items-center overflow-hidden bg-gray-01;
 
   &[data-center-title] {
     @apply grid grid-cols-8 gap-4;
