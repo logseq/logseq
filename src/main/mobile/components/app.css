@@ -524,7 +524,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
-      @apply text-base;
+      @apply text-base opacity-80;
       display: flex !important;
     }
   }
