@@ -19,14 +19,15 @@ html.is-native-ios {
 }
 
 html.is-native-android {
-  --silk-topbar-inner-padding-top: 4px;
-  --silk-topbar-inner-height: 40px;
-  --silk-tabbar-bottom-paddding: 32px;
+  --silk-topbar-inner-padding-top: 14px;
+  --silk-topbar-inner-height: 36px;
   --silk-topbar-inner-padding-bottom: 6px;
+
+  --silk-tabbar-bottom-paddding: 28px;
 
   .app-silk-search-page {
     > .hd {
-      padding-top: calc(var(--safe-area-inset-top) + 12px);
+      padding-top: calc(var(--safe-area-inset-top) + 14px);
     }
   }
 }
