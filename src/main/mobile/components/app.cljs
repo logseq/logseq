@@ -40,6 +40,11 @@
    [:div.pt-3
     (journal/all-journals)]))
 
+(defn- modal-popup-exists?
+  []
+  (or (seq @mobile-state/*modal-blocks)
+      (seq @mobile-state/*popup-data)))
+
 (defn- setup-sidebar-touch-swipe!
   []
   (let [touch-start-x (atom 0)
@@ -53,7 +58,7 @@
         max-vertical-drift 50
 
         on-touch-start (fn [^js e]
-                         (when (empty? @mobile-state/*modal-blocks)
+                         (when-not (modal-popup-exists?)
                            (let [t (aget e "touches" 0)]
                              (reset! sidebar-initial-open? (mobile-state/left-sidebar-open?))
                              (reset! touch-start-x (.-pageX t))
@@ -63,7 +68,7 @@
                              (reset! max-x 0))))
 
         on-touch-move (fn [^js e]
-                        (when (empty? @mobile-state/*modal-blocks)
+                        (when-not (modal-popup-exists?)
                           (let [t (aget e "touches" 0)
                                 _ (reset! max-x (max (.-pageX t) @max-x))
                                 dx (- (.-pageX t) @touch-start-x)
