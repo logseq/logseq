@@ -620,14 +620,7 @@
 
 (defn ^:export get_page
   [id-or-page-name]
-  (p/let [page (db-async/<pull (state/get-current-repo)
-                               (cond
-                                 (number? id-or-page-name)
-                                 id-or-page-name
-                                 (util/uuid-string? id-or-page-name)
-                                 [:block/uuid (uuid id-or-page-name)]
-                                 :else
-                                 [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
+  (p/let [page (<pull-block id-or-page-name)]
     (when-let [page (and (:block/name page)
                          (some->> page (api-block/into-properties (state/get-current-repo))))]
       (bean/->js (sdk-utils/normalize-keyword-for-json page)))))
@@ -1010,6 +1003,12 @@
                            (api-block/into-readable-db-properties (:block/properties block))
                            (:block/properties block))]
           (bean/->js (sdk-utils/normalize-keyword-for-json properties)))))))
+
+(defn ^:export get_page_properties
+  [id-or-page-name]
+  (p/let [page (<pull-block id-or-page-name)]
+    (when-let [id (:block/uuid page)]
+      (get_block_properties id))))
 
 (def ^:export get_current_page_blocks_tree
   (fn []
