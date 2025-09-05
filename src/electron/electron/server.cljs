@@ -108,7 +108,9 @@
       (-> (invoke-logseq-api! method (.-args body))
           (p/then #(do
                      ;; Responses with an :error key are unexpected failures from electron.listener
-                     (when (aget % "error") (.code rep 500))
+                     (when-let [msg (aget % "error")]
+                       (.code rep 500)
+                       (js/console.error "Unexpected API error:" msg))
                      (.send rep %)))
           (p/catch #(.send rep %)))
       (-> rep

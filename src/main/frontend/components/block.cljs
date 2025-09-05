@@ -374,7 +374,7 @@
                                                {:on-click #(shui/popup-hide!)}
                                                (shui/dropdown-menu-item
                                                 {:on-click #(some-> (db/entity [:block/uuid (get-blockid)])
-                                                              (editor-handler/edit-block! :max {:container-id :unknown-container}))}
+                                                                    (editor-handler/edit-block! :max {:container-id :unknown-container}))}
                                                 [:span.flex.items-center.gap-1
                                                  (ui/icon "edit") (t :asset/edit-block)])
                                                (shui/dropdown-menu-item
@@ -2988,7 +2988,7 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (let [journal-title? (:from-journals? config)]
+                                        (let [journal-title? (:journal-page? config)]
                                           (cond
                                             (util/right-click? e)
                                             nil
