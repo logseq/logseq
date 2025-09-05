@@ -24,7 +24,7 @@
                                                     :extract-fn :block/title})
           items (keep (fn [block]
                         (if (:page? block)
-                          (cmdk/page-item repo block)
+                          (assoc (cmdk/page-item repo block) :page? true)
                           (cmdk/block-item repo block nil input))) blocks)]
     items))
 
@@ -61,15 +61,15 @@
      [(hooks/use-debounced-value input 150)])
 
     (hooks/use-effect!
-      (fn []
-        (if focused?
-          (let [input (rum/deref *ref)
-                scroll-cnt (some-> input (.closest ".app-silk-index-scroll-content") (.-parentNode))
-                handle! (fn [] (some-> input (.blur)))]
-            (.addEventListener scroll-cnt "scroll" handle!)
-            #(.removeEventListener scroll-cnt "scroll" handle!))
-          #()))
-      [focused?])
+     (fn []
+       (if focused?
+         (let [input (rum/deref *ref)
+               scroll-cnt (some-> input (.closest ".app-silk-index-scroll-content") (.-parentNode))
+               handle! (fn [] (some-> input (.blur)))]
+           (.addEventListener scroll-cnt "scroll" handle!)
+           #(.removeEventListener scroll-cnt "scroll" handle!))
+         #()))
+     [focused?])
 
     [:div.app-silk-search-page
      [:div.hd
@@ -107,9 +107,9 @@
      [:div.bd
       (when (and (string/blank? input) (seq recents))
         [:div.mb-4
-         [:div.px-4.text-sm.text-muted-foreground.border-b
-          [:div.flex.flex-item.items-center.justify-between.py-1
-           "Recent search"
+         [:div.px-4.text-sm.font-medium.text-muted-foreground
+          [:div.flex.flex-item.items-center.justify-between.mt-2
+           "Recent"
            (shui/button
             {:variant :text
              :size :sm
@@ -117,19 +117,19 @@
              :on-click (fn []
                          (search-handler/clear-recents!)
                          (set-recents! nil))}
-            "Clear all")]]
+            "Clear")]]
 
-         [:ul.px-3
-          (for [item recents]
-            [:li.flex.gap-1
+         (for [item recents]
+           [:div.px-2
+            (ui/menu-link
              {:on-click #(set-input! item)}
-             item])]])
+             item)])])
 
       [:ul.px-3
        {:class (when (and (not (string/blank? input))
                           (seq search-result))
                  "as-results")}
-       (for [{:keys [icon text header source-block]} result]
+       (for [{:keys [page? icon text header source-block]} result]
          (let [block source-block]
            [:li.flex.gap-1
             {:on-click (fn []
@@ -141,9 +141,9 @@
                              (when block (mobile-state/open-block-modal! block)))))}
             [:div.flex.flex-col.gap-1.py-1
              (when header
-               [:div.opacity-50.text-sm
+               [:div.opacity-60.text-sm
                 header])
              [:div.flex.flex-row.items-start.gap-1
-              (when icon (ui/icon icon {:size 15
-                                        :class "text-muted-foreground mt-1"}))
+              (when (and page? icon) (ui/icon icon {:size 15
+                                                    :class "text-muted-foreground mt-1"}))
               [:div text]]]]))]]]))
