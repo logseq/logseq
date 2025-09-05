@@ -318,7 +318,7 @@
   (state/set-state! [:ui/loading? :login] false)
   (async/go
     (let [result (async/<! (sync/<user-info sync/remoteapi))
-          mobile-or-web? (or (util/mobile?) (util/web-platform?))]
+          mobile-or-web? (or (util/mobile?) util/web-platform?)]
       (cond
         (instance? ExceptionInfo result)
         nil
