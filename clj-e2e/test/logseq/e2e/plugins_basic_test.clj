@@ -77,11 +77,13 @@
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-properties-apis" "block-in-page-0" {:properties {:p1 1}})
           uuid' (assert-api-ls-block! ret)
           prop1 (ls-api-call! :editor.getBlockProperty uuid' "p1")
-          props1 (ls-api-call! :editor.getBlockProperties uuid' "p1")]
+          props1 (ls-api-call! :editor.getBlockProperties uuid' "p1")
+          props2 (ls-api-call! :editor.getPageProperties "test-block-properties-apis")]
       (w/wait-for ".property-k:text('p1')")
       (is (= 1 (get prop1 "value")))
       (is (= (get prop1 "ident") ":plugin.property._api/p1"))
       (is (= 1 (get props1 ":plugin.property._api/p1")))
+      (is (= ["Page"] (get props2 ":block/tags")))
       (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2")
       (ls-api-call! :editor.upsertBlockProperty uuid' "p3" true)
       (ls-api-call! :editor.upsertBlockProperty uuid' "p4" {:a 1, :b [2, 3]})
