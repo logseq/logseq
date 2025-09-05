@@ -426,21 +426,20 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 .app-silk-search-page {
   > .hd {
-    @apply fixed top-0 left-0 px-4 pb-2.5 w-full;
-    @apply border-b bg-gray-02 dark:bg-gray-01;
+    @apply fixed top-0 left-0 px-4 py-2.5 w-full bg-gray-01;
 
-    padding-top: calc(env(safe-area-inset-top, 0px) - 2px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
     z-index: 1;
     transition: padding 0.1s ease-in-out;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[9px] opacity-60;
+      @apply absolute left-2.5 top-[11px] opacity-60;
     }
 
     .cancel {
-      @apply absolute right-0.5 opacity-0;
+      @apply absolute right-0.5 opacity-0 text-base;
 
-      bottom: 5px;
+      bottom: 11px;
     }
 
     &.input-focused {
@@ -461,9 +460,9 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
 
     .ui__input {
-      @apply border-none dark:bg-gray-02 bg-gray-04 pl-9 outline-none ring-0;
+      @apply border-none dark:bg-gray-02 bg-gray-04 pl-9 outline-none ring-0 text-base rounded-full;
 
-      height: 34px;
+      height: 40px;
       outline-offset: 0;
       box-shadow: none;
     }
@@ -472,22 +471,12 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       @apply absolute right-6 w-[16px] h-[16px] bg-gray-10 overflow-hidden
       rounded-full flex items-center justify-center text-gray-02 opacity-50;
 
-      bottom: 18px;
+      bottom: 22px;
     }
   }
 
   > .bd {
-    @apply -mx-4 pt-4;
-
-    ul {
-      &.as-results > li {
-        @apply border-b py-1 -mx-4 px-3;
-
-        &:active {
-          @apply opacity-80 bg-gray-02;
-        }
-      }
-    }
+    @apply -mx-4 mt-8;
   }
 }
 
