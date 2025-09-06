@@ -116,11 +116,10 @@
 
 (defmethod local-block-ops->remote-ops-aux :move-op
   [_ & {:keys [parent-uuid block-order block-uuid *remote-ops *depend-on-block-uuid-set]}]
-  (when parent-uuid
-    (let [pos (->pos parent-uuid block-order)]
-      (swap! *remote-ops conj [:move {:block-uuid block-uuid :pos pos}])
-      (when parent-uuid
-        (swap! *depend-on-block-uuid-set conj parent-uuid)))))
+  (let [pos (->pos parent-uuid block-order)]
+    (swap! *remote-ops conj [:move {:block-uuid block-uuid :pos pos}])
+    (when parent-uuid
+      (swap! *depend-on-block-uuid-set conj parent-uuid))))
 
 (defn- card-many-attr?
   [db attr]
@@ -240,15 +239,14 @@
     (when-let [block-uuid (some (comp :block-uuid last) [move-op update-op update-page-op])]
       (when-let [block (d/entity db [:block/uuid block-uuid])]
         (let [parent-uuid (some-> block :block/parent :block/uuid)]
-          (when parent-uuid
-            ;; remote-move-op
-            (when move-op
-              (local-block-ops->remote-ops-aux :move-op
-                                               :parent-uuid parent-uuid
-                                               :block-order (:block/order block)
-                                               :block-uuid block-uuid
-                                               :*remote-ops *remote-ops
-                                               :*depend-on-block-uuid-set *depend-on-block-uuid-set)))
+          ;; remote-move-op
+          (when move-op
+            (local-block-ops->remote-ops-aux :move-op
+                                             :parent-uuid parent-uuid
+                                             :block-order (:block/order block)
+                                             :block-uuid block-uuid
+                                             :*remote-ops *remote-ops
+                                             :*depend-on-block-uuid-set *depend-on-block-uuid-set))
           ;; remote-update-op
           (when update-op
             (local-block-ops->remote-ops-aux :update-op
