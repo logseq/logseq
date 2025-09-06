@@ -83,7 +83,9 @@ so need to pull earlier remote-data from websocket."})
           (index/generate-key-between start-order end-order)
           block-order)]
     (ldb/transact! conn [{:block/uuid block-uuid :block/order block-order*}]
-                   {:rtc-op? true})
+                   {:rtc-op? true
+                    :persist-op? false
+                    :gen-undo-ops? false})
     ;; TODO: add ops when block-order* != block-order
     ))
 
@@ -190,34 +192,37 @@ so need to pull earlier remote-data from websocket."})
 
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-block-order move? op-value]
-  (when (seq remote-parents)
-    (let [first-remote-parent (first remote-parents)
-          local-parent (d/entity @conn [:block/uuid first-remote-parent])
-          whiteboard-page-block? (ldb/whiteboard? local-parent)
-          b (d/entity @conn [:block/uuid block-uuid])]
-      (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
-        [false true true]
-        (do (if move?
-              (transact-db! :move-blocks repo conn [b] local-parent {:sibling? false})
-              (transact-db! :insert-blocks repo conn
-                            [{:block/uuid block-uuid
-                              :block/title ""}]
-                            local-parent {:sibling? false :keep-uuid? true}))
-            (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
+  (let [first-remote-parent (first remote-parents)
+        local-parent (when first-remote-parent (d/entity @conn [:block/uuid first-remote-parent]))
+        whiteboard-page-block? (ldb/whiteboard? local-parent)
+        b (d/entity @conn [:block/uuid block-uuid])]
+    (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
+      [false true true]
+      (do (if move?
+            (transact-db! :move-blocks repo conn [b] local-parent {:sibling? false})
+            (transact-db! :insert-blocks repo conn
+                          [{:block/uuid block-uuid
+                            :block/title ""}]
+                          local-parent {:sibling? false :keep-uuid? true}))
+          (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
-        [false true false]
-        (if move?
-          (transact-db! :move-blocks repo conn [b] local-parent
-                        {:sibling? false})
-          (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
+      [false true false]
+      (if move?
+        (transact-db! :move-blocks repo conn [b] local-parent
+                      {:sibling? false})
+        (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
-        ([true false false] [true false true] [true true false] [true true true])
-        (throw (ex-info "Not implemented yet for whiteboard" {:op-value op-value}))
+      [false false true]              ;no parent, only update order. e.g. udpate property's order
+      (when (and (empty? remote-parents) move?)
+        (transact-db! :update-block-order-directly repo conn block-uuid nil remote-block-order))
 
-        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid
-                                                      :remote-parents remote-parents
-                                                      :remote-block-order remote-block-order
-                                                      :op-value op-value}))))))
+      ([true false false] [true false true] [true true false] [true true true])
+      (throw (ex-info "Not implemented yet for whiteboard" {:op-value op-value}))
+
+      (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid
+                                                    :remote-parents remote-parents
+                                                    :remote-block-order remote-block-order
+                                                    :op-value op-value})))))
 
 (defn- move-ops-map->sorted-move-ops
   [move-ops-map]
