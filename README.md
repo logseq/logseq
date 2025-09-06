@@ -111,7 +111,6 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
   * FAQ page: [Logseq Docs:  FAQ](https://docs.logseq.com/#/page/faq)
 * Blog: [blog.logseq.com](https://blog.logseq.com)
   * Please visit our [About page](https://blog.logseq.com/about) for the latest updates.
-* Logseq Hub: [hub.logseq.com](https://hub.logseq.com)
 * Forum: [discuss.logseq.com](https://discuss.logseq.com) - Where we answer questions, discuss workflows, and share tips
   * FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 * [Awesome Logseq](https://github.com/logseq/awesome-logseq) - Awesome Logseq extensions and resources created by the community <3
