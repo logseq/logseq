@@ -81,10 +81,10 @@
         (when @state/*db-worker-client-id
           (->
            (p/timeout
-            (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status)]
+            (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status (state/get-current-repo))]
               (when-not available?
                 (js/window.location.reload)))
-            100)
+            500)
            (p/catch (fn [error]
                       (js/console.error error)
                       (js/window.location.reload)))))))))
