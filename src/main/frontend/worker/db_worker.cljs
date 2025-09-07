@@ -53,6 +53,8 @@
             [missionary.core :as m]
             [promesa.core :as p]))
 
+(.importScripts js/self "worker.js")
+
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
