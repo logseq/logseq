@@ -1074,6 +1074,10 @@ html.is-mac {
   height: 24px;
 }
 
+.ls-page-title .positioned-properties.block-below {
+  margin-left: 7px;
+}
+
 .ls-page-title .ls-properties-area .positioned-properties.block-left svg,
 .ls-page-title .ls-properties-area .positioned-properties.block-right svg {
   width: initial;

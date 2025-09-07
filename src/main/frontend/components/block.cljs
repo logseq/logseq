@@ -3762,7 +3762,7 @@
                                          :hide-block-refs-count? hide-block-refs-count?
                                          :*show-query? *show-query?}))])]
 
-         (when (and db-based? (not collapsed?) (not (or table? property? (:page-title? config))))
+         (when (and db-based? (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]])
 
      (when (and db-based?
