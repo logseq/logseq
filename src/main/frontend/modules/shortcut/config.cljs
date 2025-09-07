@@ -397,7 +397,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
-   :editor/toggle-display-all-properties    {:binding "p a"
+   :editor/toggle-display-hidden-properties {:binding "p a"
                                              :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
@@ -875,7 +875,7 @@
           :editor/add-property-status
           :editor/add-property-priority
           :editor/add-property-icon
-          :editor/toggle-display-all-properties
+          :editor/toggle-display-hidden-properties
           :ui/toggle-wide-mode
           :ui/select-theme-color
           :ui/goto-plugins
@@ -1011,7 +1011,7 @@
      :editor/add-property-status
      :editor/add-property-priority
      :editor/add-property-icon
-     :editor/toggle-display-all-properties]
+     :editor/toggle-display-hidden-properties]
 
     :shortcut.category/toggle
     [:ui/toggle-help

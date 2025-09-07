@@ -456,7 +456,8 @@
 
      [:div.w-full.relative
       (component-block/block-container
-       {:page-title? true
+       {:id (str (:block/uuid page))
+        :page-title? true
         :page-title-actions-cp (when (and with-actions?
                                           (not (util/mobile?))
                                           (not= (:db/id (state/get-edit-block)) (:db/id page)))
@@ -602,8 +603,10 @@
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         *objects-ready? (::objects-ready? state)
-        config (assoc config :*objects-ready? *objects-ready?)
         page (or page (some-> (:db/id option) db/entity))
+        config (assoc config
+                      :*objects-ready? *objects-ready?
+                      :id (str (:block/uuid page)))
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)

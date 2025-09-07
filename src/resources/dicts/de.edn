@@ -696,7 +696,7 @@
  :command.editor/set-tags "Tags für ausgewählte Blöcke setzen"
  :command.editor/strike-through          "Durchgestrichen"
  :command.editor/toggle-block-children "Ein-/Ausklappen umschalten"
- :command.editor/toggle-display-all-properties "Alle Properties anzeigen/verstecken"
+ :command.editor/toggle-display-hidden-properties "Alle Properties anzeigen/verstecken"
  :command.editor/toggle-number-list      "Nummeriert/Unnummeriert umschalten"
  :command.editor/toggle-open-blocks      "Öffnen von Blöcken umschalten (alle Blöcke ein- oder ausklappen)"
  :command.editor/undo                    "Rückgängig"
@@ -796,5 +796,5 @@
  :shortcut.category/navigating           "Navigation"
  :shortcut.category/others               "Sonstiges"
  :shortcut.category/toggle               "Umschalten"
- 
+
  :views.table/live-query-title (fn [total] (str "Echtzeit-Query (" total ")"))}
