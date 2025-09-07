@@ -596,6 +596,7 @@
                                (ldb/built-in? ent))
                           ;; other position
                           (when-not (or
+                                     sidebar-properties?
                                      (and page-title? (not journal-page?))
                                      show-empty-and-hidden-properties?
                                      show-in-hidden-properties?)
