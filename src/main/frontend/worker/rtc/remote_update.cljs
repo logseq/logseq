@@ -213,7 +213,7 @@ so need to pull earlier remote-data from websocket."})
                         {:sibling? false})
           (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
-        [false false true] ;no parent, only update order. e.g. udpate property's order
+        [false false true] ;no parent, only update order. e.g. update property's order
         (when (and (empty? remote-parents) move?)
           (transact-db! :update-block-order-directly repo conn block-uuid nil remote-block-order))
 
