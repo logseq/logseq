@@ -48,7 +48,7 @@
         (let [result (<? (p->c (request)))]
           (if (:ex-data result)
             (do
-              (js/console.error (:ex-message result) (:ex-data result))
+              (log/error :worker-request-failed result)
               (p/reject! response result)
               (capture-error result))
             (p/resolve! response result))
