@@ -71,6 +71,12 @@
          #()))
      [focused?])
 
+    (hooks/use-effect!
+      (fn []
+        (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 32)
+        #())
+      [])
+
     [:div.app-silk-search-page
      [:div.hd
       {:class (when (or focused?
@@ -82,7 +88,7 @@
         {:ref *ref
          :placeholder "Search"
          :value input
-         :auto-focus true
+         :auto-focus false
          :on-focus #(set-focused? true)
          :on-blur #(set-focused? false)
          :on-change (fn [^js e]
