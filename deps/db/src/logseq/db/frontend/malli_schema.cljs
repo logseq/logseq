@@ -334,7 +334,8 @@
    (concat
     [:map
      [:db/ident user-property-ident]
-     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/user-allowed-internal-property-types
+                                                      db-property-type/user-built-in-property-types))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
