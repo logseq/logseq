@@ -103,7 +103,9 @@ SheetWithDepthStackRoot.displayName = 'SheetWithDepthStack.Root'
 // The SheetStack outlets that define the scenery of the stack
 // (i.e. the content underneath) for the depth effect.
 
-const initialTopOffset = 'max(env(safe-area-inset-top), 1.3vh)'
+const isIOS = window.navigator.userAgent?.match(/iPhone|iPad/i)
+const initialTopOffset = isIOS ?
+  'max(env(safe-area-inset-top), 1.3vh)' : 'max(var(--safe-area-inset-top), 1.3vh)'
 
 const SheetWithDepthStackSceneryOutlets = React.forwardRef<
   React.ElementRef<typeof SheetStack.Outlet>,
