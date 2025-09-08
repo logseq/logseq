@@ -3,6 +3,8 @@
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.common.async-util :include-macros true :refer [<?]]
+            [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defonce *request-id (atom 0))
@@ -32,6 +34,12 @@
   [request-id]
   (swap! *unfinished-request-ids disj request-id))
 
+(defn- capture-error
+  [error]
+  (state/pub-event! [:capture-error
+                     {:error error
+                      :payload {:type :worker-request-failed}}]))
+
 (defn listen-for-requests []
   (prn "[debug] setup listen for worker request!")
   (async/go-loop []
@@ -41,11 +49,14 @@
           (if (:ex-data result)
             (do
               (js/console.error (:ex-message result) (:ex-data result))
-              (p/reject! response result))
+              (p/reject! response result)
+              (capture-error result))
             (p/resolve! response result))
           (remove-request! id))
         (catch :default e
+          (log/error :worker-request-failed e)
           (p/reject! response e)
+          (capture-error e)
           (remove-request! id)))
       (recur))))
 
