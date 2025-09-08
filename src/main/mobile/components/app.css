@@ -38,6 +38,10 @@ html.is-native-android {
       padding-top: calc(var(--safe-area-inset-top) + 14px);
     }
   }
+
+  .SheetWithDepth-content {
+    height: calc(100% - max(calc(var(--safe-area-inset-top) + 1.3vh), 2.6vh));
+  }
 }
 
 #main-container {
