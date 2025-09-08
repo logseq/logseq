@@ -1,7 +1,6 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
-            [clojure.string :as string]
             [frontend.background-tasks]
             [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
