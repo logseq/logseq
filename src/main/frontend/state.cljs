@@ -10,7 +10,6 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db.conn-state :as db-conn-state]
-            [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
@@ -2316,9 +2315,6 @@ Similar to re-frame subscriptions"
 (defn update-favorites-updated!
   []
   (update-state! :favorites/updated? inc))
-
-(def get-worker-next-request-id db-transact/get-next-request-id)
-(def add-worker-request! db-transact/add-request!)
 
 (defn get-next-container-id
   []
