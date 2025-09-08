@@ -170,7 +170,14 @@
 
 (defn- sqlite-error-handler
   [error]
-  (notification/show! [:div (str "SQLiteDB error: " error)] :error))
+  (state/pub-event! [:capture-error
+                     {:error error
+                      :payload {:type :sqlite-error}}])
+  (if (util/mobile?)
+    (js/window.location.reload)
+    (do
+      (log/error :sqlite-error error)
+      (notification/show! [:div (str "SQLiteDB error: " error)] :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB

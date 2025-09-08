@@ -190,7 +190,8 @@
 
    (util/<app-wake-up-from-sleep-loop (atom false))
 
-   (persist-var/load-vars)))
+   (when-not (util/mobile?)
+     (persist-var/load-vars))))
 
 (defn stop! []
   (prn "stop!"))
