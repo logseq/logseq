@@ -149,7 +149,6 @@
   (render)
   (i18n/start)
   (instrument/init)
-  (state/set-online! js/navigator.onLine)
 
   (-> (util/indexeddb-check?)
       (p/catch (fn [_e]

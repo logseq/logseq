@@ -21,7 +21,7 @@
 (def ^:private current-login-user-validator (ma/validator current-login-user-schema))
 (def *current-login-user (atom nil :validator current-login-user-validator))
 
-(def *network-online? (atom nil))
+(def *network-online? (atom true))
 
 ;; Public Flows
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
