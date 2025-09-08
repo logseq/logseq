@@ -81,7 +81,7 @@
       :else
       nil)))
 
-(defn page-or-object?-helper
+(defn ^:api page-or-object?-helper
   [block]
   (and (de/entity? block)
        (or (ldb/page? block)
