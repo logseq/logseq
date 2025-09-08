@@ -1,6 +1,7 @@
 (ns mobile.core
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
+            [clojure.string :as string]
             [frontend.background-tasks]
             [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
@@ -8,6 +9,7 @@
             [frontend.handler.db-based.rtc-background-tasks]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
             [mobile.components.app :as app]
             [mobile.events]
@@ -72,6 +74,9 @@
 
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
+
+(log/add-handler (fn [record]
+                   (mobile-state/log-append! record)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads

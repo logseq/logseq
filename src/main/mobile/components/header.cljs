@@ -13,6 +13,7 @@
             [frontend.util :as util]
             [goog.date :as gdate]
             [logseq.db :as ldb]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.components.ui :as ui-component]
             [mobile.components.ui-silk :as ui-silk]
@@ -80,6 +81,49 @@
    [:span.mt-2
     (shui/tabler-icon "menu" {:size 24})]))
 
+(rum/defc log
+  []
+  (let [log-str (mobile-state/log->str)
+        [error-only? set-error-only!] (hooks/use-state false)
+        [reversed? set-reversed!] (hooks/use-state false)]
+    [:div.flex.flex-col.gap-1.p-2.overflow-y-scroll
+     [:div.flex.flex-row.justify-between
+      [:div.text-lg.font-medium.mb-2 "Full log: "]
+
+      (shui/button
+       {:variant :ghost
+        :size :sm
+        :on-click (fn []
+                    (util/copy-to-clipboard! log-str))}
+       "Copy")]
+
+     [:div.flex.flex-row.gap-2
+      (shui/button
+       {:size :sm
+        :on-click (fn []
+                    (set-error-only! (not error-only?)))}
+       (if error-only?
+         "Show all"
+         "Show errors only"))
+
+      (shui/button
+       {:size :sm
+        :on-click (fn []
+                    (set-reversed! (not reversed?)))}
+       (if reversed?
+         "New record first"
+         "Old record first"))]
+
+     (let [records (cond->> @mobile-state/*log
+                     error-only?
+                     (filter (fn [record] (= (:level record) :error)))
+                     reversed?
+                     reverse)]
+       (when (seq records)
+         [:ul
+          (for [record records]
+            [:li (str record)])]))]))
+
 (rum/defc header
   [tab login?]
   (ui-silk/app-silk-topbar
@@ -112,7 +156,13 @@
                          (ui/menu-link {:on-click #(js/window.open "https://github.com/logseq/db-test/issues")}
                                        [:span.text-lg.flex.gap-2.items-center
                                         (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
-                                        "Report bug"])])
+                                        "Report bug"])
+                         (ui/menu-link {:on-click (fn []
+                                                    (mobile-state/set-popup!
+                                                     {:open? true
+                                                      :content-fn (fn [] (log))}))}
+                                       [:span.text-lg.flex.gap-2.items-center
+                                        "Check log"])])
                       {:title "Actions"
                        :default-height false
                        :type :action-sheet}))}
