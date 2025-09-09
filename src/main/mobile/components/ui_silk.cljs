@@ -31,25 +31,31 @@
       {:class (when (= current-tab "home") "active")
        :data-tab "home"}
       (shui/button {:variant :icon}
-                   (shui/tabler-icon "home" {:size 24}))
-      [:small "Journals"]]
+                   (shui/tabler-icon "home" {:size 30}))
+      ]
      [:span.as-item
       {:class (when (= current-tab "search") "active")
        :data-tab "search"}
       (shui/button {:variant :icon}
-                   (shui/tabler-icon "search" {:size 24}))
-      [:small "Search"]]
+                   (shui/tabler-icon "search" {:size 30}))
+      ]
      [:span.as-item
       (shui/button
        {:variant :icon
         :on-click (fn [^js e]
                     (util/stop e)
                     (editor-handler/show-quick-add))}
-       (shui/tabler-icon "plus" {:size 24}))
-      [:small "Quick add"]]
+       (shui/tabler-icon "plus" {:size 30}))
+      ]
      [:span.as-item
       {:class (when (= current-tab "settings") "active")
        :data-tab "settings"}
       (shui/button {:variant :icon}
-                   (shui/tabler-icon "settings" {:size 24}))
-      [:small "Settings"]]]))
+                   (shui/tabler-icon "adjustments-horizontal" {:size 30}))
+      ]
+     [:span.as-item
+      {:class (when (= current-tab "debug") "active")
+       :data-tab "debug"}
+      (shui/button {:variant :icon}
+        (shui/tabler-icon "bug" {:size 30}))]
+     ]))
