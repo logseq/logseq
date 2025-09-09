@@ -9,10 +9,6 @@
 
 (def ^:private *rtc-log (atom nil))
 
-(def rtc-log-flow
-  "used by rtc-e2e-test"
-  (m/watch *rtc-log))
-
 (def ^:private rtc-log-type-schema
   (vec
    (concat
