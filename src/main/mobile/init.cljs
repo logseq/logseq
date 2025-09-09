@@ -88,7 +88,7 @@
                 (fn [^js data]
                   (log/info ::app-url-open data)
                   (p/then
-                   state/db-worker-ready-promise
+                   state/app-ready-promise
                    (fn []
                      (when-let [url (.-url data)]
                        (when-not (and (= @*last-shared-url url)

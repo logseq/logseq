@@ -709,17 +709,17 @@
                                             (remove (fn [e] (contains? exclude-ids (:block/uuid e)))))]
                   excluded-options)
 
-                (contains? #{:class :property} property-type)
-                (let [classes (cond->
-                               (model/get-all-classes
-                                repo
-                                {:except-root-class? true
-                                 :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
-                                (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
-                                (conj (db/entity :logseq.class/Page)))]
-                  (if (= property-type :class)
-                    classes
-                    (property-handler/get-class-property-choices)))
+                (= :class property-type)
+                (cond->
+                 (model/get-all-classes
+                  repo
+                  {:except-root-class? true
+                   :except-private-tags? (not (contains? #{:logseq.property/template-applied-to} (:db/ident property)))})
+                  (not (or (and (entity-util/page? block) (not (ldb/internal-page? block))) (:logseq.property/created-from-property block)))
+                  (conj (db/entity :logseq.class/Page)))
+
+                (= :property property-type)
+                (property-handler/get-class-property-choices)
 
                 (seq classes)
                 (->>
