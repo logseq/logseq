@@ -19,7 +19,7 @@
               upgrade-result))
           upgrade-result-coll)))
 
-(deftest ^:focus migration-results=>client-ops
+(deftest migration-results=>client-ops
   (testing "65.2 => 65.11"
     (let [db-transit (str (fs-node/readFileSync "src/test/migration/65.2.transit"))
           db (ldb/read-transit-str db-transit)
