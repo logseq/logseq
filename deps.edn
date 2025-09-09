@@ -68,10 +68,6 @@
                                 cider/cider-nrepl                {:mvn/version "0.55.1"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
-           :rtc-e2e-test {:extra-paths ["src/rtc_e2e_test"]
-                          :extra-deps {cider/cider-nrepl                {:mvn/version "0.50.2"}}
-                          :main-opts ["-m" "shadow.cljs.devtools.cli"]}
-
            :bench {:extra-paths ["src/bench/"]
                    :extra-deps {olical/cljs-test-runner {:mvn/version "3.8.0"}
                                 fipp/fipp {:mvn/version "0.6.26"}}
