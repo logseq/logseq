@@ -55,14 +55,14 @@
                (conj parents' current-parent))
         (vec (reverse parents'))))))
 
-(defn- get-class-title-with-extends
+(defn get-class-title-with-extends
   [entity]
   (let [parents' (->> (db-class/get-class-extends entity)
                       (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
                       vec)]
     (string/join
      ns-util/parent-char
-     (map :block/title (conj (vec parents') entity)))))
+     (map :block/title (conj parents' entity)))))
 
 (defn get-title-with-parents
   [entity]

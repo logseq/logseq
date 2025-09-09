@@ -594,3 +594,5 @@
           true
           :else
           (recur (:block/parent parent)))))))
+
+(def get-class-title-with-extends db-db/get-class-title-with-extends)
