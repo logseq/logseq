@@ -172,7 +172,7 @@
     (when (and from-page to-page (not= from-page-name to-page-name))
       (let [datoms (d/datoms @conn :avet :block/page from-id)
             block-eids (mapv :e datoms)
-            blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/order :block/parent] block-eids)
+            blocks (d/pull-many db '[:db/id :block/page :block/refs :block/order :block/parent] block-eids)
             blocks-tx-data (map (fn [block]
                                   (let [id (:db/id block)]
                                     (cond->

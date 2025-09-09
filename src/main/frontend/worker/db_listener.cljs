@@ -20,27 +20,28 @@
   "Return tx-report"
   [repo conn {:keys [tx-meta] :as tx-report}]
   (when repo (worker-state/set-db-latest-tx-time! repo))
-  (let [{:keys [from-disk?]} tx-meta
-        result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
-        tx-report' (:tx-report result)]
-    (when (and result (not (:rtc-download-graph? tx-meta)))
-      (let [data (merge
-                  {:request-id (:request-id tx-meta)
-                   :repo repo
-                   :tx-data (:tx-data tx-report')
-                   :tx-meta tx-meta}
-                  (dissoc result :tx-report))]
-        (shared-service/broadcast-to-clients! :sync-db-changes data))
+  (when-not (:rtc-download-graph? tx-meta)
+    (let [{:keys [from-disk?]} tx-meta
+          result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
+          tx-report' (:tx-report result)]
+      (when result
+        (let [data (merge
+                    {:request-id (:request-id tx-meta)
+                     :repo repo
+                     :tx-data (:tx-data tx-report')
+                     :tx-meta tx-meta}
+                    (dissoc result :tx-report))]
+          (shared-service/broadcast-to-clients! :sync-db-changes data))
 
-      (when-not from-disk?
-        (p/do!
+        (when-not from-disk?
+          (p/do!
          ;; Sync SQLite search
-         (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
-           (when (seq blocks-to-remove-set)
-             ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
-           (when (seq blocks-to-add)
-             ((@thread-api/*thread-apis :thread-api/search-upsert-blocks) repo blocks-to-add))))))
-    tx-report'))
+           (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')]
+             (when (seq blocks-to-remove-set)
+               ((@thread-api/*thread-apis :thread-api/search-delete-blocks) repo blocks-to-remove-set))
+             (when (seq blocks-to-add)
+               ((@thread-api/*thread-apis :thread-api/search-upsert-blocks) repo blocks-to-add))))))
+      tx-report')))
 
 (comment
   (defmethod listen-db-changes :debug-listen-db-changes

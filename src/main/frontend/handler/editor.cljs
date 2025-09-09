@@ -597,31 +597,31 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (merge new-block other-attrs)
-              [block-m sibling?] (cond
-                                   before?
-                                   (let [left-or-parent (or (ldb/get-left-sibling block)
-                                                            (:block/parent block))
-                                         sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
-                                                    false sibling?)]
-                                     [left-or-parent sibling?])
+              [target-block sibling?] (cond
+                                        before?
+                                        (let [left-or-parent (or (ldb/get-left-sibling block)
+                                                                 (:block/parent block))
+                                              sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
+                                                         false sibling?)]
+                                          [left-or-parent sibling?])
 
-                                   sibling?
-                                   [(db/entity (:db/id block)) sibling?]
+                                        sibling?
+                                        [(db/entity (:db/id block)) sibling?]
 
-                                   last-block
-                                   [last-block true]
+                                        last-block
+                                        [last-block true]
 
-                                   block
-                                   [(db/entity (:db/id block)) sibling?]
+                                        block
+                                        [(db/entity (:db/id block)) sibling?]
 
-                                   ;; FIXME: assert
-                                   :else
-                                   nil)]
-          (when block-m
+                                        ;; FIXME: assert
+                                        :else
+                                        nil)]
+          (when target-block
             (p/do!
              (ui-outliner-tx/transact!
               {:outliner-op :insert-blocks}
-              (outliner-insert-block! config block-m new-block
+              (outliner-insert-block! config target-block new-block
                                       {:sibling? sibling?
                                        :keep-uuid? true
                                        :ordered-list? ordered-list?
@@ -837,32 +837,15 @@
                   nil
 
                   concat-prev-block?
-                  (let [children (:block/_parent (db/entity (:db/id block)))
-                        db-based? (config/db-based-graph? repo)
-                        prev-block-is-not-parent? (empty? (:block/_parent prev-block))
-                        delete-prev-block? (and db-based?
-                                                prev-block-is-not-parent?
-                                                (empty? (:block/tags block))
-                                                (not (:logseq.property.node/display-type block))
-                                                (seq (:block/properties block))
-                                                (empty? (:block/properties prev-block))
-                                                (not (:logseq.property/created-from-property block)))]
-                    (if delete-prev-block?
-                      (p/do!
-                       (state/set-state! :editor/edit-block-fn
-                                         #(edit-block! (assoc block :block/title new-content) (count (:block/title prev-block))))
-                       (ui-outliner-tx/transact!
-                        transact-opts
-                        (delete-block-aux! prev-block)
-                        (save-block! repo block new-content {})))
-                      (p/do!
-                       (state/set-state! :editor/edit-block-fn edit-block-f)
-                       (ui-outliner-tx/transact!
-                        transact-opts
-                        (when (seq children)
-                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
-                        (delete-block-aux! block)
-                        (save-block! repo prev-block new-content {})))))
+                  (let [children (:block/_parent (db/entity (:db/id block)))]
+                    (p/do!
+                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (ui-outliner-tx/transact!
+                      transact-opts
+                      (when (seq children)
+                        (outliner-op/move-blocks! children prev-block {:sibling? false}))
+                      (delete-block-aux! block)
+                      (save-block! repo prev-block new-content {}))))
 
                   :else
                   (p/do!
@@ -891,7 +874,7 @@
                                       :trigger (fn [chosen]
                                                  (state/pub-event! [:editor/hide-action-bar])
                                                  (state/clear-selection!)
-                                                 (move-blocks! blocks (:source-page chosen) {:bottom? true}))}))
+                                                 (move-blocks! blocks (:source-block chosen) {:bottom? true}))}))
       (notification/show! "There's no block selected, please select blocks first." :warning))))
 
 (defn delete-block!
@@ -3504,12 +3487,19 @@
                       (state/get-current-page)
                       (date/today))]
     (p/let [block-id (or root-block (parse-uuid page))
-            page-id (when-not block-id
-                      (:db/id (db/get-page page)))
+            page-id (let [page-entity (db/get-page page)]
+                      (if (config/db-based-graph?)
+                        (when (ldb/page? page-entity)
+                          (:block/uuid page-entity))
+                        (when-not block-id
+                          (:block/uuid page-entity))))
             repo (state/get-current-repo)
-            result (db-async/<get-block repo (or block-id page-id)
-                                        {:children-only? true
-                                         :include-collapsed-children? true})
+            _ (db-async/<get-block repo (or block-id page-id)
+                                   {:children? true
+                                    :include-collapsed-children? true})
+            entity (db/entity [:block/uuid (or block-id page-id)])
+            result (or (:block/_page entity)
+                       (rest (db/get-block-and-children repo (:block/uuid entity))))
             blocks (if page-id
                      result
                      (cons (db/entity [:block/uuid block-id]) result))
@@ -3585,7 +3575,7 @@
 (defn expand-block! [block-id & {:keys [skip-db-collpsing?]}]
   (let [repo (state/get-current-repo)]
     (p/do!
-     (db-async/<get-block repo block-id {:children-only? true
+     (db-async/<get-block repo block-id {:children? true
                                          :include-collapsed-children? true})
      (when-not (or skip-db-collpsing? (skip-collapsing-in-db?))
        (set-blocks-collapsed! [block-id] false))
@@ -3694,11 +3684,6 @@
                (doseq [block-id block-ids] (collapse-block! block-id))))))
        (and clear-selection? (clear-selection!)))
 
-     (whiteboard?)
-      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
-      ;; Leaving unimplemented for now.
-     nil
-
      :else
       ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
       ;; so we no-op here, unlike in the expand! & collapse! functions.
@@ -3729,27 +3714,33 @@
 
 (defn collapse-all-selection!
   []
-  (p/let [blocks (p/all
+  (p/let [result (p/all
                   (map #(<all-blocks-with-level {:incremental? false
                                                  :expanded? true
                                                  :root-block %})
                        (get-selected-toplevel-block-uuids)))
-          block-ids (->> blocks
+          block-ids (->> result
+                         (apply concat)
                          (map :block/uuid)
                          distinct)]
     (set-blocks-collapsed! block-ids true)))
 
 (defn expand-all-selection!
   []
-  (let [blocks (p/all
-                (map #(<all-blocks-with-level {:incremental? false
-                                               :expanded? true
-                                               :root-block %})
-                     (get-selected-toplevel-block-uuids)))
-        block-ids (->> blocks
-                       (map :block/uuid)
-                       distinct)]
-    (set-blocks-collapsed! block-ids false)))
+  (->
+   (p/let [select-ids (get-selected-toplevel-block-uuids)
+           result (p/all
+                   (map #(<all-blocks-with-level {:incremental? false
+                                                  :collapse? true
+                                                  :root-block %})
+                        select-ids))
+           block-ids (->> result
+                          (apply concat)
+                          (map :block/uuid)
+                          distinct)]
+     (set-blocks-collapsed! block-ids false))
+   (p/catch (fn [e]
+              (js/console.error e)))))
 
 (defn toggle-open! []
   (p/let [blocks (<all-blocks-with-level {:incremental? false
@@ -3761,7 +3752,8 @@
 
 (defn toggle-open-block-children! [block-id]
   (p/let [blocks (<all-blocks-with-level {:incremental? false
-                                          :collapse? true})
+                                          :collapse? true
+                                          :root-block block-id})
           all-expanded? (empty? blocks)]
     (if all-expanded?
       (collapse-all! block-id {:collapse-self? false})

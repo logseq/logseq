@@ -775,7 +775,7 @@
   :editor/copy-page-url "Copy page url"
   :ui/toggle-wide-mode "Toggle wide mode"
   :ui/highlight-recent-blocks "Toggle highlight recent blocks"
-  :editor/toggle-display-all-properties "Toggle display all properties"
+  :editor/toggle-display-hidden-properties "Toggle display hidden properties"
   :ui/select-theme-color "Select available theme colors"
   :ui/goto-plugins "Go to plugins dashboard"
   :ui/install-plugins-from-file "Install plugins from plugins.edn"

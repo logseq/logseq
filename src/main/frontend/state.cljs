@@ -10,7 +10,6 @@
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.db.conn-state :as db-conn-state]
-            [frontend.db.transact :as db-transact]
             [frontend.flows :as flows]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
@@ -33,7 +32,9 @@
 (defonce *profile-state (volatile! {}))
 
 (defonce *db-worker (atom nil))
+(defonce *db-worker-client-id (atom nil))
 (defonce *editor-info (atom nil))
+(defonce db-worker-ready-promise (p/deferred))
 
 (def db-worker-ready-flow
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
@@ -2315,9 +2316,6 @@ Similar to re-frame subscriptions"
 (defn update-favorites-updated!
   []
   (update-state! :favorites/updated? inc))
-
-(def get-worker-next-request-id db-transact/get-next-request-id)
-(def add-worker-request! db-transact/add-request!)
 
 (defn get-next-container-id
   []

@@ -6,6 +6,7 @@
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
             [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
@@ -619,14 +620,7 @@
 
 (defn ^:export get_page
   [id-or-page-name]
-  (p/let [page (db-async/<pull (state/get-current-repo)
-                               (cond
-                                 (number? id-or-page-name)
-                                 id-or-page-name
-                                 (util/uuid-string? id-or-page-name)
-                                 [:block/uuid (uuid id-or-page-name)]
-                                 :else
-                                 [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
+  (p/let [page (<pull-block id-or-page-name)]
     (when-let [page (and (:block/name page)
                          (some->> page (api-block/into-properties (state/get-current-repo))))]
       (bean/->js (sdk-utils/normalize-keyword-for-json page)))))
@@ -1010,6 +1004,12 @@
                            (:block/properties block))]
           (bean/->js (sdk-utils/normalize-keyword-for-json properties)))))))
 
+(defn ^:export get_page_properties
+  [id-or-page-name]
+  (p/let [page (<pull-block id-or-page-name)]
+    (when-let [id (:block/uuid page)]
+      (get_block_properties id))))
+
 (def ^:export get_current_page_blocks_tree
   (fn []
     (when-let [page (state/get-current-page)]
@@ -1078,15 +1078,22 @@
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [_               (<ensure-page-loaded uuid-or-page-name)
-          page?           (not (util/uuid-string? uuid-or-page-name))
-          page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
-          _               (and page-not-exist? (page-handler/<create! uuid-or-page-name
-                                                                      {:redirect?           false
-                                                                       :format              (state/get-preferred-format)}))]
-    (when-let [block (db-model/get-page uuid-or-page-name)]
-      (let [target   (str (:block/uuid block))]
-        (insert_block target content opts)))))
+  (let [current-page? (or (and (nil? content) (nil? opts))
+                          (and (nil? opts) (some->> content (instance? js/Object))))
+        opts (if current-page? content opts)
+        content (if current-page? uuid-or-page-name content)
+        uuid-or-page-name (if current-page?
+                            (or (state/get-current-page) (date/today))
+                            uuid-or-page-name)]
+    (p/let [_ (<ensure-page-loaded uuid-or-page-name)
+            page? (not (util/uuid-string? uuid-or-page-name))
+            page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
+            _ (and page-not-exist? (page-handler/<create! uuid-or-page-name
+                                                          {:redirect? false
+                                                           :format (state/get-preferred-format)}))]
+      (when-let [block (db-model/get-page uuid-or-page-name)]
+        (let [target (str (:block/uuid block))]
+          (insert_block target content opts))))))
 
 ;; plugins
 (defn ^:export validate_external_plugins [urls]

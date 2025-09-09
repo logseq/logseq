@@ -33,7 +33,7 @@
   it means `(db/entity :block/title)` always return same result"
   #{:block/link :block/updated-at :block/refs :block/closed-value-property
     :block/created-at :block/collapsed? :block/tags :block/title
-    :block/path-refs :block/parent :block/order :block/page
+    :block/parent :block/order :block/page
 
     :logseq.property/created-from-property
     :logseq.property/icon

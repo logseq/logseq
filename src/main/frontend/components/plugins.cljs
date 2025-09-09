@@ -1270,9 +1270,11 @@
                                                                 (if-not (state/get-left-sidebar-open?)
                                                                   (- width-t width-l) width-t))]
                                           (set-max-width! (max (- width-t width-c' 100) 76))))]
-             (.addEventListener js/window "resize" calc-wrap-max-width)
-             (js/setTimeout calc-wrap-max-width 16)
-             #(.removeEventListener js/window "resize" calc-wrap-max-width)))))
+             (when (util/electron?)
+               (.addEventListener js/window "resize" calc-wrap-max-width)
+               (js/setTimeout calc-wrap-max-width 16))
+             #(when (util/electron?)
+                (.removeEventListener js/window "resize" calc-wrap-max-width))))))
      [right-sidebar-resized])
 
     [:div.list-wrap

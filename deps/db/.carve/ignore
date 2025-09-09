@@ -44,3 +44,5 @@ logseq.db.sqlite.gc/gc-kvs-table!
 logseq.db.sqlite.gc/gc-kvs-table-node-version!
 ;; API
 logseq.db.sqlite.gc/ensure-no-garbage
+;; documenting keywords
+logseq.db.frontend.kv-entity/kv-entities

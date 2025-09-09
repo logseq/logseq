@@ -3,6 +3,7 @@
   (:require [logseq.common.defkeywords :refer [defkeywords]]))
 
 (defkeywords
+  :rtc.exception/ws-already-disconnected {:doc "Remote exception. current websocket conn is already disconnected and deleted by remote."}
   :rtc.exception/remote-graph-not-exist {:doc "Remote exception. e.g. push client-updates to a deleted graph."}
   :rtc.exception/remote-graph-not-ready {:doc "Remote exception. Remote graph is still creating."}
   :rtc.exception/remote-graph-lock-missing {:doc "
@@ -24,6 +25,9 @@ the server will put it to s3 and return its presigned-url to clients."}
   :rtc.exception/bad-request-body {:doc "bad request body, rejected by server-schema"}
   :rtc.exception/not-allowed {:doc "this api-call is not allowed"}
   :rtc.exception/ws-timeout {:doc "websocket timeout"})
+
+(def ex-ws-already-disconnected
+  (ex-info "websocket conn is already disconnected" {:type :rtc.exception/ws-already-disconnected}))
 
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))

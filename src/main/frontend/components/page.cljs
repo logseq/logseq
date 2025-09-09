@@ -101,33 +101,43 @@
 
 (declare page-cp)
 
-(rum/defc add-button
-  [block {:keys [container-id] :as config*}]
+(rum/defc add-button-inner
+  [block {:keys [container-id editing?] :as config*}]
   (let [*ref (rum/use-ref nil)
         has-children? (:block/_parent block)
         page? (ldb/page? block)
-        opacity-class (if has-children? "opacity-0" "opacity-50")
+        opacity-class (cond
+                        (and editing? has-children?) "opacity-0"
+                        (and (util/mobile?)
+                             (or (some-> (:block/title (last (ldb/sort-by-order (:block/_parent block)))) string/blank?)
+                                 (and (not has-children?) (string/blank? (:block/title block)))))
+                        "opacity-0"
+                        (util/mobile?) "opacity-50"
+                        has-children? "opacity-0"
+                        :else "opacity-50")
         config (dissoc config* :page)]
-    (when page?
+    (when (or page? (util/mobile?))
       [:div.ls-block.block-add-button.flex-1.flex-col.rounded-sm.cursor-text.transition-opacity.ease-in.duration-100.!py-0
        {:class opacity-class
         :parentblockid (:db/id block)
         :ref *ref
         :on-click (fn [e]
-                    (util/stop e)
-                    (state/set-state! :editor/container-id container-id)
-                    (editor-handler/api-insert-new-block! "" (merge config
-                                                                    {:block-uuid (:block/uuid block)})))
+                    (when-not (and (util/mobile?) editing?)
+                      (util/stop e)
+                      (state/set-state! :editor/container-id container-id)
+                      (editor-handler/api-insert-new-block! "" (merge config
+                                                                      {:block-uuid (:block/uuid block)}))))
         :on-mouse-over (fn []
-                         (let [ref (rum/deref *ref)
-                               prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
-                           (cond
-                             (and prev-block (dom/has-class? prev-block "is-blank"))
-                             (dom/add-class! ref "opacity-0")
-                             (and prev-block has-children?)
-                             (dom/add-class! ref "opacity-50")
-                             :else
-                             (dom/add-class! ref "opacity-100"))))
+                         (when-not (and (util/mobile?) editing?)
+                           (let [ref (rum/deref *ref)
+                                 prev-block (util/get-prev-block-non-collapsed (rum/deref *ref) {:up-down? true})]
+                             (cond
+                               (and prev-block (dom/has-class? prev-block "is-blank"))
+                               (dom/add-class! ref "opacity-0")
+                               (and prev-block has-children?)
+                               (dom/add-class! ref "opacity-50")
+                               :else
+                               (dom/add-class! ref "opacity-100")))))
         :on-mouse-leave #(do
                            (dom/remove-class! (rum/deref *ref) "opacity-50")
                            (dom/remove-class! (rum/deref *ref) "opacity-100"))
@@ -138,9 +148,16 @@
         :tab-index 0}
        [:div.flex.flex-row
         [:div.flex.items-center {:style {:height 28
-                                         :margin-left (if (util/mobile?) 0 22)}}
+                                         :margin-left (if (util/mobile?)
+                                                        (if page? 0 18)
+                                                        22)}}
          [:span.bullet-container
           [:span.bullet]]]]])))
+
+(rum/defc add-button < rum/reactive
+  [block config]
+  (let [editing? (state/sub :editor/editing?)]
+    (add-button-inner block (assoc config :editing? editing?))))
 
 (rum/defcs page-blocks-cp < rum/reactive db-mixins/query
   {:will-mount (fn [state]
@@ -153,7 +170,7 @@
                                     (date/journal-title->int (date/today))))
                        (state/pub-event! [:journal/insert-template page-name]))))
                  state)}
-  [state block* {:keys [sidebar? whiteboard?] :as config}]
+  [state block* {:keys [sidebar? whiteboard? hide-add-button?] :as config}]
   (when-let [id (:db/id block*)]
     (let [block (db/sub-block id)
           block-id (:block/uuid block)
@@ -189,7 +206,7 @@
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div.relative
            (page-blocks-inner block blocks config sidebar? whiteboard? block-id)
-           (when-not (and (util/capacitor-new?) (seq blocks))
+           (when-not hide-add-button?
              (add-button block config))])))))
 
 (rum/defc today-queries < rum/reactive
@@ -439,7 +456,8 @@
 
      [:div.w-full.relative
       (component-block/block-container
-       {:page-title? true
+       {:id (str (:block/uuid page))
+        :page-title? true
         :page-title-actions-cp (when (and with-actions?
                                           (not (util/mobile?))
                                           (not= (:db/id (state/get-edit-block)) (:db/id page)))
@@ -450,7 +468,7 @@
         :hide-children? true
         :container-id container-id
         :show-tag-and-property-classes? true
-        :from-journals? (contains? #{:home :all-journals} (get-in (state/get-route-match) [:data :name]))}
+        :journal-page? (ldb/journal? page)}
        page)]]))
 
 (defn- page-mouse-over
@@ -585,8 +603,10 @@
   [state {:keys [repo page preview? sidebar? tag-dialog? linked-refs? unlinked-refs? config] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         *objects-ready? (::objects-ready? state)
-        config (assoc config :*objects-ready? *objects-ready?)
         page (or page (some-> (:db/id option) db/entity))
+        config (assoc config
+                      :*objects-ready? *objects-ready?
+                      :id (str (:block/uuid page)))
         repo (or repo current-repo)
         block? (some? (:block/page page))
         class-page? (ldb/class? page)
@@ -721,7 +741,9 @@
                (reset! *page (db/entity (:db/id page-block)))
                (when page-block
                  (when-not (or preview-or-sidebar? (:tag-dialog? option))
-                   (if-let [page-uuid (and (not (:db/id page*)) (not page-uuid?) (:block/uuid page-block))]
+                   (if-let [page-uuid (and (not (:db/id page*))
+                                           (and page-name (not page-uuid?))
+                                           (:block/uuid page-block))]
                      (route-handler/redirect-to-page! (str page-uuid) {:push false})
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state

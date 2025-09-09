@@ -317,7 +317,8 @@
 (defmethod events/handle :user/fetch-info-and-graphs [[_]]
   (state/set-state! [:ui/loading? :login] false)
   (async/go
-    (let [result (async/<! (sync/<user-info sync/remoteapi))]
+    (let [result (async/<! (sync/<user-info sync/remoteapi))
+          mobile-or-web? (or (util/mobile?) util/web-platform?)]
       (cond
         (instance? ExceptionInfo result)
         nil
@@ -330,15 +331,18 @@
             (when (and (= status :welcome) (user-handler/logged-in?))
               (enable-beta-features!)
               (async/<! (p->c (rtc-handler/<get-remote-graphs)))
-              (async/<! (file-sync-handler/load-session-graphs))
+              (when-not mobile-or-web?
+                (async/<! (file-sync-handler/load-session-graphs)))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
-                  (when (some #(and (= (:url %) repo)
-                                    (vector? (:sync-meta %))
-                                    (util/uuid-string? (first (:sync-meta %)))
-                                    (util/uuid-string? (second (:sync-meta %)))) repos)
-                    (sync/<sync-start)))))
-            (file-sync/maybe-onboarding-show status)))))))
+                  (when-not mobile-or-web?
+                    (when (some #(and (= (:url %) repo)
+                                      (vector? (:sync-meta %))
+                                      (util/uuid-string? (first (:sync-meta %)))
+                                      (util/uuid-string? (second (:sync-meta %)))) repos)
+                      (sync/<sync-start))))))
+            (when-not mobile-or-web?
+              (file-sync/maybe-onboarding-show status))))))))
 
 (defmethod events/handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]

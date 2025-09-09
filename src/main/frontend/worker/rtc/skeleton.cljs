@@ -37,11 +37,13 @@
               client-builtin-db-idents (set (get-builtin-db-idents db))
               client-schema-version (ldb/get-graph-schema-version db)]
           (when-not (zero? (db-schema/compare-schema-version client-schema-version server-schema-version))
-            (shared-service/broadcast-to-clients! :notification
-                                                  [[:div
-                                                    [:p (str :client-schema-version client-schema-version)]
-                                                    [:p (str :server-schema-version server-schema-version)]]
-                                                   :error]))
+            (js/console.error "RTC schema error: client version doesn't match server's version")
+            ;; (shared-service/broadcast-to-clients! :notification
+            ;;                                       [[:div
+            ;;                                         [:p (str :client-schema-version client-schema-version)]
+            ;;                                         [:p (str :server-schema-version server-schema-version)]]
+            ;;                                        :error])
+            )
           (let [[client-only server-only _]
                 (data/diff client-builtin-db-idents server-builtin-db-idents)]
             (when (or (seq client-only) (seq server-only))

@@ -493,9 +493,10 @@
        (setups/setups-container
         :importer
         [:article.flex.flex-col.items-center.importer.py-16.px-8
-         [:section.c.text-center
-          [:h1 (t :on-boarding/importing-title)]
-          [:h2 (t :on-boarding/importing-desc)]]
+         (when-not (util/mobile?)
+           [:section.c.text-center
+            [:h1 (t :on-boarding/importing-title)]
+            [:h2 (t :on-boarding/importing-desc)]])
          [:section.d.md:flex.flex-col
           [:label.action-input.flex.items-center.mx-2.my-2
            [:span.as-flex-center [:i (svg/logo 28)]]
@@ -509,7 +510,7 @@
                           (shui/dialog-open!
                            #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-          (when (or (util/electron?) util/web-platform?)
+          (when-not (util/mobile?)
             [:label.action-input.flex.items-center.mx-2.my-2
              [:span.as-flex-center [:i (svg/logo 28)]]
              [:span.flex.flex-col
@@ -525,31 +526,29 @@
                                       (import-file-to-db-handler e {}))
                                     1000)}]])
 
-          (when (or (util/electron?) util/web-platform?)
-            [:label.action-input.flex.items-center.mx-2.my-2
-             [:span.as-flex-center [:i (svg/logo 28)]]
-             [:span.flex.flex-col
-              [[:strong "Debug Transit"]
-               [:small "Import debug transit file into a new DB graph"]]]
-             [:input.absolute.hidden
-              {:id "import-debug-transit"
-               :type "file"
-               :on-change (fn [e]
-                            (shui/dialog-open!
-                             #(set-graph-name-dialog e {:debug-transit? true})))}]])
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "Debug Transit"]
+             [:small "Import debug transit file into a new DB graph"]]]
+           [:input.absolute.hidden
+            {:id "import-debug-transit"
+             :type "file"
+             :on-change (fn [e]
+                          (shui/dialog-open!
+                           #(set-graph-name-dialog e {:debug-transit? true})))}]]
 
-          (when (or (util/electron?) util/web-platform?)
-            [:label.action-input.flex.items-center.mx-2.my-2
-             [:span.as-flex-center [:i (svg/logo 28)]]
-             [:span.flex.flex-col
-              [[:strong "EDN to DB graph"]
-               [:small "Import a DB graph's EDN export into a new DB graph"]]]
-             [:input.absolute.hidden
-              {:id "import-db-edn"
-               :type "file"
-               :on-change (fn [e]
-                            (shui/dialog-open!
-                             #(set-graph-name-dialog e {:db-edn? true})))}]])
+          [:label.action-input.flex.items-center.mx-2.my-2
+           [:span.as-flex-center [:i (svg/logo 28)]]
+           [:span.flex.flex-col
+            [[:strong "EDN to DB graph"]
+             [:small "Import a DB graph's EDN export into a new DB graph"]]]
+           [:input.absolute.hidden
+            {:id "import-db-edn"
+             :type "file"
+             :on-change (fn [e]
+                          (shui/dialog-open!
+                           #(set-graph-name-dialog e {:db-edn? true})))}]]
 
           (when (and (util/electron?) support-file-based?)
             [:label.action-input.flex.items-center.mx-2.my-2

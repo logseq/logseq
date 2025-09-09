@@ -98,6 +98,10 @@
 
        (let [db-graph? (config/db-based-graph? url)
              manager? (and db-graph? (user-handler/manager? url))]
+         (prn "debug"
+              ":repo " (str repo)
+              ":db-graph? " db-graph?
+              "manager? " manager?)
          (shui/dropdown-menu
           (shui/dropdown-menu-trigger
            {:asChild true}
@@ -128,6 +132,7 @@
               "Delete local graph"))
            (when (and db-based? root
                       (user-handler/logged-in?)
+                      (user-handler/rtc-group?)
                       (not remote?)
                       (= url (state/get-current-repo)))
              (shui/dropdown-menu-item
@@ -180,6 +185,11 @@
               "Delete from server")))))]]]))
 
 (rum/defc repos-cp < rum/reactive
+  {:will-mount (fn [state]
+                 (let [login? (:auth/id-token @state/state)]
+                   (when (and login? (user-handler/rtc-group?))
+                     (rtc-handler/<get-remote-graphs)))
+                 state)}
   []
   (let [login? (boolean (state/sub :auth/id-token))
         repos (state/sub [:me :repos])
@@ -349,7 +359,7 @@
                  (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
         items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
         header-fn #(when (> (count repos) 1)                ; show switch to if there are multiple repos
-                     [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                     [:div.font-medium.md:text-sm.md:opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
                       [:h4.pb-1 (t :left-side-bar/switch)]
 
                       (when (and (file-sync/enable-sync?) login?)
@@ -373,10 +383,11 @@
      [:div.cp__repos-list-wrap
       (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
         (let [on-click' (:on-click options)
-              href' (:href options)]
+              href' (:href options)
+              menu-item (if (util/mobile?) ui/menu-link shui/dropdown-menu-item)]
           (if hr
-            (shui/dropdown-menu-separator)
-            (shui/dropdown-menu-item
+            (if (util/mobile?) [:hr.py-2] (shui/dropdown-menu-separator))
+            (menu-item
              (assoc options
                     :title hover-detail
                     :on-click (fn [^js e]

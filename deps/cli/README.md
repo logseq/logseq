@@ -12,7 +12,7 @@ This section assumes you have installed the CLI from npm or via the [dev
 setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
 `node.cli.mjs -h`.
 
-All commands can be used offline or on CI. The `search` command and any command that has an api-query-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
+All commands except for `append` can be used offline or on CI. The `search` command and any command that has an api-server-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
 
 Now let's use it!
 
@@ -26,11 +26,12 @@ Options:
 Commands:
 list                 List graphs
 show                 Show DB graph(s) info
-search [options]     Search current DB graph
+search [options]     Search DB graph
 query [options]      Query DB graph(s)
+export [options]     Export DB graph as Markdown
 export-edn [options] Export DB graph as EDN
+append [options]     Appends text to current page
 help                 Print a command's help
-
 
 $ logseq list
 DB Graphs:
@@ -59,6 +60,9 @@ $ logseq search woot -a my-token
 Search found 100 results:
 dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
 dev:db-diff woot woot2
+...
+# Can also authenticate api with $LOGSEQ_API_SERVER_TOKEN
+$ LOGSEQ_API_SERVER_TOKEN=my-token logseq search woot
 ...
 
 # Search a local graph
@@ -110,9 +114,17 @@ $ logseq query '(task DOING)' -a my-token
   :uuid "68795144-e5f6-48e8-849d-79cd6473b952"}
   ...
 
-# Export your DB graph as EDN
+# Export DB graph as markdown
+$ logseq export yep
+Exported 41 pages to yep_markdown_1756128259.zip
+
+# Export DB graph as EDN
 $ logseq export-edn woot -f woot.edn
 Exported 16 properties, 16 classes and 36 pages
+
+# Append text to current page
+$ logseq append add this text -a my-token
+Success!
 ```
 
 ## API
