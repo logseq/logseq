@@ -325,6 +325,10 @@ ul {
   &:has(.ls-quick-add) {
     @apply min-h-[80vh] max-h-[90vh] overflow-y-auto overflow-x-hidden;
   }
+
+  .ls-debug-log {
+    @apply h-[80vh] overflow-y-auto overflow-x-hidden pb-8;
+  }
 }
 
 /* silk styles */
