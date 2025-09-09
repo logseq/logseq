@@ -146,7 +146,11 @@
                        (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
                            (ldb/private-tags (:db/ident t))))
                      (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
-    (if (seq tags)
+    (cond
+      (ldb/class? block)
+      (ldb/get-class-title-with-extends block)
+
+      (seq tags)
       (str (:block/title block)
            " "
            (string/join
@@ -155,6 +159,7 @@
                     (when-let [title (:block/title tag)]
                       (str "#" title)))
                   tags)))
+      :else
       (:block/title block))))
 
 (defn edit-block!
