@@ -7,21 +7,41 @@
   --ls-page-title-size: 26px;
   --silk-topbar-inner-height: 32px;
   --silk-tabbar-bottom-paddding: 12px;
-  --silk-100-lvh-dvh-pct: max(100%,100vh);
+  --silk-100-lvh-dvh-pct: max(100%, 100vh);
+  --safe-area-inset-top: 40px;
+  --safe-area-inset-bottom: 16px;
 }
 
 html.is-native-ios {
   --silk-tabbar-bottom-paddding: 2px;
+  --safe-area-inset-top: 58px;
+  --safe-area-inset-bottom: 24px;
 }
 
 html.is-native-android {
-  --silk-topbar-inner-padding-top: 4px;
-  --silk-topbar-inner-height: 40px;
-  --silk-tabbar-bottom-paddding: 32px;
+  --silk-topbar-inner-padding-top: 14px;
+  --silk-topbar-inner-height: 36px;
   --silk-topbar-inner-padding-bottom: 6px;
-}
 
-#mobile-editor-toolbar {
+  --silk-tabbar-bottom-paddding: 28px;
+
+  .app-silk-index-container {
+    padding-top: calc(var(--safe-area-inset-top) + var(--silk-topbar-inner-height) + 22px);
+  }
+
+  .app-silk-topbar {
+    padding-top: calc(var(--safe-area-inset-top) + var(--silk-topbar-inner-padding-top));
+  }
+
+  .app-silk-search-page {
+    > .hd {
+      padding-top: calc(var(--safe-area-inset-top) + 14px);
+    }
+  }
+
+  .SheetWithDepth-content {
+    height: calc(100% - max(calc(var(--safe-area-inset-top) + 1.3vh), 2.6vh));
+  }
 }
 
 #main-container {
@@ -76,6 +96,8 @@ html {
 
 body {
   @apply relative overflow-hidden;
+
+  min-height: unset !important;
 
   .SheetWithDepth-stackSceneryContainer {
     @apply overflow-hidden;
@@ -153,10 +175,12 @@ ul {
     }
   }
 
-  .app-silk-depth-sheet-content {}
+  .app-silk-depth-sheet-content {
+  }
 
   .app-silk-scroll-content {
     @apply min-h-screen;
+    padding-bottom: 200px;
   }
 }
 
@@ -335,7 +359,6 @@ ul {
   overflow: hidden;
   overflow: clip;
   position: relative;
-  padding-bottom: 200px;
 }
 
 html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
@@ -352,7 +375,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     --silk-topbar-inner-height: 2px;
   }
 
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-height) + 22px);
+  padding-top: calc(env(safe-area-inset-top) + var(--silk-topbar-inner-height) + 22px);
   padding-bottom: 120px;
 
   #journals {
@@ -361,8 +384,13 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 }
 
 .app-silk-topbar {
-  @apply fixed top-0 left-0 w-full border-b bg-gray-02 dark:bg-gray-01
-  flex justify-between items-center overflow-hidden;
+  @apply fixed top-0 left-0 w-full flex justify-between items-center overflow-hidden bg-gray-01;
+
+  padding-top: calc(env(safe-area-inset-top) + var(--silk-topbar-inner-padding-top, 2px));
+  height: var(--silk-topbar-inner-height, 32px);
+
+  padding-bottom: var(--silk-topbar-inner-padding-bottom, 8px);
+  box-sizing: content-box;
 
   &[data-center-title] {
     @apply grid grid-cols-8 gap-4;
@@ -371,12 +399,6 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       @apply col-span-2;
     }
   }
-
-  padding-top: calc(env(safe-area-inset-top, 0px) + var(--silk-topbar-inner-padding-top, 2px));
-  height: var(--silk-topbar-inner-height, 32px);
-
-  padding-bottom: var(--silk-topbar-inner-padding-bottom, 8px);
-  box-sizing: content-box;
 
   &.search {
     @apply hidden;
@@ -427,21 +449,20 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 .app-silk-search-page {
   > .hd {
-    @apply fixed top-0 left-0 px-4 pb-2.5 w-full;
-    @apply border-b bg-gray-02 dark:bg-gray-01;
+    @apply fixed top-0 left-0 px-4 py-2.5 w-full bg-gray-01;
 
-    padding-top: calc(env(safe-area-inset-top, 0px) - 2px);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 4px);
     z-index: 1;
     transition: padding 0.1s ease-in-out;
 
     .ls-icon-search {
-      @apply absolute left-2.5 top-[9px] opacity-60;
+      @apply absolute left-2.5 top-[11px] opacity-60;
     }
 
     .cancel {
-      @apply absolute right-0.5 opacity-0;
+      @apply absolute right-0.5 opacity-0 text-base;
 
-      bottom: 5px;
+      bottom: 11px;
     }
 
     &.input-focused {
@@ -462,9 +483,9 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     }
 
     .ui__input {
-      @apply border-none dark:bg-gray-02 bg-gray-04 pl-9 outline-none ring-0;
+      @apply border-none dark:bg-gray-02 bg-gray-04 pl-9 outline-none ring-0 text-base rounded-full;
 
-      height: 34px;
+      height: 40px;
       outline-offset: 0;
       box-shadow: none;
     }
@@ -473,22 +494,12 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
       @apply absolute right-6 w-[16px] h-[16px] bg-gray-10 overflow-hidden
       rounded-full flex items-center justify-center text-gray-02 opacity-50;
 
-      bottom: 18px;
+      bottom: 22px;
     }
   }
 
   > .bd {
-    @apply -mx-4 pt-4;
-
-    ul {
-      &.as-results > li {
-        @apply border-b py-1 -mx-4 px-3;
-
-        &:active {
-          @apply opacity-80 bg-gray-02;
-        }
-      }
-    }
+    @apply -mx-4 mt-8;
   }
 }
 
@@ -526,16 +537,29 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply text-gray-12 dark:text-gray-11;
 
     .page-title {
+      @apply text-base opacity-80;
       display: flex !important;
     }
+  }
+
+  .cp__sidebar-left-layout a, .wrap-th, .more {
+    @apply !opacity-80;
+  }
+
+  .hd .wrap-th > strong {
+    @apply !text-lg;
   }
 }
 
 .Sidebar-hidden {
-    @apply bg-transparent dark:bg-transparent;
-    box-shadow: none;
+  @apply bg-transparent dark:bg-transparent;
+  box-shadow: none;
 }
 
 #app-main-content {
-    padding-bottom: 200px;
+  padding-bottom: 200px;
+}
+
+.menu-link, .cp__repos-quick-actions .ui__button {
+  @apply text-base;
 }

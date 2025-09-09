@@ -81,26 +81,30 @@
       :else
       nil)))
 
+(defn ^:api page-or-object?-helper
+  [block]
+  (and (de/entity? block)
+       (or (ldb/page? block)
+           (ldb/object? block))
+       ;; Don't allow :default property value objects to reference their
+       ;; parent block as they are dependent on their block for display
+       ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
+       (not (:logseq.property/created-from-property block))))
+
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
-  [db block]
-  (let [;; explicit lookup in order to be nbb compatible
+  [db block & {:keys [page-or-object?-memoized]}]
+  (let [block-db-id (:db/id block)
+        ;; explicit lookup in order to be nbb compatible
         properties (->
-                    (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
+                    (->> (entity-plus/lookup-kv-then-entity (d/entity db block-db-id) :block/properties)
                          (into {}))
                     ;; both page and parent shouldn't be counted as refs
                     (dissoc :block/parent :block/page :logseq.property/created-by-ref
                             :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))
-        page-or-object? (fn [block]
-                          (and (de/entity? block)
-                               (or (ldb/page? block)
-                                   (ldb/object? block))
-                               ;; Don't allow :default property value objects to reference their
-                               ;; parent block as they are dependent on their block for display
-                               ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
-                               (not (:logseq.property/created-from-property block))))
+        page-or-object? (or page-or-object?-memoized page-or-object?-helper)
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
                                            (cond
@@ -118,10 +122,12 @@
                  (when-let [id (:db/id (:block/link block))]
                    [id])
                  property-refs content-refs)
+         distinct
          ;; Remove self-ref to avoid recursive bugs
-         (remove #(or (= (:db/id block) %) (= (:db/id block) (:db/id (d/entity db %)))))
+         (remove #(or (identical? block-db-id %)
+                      (identical? block-db-id (:db/id (d/entity db %)))))
          ;; Remove alias ref to avoid recursive display bugs
-         (remove #(contains? (set (map :db/id (:block/alias block))) %))
+         (remove #(some (fn [alias-id] (identical? alias-id %)) (map :db/id (:block/alias block))))
          (remove nil?))))
 
 (defn- rebuild-block-refs-tx

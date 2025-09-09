@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [logseq.shui.dialog.core :as shui-dialog]
             [mobile.components.ui :as cc-ui]
-            [mobile.state :as mobile-state]))
+            [mobile.state :as mobile-state]
+            [promesa.core :as p]))
 
 (def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
@@ -77,14 +78,16 @@
       (if (not is-active?)
         (editor-handler/save-current-block!)
         ;; check whether db-worker is available
-        (when-let [client-id @state/*db-worker-client-id]
-          (when @state/*db-worker
-            (js/navigator.locks.request client-id #js {:mode "exclusive"
-                                                       :ifAvailable true}
-                                        (fn [lock]
-                                          (when lock
-                                            ;; lock acquired, meaning the worker has terminated
-                                            (js/window.location.reload))))))))))
+        (when @state/*db-worker-client-id
+          (->
+           (p/timeout
+            (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status (state/get-current-repo))]
+              (when-not available?
+                (js/window.location.reload)))
+            500)
+           (p/catch (fn [error]
+                      (js/console.error error)
+                      (js/window.location.reload)))))))))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"

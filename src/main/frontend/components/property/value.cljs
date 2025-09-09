@@ -55,7 +55,7 @@
                :else
                "Empty")]
     (if (= text "Empty")
-      (shui/button (merge {:class "empty-btn" :variant :text} opts)
+      (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
                    text)
       (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
                    text))))

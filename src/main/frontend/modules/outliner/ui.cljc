@@ -30,7 +30,7 @@
                                               (frontend.state/get-date-formatter)
                                               ~opts))
              (when (seq r#)
-               (let [request-id# (frontend.state/get-worker-next-request-id)
+               (let [request-id# (frontend.db.transact/get-next-request-id)
                      request# #(frontend.state/<invoke-db-worker
                                 :thread-api/apply-outliner-ops
                                 (frontend.state/get-current-repo)
@@ -38,5 +38,5 @@
                                 (assoc ~opts
                                        :request-id request-id#
                                        :client-id (:client-id @frontend.state/state)))
-                     response# (frontend.state/add-worker-request! request-id# request#)]
+                     response# (frontend.db.transact/add-request! request-id# request#)]
                  response#))))))))

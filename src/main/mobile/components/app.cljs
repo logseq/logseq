@@ -34,11 +34,12 @@
     :auto-capitalize "off"
     :auto-correct "false"}])
 
-(rum/defc journals
+(defn- sidebar-not-allowed-to-open?
   []
-  (ui-component/classic-app-container-wrap
-   [:div.pt-3
-    (journal/all-journals)]))
+  (or (seq @mobile-state/*modal-blocks)
+      (seq @mobile-state/*popup-data)
+      (:mobile/show-action-bar? @state/state)
+      (state/editing?)))
 
 (defn- setup-sidebar-touch-swipe!
   []
@@ -46,43 +47,57 @@
         touch-start-y (atom 0)
         has-triggered? (atom false)
         blocking-scroll? (atom false)
-
-        swipe-trigger-distance 50         ;; when to actually open sidebar
-        horiz-intent-threshold 10         ;; when to start blocking scroll
+        sidebar-initial-open? (atom false)
+        max-x (atom 0)
+        swipe-trigger-distance 50         ;; distance to actually open/close
+        horiz-intent-threshold 10         ;; start blocking scroll when horizontal intent is clear
         max-vertical-drift 50
 
         on-touch-start (fn [^js e]
-                         (when (empty? @mobile-state/*modal-blocks)
+                         (when-not (sidebar-not-allowed-to-open?)
                            (let [t (aget e "touches" 0)]
+                             (reset! sidebar-initial-open? (mobile-state/left-sidebar-open?))
                              (reset! touch-start-x (.-pageX t))
                              (reset! touch-start-y (.-pageY t))
                              (reset! has-triggered? false)
-                             (reset! blocking-scroll? false))))
+                             (reset! blocking-scroll? false)
+                             (reset! max-x 0))))
 
         on-touch-move (fn [^js e]
-                        (when (empty? @mobile-state/*modal-blocks)
+                        (when-not (sidebar-not-allowed-to-open?)
                           (let [t (aget e "touches" 0)
+                                _ (reset! max-x (max (.-pageX t) @max-x))
                                 dx (- (.-pageX t) @touch-start-x)
                                 dy (js/Math.abs (- (.-pageY t) @touch-start-y))
-                                horizontal-intent (and (> dx horiz-intent-threshold)
-                                                       (> dx dy))
-                                is-horizontal-swipe (and (> dx swipe-trigger-distance)
-                                                         (< dy max-vertical-drift))]
+                                abs-dx (js/Math.abs dx)
+                                horizontal-intent (and (> abs-dx horiz-intent-threshold)
+                                                       (> abs-dx dy))
+                                open-swipe? (and (> dx swipe-trigger-distance)
+                                                 (< dy max-vertical-drift))
+                                close-swipe? (and (not @sidebar-initial-open?)
+                                                  (mobile-state/left-sidebar-open?)
+                                                  (> (- @max-x (.-pageX t)) swipe-trigger-distance)
+                                                  (< dy max-vertical-drift))]
 
-                          ;; as soon as we detect horizontal intent, block vertical scrolling
-                            (when (or @blocking-scroll? horizontal-intent)
+                            ;; Block vertical scroll as soon as horizontal intent is clear
+                            (when (or @blocking-scroll? (and horizontal-intent
+                                                             (not @sidebar-initial-open?)
+                                                             (mobile-state/left-sidebar-open?)))
                               (reset! blocking-scroll? true)
-                              (.preventDefault e))       ;; <-- stops page from scrolling
+                              (.preventDefault e))
 
-                            (when (and (not @has-triggered?)
-                                       is-horizontal-swipe)
-                              (reset! has-triggered? true)
-                              (mobile-state/open-left-sidebar!)))))
+                            (cond
+                              (and open-swipe? (not @has-triggered?))
+                              (do (reset! has-triggered? true)
+                                  (mobile-state/open-left-sidebar!))
+
+                              close-swipe?
+                              (mobile-state/close-left-sidebar!)))))
 
         on-touch-end (fn [_]
                        (reset! blocking-scroll? false))]
 
-    ;; IMPORTANT: passive:false so preventDefault actually works
+    ;; passive:false so preventDefault works
     (.addEventListener js/document "touchstart" on-touch-start #js {:passive false})
     (.addEventListener js/document "touchmove"  on-touch-move  #js {:passive false})
     (.addEventListener js/document "touchend"   on-touch-end   #js {:passive false})
@@ -95,11 +110,17 @@
        (.removeEventListener js/document "touchend"   on-touch-end)
        (.removeEventListener js/document "touchcancel" on-touch-end))))
 
-(rum/defc home-inner
-  [*page db-restoring? current-tab]
+(rum/defc journals
+  []
   (hooks/use-effect!
    (fn []
      (setup-sidebar-touch-swipe!)) [])
+  (ui-component/classic-app-container-wrap
+   [:div.pt-3
+    (journal/all-journals)]))
+
+(rum/defc home-inner
+  [*page db-restoring? current-tab]
   [:div {:id "app-main-content"
          :ref *page}
 

@@ -1,6 +1,7 @@
 (ns mobile.state
   "Mobile state"
-  (:require [frontend.rum :as r]))
+  (:require [clojure.string :as string]
+            [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))
 (defn set-tab! [tab] (reset! *tab tab))
@@ -23,12 +24,10 @@
 
 (defn pop-navigation-history!
   []
-  (if (seq @*blocks-navigation-history)
+  (when (seq @*blocks-navigation-history)
     (let [stack (swap! *blocks-navigation-history pop)]
-      (if (empty? stack)
-        (close-block-modal!)
-        (reset! *modal-blocks [(last stack)])))
-    (close-block-modal!)))
+      (when (seq stack)
+        (reset! *modal-blocks [(last stack)])))))
 
 (defonce *popup-data (atom nil))
 (defn set-popup!
@@ -51,3 +50,13 @@
 
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))
+
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record))
+
+(defn log->str
+  []
+  (->> @*log
+       (string/join "\n\n")))

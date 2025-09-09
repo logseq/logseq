@@ -24,7 +24,7 @@
                                                     :extract-fn :block/title})
           items (keep (fn [block]
                         (if (:page? block)
-                          (cmdk/page-item repo block)
+                          (assoc (cmdk/page-item repo block) :page? true)
                           (cmdk/block-item repo block nil input))) blocks)]
     items))
 
@@ -43,8 +43,8 @@
 
     (hooks/use-effect!
      (fn []
-       (let [*timeout (atom nil)]
-         (when-not (string/blank? input)
+       (when-not (string/blank? input)
+         (let [*timeout (atom nil)]
            (p/let [result (search-blocks input)]
              (set-search-result! result)
              (when (seq result)
@@ -55,10 +55,27 @@
                             (when (and last-input-at (>= (- now last-input-at) 2000))
                               (search-handler/add-recent! input)
                               (set-recents! (search-handler/get-recents)))))
-                        2000)))))
-         #(when-let [timeout @*timeout]
-            (js/clearTimeout timeout))))
+                        2000))))
+           #(when-let [timeout @*timeout]
+              (js/clearTimeout timeout)))))
      [(hooks/use-debounced-value input 150)])
+
+    (hooks/use-effect!
+     (fn []
+       (if focused?
+         (let [input (rum/deref *ref)
+               scroll-cnt (some-> input (.closest ".app-silk-index-scroll-content") (.-parentNode))
+               handle! (fn [] (some-> input (.blur)))]
+           (.addEventListener scroll-cnt "scroll" handle!)
+           #(.removeEventListener scroll-cnt "scroll" handle!))
+         #()))
+     [focused?])
+
+    (hooks/use-effect!
+      (fn []
+        (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 32)
+        #())
+      [])
 
     [:div.app-silk-search-page
      [:div.hd
@@ -71,6 +88,7 @@
         {:ref *ref
          :placeholder "Search"
          :value input
+         :auto-focus false
          :on-focus #(set-focused? true)
          :on-blur #(set-focused? false)
          :on-change (fn [^js e]
@@ -93,33 +111,31 @@
          (shui/tabler-icon "x" {:size 14})])]
 
      [:div.bd
-      (when (string/blank? input)
-        [:<>
-         [:div.mb-4
-          [:div.px-4.text-sm.text-muted-foreground.border-b
-           [:div.flex.flex-item.items-center.justify-between.py-1
-            "Recent search"
-            (when (seq recents)
-              (shui/button
-               {:variant :text
-                :size :sm
-                :class "text-muted-foreground flex justify-end pr-1"
-                :on-click (fn []
-                            (search-handler/clear-recents!)
-                            (set-recents! nil))}
-               "Clear all"))]]
+      (when (and (string/blank? input) (seq recents))
+        [:div.mb-4
+         [:div.px-4.text-sm.font-medium.text-muted-foreground
+          [:div.flex.flex-item.items-center.justify-between.mt-2
+           "Recent"
+           (shui/button
+            {:variant :text
+             :size :sm
+             :class "text-muted-foreground flex justify-end pr-1"
+             :on-click (fn []
+                         (search-handler/clear-recents!)
+                         (set-recents! nil))}
+            "Clear")]]
 
-          [:ul.px-3
-           (for [item recents]
-             [:li.flex.gap-1
-              {:on-click #(set-input! item)}
-              item])]]])
+         (for [item recents]
+           [:div.px-2
+            (ui/menu-link
+             {:on-click #(set-input! item)}
+             item)])])
 
       [:ul.px-3
        {:class (when (and (not (string/blank? input))
                           (seq search-result))
                  "as-results")}
-       (for [{:keys [icon text header source-block]} result]
+       (for [{:keys [page? icon text header source-block]} result]
          (let [block source-block]
            [:li.flex.gap-1
             {:on-click (fn []
@@ -131,9 +147,9 @@
                              (when block (mobile-state/open-block-modal! block)))))}
             [:div.flex.flex-col.gap-1.py-1
              (when header
-               [:div.opacity-50.text-sm
+               [:div.opacity-60.text-sm
                 header])
              [:div.flex.flex-row.items-start.gap-1
-              (when icon (ui/icon icon {:size 15
-                                        :class "text-muted-foreground mt-1"}))
+              (when (and page? icon) (ui/icon icon {:size 15
+                                                    :class "text-muted-foreground mt-1"}))
               [:div text]]]]))]]]))

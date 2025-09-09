@@ -84,11 +84,22 @@
                  :pages-directory (config/get-pages-directory)}]
     (state/<invoke-db-worker :thread-api/transact repo tx-data tx-meta context)))
 
+(defn- set-worker-fs
+  [worker]
+  (p/let [portal (js/MagicPortal. worker)
+          fs (.get portal "fs")
+          pfs (.get portal "pfs")
+          worker-thread (.get portal "workerThread")]
+    (set! (.-fs js/window) fs)
+    (set! (.-pfs js/window) pfs)
+    (set! (.-workerThread js/window) worker-thread)))
+
 (defn start-db-worker!
   []
   (when-not util/node-test?
     (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+          _ (set-worker-fs worker)
           wrapped-worker* (Comlink/wrap worker)
           wrapped-worker (fn [qkw direct-pass? & args]
                            (p/let [result (.remoteInvoke ^js wrapped-worker*
@@ -159,7 +170,14 @@
 
 (defn- sqlite-error-handler
   [error]
-  (notification/show! [:div (str "SQLiteDB error: " error)] :error))
+  (state/pub-event! [:capture-error
+                     {:error error
+                      :payload {:type :sqlite-error}}])
+  (if (util/mobile?)
+    (js/window.location.reload)
+    (do
+      (log/error :sqlite-error error)
+      (notification/show! [:div (str "SQLiteDB error: " error)] :error))))
 
 (defrecord InBrowser []
   protocol/PersistentDB

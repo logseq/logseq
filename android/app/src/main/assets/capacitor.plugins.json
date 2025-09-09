@@ -48,14 +48,6 @@
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
 	},
 	{
-		"pkg": "@capawesome/capacitor-background-task",
-		"classpath": "io.capawesome.capacitorjs.plugins.backgroundtask.BackgroundTaskPlugin"
-	},
-	{
-		"pkg": "@capgo/capacitor-navigation-bar",
-		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
-	},
-	{
 		"pkg": "capacitor-voice-recorder",
 		"classpath": "com.tchvu3.capacitorvoicerecorder.VoiceRecorder"
 	},

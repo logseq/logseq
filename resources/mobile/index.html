@@ -11,17 +11,6 @@
 <div id="root"></div>
 <script>var isCapacitorNew=true</script>
 <script src="./js/magic_portal.js"></script>
-<script>let worker = new Worker('./js/worker.js')
-const portal = new MagicPortal(worker);
-(async () => {
-  const fs = await portal.get('fs')
-  window.fs = fs
-  const pfs = await portal.get('pfs')
-  window.pfs = pfs
-  const workerThread = await portal.get('workerThread')
-  window.workerThread = workerThread
-})()
-</script>
 <script defer src="./js/highlight.min.js"></script>
 <script defer src="./js/interact.min.js"></script>
 <script defer src="./js/marked.min.js"></script>

@@ -1,6 +1,7 @@
 (ns frontend.handler.worker
   "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -90,4 +91,5 @@
                   (if (string? data)
                     (let [[e payload] (ldb/read-transit-str data)]
                       (handle (keyword e) wrapped-worker payload))
-                    (js/console.error "Worker received invalid data from worker: " data)))))))))
+                    (when-not (string/starts-with? (.-type data) "MP_")
+                      (js/console.error "Worker received invalid data from worker: " data))))))))))
