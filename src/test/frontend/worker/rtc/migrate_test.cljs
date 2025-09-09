@@ -20,11 +20,11 @@
           upgrade-result-coll)))
 
 (deftest ^:focus migration-results=>client-ops
-  (testing "65.2 => 65.10"
+  (testing "65.2 => 65.11"
     (let [db-transit (str (fs-node/readFileSync "src/test/migration/65.2.transit"))
           db (ldb/read-transit-str db-transit)
           conn (d/conn-from-db db)
-          migration-result (db-migrate/migrate conn {:target-version "65.10"})
+          migration-result (db-migrate/migrate conn {:target-version "65.11"})
           client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
       (prn :migration-result "================================================================")
       (pp/pprint (merge (select-keys migration-result [:from-version :to-version])
