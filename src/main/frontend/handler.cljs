@@ -179,7 +179,7 @@
                   (js/console.error "Error while restoring repos: " e)))
        (p/finally (fn []
                     (state/set-db-restoring! false)
-                    (p/resolve! state/db-worker-ready-promise true)
+                    (p/resolve! state/app-ready-promise true)
                     (when-not (util/mobile?)
                       (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
                         (log/info :webgpu-available? webgpu-available?)
