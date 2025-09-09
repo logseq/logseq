@@ -525,7 +525,8 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
-   :ui/highlight-recent-blocks              {:fn      state/toggle-highlight-recent-blocks!}
+   :ui/highlight-recent-blocks              {:binding "mod+c mod+r"
+                                             :fn      state/toggle-highlight-recent-blocks!}
 
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}

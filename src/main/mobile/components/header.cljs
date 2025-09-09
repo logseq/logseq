@@ -86,7 +86,7 @@
   (let [log-str (mobile-state/log->str)
         [error-only? set-error-only!] (hooks/use-state false)
         [reversed? set-reversed!] (hooks/use-state false)]
-    [:div.flex.flex-col.gap-1.p-2.overflow-y-scroll
+    [:div.flex.flex-col.gap-1.p-2.ls-debug-log
      [:div.flex.flex-row.justify-between
       [:div.text-lg.font-medium.mb-2 "Full log: "]
 
@@ -116,7 +116,7 @@
 
      (let [records (cond->> @mobile-state/*log
                      error-only?
-                     (filter (fn [record] (= (:level record) :error)))
+                     (filter (fn [record] (contains? #{:error :severe} (:level record))))
                      reversed?
                      reverse)]
        (when (seq records)
@@ -158,6 +158,7 @@
                                         (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
                                         "Report bug"])
                          (ui/menu-link {:on-click (fn []
+                                                    (mobile-state/set-popup! nil)
                                                     (mobile-state/set-popup!
                                                      {:open? true
                                                       :content-fn (fn [] (log))}))}

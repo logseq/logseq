@@ -183,9 +183,6 @@
   (let [db-based? (config/db-based-graph? repo)]
     (p/do!
      (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (util/mobile?)
-       (state/pub-event! [:mobile/post-init]))
      ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
      (when-not config/publishing?
