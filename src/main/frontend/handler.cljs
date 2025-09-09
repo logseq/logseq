@@ -168,13 +168,7 @@
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (if (empty? repos)
                    (repo-handler/new-db! config/demo-repo)
-                   (restore-and-setup! repo))
-               webgpu-available? (db-browser/<check-webgpu-available?)]
-         (log/info :webgpu-available? webgpu-available?)
-         (when webgpu-available?
-           (p/do! (db-browser/start-inference-worker!)
-                  (db-browser/<connect-db-worker-and-infer-worker!)
-                  (reset! vector-search-flows/*infer-worker-ready true)))
+                   (restore-and-setup! repo))]
          (set-network-watcher!)
 
          (when (util/electron?)
