@@ -10,25 +10,17 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.shui.dialog.core :as shui-dialog]
             [mobile.components.ui :as cc-ui]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
-(def *init-url (atom nil))
 ;; FIXME: `appUrlOpen` are fired twice when receiving a same intent.
 ;; The following two variable atoms are used to compare whether
 ;; they are from the same intent share.
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
-
-(defn mobile-post-init
-  "postinit logic of mobile platforms: handle deeplink and intent"
-  []
-  (when (mobile-util/native-ios?)
-    (when @*init-url
-      (deeplink/deeplink @*init-url)
-      (reset! *init-url nil))))
 
 (defn- ios-init
   "Initialize iOS-specified event listeners"
@@ -94,14 +86,16 @@
   []
   (.addListener App "appUrlOpen"
                 (fn [^js data]
-                  (when-let [url (.-url data)]
-                    (if-not (= (.-readyState js/document) "complete")
-                      (reset! *init-url url)
-                      (when-not (and (= @*last-shared-url url)
-                                     (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
-                        (reset! *last-shared-url url)
-                        (reset! *last-shared-seconds (.getSeconds (js/Date.)))
-                        (deeplink/deeplink url))))))
+                  (log/info ::app-url-open data)
+                  (p/then
+                   state/db-worker-ready-promise
+                   (fn []
+                     (when-let [url (.-url data)]
+                       (when-not (and (= @*last-shared-url url)
+                                      (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
+                         (reset! *last-shared-url url)
+                         (reset! *last-shared-seconds (.getSeconds (js/Date.)))
+                         (deeplink/deeplink url)))))))
 
   (.addListener Keyboard "keyboardWillShow"
                 (fn [^js info]
