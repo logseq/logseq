@@ -140,7 +140,7 @@
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [app-major-schema-version (str (:major (db-schema/parse-schema-version db-schema/version)))
-          repos' (group-by :GraphUUID repos')
+          repos' (group-by :url repos')
           repos'' (mapcat (fn [[k vs]]
                             (if (some? k)
                               (let [remote-repos (filter :remote? vs)
@@ -172,7 +172,8 @@
                   repos
                   (concat
                    (state/get-rtc-graphs)
-                   (state/get-remote-file-graphs)))]
+                   (when-not (or (util/mobile?) util/web-platform?)
+                     (state/get-remote-file-graphs))))]
     (state/set-repos! repos')
     repos'))
 

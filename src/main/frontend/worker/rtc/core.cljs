@@ -218,7 +218,7 @@
                                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
-        get-ws-create-task (r.client/ensure-register-graph-updates
+        get-ws-create-task (r.client/ensure-register-graph-updates--memoized
                             get-ws-create-task graph-uuid major-schema-version
                             repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
@@ -272,6 +272,9 @@
            (m/?))
           (catch Cancelled e
             (add-log-fn :rtc.log/cancelled {})
+            (throw e))
+          (catch :default e
+            (add-log-fn :rtc.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
             (throw e))
           (finally
             (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)

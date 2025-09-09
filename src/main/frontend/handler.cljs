@@ -149,7 +149,6 @@
   (render)
   (i18n/start)
   (instrument/init)
-  (state/set-online! js/navigator.onLine)
 
   (-> (util/indexeddb-check?)
       (p/catch (fn [_e]
@@ -161,6 +160,7 @@
   (events/run!)
 
   (p/do!
+   (prn :debug :start-db-worker)
    (-> (p/let [_ (db-browser/start-db-worker!)
                repos (repo-handler/get-repos)
                _ (state/set-repos! repos)
@@ -185,16 +185,19 @@
                   (js/console.error "Error while restoring repos: " e)))
        (p/finally (fn []
                     (state/set-db-restoring! false)
-                    (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
-                      (log/info :webgpu-available? webgpu-available?)
-                      (when webgpu-available?
-                        (p/do! (db-browser/start-inference-worker!)
-                               (db-browser/<connect-db-worker-and-infer-worker!)
-                               (reset! vector-search-flows/*infer-worker-ready true)))))))
+                    (p/resolve! state/db-worker-ready-promise true)
+                    (when-not (util/mobile?)
+                      (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
+                        (log/info :webgpu-available? webgpu-available?)
+                        (when webgpu-available?
+                          (p/do! (db-browser/start-inference-worker!)
+                                 (db-browser/<connect-db-worker-and-infer-worker!)
+                                 (reset! vector-search-flows/*infer-worker-ready true))))))))
 
    (util/<app-wake-up-from-sleep-loop (atom false))
 
-   (persist-var/load-vars)))
+   (when-not (util/mobile?)
+     (persist-var/load-vars))))
 
 (defn stop! []
   (prn "stop!"))

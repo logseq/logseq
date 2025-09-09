@@ -397,7 +397,7 @@
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Icon"}]))}
 
-   :editor/toggle-display-all-properties    {:binding "p a"
+   :editor/toggle-display-hidden-properties {:binding "p a"
                                              :db-graph? true
                                              :fn      ui-handler/toggle-show-empty-hidden-properties!}
 
@@ -525,7 +525,8 @@
    :ui/toggle-document-mode                 {:binding "t d"
                                              :fn      state/toggle-document-mode!}
 
-   :ui/highlight-recent-blocks              {:fn      state/toggle-highlight-recent-blocks!}
+   :ui/highlight-recent-blocks              {:binding "mod+c mod+r"
+                                             :fn      state/toggle-highlight-recent-blocks!}
 
    :ui/toggle-settings                      {:binding (if mac? ["t s" "mod+,"] "t s")
                                              :fn      ui-handler/toggle-settings-modal!}
@@ -875,7 +876,7 @@
           :editor/add-property-status
           :editor/add-property-priority
           :editor/add-property-icon
-          :editor/toggle-display-all-properties
+          :editor/toggle-display-hidden-properties
           :ui/toggle-wide-mode
           :ui/select-theme-color
           :ui/goto-plugins
@@ -1011,7 +1012,7 @@
      :editor/add-property-status
      :editor/add-property-priority
      :editor/add-property-icon
-     :editor/toggle-display-all-properties]
+     :editor/toggle-display-hidden-properties]
 
     :shortcut.category/toggle
     [:ui/toggle-help

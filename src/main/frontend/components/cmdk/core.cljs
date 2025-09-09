@@ -34,7 +34,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.db :as ldb]
-            [logseq.graph-parser.text :as text]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -128,22 +127,11 @@
                             (take (get-group-limit group) items))))
         node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
-                         (or (let [page (some-> (text/get-namespace-last-part input)
-                                                string/trim
-                                                db/get-page)
-                                   parent-title (:block/title (:block/parent page))
-                                   namespace? (string/includes? input "/")]
-                               (and page
-                                    (or (not namespace?)
-                                        (and
-                                         parent-title
-                                         (= (util/page-name-sanity-lc parent-title)
-                                            (some-> (util/nth-safe (reverse (string/split input "/")) 1)
-                                                    util/page-name-sanity-lc))))))
-                             (some (fn [block]
-                                     (and
-                                      (:block/tags block)
-                                      (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
+                         (some (fn [block]
+                                 (and
+                                  (:block/tags block)
+                                  (not (:block/parent block))
+                                  (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result)))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         start-with-slash? (string/starts-with? input "/")
@@ -203,8 +191,7 @@
 (defn state->action [state]
   (let [highlighted-item (state->highlighted-item state)
         action (get-action)]
-    (cond (and (:source-page highlighted-item) (= action :move-blocks)) :trigger
-          (:source-page highlighted-item) :open
+    (cond (and (:source-block highlighted-item) (= action :move-blocks)) :trigger
           (:source-block highlighted-item) :open
           (:file-path highlighted-item) :open
           (:source-search highlighted-item) :search
@@ -310,7 +297,7 @@
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page) {}))
               :alias (:alias page)
-              :source-page (or source-page page))))
+              :source-block (or source-page page))))
 
 (defn block-item
   [repo block current-page input]
@@ -461,8 +448,7 @@
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)
         block (or (:alias highlighted-item)
-                  (:source-block highlighted-item)
-                  (:source-page highlighted-item))]
+                  (:source-block highlighted-item))]
     (:block/uuid block)))
 
 (defmethod handle-action :open-page [_ state _event]
@@ -527,7 +513,7 @@
 (defn- page-item?
   [item]
   (let [block-uuid (:block/uuid (:source-block item))]
-    (or (boolean (:source-page item))
+    (or (boolean (:source-block item))
         (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))))
 
 (defmethod handle-action :open [_ state event]
@@ -694,8 +680,8 @@
              :let [highlighted? (= item highlighted-item)
                    page? (= "file" (some-> item :icon))
                    text (some-> item :text)
-                   source-page (some-> item :source-page)
-                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-page)))]]
+                   source-block (some-> item :source-block)
+                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
          (let [item (list-item/root
                      (assoc item
                             :group group

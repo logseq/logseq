@@ -373,7 +373,8 @@
                                               [:div
                                                {:on-click #(shui/popup-hide!)}
                                                (shui/dropdown-menu-item
-                                                {:on-click #(some-> (db/entity [:block/uuid (get-blockid)]) (editor-handler/edit-block! :max))}
+                                                {:on-click #(some-> (db/entity [:block/uuid (get-blockid)])
+                                                                    (editor-handler/edit-block! :max {:container-id :unknown-container}))}
                                                 [:span.flex.items-center.gap-1
                                                  (ui/icon "edit") (t :asset/edit-block)])
                                                (shui/dropdown-menu-item
@@ -992,38 +993,41 @@
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview? show-non-exists-page? tag? _skip-async-load?] :as config} page]
-  (when-let [entity' (rum/react (:*entity state))]
-    (let [entity (or (db/sub-block (:db/id entity')) entity')
-          config (assoc config :block entity)]
-      (cond
-        entity
-        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
-              whiteboard-page? (model/whiteboard-page? entity)
-              inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
-              modal? (shui-dialog/has-modal?)]
-          (if (and (not (util/mobile?))
-                   (not= page-name (:id config))
-                   (not (false? preview?))
-                   (not disable-preview?)
-                   (not modal?))
-            (page-preview-trigger (assoc config :children inner) entity)
-            inner))
+  (let [entity' (rum/react (:*entity state))
+        entity (or (db/sub-block (:db/id entity')) entity')
+        config (assoc config :block entity)]
+    (cond
+      entity
+      (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+            whiteboard-page? (model/whiteboard-page? entity)
+            inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
+            modal? (shui-dialog/has-modal?)]
+        (if (and (not (util/mobile?))
+                 (not= page-name (:id config))
+                 (not (false? preview?))
+                 (not disable-preview?)
+                 (not modal?))
+          (page-preview-trigger (assoc config :children inner) entity)
+          inner))
 
-        (and (:block/name page) show-non-exists-page?)
-        (page-inner config (merge
-                            {:block/title (or (:block/title page)
-                                              (:block/name page))
-                             :block/name (:block/name page)}
-                            page) children label)
+      (and (:block/name page) show-non-exists-page?)
+      (page-inner config (merge
+                          {:block/title (or (:block/title page)
+                                            (:block/name page))
+                           :block/name (:block/name page)}
+                          page) children label)
 
-        (:block/name page)
-        [:span (str (when tag? "#")
-                    (when-not tag? page-ref/left-brackets)
-                    (:block/name page)
-                    (when-not tag? page-ref/right-brackets))]
+      (:block/name page)
+      [:span
+       (when tag? "#")
+       (when-not tag?
+         [:span.text-gray-500.bracket page-ref/left-brackets])
+       (or label (:block/name page))
+       (when-not tag?
+         [:span.text-gray-500.bracket page-ref/right-brackets])]
 
-        :else
-        nil))))
+      :else
+      nil)))
 
 (rum/defc page-cp
   [config page]
@@ -2497,7 +2501,8 @@
 
       ;; TODO: switched to https://cortexjs.io/mathlive/ for editing
       (= :math node-display-type)
-      (latex/latex (:block/title block) true false)
+      [:div.math-block
+       (latex/latex (:block/title block) true true)]
 
       (seq (:logseq.property/_query block'))
       (query-builder-component/builder block' {})
@@ -2629,92 +2634,94 @@
 
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (let [target (.-target e)
-        selection-blocks (state/get-selection-blocks)
-        starting-block (state/get-selection-start-block-or-first)
-        mobile-selection? (and (util/capacitor-new?) (seq selection-blocks))
-        block-dom-element (util/rec-get-node target "ls-block")]
+  (when-not @(:ui/scrolling? @state/state)
+    (let [target (.-target e)
+          selection-blocks (state/get-selection-blocks)
+          starting-block (state/get-selection-start-block-or-first)
+          mobile? (util/mobile?)
+          mobile-selection? (and mobile? (seq selection-blocks))
+          block-dom-element (util/rec-get-node target "ls-block")]
+      (if mobile-selection?
+        (let [ids (set (state/get-selection-block-ids))]
+          (if (contains? ids (:block/uuid block))
+            (do
+              (state/drop-selection-block! block-dom-element)
+              (when (= 1 (count ids))
+                (state/set-state! :mobile/show-action-bar? false)))
+            (state/conj-selection-block! block-dom-element)))
+        (when-not (or
+                   (:closed-values? config)
+                   (> (count content) (state/block-content-max-length (state/get-current-repo))))
+          (let [target (gobj/get e "target")
+                button (gobj/get e "buttons")
+                shift? (gobj/get e "shiftKey")
+                meta? (util/meta-key? e)
+                forbidden-edit? (target-forbidden-edit? target)
+                get-cursor-range #(some-> block-dom-element
+                                          (dom/by-class "block-content-inner")
+                                          first
+                                          util/caret-range)
+                mobile-range (when mobile? (get-cursor-range))]
+            (when-not forbidden-edit?
+              (util/mobile-keep-keyboard-open false))
+            (when (and (not forbidden-edit?) (contains? #{1 0} button))
+              (cond
+                (and meta? shift?)
+                (when-not (empty? selection-blocks)
+                  (util/stop e)
+                  (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
 
-    (if mobile-selection?
-      (let [ids (set (state/get-selection-block-ids))]
-        (if (contains? ids (:block/uuid block))
-          (do
-            (state/drop-selection-block! block-dom-element)
-            (when (= 1 (count ids))
-              (state/set-state! :mobile/show-action-bar? false)))
-          (state/conj-selection-block! block-dom-element)))
-      (when-not (or
-                 (:closed-values? config)
-                 (> (count content) (state/block-content-max-length (state/get-current-repo))))
-        (let [target (gobj/get e "target")
-              button (gobj/get e "buttons")
-              shift? (gobj/get e "shiftKey")
-              meta? (util/meta-key? e)
-              forbidden-edit? (target-forbidden-edit? target)]
-          (when (and (not forbidden-edit?) (contains? #{1 0} button))
-            (cond
-              (and meta? shift?)
-              (when-not (empty? selection-blocks)
-                (util/stop e)
-                (editor-handler/highlight-selection-area! block-id block-dom-element {:append? true}))
+                meta?
+                (do
+                  (util/stop e)
+                  (if (some #(= block-dom-element %) selection-blocks)
+                    (state/drop-selection-block! block-dom-element)
+                    (state/conj-selection-block! block-dom-element :down))
+                  (if (empty? (state/get-selection-blocks))
+                    (state/clear-selection!)
+                    (state/set-selection-start-block! block-dom-element)))
 
-              meta?
-              (do
-                (util/stop e)
-                (if (some #(= block-dom-element %) selection-blocks)
-                  (state/drop-selection-block! block-dom-element)
-                  (state/conj-selection-block! block-dom-element :down))
-                (if (empty? (state/get-selection-blocks))
-                  (state/clear-selection!)
-                  (state/set-selection-start-block! block-dom-element)))
+                (and shift? starting-block)
+                (do
+                  (util/stop e)
+                  (util/clear-selection!)
+                  (editor-handler/highlight-selection-area! block-id block-dom-element))
 
-              (and shift? starting-block)
-              (do
-                (util/stop e)
-                (util/clear-selection!)
-                (editor-handler/highlight-selection-area! block-id block-dom-element))
+                shift?
+                (do
+                  (util/clear-selection!)
+                  (state/set-selection-start-block! block-dom-element))
 
-              shift?
-              (do
-                (util/clear-selection!)
-                (state/set-selection-start-block! block-dom-element))
-
-              :else
-              (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
-                (util/mobile-keep-keyboard-open false)
-                (editor-handler/clear-selection!)
-                (editor-handler/unhighlight-blocks!)
-                (let [f #(p/do!
-                          (when-not (:block.temp/fully-loaded? (db/entity (:db/id block)))
-                            (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
-                          (let [block (db/entity (:db/id block))
-                                {:block/keys [title format]} block
-                                content (if (config/db-based-graph? (state/get-current-repo))
-                                          (:block/title block)
-                                          (->> title
-                                               (property-file/remove-built-in-properties-when-file-based
-                                                (state/get-current-repo) format)
-                                               (drawer/remove-logbook)))
-                                cursor-range (if (util/ios?)
-                                               (:block/title block)
-                                               (some-> block-dom-element
-                                                       (dom/by-class "block-content-inner")
-                                                       first
-                                                       util/caret-range))]
-                            (state/set-editing!
-                             edit-input-id
-                             content
-                             block
-                             cursor-range
-                             {:db (db/get-db)
-                              :move-cursor? false
-                              :container-id (:container-id config)})))]
-                    ;; wait a while for the value of the caret range
+                :else
+                (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+                  (editor-handler/clear-selection!)
+                  (editor-handler/unhighlight-blocks!)
                   (p/do!
                    (state/pub-event! [:editor/save-code-editor])
-                   (f))
 
-                  (state/set-selection-start-block! block-dom-element))))))))))
+                   (when-not (:block.temp/load-status (db/entity (:db/id block)))
+                     (db-async/<get-block (state/get-current-repo) (:db/id block) {:children? false}))
+
+                   (let [cursor-range (if mobile? mobile-range (get-cursor-range))
+                         block (db/entity (:db/id block))
+                         {:block/keys [title format]} block
+                         content (if (config/db-based-graph? (state/get-current-repo))
+                                   (:block/title block)
+                                   (->> title
+                                        (property-file/remove-built-in-properties-when-file-based
+                                         (state/get-current-repo) format)
+                                        (drawer/remove-logbook)))]
+
+                     (state/set-editing!
+                      edit-input-id
+                      content
+                      block
+                      cursor-range
+                      {:db (db/get-db)
+                       :move-cursor? false
+                       :container-id (:container-id config)}))
+
+                   (state/set-selection-start-block! block-dom-element)))))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id top?]
@@ -2981,7 +2988,7 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (let [journal-title? (:from-journals? config)]
+                                        (let [journal-title? (:journal-page? config)]
                                           (cond
                                             (util/right-click? e)
                                             nil
@@ -2994,7 +3001,8 @@
                                             journal-title?
                                             (do
                                               (.preventDefault e)
-                                              (route-handler/redirect-to-page! (:block/uuid block)))
+                                              (when-not (util/capacitor-new?)
+                                                (route-handler/redirect-to-page! (:block/uuid block))))
 
                                             (ldb/journal? block)
                                             (.preventDefault e)
@@ -3423,11 +3431,11 @@
   [^js e block *control-show? block-id doc-mode?]
   (let [mouse-moving? (not= (some-> @*block-last-mouse-event (.-clientY)) (.-clientY e))
         block-dom-node (util/rec-get-node (.-target e) "ls-block")]
+    (reset! *control-show? true)
     (when (and mouse-moving?
                (not @*dragging?)
                (not= (:block/uuid block) (:block/uuid (state/get-edit-block))))
       (.preventDefault e)
-      (reset! *control-show? true)
       (when-let [parent (gdom/getElement block-id)]
         (let [node (.querySelector parent ".bullet-container")]
           (when doc-mode?
@@ -3645,7 +3653,8 @@
                            (block-handler/on-touch-start event uuid)))
        :on-touch-end (fn [event]
                        (when-not @*dragging?
-                         (block-handler/on-touch-end event)))
+                         (block-handler/on-touch-end event))
+                       (reset! *dragging? false))
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
 
@@ -3753,7 +3762,7 @@
                                          :hide-block-refs-count? hide-block-refs-count?
                                          :*show-query? *show-query?}))])]
 
-         (when (and db-based? (not collapsed?) (not (or table? property? (:page-title? config))))
+         (when (and db-based? (not collapsed?) (not (or table? property?)))
            (block-positioned-properties config block :block-below))]])
 
      (when (and db-based?
@@ -4389,14 +4398,16 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[virtualized? _] (rum/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
-                                                 (if (:journals? config)
-                                                   (< (count blocks) 50)
-                                                   (< (count blocks) 10))
-                                                 (and (util/mobile?) (ldb/journal? (:block/page (first blocks))))
-                                                 (and (:block-children? config)
-                                                      ;; zoom-in block's children
-                                                      (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
+  (let [mobile? (util/mobile?)
+        [ready? set-ready?] (hooks/use-state
+                             (not (and mobile? (not (:journals? config)))))
+        [virtualized? _] (hooks/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
+                                                   (if (:journals? config)
+                                                     (< (count blocks) 50)
+                                                     (< (count blocks) 10))
+                                                   (and (:block-children? config)
+                                                        ;; zoom-in block's children
+                                                        (not (and (:id config) (= (:id config) (str (:block/uuid (:block/parent (first blocks)))))))))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
@@ -4410,7 +4421,9 @@
         virtual-opts (when virtualized?
                        {:ref *virtualized-ref
                         :custom-scroll-parent (or (:scroll-container config)
-                                                  (util/app-scroll-container-node))
+                                                  (if-let [node (js/document.getElementById (:blocks-node-id config))]
+                                                    (util/app-scroll-container-node node)
+                                                    (util/app-scroll-container-node)))
                         :compute-item-key (fn [idx]
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
@@ -4429,6 +4442,7 @@
         *wrap-ref (hooks/use-ref nil)]
     (hooks/use-effect!
      (fn []
+       (when mobile? (util/schedule #(set-ready? true)))
        (when virtualized?
          (when (:current-page? config)
            (let [ref (.-current *virtualized-ref)]
@@ -4457,22 +4471,29 @@
     [:div.blocks-list-wrap
      {:data-level (or (:level config) 0)
       :ref *wrap-ref}
-     (cond
-       virtualized?
-       (ui/virtualized-list virtual-opts)
-       :else
-       (map-indexed (fn [idx block]
-                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-                    blocks))]))
+     (when ready?
+       (cond
+         virtualized?
+         (ui/virtualized-list virtual-opts)
+         :else
+         (map-indexed (fn [idx block]
+                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                      blocks)))]))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
+  {:init (fn [state]
+           (assoc state ::id (str (random-uuid))))}
   [state config blocks]
-  (let [doc-mode? (:document/mode? config)]
+  (let [doc-mode? (:document/mode? config)
+        id (::id state)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
-       {:class (when doc-mode? "document-mode")
+       {:id id
+        :class (when doc-mode? "document-mode")
         :containerid (:container-id state)}
-       (block-list (assoc config :container-id (:container-id state))
+       (block-list (assoc config
+                          :blocks-node-id id
+                          :container-id (:container-id state))
                    blocks)])))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
@@ -4567,7 +4588,9 @@
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)
             scroll-container (or (:scroll-container config)
-                                 (util/app-scroll-container-node))]
+                                 (util/app-scroll-container-node))
+            scroll-container (if (fn? scroll-container)
+                               (scroll-container) scroll-container)]
         (when (seq blocks)
           (if (:sidebar? config)
             (for [block blocks]

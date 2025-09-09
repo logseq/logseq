@@ -54,6 +54,8 @@
             [missionary.core :as m]
             [promesa.core :as p]))
 
+(.importScripts js/self "worker.js")
+
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
@@ -440,14 +442,17 @@
         [db requests]]))
    (fn [db requests]
      (when db
-       (mapv (fn [{:keys [id opts]}]
-               (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-                 (-> (common-initial-data/get-block-and-children db id' opts)
-                     (assoc :id id)))) requests)))))
+       (->> requests
+            (mapv (fn [{:keys [id opts]}]
+                    (let [id' (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+                      (-> (common-initial-data/get-block-and-children db id' opts)
+                          (assoc :id id)))))
+            ldb/write-transit-str)))))
 
 (def-thread-api :thread-api/get-blocks
   [repo requests]
-  (get-blocks-with-cache repo requests))
+  (let [requests (ldb/read-transit-str requests)]
+    (get-blocks-with-cache repo requests)))
 
 (def-thread-api :thread-api/get-block-refs
   [repo id]
@@ -761,6 +766,13 @@
   [repo]
   (js/Promise. (embedding/task--update-index-info! repo)))
 
+(def-thread-api :thread-api/check-worker-status
+  [repo]
+  (when repo
+    (let [conn (worker-state/get-datascript-conn repo)]
+      (when @conn
+        {:available? (some? (d/entity @conn :logseq.class/Tag))}))))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -818,7 +830,10 @@
      (when-not (:import-type start-opts)
        (c.m/<? (start-db! repo start-opts))
        (assert (some? (worker-state/get-datascript-conn repo))))
-     (m/? (rtc.core/new-task--rtc-start true)))))
+     ;; Don't wait for rtc started because the app will be slow to be ready
+     ;; for users.
+     (when @worker-state/*rtc-ws-url
+       (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
@@ -862,7 +877,10 @@
                                 ;; because shared-service operates at the graph level,
                                 ;; creating a new database or switching to another one requires re-initializing the service.
                                 (let [[graph opts] (ldb/read-transit-str (last args))]
-                                  (p/let [service (<init-service! graph opts)]
+                                  (p/let [service (<init-service! graph opts)
+                                          client-id (:client-id service)]
+                                    (when client-id
+                                      (worker-util/post-message :record-worker-client-id {:client-id client-id}))
                                     (get-in service [:status :ready])
                                     ;; wait for service ready
                                     (js-invoke (:proxy service) k args)))

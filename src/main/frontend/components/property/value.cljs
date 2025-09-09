@@ -55,7 +55,7 @@
                :else
                "Empty")]
     (if (= text "Empty")
-      (shui/button (merge {:class "empty-btn" :variant :text} opts)
+      (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
                    text)
       (shui/button (merge {:class "empty-btn !text-base" :variant :text} opts)
                    text))))
@@ -564,7 +564,14 @@
         id (:db/id page-entity)
         class? (or (= :block/tags (:db/ident property))
                    (and (= :logseq.property.class/extends (:db/ident property))
-                        (ldb/class? block)))
+                        (ldb/class? block))
+                   (every? (fn [class]
+                             (or
+                              (= :logseq.class/Tag (:db/ident class))
+                              (some (fn [e]
+                                      (= :logseq.class/Tag (:db/ident e)))
+                                    (ldb/get-class-extends class))))
+                           (:logseq.property/classes property)))
         ;; Note: property and other types shouldn't be converted to class
         page? (ldb/internal-page? page-entity)]
     (cond
@@ -580,7 +587,12 @@
                                     [inline-class-uuid]
                                     ;; Only 1st class b/c page normally has
                                     ;; one of and not all these classes
-                                    (mapv :block/uuid (take 1 classes)))}]
+                                    (let [tag (db/entity :logseq.class/Tag)
+                                          classes' (if (= (map :db/id classes) [(:db/id tag)])
+                                                     classes
+                                                     (->> (remove (fn [c] (= (:db/id c) (:db/id tag))) classes)
+                                                          (take 1)))]
+                                      (mapv :block/uuid classes')))}]
         (p/let [page (if class?
                        (db-page-handler/<create-class! page create-options)
                        (page-handler/<create! page create-options))]
@@ -641,7 +653,8 @@
                (f chosen selected?)))]
     (hooks/use-effect!
      (fn []
-       (set-items! (sort-select-items property selected-choices items)))
+       (when-not (= (count items) (count sorted-items))
+         (set-items! (sort-select-items property selected-choices items))))
      [items])
     (select/select (assoc opts
                           :selected-choices selected-choices
@@ -1511,7 +1524,10 @@
              value-cp [:div.property-value-inner
                        {:data-type type
                         :class (str (when empty-value? "empty-value")
-                                    (when-not (:other-position? opts) " w-full"))}
+                                    (when-not (:other-position? opts) " w-full"))
+                        :on-pointer-down (fn [e]
+                                           (when-not (some-> (.-target e) (.closest "[data-radix-popper-content-wrapper]"))
+                                             (state/clear-selection!)))}
                        (cond
                          (and multiple-values? (contains? #{:default :url} type) (not closed-values?) (not editing?))
                          (property-normal-block-value block property v opts)

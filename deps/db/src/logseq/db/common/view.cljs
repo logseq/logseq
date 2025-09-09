@@ -7,6 +7,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
@@ -301,7 +302,7 @@
                               (entity-util/built-in? e)))
                 (cond-> e
                   refs-count?
-                  (assoc :block.temp/refs-count (count (:block/_refs e)))))))
+                  (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))
           (d/datoms db :avet property-ident))))
 
 (defn- get-entities
@@ -450,8 +451,13 @@
           filters (or (:logseq.property.table/filters view) filters)
           feat-type (or view-feature-type (:logseq.property.view/feature-type view))
           query? (= feat-type :query-result)
+          query-entity-ids (when (seq query-entity-ids) (set query-entity-ids))
           entities-result (if query?
-                            (keep #(d/entity db %) query-entity-ids)
+                            (keep (fn [id]
+                                    (let [e (d/entity db id)]
+                                      (when-not (= :logseq.property/query (:db/ident (:logseq.property/created-from-property e)))
+                                        e)))
+                                  query-entity-ids)
                             (get-view-entities db view-id opts))
           entities (if (= feat-type :linked-references)
                      (:ref-blocks entities-result)

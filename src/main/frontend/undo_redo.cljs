@@ -340,8 +340,7 @@
                        (filter
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
-            tx-data' (->> (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
-                          vec)
+            tx-data' (vec tx-data)
             editor-info @state/*editor-info
             _ (reset! state/*editor-info nil)
             op (->> [(when editor-info [::record-editor-info editor-info])
