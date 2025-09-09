@@ -1044,6 +1044,17 @@ html.is-mac {
   height: 18px;
 }
 
+.katex svg {
+  width: initial;
+  height: initial;
+}
+.math-block {
+    @apply w-full;
+    .latex {
+        @apply w-full;
+    }
+}
+
 .ls-small-icon svg {
     width: 12px;
     height: 12px;
@@ -1057,7 +1068,23 @@ html.is-mac {
   height: 38px;
 }
 
-.ls-page-title .positioned-properties svg, .page-ref svg {
+.ls-page-title .positioned-properties.block-left svg,
+.ls-page-title .positioned-properties.block-right svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ls-page-title .positioned-properties.block-below {
+  margin-left: 7px;
+}
+
+.ls-page-title .ls-properties-area .positioned-properties.block-left svg,
+.ls-page-title .ls-properties-area .positioned-properties.block-right svg {
+  width: initial;
+  height: initial;
+}
+
+.page-ref svg {
   width: 16px;
   height: 16px;
 }
@@ -1065,6 +1092,10 @@ html.is-mac {
 .ls-page-title {
   .positioned-properties, .time-spent {
     margin-top: 15px;
+  }
+
+  .block-tags {
+    margin-top: 17px;
   }
 }
 

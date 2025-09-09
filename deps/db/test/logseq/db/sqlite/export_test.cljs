@@ -428,7 +428,8 @@
                       :user.property/node {:logseq.property/type :node
                                            :db/cardinality :db.cardinality/many
                                            :build/property-classes [:user.class/MyClass]}
-                      :user.property/p1 {:logseq.property/type :default}}
+                      :user.property/p1 {:logseq.property/type :default}
+                      :user.property/map {:logseq.property/type :map}}
          :classes {:user.class/MyClass {:build/class-properties [:user.property/p1]}}
          :pages-and-blocks
          [{:page {:block/title "page1"}
@@ -442,7 +443,9 @@
                      :build/properties {:user.property/node #{[:build/page {:block/title "page object"
                                                                             :build/tags [:user.class/MyClass]}]
                                                               [:block/uuid block-object-uuid]
-                                                              :logseq.class/Task}}}]}
+                                                              :logseq.class/Task}}}
+                    {:block/title "map block"
+                     :build/properties {:user.property/map {:foo :bar :num 2}}}]}
           {:page {:block/title "Blocks"}
            :blocks [{:block/title "myclass object"
                      :build/tags [:user.class/MyClass]

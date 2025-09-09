@@ -39,8 +39,7 @@
              tx (cond->
                  (mapcat
                   (fn [block]
-                    [[:db/retract (:db/id ref) :block/refs (:db/id block)]
-                     [:db/retract (:db/id ref) :block/path-refs (:db/id block)]]) retracted-blocks)
+                    [[:db/retract (:db/id ref) :block/refs (:db/id block)]]) retracted-blocks)
                   replaced-title
                   (conj [:db/add id :block/title replaced-title]))]
          tx))

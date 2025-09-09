@@ -175,6 +175,10 @@
            persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
+        tags (if (every? uuid? tags)
+               (map (fn [id] (d/entity db [:block/uuid id])) tags)
+               tags)
+        class? (or class? (some (fn [t] (= :logseq.class/Tag (:db/ident t))) tags))
         title (sanitize-title title*)
         types (cond class?
                     #{:logseq.class/Tag}
@@ -186,10 +190,10 @@
                     (set (map :db/ident tags))
                     :else
                     #{:logseq.class/Page})
-        existing-page-id (first (ldb/page-exists? db title types))]
-    (if existing-page-id
-      (let [existing-page (d/entity db existing-page-id)
-            tx-meta {:persist-op? persist-op?
+        existing-page-id (first (ldb/page-exists? db title types))
+        existing-page (some->> existing-page-id (d/entity db))]
+    (if (and existing-page (not (:block/parent existing-page)))
+      (let [tx-meta {:persist-op? persist-op?
                      :outliner-op :save-block}]
         (when (and class?
                    (not (ldb/class? existing-page))
@@ -199,7 +203,9 @@
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
-             :tx-data tx-data})))
+             :tx-data tx-data
+             :page-uuid (:block/uuid existing-page)
+             :title (:block/title existing-page)})))
       (let [page           (gp-block/page-name->map title db true date-formatter
                                                     {:class? class?
                                                      :page-uuid (when (uuid? uuid) uuid)

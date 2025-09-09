@@ -183,9 +183,6 @@
   (let [db-based? (config/db-based-graph? repo)]
     (p/do!
      (state/pub-event! [:graph/sync-context])
-    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-     (when (util/mobile?)
-       (state/pub-event! [:mobile/post-init]))
      ;; FIXME: an ugly implementation for redirecting to page on new window is restored
      (repo-handler/graph-ready! repo)
      (when-not config/publishing?
@@ -221,7 +218,7 @@
     (st/consume-pending-shortcuts!)))
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
-  (let [main-node (util/app-scroll-container-node)]
+  (let [_main-node (util/app-scroll-container-node)]
     (state/set-state! :mobile/show-action-bar? false)
     (when (= (state/sub :editor/record-status) "RECORDING")
       (state/set-state! :mobile/show-recording-bar? true))
@@ -229,9 +226,11 @@
       (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
       (.add (.-classList html) "has-mobile-keyboard")
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 1))
-    (when (mobile-util/native-ios?)
+    (when (mobile-util/native-platform?)
       (reset! util/keyboard-height keyboard-height)
-      (set! (.. main-node -style -marginBottom) (str keyboard-height "px")))))
+      (util/schedule
+       #(some-> (state/get-input)
+                (util/scroll-editor-cursor false))))))
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
@@ -406,11 +405,10 @@
       (shui/popup-hide! :download-rtc-graph)))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
-              (js/console.error e)
-              (when (util/mobile?)
-                (shui/popup-hide! :download-rtc-graph)
-                ;; TODO: notify error
-                )))))
+              (log/error :rtc-download-graph-failed e)
+              (shui/popup-hide! :download-rtc-graph)
+              ;; TODO: notify error
+              ))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]

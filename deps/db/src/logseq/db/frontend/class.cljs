@@ -136,9 +136,9 @@
 
 (defn get-class-extends
   "Returns all extends of a class"
-  [node]
-  (assert (de/entity? node) "get-class-extends `node` should be an entity")
-  (loop [extends (:logseq.property.class/extends node)
+  [class]
+  (assert (de/entity? class) "get-class-extends `class` should be an entity")
+  (loop [extends (:logseq.property.class/extends class)
          result #{}]
     (if (seq extends)
       (recur (set (mapcat :logseq.property.class/extends extends))

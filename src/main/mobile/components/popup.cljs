@@ -1,13 +1,13 @@
 (ns mobile.components.popup
   "Mobile popup"
-  (:require [dommy.core :as dom]
-            [frontend.handler.editor :as editor-handler]
+  (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
+            [frontend.ui :as ui]
+            [goog.object :as gobj]
             [logseq.shui.popup.core :as shui-popup]
+            [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
-            [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
-            [mobile.ionic :as ion]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -16,8 +16,8 @@
 (defn wrap-calc-commands-popup-side
   [pos opts]
   (let [[side mh] (let [[_x y _ height] pos
-                        vh js/window.innerHeight
-                        [th bh] [y (- vh (+ y height) 300)]]
+                        vh (.-clientHeight js/document.body)
+                        [th bh] [y (- vh (+ y height) 310)]]
                     (case (if (> bh 280) "bottom"
                               (if (> (- th bh) 100)
                                 "top" "bottom"))
@@ -56,8 +56,7 @@
     (= :download-rtc-graph (first args))
     (do
       (mobile-state/set-popup! nil)
-      (js/setTimeout
-       #(.select (dom/sel1 "ion-tabs") "home") 1000))
+      (mobile-state/redirect-to-tab! "home"))
 
     :else
     (if (and @*last-popup-modal? (not (= (first args) :editor.commands/commands)))
@@ -70,31 +69,62 @@
 (rum/defc popup < rum/reactive
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
-        [initial-breakpoint breakpoints] (if (= (:id opts) :ls-quick-add)
-                                           [1 #js [0 1]]
-                                           [0.75 #js [0 0.75 1]])]
+        quick-add? (= :ls-quick-add (:id opts))
+        action-sheet? (= :action-sheet (:type opts))
+        default-height (:default-height opts)]
+
     (when open?
       (state/clear-edit!)
       (init/keyboard-hide))
-    (ion/modal
+
+    (silkhq/bottom-sheet
      (merge
-      {:isOpen (boolean open?)
-       :initialBreakpoint initial-breakpoint
-       :onDidPresent (fn []
-                       (when (= :ls-quick-add (:id opts))
-                         (editor-handler/quick-add-open-last-block!)))
-       :breakpoints breakpoints
-       :onDidDismiss (fn []
-                       (mobile-state/set-popup! nil)
-                       (state/clear-edit!)
-                       (state/pub-event! [:mobile/keyboard-will-hide]))
-       :expand "block"}
+      {:presented (boolean open?)
+       :onPresentedChange (fn [v?]
+                            (when (false? v?)
+                              (js/setTimeout
+                               #(mobile-state/set-popup! nil) 300)))}
       (:modal-props opts))
-     (ion/content
-      {:class "ion-padding scrolling"}
-      [:<>
-       (when-let [title (:title opts)]
-         [:h2.py-2.opacity-40 title])
-       (when content-fn
-         (mobile-ui/classic-app-container-wrap
-          (if (fn? content-fn) (content-fn) content-fn)))]))))
+     (silkhq/bottom-sheet-portal
+      (silkhq/bottom-sheet-view
+       {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
+        :inertOutside false
+        :onTravelStatusChange (fn [status]
+                                (when (and quick-add? (= status "entering"))
+                                  (editor-handler/quick-add-open-last-block!)))
+        :onPresentAutoFocus #js {:focus false}}
+       (silkhq/bottom-sheet-backdrop
+        (when quick-add?
+          {:travelAnimation {:opacity (fn [data]
+                                        (let [progress (gobj/get data "progress")]
+                                          (js/Math.min (* progress 0.9) 0.9)))}}))
+       (silkhq/bottom-sheet-content
+        {:class "flex flex-col items-center p-2"}
+        (silkhq/bottom-sheet-handle)
+        (silkhq/scroll
+         {:as-child true}
+         (silkhq/scroll-view
+          {:class "app-silk-scroll-view overflow-y-scroll"
+           :scrollGestureTrap {:yEnd true}
+           :style {:min-height (cond
+                                 (false? default-height)
+                                 nil
+                                 (number? default-height)
+                                 default-height
+                                 :else
+                                 400)
+                   :max-height "80vh"}}
+          (silkhq/scroll-content
+           (let [title (or (:title opts) (when (string? content-fn) content-fn))
+                 content (if (fn? content-fn)
+                           (content-fn)
+                           (if-let [buttons (and action-sheet? (:buttons opts))]
+                             [:div.-mx-2
+                              (for [{:keys [role text]} buttons]
+                                (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
+                                               :data-role role}
+                                              [:span.text-lg.flex.items-center text]))]
+                             (when-not (string? content-fn) content-fn)))]
+             [:div.w-full.app-silk-popup-content-inner.p-2
+              (when title [:h2.py-2.opacity-40 title])
+              content]))))))))))

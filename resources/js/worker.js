@@ -27,15 +27,6 @@ if (detect() === 'Worker') {
 
   portal.set('workerThread', {
     rimraf: async function (path) {
-      // try {
-      //   // First assume path is itself a file
-      //   await pfs.unlink(path)
-      //   // if that worked we're done
-      //   return
-      // } catch (err) {
-      //   // Otherwise, path must be a directory
-      //   if (err.code !== 'EISDIR') throw err
-      // }
       // Knowing path is a directory,
       // first, assume everything inside path is a file.
       let files = await pfs.readdir(path);

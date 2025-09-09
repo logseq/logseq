@@ -123,8 +123,7 @@
                                                       with-out-str)]]
                                            :error)))
 
-                 :rtc.exception/lock-failed
-                 (js/setTimeout #(<rtc-start! repo) 1000)
+                 :rtc.exception/lock-failed nil
 
                  ;; else
                  nil)]

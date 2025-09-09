@@ -1,9 +1,10 @@
 (ns ^:node-only logseq.cli.util
-  "Util fns"
+  "CLI only util fns"
   (:require ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
+            [promesa.core :as p]
             [nbb.error]))
 
 (defn get-graph-dir
@@ -18,18 +19,25 @@
 (defn api-fetch [token method args]
   (js/fetch "http://127.0.0.1:12315/api"
             (clj->js {:method "POST"
-                      :headers {"Authorization" (str "Bearer " token)
+                      :headers {"Authorization"
+                                (str "Bearer " (or token js/process.env.LOGSEQ_API_SERVER_TOKEN))
                                 "Content-Type" "application/json"}
                       :body (js/JSON.stringify
                              (clj->js {:method method
                                        :args args}))})))
 
 (defn api-handle-error-response
-  "Handles a non 200 response"
+  "Handles a non 200 response. For 500 return full response to provide more detail"
   [resp]
-  (js/console.error "Error: API Server responded with status" (.-status resp)
-                    (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
-  (js/process.exit 1))
+  (if (= 500 (.-status resp))
+    (p/let [body (.text resp)]
+      (js/console.error "Error: API Server responded with status" (.-status resp)
+                        "\nAPI Response:" (pr-str body))
+      (js/process.exit 1))
+    (do
+      (js/console.error "Error: API Server responded with status" (.-status resp)
+                        (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
+      (js/process.exit 1))))
 
 (defn command-catch-handler
   "Default p/catch handler for commands which handles sci errors and HTTP API Server connections gracefully"

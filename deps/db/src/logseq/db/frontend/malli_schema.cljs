@@ -273,8 +273,7 @@
 (def page-attrs
   "Common attributes for pages"
   [[:block/name :string]
-   [:block/title :string]
-   [:block/path-refs {:optional true} [:set :int]]])
+   [:block/title :string]])
 
 (def property-attrs
   "Common attributes for properties"
@@ -335,7 +334,8 @@
    (concat
     [:map
      [:db/ident user-property-ident]
-     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/user-allowed-internal-property-types
+                                                      db-property-type/user-built-in-property-types))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -387,7 +387,6 @@
    [:block/order block-order]
    ;; refs
    [:block/page :int]
-   [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
    [:logseq.property/created-from-property {:optional true} :int]])
 
@@ -399,8 +398,7 @@
     [[:block/title :string]
      [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
-     [:block/page :int]
-     [:block/path-refs {:optional true} [:set :int]]]
+     [:block/page :int]]
     page-or-block-attrs)))
 
 (def property-value-block

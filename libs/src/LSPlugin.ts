@@ -834,6 +834,7 @@ export interface IEditorProxy extends Record<string, any> {
   getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | unknown>
 
   getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
+  getPageProperties: (page: PageIdentity) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,

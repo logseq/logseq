@@ -260,7 +260,7 @@
 
 (defn db-based-priorities
   []
-  (map (fn [e] (:block/title e))
+  (map (fn [e] (str "Priority " (:block/title e)))
        (db-pu/get-closed-property-values :logseq.property/priority)))
 
 (defn get-priorities
@@ -272,7 +272,8 @@
                   (db-based-priorities)
                   (file-based-priorities))
                 (mapv (fn [item]
-                        (let [command item]
+                        (let [command item
+                              item (string/replace item #"^Priority " "")]
                           [command
                            (->priority item)
                            (str "Set priority to " item)
