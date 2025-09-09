@@ -8,7 +8,6 @@
             [frontend.common.thread-api :as thread-api]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.crypt :as crypt]
-            [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
@@ -20,8 +19,6 @@
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
@@ -161,8 +158,7 @@
             (client-op/remove-local-tx repo)
             (client-op/add-all-exists-asset-as-ops repo)
             (crypt/store-graph-keys-jwk repo aes-key-jwk)
-            (when-not rtc-const/RTC-E2E-TEST
-              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
+            (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
             (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
                                                         :message "upload-graph completed"})
             {:graph-uuid graph-uuid})
@@ -269,29 +265,6 @@
        [schema-blocks (conj normal-blocks block)]))
    [[] []] blocks))
 
-(defn- create-graph-for-rtc-test
-  "TODO: remove this fn
-  it's complex to setup db-worker related stuff, when I only want to test rtc related logic"
-  [repo init-tx-data other-tx-data]
-  (let [conn (d/create-conn db-schema/schema)
-        db-initial-data (sqlite-create-graph/build-db-initial-data "")]
-    (swap! worker-state/*datascript-conns assoc repo conn)
-    (d/transact! conn db-initial-data {:initial-db? true
-                                       :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST})
-    (db-listener/listen-db-changes! repo conn)
-    (d/transact! conn init-tx-data {:rtc-download-graph? true
-                                    :gen-undo-ops? false
-                                    ;; only transact db schema, skip validation to avoid warning
-                                    :frontend.worker.pipeline/skip-validate-db? true
-                                    :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
-                                    :persist-op? false})
-    (d/transact! conn other-tx-data {:rtc-download-graph? true
-                                     :gen-undo-ops? false
-                                     :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST
-                                     :persist-op? false})
-    (transact-remote-schema-version! repo)
-    (<transact-block-refs! repo nil)))
-
 (defn- blocks-resolve-temp-id
   [schema-blocks blocks]
   (let [uuids (map :block/uuid blocks)
@@ -388,37 +361,35 @@
       (client-op/update-local-tx repo remote-t)
       (rtc-log-and-state/update-local-t graph-uuid remote-t)
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
-      (if rtc-const/RTC-E2E-TEST
-        (create-graph-for-rtc-test repo init-tx-data tx-data)
-        (c.m/<?
-         (p/do!
-          ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
-          ((@thread-api/*thread-apis :thread-api/export-db) repo)
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-1
-                                                        :message (str "transacting init data(" (count init-tx-data) ")")
-                                                        :graph-uuid graph-uuid})
-          ((@thread-api/*thread-apis :thread-api/transact)
-           repo init-tx-data
-           {:rtc-download-graph? true
-            :gen-undo-ops? false
+      (c.m/<?
+       (p/do!
+        ((@thread-api/*thread-apis :thread-api/create-or-open-db) repo {:close-other-db? false})
+        ((@thread-api/*thread-apis :thread-api/export-db) repo)
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-1
+                                                      :message (str "transacting init data(" (count init-tx-data) ")")
+                                                      :graph-uuid graph-uuid})
+        ((@thread-api/*thread-apis :thread-api/transact)
+         repo init-tx-data
+         {:rtc-download-graph? true
+          :gen-undo-ops? false
             ;; only transact db schema, skip validation to avoid warning
-            :frontend.worker.pipeline/skip-validate-db? true
-            :persist-op? false}
-           (worker-state/get-context))
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
-                                                        :message (str "transacting other data(" (count tx-data) ")")
-                                                        :graph-uuid graph-uuid})
-          (p/doseq [tx-data* (partition-all 500 tx-data)]
-            ((@thread-api/*thread-apis :thread-api/transact)
-             repo tx-data* {:rtc-download-graph? true
-                            :gen-undo-ops? false
-                            :persist-op? false} (worker-state/get-context))
-            (p/delay 10))
-          (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-3
-                                                        :message "transacting remote schema version"
-                                                        :graph-uuid graph-uuid})
-          (transact-remote-schema-version! repo)
-          (<transact-block-refs! repo graph-uuid))))
+          :frontend.worker.pipeline/skip-validate-db? true
+          :persist-op? false}
+         (worker-state/get-context))
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
+                                                      :message (str "transacting other data(" (count tx-data) ")")
+                                                      :graph-uuid graph-uuid})
+        (p/doseq [tx-data* (partition-all 500 tx-data)]
+          ((@thread-api/*thread-apis :thread-api/transact)
+           repo tx-data* {:rtc-download-graph? true
+                          :gen-undo-ops? false
+                          :persist-op? false} (worker-state/get-context))
+          (p/delay 10))
+        (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-3
+                                                      :message "transacting remote schema version"
+                                                      :graph-uuid graph-uuid})
+        (transact-remote-schema-version! repo)
+        (<transact-block-refs! repo graph-uuid)))
       (shared-service/broadcast-to-clients! :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -490,8 +461,7 @@
                                                             :message "transacted all blocks"
                                                             :graph-uuid graph-uuid})
               (client-op/update-graph-uuid repo graph-uuid)
-              (when-not rtc-const/RTC-E2E-TEST
-                (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid}))))
+              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
               (worker-state/set-rtc-downloading-graph! false)
               (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
                                                             :message "download completed"
@@ -600,7 +570,4 @@
            datoms)))]
     (prn ::count (count refs-tx))
     ;; (prn ::take-20 (take 20 (sort-by second > (into [] (frequencies (map last refs-tx))))))
-    )
-
-
-  )
+    ))
