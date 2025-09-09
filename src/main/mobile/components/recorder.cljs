@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
             [rum.core :as rum]
+            [goog.functions :as gfun]
             [frontend.rum :as r]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -10,10 +11,17 @@
 (defonce *open? (atom true))
 (defn set-open? [v?] (reset! *open? v?))
 
+(defn ms-to-time-format [ms]
+  (let [seconds (quot ms 1000)
+        minutes (quot seconds 60)
+        secs (mod seconds 60)]
+    (str (.padStart (str minutes) 2 "0") ":" (.padStart (str secs) 2 "0"))))
+
 (rum/defc audio-recorder-aux
   [{:keys [open?]}]
   (let [*wave-ref (rum/use-ref nil)
         *micid-ref (rum/use-ref nil)
+        *timer-ref (rum/use-ref nil)
         [^js wavesurfer set-wavesurfer!] (rum/use-state nil)
         [^js recorder set-recorder!] (rum/use-state nil)
         [mic-devices set-mic-devices!] (rum/use-state nil)
@@ -24,7 +32,8 @@
     (hooks/use-effect!
       (fn []
         (when (false? open?)
-          (some-> wavesurfer (.destroy)))
+          (js/setTimeout
+            #(some-> wavesurfer (.destroy)) 200))
         #())
       [open?])
 
@@ -50,8 +59,11 @@
       (fn []
         (let [^js w (.create js/window.WaveSurfer
                       #js {:container (rum/deref *wave-ref)
-                           :waveColor "rgb(200, 0, 200)"
-                           :progressColor "rgb(100, 0, 100)"})
+                           :waveColor "rgb(167, 167, 167)"
+                           :progressColor "rgb(10, 10, 10)"
+                           :barWidth 2
+                           :barRadius 6
+                           })
               ^js r (.registerPlugin w
                       (.create js/window.WaveSurfer.Record
                         #js {:renderRecordedAudio false
@@ -67,23 +79,35 @@
                                          (set-status-pulse! (js/Date.now)))]
             (doto r
               (.on "record-end" (fn [^js blob]
-                                  (js/console.log "===>> record stopped!" blob)
+                                  (js/console.log "===>> record saved (stopped)!" blob)
                                   (handle-status-changed!)))
-              (.on "record-progress" (fn [time]
-                                       (js/console.log "===>> record progressing:" time)))
+              (.on "record-progress" (gfun/throttle
+                                       (fn [time]
+                                         (try
+                                           (let [t (ms-to-time-format time)]
+                                             (set! (. (rum/deref *timer-ref) -textContent) t))
+                                           (catch js/Error e
+                                             (js/console.warn "WARN: bad progress time:" e))))
+                                       800))
               (.on "record-start" handle-status-changed!)
               (.on "record-pause" handle-status-changed!)
               (.on "record-resume" handle-status-changed!)))
-          #(js/console.log "==>> audio recorder aux: Destroy")))
+          #()))
       [])
 
     [:div.app-audio-recorder-inner
-     [:h1.text-3xl.font-bold.p-8
-      "REC 🎙️"]
-     (silkhq/card-sheet-description
-       [:div.p-8 {:style {:min-height 180}}
-        [:p.timer "00 : 00"]
-        [:div.wave.border {:ref *wave-ref}]])
+     [:div.flex.items-center.justify-between
+      [:h1.text-xl.p-6.bold "REC 🎙️"]
+      (shui/button
+        {:variant :icon
+         :class "mr-2 opacity-60"
+         :on-click #(set-open? false)}
+        (shui/tabler-icon "x" {:size 20}))]
+
+     [:div.px-6
+      [:p.timer {:ref *timer-ref} "00 : 00"]
+      [:div.wave.border.rounded {:ref *wave-ref}]]
+
      [:p.p-6.flex.justify-between
       [:span.flex.justify-center
        [:select
@@ -93,7 +117,8 @@
         (for [d mic-devices]
           [:option {:value (:value d)}
            (str "Mic: " (if (string/blank? (:text d)) "Default" (:text d)))])]]
-      [:span
+
+      [:span.flex.items-center.gap-1
        (let [handle-record!
              (fn []
                (cond
@@ -109,19 +134,26 @@
                    (js/console.log "==>> deviceID: " micid)
                    (.startRecording recorder #js {:deviceId micid}))
                  ))]
-         (if recording?
-           (shui/button {:variant :outline
-                         :on-click handle-record!}
-             "🎙️ Recording ...")
-           (shui/button {:on-click handle-record!}
-             (if (true? paused?)
-               "🔁 Resume"
-               "▶️ Record")
-             )))]]
-     [:p.p-8.flex.justify-end
-      (shui/button {:variant :outline
-                    :on-click #(set-open? false)} "close")]
-     ]))
+
+         [:<>
+          (when (true? paused?)
+            (shui/button {:variant :outline
+                          :on-click #(.stopRecording recorder)}
+              "✅ Save"))
+
+          (if recording?
+            (shui/button {:variant :outline
+                          :on-click handle-record!}
+              "🎙️ Recording ...")
+            (shui/button
+              {:class (if (true? paused?)
+                        "primary-yellow"
+                        "primary-green")
+               :on-click handle-record!}
+              (if (true? paused?)
+                "🔁 Resume"
+                "▶️ Record")
+              ))])]]]))
 
 (rum/defc card
   []

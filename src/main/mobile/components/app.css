@@ -530,6 +530,10 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   overflow: hidden;
 }
 
+.app-audio-recorder-inner {
+  @apply relative;
+}
+
 .left-sidebar-inner {
   @apply -mx-4;
 
