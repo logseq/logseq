@@ -135,23 +135,24 @@
     (page-handler/on-chosen-handler input id pos format)))
 
 (defn- matched-pages-with-new-page [partial-matched-pages db-tag? q]
-  (if (or
-       (db/page-exists? q (if db-tag?
-                            #{:logseq.class/Tag}
-                            ;; Page existence here should be the same as entity-util/page?.
-                            ;; Don't show 'New page' if a page has any of these tags
-                            db-class/page-classes))
-       (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
-    partial-matched-pages
-    (if db-tag?
-      (concat
+  (let [ids (db/page-exists? q (if db-tag?
+                                 #{:logseq.class/Tag}
+                                 ;; Page existence here should be the same as entity-util/page?.
+                                 ;; Don't show 'New page' if a page has any of these tags
+                                 db-class/page-classes))
+        page-exists? (some (fn [id] (nil? (:block/parent (db/entity id)))) ids)]
+    (if (or page-exists?
+            (and db-tag? (some ldb/class? (:block/_alias (db/get-page q)))))
+      partial-matched-pages
+      (if db-tag?
+        (concat
        ;; Don't show 'New tag' for an internal page because it already shows 'Convert ...'
-       (when-not (let [entity (db/get-page q)]
-                   (and (ldb/internal-page? entity) (= (:block/title entity) q)))
-         [{:block/title (str (t :new-tag) " " q)}])
-       partial-matched-pages)
-      (cons {:block/title (str (t :new-page) " " q)}
-            partial-matched-pages))))
+         (when-not (let [entity (db/get-page q)]
+                     (and (ldb/internal-page? entity) (= (:block/title entity) q)))
+           [{:block/title (str (t :new-tag) " " q)}])
+         partial-matched-pages)
+        (cons {:block/title (str (t :new-page) " " q)}
+              partial-matched-pages)))))
 
 (defn- search-pages
   [q db-tag? db-based? set-matched-pages!]
@@ -253,7 +254,9 @@
                                                                     "Search for a node")]
          :class "black"})
 
-       (when (and db-based? db-tag? (not (string/blank? q)))
+       (when (and db-based? db-tag?
+                  (not (string/blank? q))
+                  (not= "page" (string/lower-case q)))
          [:p.px-1.opacity-50.text-sm
           [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
           [:span " to display this tag inline instead of at the end of this node."]])])))

@@ -1,5 +1,5 @@
 (ns frontend.modules.instrumentation.posthog
-  (:require ["posthog-js$default" :as posthog]
+  (:require ["posthog-js" :as posthog]
             [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]

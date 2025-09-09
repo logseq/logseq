@@ -267,6 +267,7 @@
          [:t-before :int]]
         [:map
          [:req-id :string]
+         [:schema-version db-schema/major-schema-version-string-schema]
          [:action :string]
          [:profile {:optional true} :boolean]
          [:s3-key :string]]]]

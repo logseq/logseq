@@ -171,8 +171,7 @@
                :build-existing-tx? true})
         block (db-test/find-block-by-content @conn "block")
         block-invalid-title (db-test/find-block-by-content @conn #"invalid title")
-        block-invalid-location (db-test/find-block-by-content @conn #"invalid location")
-        block-invalid-in-class (db-test/find-block-by-content @conn "class block")]
+        block-invalid-location (db-test/find-block-by-content @conn #"invalid location")]
 
     (is (thrown-with-msg?
          js/Error
@@ -217,13 +216,7 @@
          js/Error
          #"Can't convert this block to page"
          (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-location)] :logseq.class/Page))
-        "Block with invalid location can't be tagged with #Page")
-
-    (is (thrown-with-msg?
-         js/Error
-         #"Can't convert this block to page"
-         (outliner-validate/validate-tags-property @conn [(:db/id block-invalid-in-class)] :logseq.class/Page))
-        "Block in class or property can't be tagged with #Page")))
+        "Block with invalid location can't be tagged with #Page")))
 
 (deftest validate-tags-property-deletion
   (let [conn (db-test/create-conn-with-blocks

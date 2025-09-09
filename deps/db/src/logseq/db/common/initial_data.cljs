@@ -141,8 +141,7 @@
             identity
             (fn [e]
               (keep (fn [[k v]]
-                      (when (and (not (contains? #{:block/path-refs} k))
-                                 (or (empty? properties) (properties k)))
+                      (when (or (empty? properties) (properties k))
                         (let [v' (cond
                                    (= k :block/parent)
                                    (:db/id v)
@@ -216,7 +215,8 @@
                   nil))
         block-refs-count? (some #{:block.temp/refs-count} properties)]
     (when block
-      ;; (prn :debug :get-block (:db/id block) (:block/title block) :children? children?)
+      ;; (prn :debug :get-block (:db/id block) (:block/title block) :children? children?
+      ;;      :include-collapsed-children? include-collapsed-children?)
       (let [children (when children?
                        (let [children-blocks (get-block-children db (:block/uuid block) {:include-collapsed-children? include-collapsed-children?})
                              large-page? (>= (count children-blocks) 100)
@@ -243,7 +243,13 @@
                      block-refs-count?
                      (assoc :block.temp/refs-count (get-block-refs-count db (:db/id block)))
                      true
-                     (assoc :block.temp/load-status (if (and children? (empty? properties)) :full :self)))]
+                     (assoc :block.temp/load-status (cond
+                                                      (and children? include-collapsed-children? (empty? properties))
+                                                      :full
+                                                      (and children? (empty? properties))
+                                                      :children
+                                                      :else
+                                                      :self)))]
         (cond->
          {:block block'}
           children?

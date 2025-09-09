@@ -289,14 +289,7 @@
                               {:type :notification
                                :payload {:message message
                                          :type :error
-                                         :block (into {} block)}}))))
-          ;; Guard against classes and properties becoming namespace parents
-          (when (or (entity-util/class? (:block/page block)) (entity-util/property? (:block/page block)))
-            (throw (ex-info "Can't convert this block to page when block is in a property or tag."
-                            {:type :notification
-                             :payload {:message "Can't convert this block to page when block is in a property or tag."
-                                       :type :error
-                                       :block (into {} block)}}))))))))
+                                         :block (into {} block)}})))))))))
 
 (defn validate-tags-property
   "Validates adding a property value to :block/tags for given blocks"

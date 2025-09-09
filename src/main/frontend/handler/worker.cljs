@@ -1,6 +1,7 @@
 (ns frontend.handler.worker
   "Handle messages received from the webworkers"
   (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -49,6 +50,10 @@
 (defmethod handle :export-current-db [_]
   (state/pub-event! [:db/export-sqlite]))
 
+(defmethod handle :record-worker-client-id [_ _worker data]
+  (when-let [client-id (:client-id data)]
+    (reset! state/*db-worker-client-id client-id)))
+
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
 
@@ -86,4 +91,5 @@
                   (if (string? data)
                     (let [[e payload] (ldb/read-transit-str data)]
                       (handle (keyword e) wrapped-worker payload))
-                    (js/console.error "Worker received invalid data from worker: " data)))))))))
+                    (when-not (string/starts-with? (.-type data) "MP_")
+                      (js/console.error "Worker received invalid data from worker: " data))))))))))

@@ -120,13 +120,17 @@
 
      (shui/dropdown-menu-item
       {:key "Expand all"
-       :on-click editor-handler/expand-all-selection!}
+       :on-pointer-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/expand-all-selection!))}
       (t :editor/expand-block-children)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)))
 
      (shui/dropdown-menu-item
       {:key "Collapse all"
-       :on-click editor-handler/collapse-all-selection!}
+       :on-pointer-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/collapse-all-selection!))}
       (t :editor/collapse-block-children)
       (shui/dropdown-menu-shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)))]))
 

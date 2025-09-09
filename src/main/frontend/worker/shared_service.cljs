@@ -353,7 +353,8 @@
                                                                              :method method
                                                                              :args args})))))))
                                      (log/error :invalid-invoke-method method)))})
-     :status status}))
+     :status status
+     :client-id client-id}))
 
 (defn broadcast-to-clients!
   [type' data]
