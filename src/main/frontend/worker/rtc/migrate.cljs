@@ -1,7 +1,6 @@
 (ns frontend.worker.rtc.migrate
   "migrate server data according to schema-version and client's migration-updates"
-  (:require [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.worker.rtc.gen-client-op :as gen-client-op]))
 
 (def apply-conj (partial apply conj))
