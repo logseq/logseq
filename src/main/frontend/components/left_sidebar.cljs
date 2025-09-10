@@ -123,7 +123,7 @@
                           :style {:display "ruby"}}
         (cond
           (not (db/page? page))
-          (block/inline-text :markdown (:block/title page))
+          (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))
           untitled? (t :untitled)
           :else (let [title' (pdf-utils/fix-local-asset-pagename title)
                       parent (:block/parent page)]
