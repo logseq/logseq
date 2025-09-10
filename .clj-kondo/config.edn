@@ -219,6 +219,7 @@
              logseq.outliner.op outliner-op
              logseq.outliner.page outliner-page
              logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.tree otree
              logseq.outliner.validate outliner-validate
              logseq.shui.popup.core shui-popup
              logseq.shui.ui shui
