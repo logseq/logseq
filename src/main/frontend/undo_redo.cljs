@@ -179,8 +179,8 @@
          [op e a v])))
    datoms))
 
-(defn- moved-block-or-target-deleted?
-  [conn e->datoms e moved-blocks redo?]
+(defn- block-moved-and-target-deleted?
+  [conn e->datoms e moved-blocks tx-data]
   (let [datoms (get e->datoms e)]
     (and (moved-blocks e)
          (let [b (d/entity @conn e)
@@ -188,16 +188,17 @@
                move-datoms (filter (fn [d] (contains? #{:block/parent} (:a d))) datoms)]
            (when cur-parent
              (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
-                   after-parent (some (fn [d] (when (and (= :block/parent (:a d)) (:added d)) (:v d))) move-datoms)]
-               (and before-parent after-parent ; parent changed
-                    (if redo?
-                      (or (not= cur-parent before-parent)
-                          (nil? (d/entity @conn after-parent)))
-                      (or (not= cur-parent after-parent)
-                          (nil? (d/entity @conn before-parent)))))))))))
+                   not-exists-in-current-db (nil? (d/entity @conn before-parent))
+                   ;; reverse tx-data will add parent before back
+                   removed-before-parent (some (fn [d] (and (= :block/uuid (:a d))
+                                                            (= before-parent (:e d))
+                                                            (not (:added d)))) tx-data)]
+               (and before-parent
+                    not-exists-in-current-db
+                    (not removed-before-parent))))))))
 
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} _tx-meta]
+  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
   (try
     (let [redo? (not undo?)
           e->datoms (->> (if redo? tx-data (reverse tx-data))
@@ -218,16 +219,18 @@
                                          :undo? undo?})))
 
               ;; new children blocks have been added
-              (or (and (contains? retracted-ids e) redo?
-                       (other-children-exist? entity retracted-ids)) ; redo delete-blocks
-                  (and (contains? added-ids e) undo?                 ; undo insert-blocks
-                       (other-children-exist? entity added-ids)))
+              (and
+               (not (:local-tx? tx-meta))
+               (or (and (contains? retracted-ids e) redo?
+                        (other-children-exist? entity retracted-ids)) ; redo delete-blocks
+                   (and (contains? added-ids e) undo?                 ; undo insert-blocks
+                        (other-children-exist? entity added-ids))))
               (throw (ex-info "Children still exists"
                               (merge op {:error :block-children-exists
                                          :undo? undo?})))
 
               ;; block has been moved or target got deleted by another client
-              (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
+              (block-moved-and-target-deleted? conn e->datoms e moved-blocks tx-data)
               (throw (ex-info "This block has been moved or its target has been deleted"
                               (merge op {:error :block-moved-or-target-deleted
                                          :undo? undo?})))
@@ -238,7 +241,6 @@
                        (and (contains? added-ids e) undo?)))   ; undo insert-blocks
               [[:db/retractEntity e]]
 
-              ;; reverse datoms
               :else
               (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))))
         e->datoms)
