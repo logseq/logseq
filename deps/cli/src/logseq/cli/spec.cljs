@@ -53,6 +53,8 @@
 (def mcp-server
   {:api-server-token {:alias :a
                       :desc "API server token to connect to current graph"}
+   :graph {:alias :g
+           :desc "Local graph to use with MCP server"}
    :debug-tool {:alias :t
                 :coerce :keyword
                 :desc "Debug mcp tool with direct invocation"}})
