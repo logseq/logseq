@@ -404,10 +404,14 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (get&remove-all-rename-db-ident-ops* conn)))
 
-(defn get-unpushed-block-ops-count
+(defn get-unpushed-ops-count
+  "except asset-ops"
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (count (get-all-block-ops* @conn))))
+    (+
+     (count (get-all-block-ops* @conn))
+     (count (get-all-rename-db-ident-ops* @conn))
+     (count (get-all-update-kv-value-ops* @conn)))))
 
 (defn rtc-db-graph?
   "Is db-graph & RTC enabled"
@@ -419,19 +423,17 @@
 (defn create-pending-block-ops-count-flow
   [repo]
   (when-let [conn (worker-state/get-client-ops-conn repo)]
-    (letfn [(datom-count [db]
-              (count (get-all-block-ops* db)))]
-      (let [db-updated-flow
-            (m/observe
-             (fn ctor [emit!]
-               (d/listen! conn :create-pending-ops-count-flow #(emit! true))
-               (emit! true)
-               (fn dtor []
-                 (d/unlisten! conn :create-pending-ops-count-flow))))]
-        (m/ap
-          (let [_ (m/?> (c.m/throttle 100 db-updated-flow))]
+    (let [db-updated-flow
+          (m/observe
+           (fn ctor [emit!]
+             (d/listen! conn :create-pending-ops-count-flow #(emit! true))
+             (emit! true)
+             (fn dtor []
+               (d/unlisten! conn :create-pending-ops-count-flow))))]
+      (m/ap
+        (let [_ (m/?> (c.m/throttle 200 db-updated-flow))]
             ;; throttle db-updated-flow, because `datom-count` is a time-consuming fn
-            (datom-count @conn)))))))
+          (get-unpushed-ops-count repo))))))
 
 ;;; asset ops
 (defn add-asset-ops
