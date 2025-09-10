@@ -11,6 +11,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -312,7 +313,9 @@
              block-uuid (:block/uuid ent)]
          (when block-uuid
            {:db-ident-or-block-uuid block-uuid
-            :new-db-ident (db-class/create-user-class-ident-from-name db title)})))
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      class-ids)))
 
 (defn fix-using-properties-as-tags
@@ -352,7 +355,9 @@
              block-uuid (:block/uuid ent)]
          (when block-uuid
            {:db-ident-or-block-uuid block-uuid
-            :new-db-ident (db-class/create-user-class-ident-from-name db title)})))
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      property-ids)))
 
 (defn remove-block-order-for-tags
