@@ -295,7 +295,7 @@
               (icon "info-circle" {:class "text-indigo-500" :size "20"}))
             status)]
       [:div.ui__notifications-content
-       {:class (str "notification-" (name (or status :info)))
+       {:class (str "notification-" (name (or (when (keyword? status) status) :info)))
         :style
         (when (or (= state "exiting")
                   (= state "exited"))
