@@ -49,3 +49,10 @@
 (def append
   {:api-server-token {:alias :a
                       :desc "API server token to modify current graph"}})
+
+(def mcp-server
+  {:api-server-token {:alias :a
+                      :desc "API server token to connect to current graph"}
+   :debug-tool {:alias :t
+                :coerce :keyword
+                :desc "Debug mcp tool with direct invocation"}})
