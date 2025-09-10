@@ -1162,7 +1162,10 @@
                  {:data-ref (str uuid-or-title)}
                  (when (and brackets? (not blank-title?))
                    [:span.text-gray-500.bracket page-ref/left-brackets])
-                 (when (and (config/db-based-graph?) (ldb/class-instance? (db/entity :logseq.class/Task) block))
+                 (when (and (config/db-based-graph?)
+                            (or (ldb/class-instance? (db/entity :logseq.class/Task) block)
+                                (:logseq.property/status block)
+                                (:logseq.property/priority block)))
                    [:div.inline-block
                     {:style {:margin-right 1
                              :margin-top -2
