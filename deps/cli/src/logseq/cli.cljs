@@ -100,6 +100,7 @@
     :args->opts [:args] :require [:args] :coerce {:args []}
     :spec cli-spec/append}
    {:cmds ["mcp-server"] :desc "Run a MCP server"
+    :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph."
     :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
     :spec cli-spec/mcp-server}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
