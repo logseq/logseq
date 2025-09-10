@@ -87,6 +87,10 @@ html {
         background: var(--ls-secondary-background-color);
       }
 
+      .Card-content {
+        background: var(--ls-primary-background-color);
+      }
+
       .BottomSheet-handle {
         @apply bg-gray-03;
       }

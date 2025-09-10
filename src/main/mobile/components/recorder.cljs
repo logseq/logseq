@@ -4,6 +4,7 @@
             [rum.core :as rum]
             [goog.functions :as gfun]
             [frontend.rum :as r]
+            [frontend.state :as state]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.silkhq :as silkhq]))
@@ -12,10 +13,13 @@
 (defn set-open? [v?] (reset! *open? v?))
 
 (defn ms-to-time-format [ms]
-  (let [seconds (quot ms 1000)
-        minutes (quot seconds 60)
-        secs (mod seconds 60)]
-    (str (.padStart (str minutes) 2 "0") ":" (.padStart (str secs) 2 "0"))))
+  (let [total-seconds (quot ms 1000)
+        minutes (quot total-seconds 60)
+        seconds (mod total-seconds 60)
+        centiseconds (quot (mod ms 1000) 10)]
+    (str (.padStart (str minutes) 2 "0") ":"
+      (.padStart (str seconds) 2 "0") "."
+      (.padStart (str centiseconds) 2 "0"))))
 
 (rum/defc audio-recorder-aux
   [{:keys [open?]}]
@@ -57,10 +61,11 @@
 
     (hooks/use-effect!
       (fn []
-        (let [^js w (.create js/window.WaveSurfer
+        (let [dark? (= "dark" (state/sub :ui/theme))
+              ^js w (.create js/window.WaveSurfer
                       #js {:container (rum/deref *wave-ref)
                            :waveColor "rgb(167, 167, 167)"
-                           :progressColor "rgb(10, 10, 10)"
+                           :progressColor (if dark? "rgb(219, 216, 216)" "rgb(10, 10, 10)")
                            :barWidth 2
                            :barRadius 6
                            })
@@ -88,7 +93,7 @@
                                              (set! (. (rum/deref *timer-ref) -textContent) t))
                                            (catch js/Error e
                                              (js/console.warn "WARN: bad progress time:" e))))
-                                       800))
+                                       50))
               (.on "record-start" handle-status-changed!)
               (.on "record-pause" handle-status-changed!)
               (.on "record-resume" handle-status-changed!)))
@@ -105,55 +110,53 @@
         (shui/tabler-icon "x" {:size 20}))]
 
      [:div.px-6
-      [:p.timer {:ref *timer-ref} "00 : 00"]
-      [:div.wave.border.rounded {:ref *wave-ref}]]
-
-     [:p.p-6.flex.justify-between
-      [:span.flex.justify-center
-       [:select
+      [:div.flex.justify-between.items-center
+       [:span.timer {:ref *timer-ref} "00:00"]
+       [:select.opacity-60
         {:name "mic-select"
-         :style {:max-width "120px"}
+         :style {:max-width "220px" :border "none"}
          :ref *micid-ref}
         (for [d mic-devices]
           [:option {:value (:value d)}
            (str "Mic: " (if (string/blank? (:text d)) "Default" (:text d)))])]]
+      [:div.wave.border.rounded {:ref *wave-ref}]]
 
-      [:span.flex.items-center.gap-1
-       (let [handle-record!
-             (fn []
-               (cond
-                 (true? paused?)
-                 (.resumeRecording recorder)
+     [:div.p-6.flex.justify-between
+      (let [handle-record!
+            (fn []
+              (cond
+                (true? paused?)
+                (.resumeRecording recorder)
 
-                 (true? recording?)
-                 (.pauseRecording recorder)
+                (true? recording?)
+                (.pauseRecording recorder)
 
-                 ;; start recording
-                 :else
-                 (let [micid (some-> (rum/deref *micid-ref) (.-value))]
-                   (js/console.log "==>> deviceID: " micid)
-                   (.startRecording recorder #js {:deviceId micid}))
-                 ))]
+                ;; start recording
+                :else
+                (let [micid (some-> (rum/deref *micid-ref) (.-value))]
+                  (.startRecording recorder #js {:deviceId micid}))
+                ))]
 
-         [:<>
+        [:<>
+         [:span.flex.justify-center
           (when (true? paused?)
             (shui/button {:variant :outline
+                          :class "border-green-500"
                           :on-click #(.stopRecording recorder)}
-              "✅ Save"))
+              "✅ Save"))]
 
+         [:span.flex.items-center.gap-1
           (if recording?
             (shui/button {:variant :outline
                           :on-click handle-record!}
               "🎙️ Recording ...")
             (shui/button
-              {:class (if (true? paused?)
-                        "primary-yellow"
-                        "primary-green")
+              {:variant :outline
                :on-click handle-record!}
               (if (true? paused?)
                 "🔁 Resume"
-                "▶️ Record")
-              ))])]]]))
+                "▶️ Start")
+              ))]])]]))
 
 (rum/defc card
   []
