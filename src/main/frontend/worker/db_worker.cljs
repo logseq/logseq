@@ -533,7 +533,7 @@
       (catch :default e
         (prn :debug :error)
         (js/console.error e)
-        (prn :debug :tx-data @conn tx-data)))))
+        (prn :debug :tx-meta tx-meta :tx-data tx-data)))))
 
 (def-thread-api :thread-api/get-initial-data
   [repo]
