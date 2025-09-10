@@ -1,6 +1,6 @@
 (ns frontend.worker.rtc.migrate-test
   (:require ["fs" :as fs-node]
-            [cljs.pprint :as pp]
+            ;; [cljs.pprint :as pp]
             [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
@@ -26,13 +26,13 @@
           conn (d/conn-from-db db)
           migration-result (db-migrate/migrate conn {:target-version "65.11"})
           client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
-      (prn :migration-result "================================================================")
-      (pp/pprint (merge (select-keys migration-result [:from-version :to-version])
-                        {:upgrade-result-coll
-                         (map (fn [r] [(:tx-data r) (select-keys (:migrate-updates r) [:rename-db-idents])])
-                              (:upgrade-result-coll migration-result))}))
-      (prn :client-ops "================================================================")
-      (pp/pprint client-ops)
+      ;; (prn :migration-result "================================================================")
+      ;; (pp/pprint (merge (select-keys migration-result [:from-version :to-version])
+      ;;                   {:upgrade-result-coll
+      ;;                    (map (fn [r] [(:tx-data r) (select-keys (:migrate-updates r) [:rename-db-idents])])
+      ;;                         (:upgrade-result-coll migration-result))}))
+      ;; (prn :client-ops "================================================================")
+      ;; (pp/pprint client-ops)
       (testing "check schema-version"
         (let [last-op (last client-ops)
               schema-version-update? (= :update-kv-value (first last-op))]
