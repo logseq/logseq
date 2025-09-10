@@ -99,6 +99,9 @@
     :fn (lazy-load-fn 'logseq.cli.commands.append/append)
     :args->opts [:args] :require [:args] :coerce {:args []}
     :spec cli-spec/append}
+   {:cmds ["mcp-server"] :desc "Run a MCP server"
+    :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
+    :spec cli-spec/mcp-server}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []

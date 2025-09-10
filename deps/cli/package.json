@@ -11,10 +11,12 @@
   "license": "MIT",
   "dependencies": {
     "@logseq/nbb-logseq": "github:logseq/nbb-logseq#feat-db-v28",
+    "@modelcontextprotocol/sdk": "^1.17.5",
     "better-sqlite3": "~11.10.0",
     "fs-extra": "^11.3.0",
     "jszip": "3.8.0",
-    "mldoc": "^1.5.9"
+    "mldoc": "^1.5.9",
+    "zod": "^4.1.5"
   },
   "repository": {
     "type": "git",
