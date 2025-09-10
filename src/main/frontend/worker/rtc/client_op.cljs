@@ -249,14 +249,13 @@
 (defn generate-rename-db-ident-ops-tx-data
   [ops]
   (let [op-type :rename-db-ident
-        sorted-ops (sort-by second ops)
         db-ident-or-block-uuid->op
         (reduce
          (fn [r op]
            (let [[_op-type _t value] op
                  db-ident-or-block-uuid (:db-ident-or-block-uuid value)]
              (assoc r db-ident-or-block-uuid op)))
-         {} sorted-ops)]
+         {} ops)]
     (mapcat
      (fn [[db-ident-or-block-uuid op]]
        (let [tmpid (str db-ident-or-block-uuid "-rename-db-ident")]
