@@ -54,7 +54,7 @@
     "@electron-forge/maker-squirrel": "^7.8.3",
     "@electron-forge/maker-zip": "^7.8.3",
     "@electron/rebuild": "4.0.1",
-    "electron": "37.2.6",
+    "electron": "37.3.1",
     "electron-builder": "26.0.12",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
     "electron-devtools-installer": "4.0.0"
