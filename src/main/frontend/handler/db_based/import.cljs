@@ -2,6 +2,7 @@
   "Handles DB graph imports"
   (:require [cljs.pprint :as pprint]
             [clojure.edn :as edn]
+            [datascript.core :as d]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
@@ -38,7 +39,8 @@
 (defn import-from-debug-transit!
   [bare-graph-name raw finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)
-        datoms (ldb/read-transit-str raw)]
+        db-or-datoms (ldb/read-transit-str raw)
+        datoms (if (d/db? db-or-datoms) (vec (d/datoms db-or-datoms :eavt)) db-or-datoms)]
     (p/do!
      (persist-db/<new graph {:import-type :debug-transit
                              :datoms datoms})

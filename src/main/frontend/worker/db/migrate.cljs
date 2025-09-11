@@ -5,17 +5,18 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker-common.util :as worker-util]
+            [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-;; TODO: fixes/rollback
 ;; Frontend migrations
 ;; ===================
 
@@ -156,6 +157,7 @@
                {old-p new-p}
                {:replace-fn (fn [id prop-value]
                               (let [page (d/entity db id)
+                                    ;; bad impl, it's not just simple db/ident renaming
                                     new-p' (if (ldb/class? page) new-p :block/parent)]
                                 [[:db/retract id old-p]
                                  [:db/add id new-p' prop-value]]))})
@@ -289,11 +291,31 @@
                    db)]
     (mapcat
      (fn [id]
-       (let [title (:block/title (d/entity db id))]
-         [[:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]
-          [:db/add id :logseq.property.class/extends :logseq.class/Root]
-          [:db/retract id :block/tags :logseq.class/Page]
-          [:db/retract id :block/refs :logseq.class/Page]]))
+       [[:db/add id :logseq.property.class/extends :logseq.class/Root]
+        [:db/retract id :block/tags :logseq.class/Page]
+        [:db/retract id :block/refs :logseq.class/Page]
+        [:db/retract id :block/path-refs :logseq.class/Page]])
+     class-ids)))
+
+(defn add-missing-db-ident-for-tags2
+  [db]
+  (let [class-ids
+        (d/q
+         '[:find [?b ...]
+           :where
+           [?b :block/tags :logseq.class/Tag]
+           [(missing? $ ?b :db/ident)]]
+         db)]
+    (keep
+     (fn [id]
+       (let [ent (d/entity db id)
+             title (:block/title ent)
+             block-uuid (:block/uuid ent)]
+         (when block-uuid
+           {:db-ident-or-block-uuid block-uuid
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      class-ids)))
 
 (defn fix-using-properties-as-tags
@@ -310,11 +332,32 @@
                       (map first))]
     (mapcat
      (fn [id]
-       (let [property (d/entity db id)
-             title (:block/title property)]
-         (into (retract-property-attributes id)
-               [[:db/retract id :logseq.property/parent]
-                [:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]])))
+       (into (retract-property-attributes id)
+             [[:db/retract id :logseq.property/parent]]))
+     property-ids)))
+
+(defn fix-using-properties-as-tags2
+  [db]
+  (let [property-ids
+        (->>
+         (d/q
+          '[:find ?b ?i
+            :where
+            [?b :block/tags :logseq.class/Tag]
+            [?b :db/ident ?i]]
+          db)
+         (filter (fn [[_ ident]] (= "user.property" (namespace ident))))
+         (map first))]
+    (keep
+     (fn [id]
+       (let [ent (d/entity db id)
+             title (:block/title ent)
+             block-uuid (:block/uuid ent)]
+         (when block-uuid
+           {:db-ident-or-block-uuid block-uuid
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      property-ids)))
 
 (defn remove-block-order-for-tags
@@ -364,12 +407,12 @@
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
-   and :fix."
+   :rename-db-idents and :fix."
   [["65.0" {:fix separate-classes-and-properties}]
    ["65.1" {:fix fix-rename-parent-to-extends}]
    ["65.2" {:fix fix-tag-properties}]
-   ["65.3" {:fix add-missing-db-ident-for-tags}]
-   ["65.4" {:fix fix-using-properties-as-tags}]
+   ["65.3" {:rename-db-idents add-missing-db-ident-for-tags2 :fix add-missing-db-ident-for-tags}]
+   ["65.4" {:rename-db-idents fix-using-properties-as-tags2 :fix fix-using-properties-as-tags}]
    ["65.5" {:fix remove-block-order-for-tags}]
    ["65.6" {:fix update-extends-to-cardinality-many}]
    ["65.7" {:fix add-quick-add-page}]
@@ -388,6 +431,7 @@
         (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))))
 
 (defn ensure-built-in-data-exists!
+  "Return tx-data"
   [conn]
   (let [*uuids (atom {})
         data (->> (sqlite-create-graph/build-db-initial-data "")
@@ -440,12 +484,16 @@
                    [:block/uuid (@*uuids (second f))]
                    :else
                    f))
-               data)]
-    (d/transact! conn data' {:fix-db? true
-                             :db-migrate? true})))
+               data)
+        r (d/transact! conn data' {:fix-db? true
+                                   :db-migrate? true})]
+    (assoc r :migrate-updates
+           ;; fake it as a normal :fix type migration
+           {:fix (constantly :ensure-built-in-data-exists!)})))
 
 (defn- upgrade-version!
-  [conn db-based? version {:keys [properties classes fix]}]
+  "Return tx-data"
+  [conn db-based? version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -467,23 +515,31 @@
         new-class-idents (keep (fn [class]
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
+        [rename-db-idents-tx-data rename-db-idents-coll]
+        (when rename-db-idents
+          (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents))
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
+        tx-data (if db-based?
+                  (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
+                  fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
-                  tx-data)]
-    (ldb/transact! conn tx-data' {:db-migrate? true})
-    (println "DB schema migrated to" version)))
+                  tx-data)
+        r (ldb/transact! conn tx-data' {:db-migrate? true})
+        migrate-updates (cond-> migrate-updates
+                          rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
+    (println "DB schema migrated to" version)
+    (assoc r :migrate-updates migrate-updates)))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
-  [conn]
+  [conn & {:keys [target-version] :or {target-version db-schema/version}}]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
-          compare-result (db-schema/compare-schema-version db-schema/version version-in-db)]
+          compare-result (db-schema/compare-schema-version target-version version-in-db)]
       (cond
         (zero? compare-result)
         nil
@@ -497,14 +553,21 @@
                 updates (keep (fn [[v updates]]
                                 (let [v* (db-schema/parse-schema-version v)]
                                   (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
-                                             (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
+                                             (not (pos? (db-schema/compare-schema-version v* target-version))))
                                     [v updates])))
-                              schema-version->updates)]
+                              schema-version->updates)
+                result-ks [:tx-data :db-before :db-after :migrate-updates]
+                *upgrade-result-coll (atom [])]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
-              (upgrade-version! conn db-based? v m))
-            (ensure-built-in-data-exists! conn))
+              (let [r (upgrade-version! conn db-based? v m)]
+                (swap! *upgrade-result-coll conj (select-keys r result-ks))))
+            (swap! *upgrade-result-coll conj
+                   (select-keys (ensure-built-in-data-exists! conn) result-ks))
+            {:from-version version-in-db
+             :to-version target-version
+             :upgrade-result-coll @*upgrade-result-coll})
           (catch :default e
-            (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
+            (prn :error (str "DB migration failed to migrate to " target-version " from " version-in-db ":"))
             (js/console.error e)
             (throw e)))))))
