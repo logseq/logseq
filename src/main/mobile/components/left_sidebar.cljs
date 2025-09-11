@@ -9,7 +9,7 @@
   []
   [:div.w-full.app-silk-popup-content-inner.px-2
    [:div.left-sidebar-inner
-    [:div.sidebar-contents-container.mt-8
+    [:div.sidebar-contents-container.mt-11
      {:class "!gap-4"}
      (app-left-sidebar/sidebar-favorites)
      (app-left-sidebar/sidebar-recent-pages)]]])
