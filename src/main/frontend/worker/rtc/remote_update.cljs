@@ -618,8 +618,7 @@ so need to pull earlier remote-data from websocket."})
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
-                                             :gen-undo-ops? false
-                                             :frontend.worker.pipeline/skip-store-conn rtc-const/RTC-E2E-TEST}
+                                             :gen-undo-ops? false}
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))

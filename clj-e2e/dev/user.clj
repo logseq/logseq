@@ -74,6 +74,10 @@
   (->> (future (run-tests 'logseq.e2e.rtc-extra-test))
        (swap! *futures assoc :rtc-extra-test)))
 
+(defn run-rtc-extra-test2
+  [& _args]
+  (run-tests 'logseq.e2e.rtc-extra-test))
+
 (defn run-editor-basic-test
   []
   (->> (future (run-tests 'logseq.e2e.editor-basic-test))
