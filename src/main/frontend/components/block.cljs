@@ -2491,13 +2491,6 @@
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
 
-      (ldb/asset? block)
-      [:div.grid.grid-cols-1.justify-items-center.asset-block-wrap
-       (asset-cp config block)
-       (when (img-audio-video? block)
-         [:div.text-xs.opacity-60.mt-1
-          (text-block-title (dissoc config :raw-title?) block)])]
-
       (= :code node-display-type)
       [:div.flex.flex-1.w-full
        (src-cp (assoc config :code-block block) {:language (:logseq.property.code/lang block)})]
@@ -3082,8 +3075,16 @@
                                  (swap! *hide-block-refs? not)))}
                   [:span.text-sm block-refs-count'])]))
 
+(defn- edit-block-content
+  [config block edit-input-id]
+  (let [content (:block/title block)]
+    (editor-handler/clear-selection!)
+    (editor-handler/unhighlight-blocks!)
+    (state/set-editing! edit-input-id content block content {:db (db/get-db)
+                                                             :container-id (:container-id config)})))
+
 (rum/defc block-content-with-error
-  [config block edit-input-id block-id *show-query? editor-box]
+  [config block edit-input-id block-id *show-query? editor-box custom-block-content]
   (let [[editing? set-editing!] (hooks/use-state false)
         query (:logseq.property/query block)]
     (ui/catch-error
@@ -3106,12 +3107,8 @@
                         {:content (or (:block/title query)
                                       (:block/title block))
                          :section-attrs
-                         {:on-click #(let [content (:block/title block)]
-                                       (editor-handler/clear-selection!)
-                                       (editor-handler/unhighlight-blocks!)
-                                       (state/set-editing! edit-input-id content block "" {:db (db/get-db)
-                                                                                           :container-id (:container-id config)}))}})])
-     (block-content config block edit-input-id block-id *show-query?))))
+                         {:on-click #(edit-block-content config block edit-input-id)}})])
+     (or custom-block-content (block-content config block edit-input-id block-id *show-query?)))))
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   [state config {:block/keys [uuid] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? refs-count *hide-block-refs? *show-query?]}]
@@ -3138,34 +3135,36 @@
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.block-row.flex.flex-1.flex-row.gap-1.items-center
-       (let [content-cp [:div.flex.flex-1.w-full.block-content-wrapper
-                         {:style {:display "flex"}}
-                         (when-let [actions-cp (:page-title-actions-cp config)]
-                           (actions-cp block))
-                         (block-content-with-error config block edit-input-id block-id *show-query? editor-box)
+       (let [block-content-f (fn block-content-f
+                               [{:keys [custom-block-content]}]
+                               [:div.flex.flex-1.w-full.block-content-wrapper
+                                {:style {:display "flex"}}
+                                (when-let [actions-cp (:page-title-actions-cp config)]
+                                  (actions-cp block))
+                                (block-content-with-error config block edit-input-id block-id *show-query? editor-box custom-block-content)
 
-                         (when (and (not hide-block-refs-count?)
-                                    (not named?)
-                                    (not (:table-block-title? config)))
-                           [:div.flex.flex-row.items-center
-                            (when (and (:embed? config)
-                                       (:embed-parent config))
-                              [:a.opacity-70.hover:opacity-100.svg-small.inline
-                               {:on-pointer-down (fn [e]
-                                                   (util/stop e)
-                                                   (when-let [block (:embed-parent config)]
-                                                     (editor-handler/edit-block! block :max)))}
-                               svg/edit])
+                                (when (and (not hide-block-refs-count?)
+                                           (not named?)
+                                           (not (:table-block-title? config)))
+                                  [:div.flex.flex-row.items-center
+                                   (when (and (:embed? config)
+                                              (:embed-parent config))
+                                     [:a.opacity-70.hover:opacity-100.svg-small.inline
+                                      {:on-pointer-down (fn [e]
+                                                          (util/stop e)
+                                                          (when-let [block (:embed-parent config)]
+                                                            (editor-handler/edit-block! block :max)))}
+                                      svg/edit])
 
-                            (when block-reference-only?
-                              [:a.opacity-70.hover:opacity-100.svg-small.inline
-                               {:on-pointer-down (fn [e]
-                                                   (util/stop e)
-                                                   (editor-handler/edit-block! block :max))}
-                               svg/edit])])
+                                   (when block-reference-only?
+                                     [:a.opacity-70.hover:opacity-100.svg-small.inline
+                                      {:on-pointer-down (fn [e]
+                                                          (util/stop e)
+                                                          (editor-handler/edit-block! block :max))}
+                                      svg/edit])])
 
-                         (when-not (or (:table? config) (:property? config) (:page-title? config))
-                           (block-refs-count block refs-count *hide-block-refs?))]
+                                (when-not (or (:table? config) (:property? config) (:page-title? config))
+                                  (block-refs-count block refs-count *hide-block-refs?))])
              editor-cp [:div.editor-wrapper.flex.flex-1.w-full
                         {:id editor-id
                          :class (util/classnames [{:opacity-50 (boolean (or (ldb/built-in? block) (ldb/journal? block)))}])}
@@ -3176,10 +3175,20 @@
                                       :block-parent-id block-id
                                       :format format}
                                      edit-input-id
-                                     config))]]
-         (if (and editor-box edit? (not type-block-editor?))
-           editor-cp
-           content-cp))
+                                     config))]
+             show-editor? (and editor-box edit? (not type-block-editor?))]
+         (if (ldb/asset? block)
+           [:div.flex.flex-col.asset-block-wrap.w-full
+            (block-content-f {:custom-block-content
+                              [:div.flex.flex-1
+                               (asset-cp config block)]})
+            (if show-editor?
+              [:div.mt-1 editor-cp]
+              (when (img-audio-video? block)
+                [:div.text-xs.opacity-60.mt-1.cursor-text
+                 {:on-click #(edit-block-content config block edit-input-id)}
+                 (text-block-title (dissoc config :raw-title?) block)]))]
+           (if show-editor? editor-cp (block-content-f {}))))
 
        (when-not (:table-block-title? config)
          [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
