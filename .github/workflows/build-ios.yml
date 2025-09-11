@@ -25,7 +25,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
