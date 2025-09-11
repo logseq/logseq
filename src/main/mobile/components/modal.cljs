@@ -73,8 +73,7 @@
                                                        (> dx dy))
                                 is-horizontal-swipe (and (> dx swipe-trigger-distance)
                                                          (< dy max-vertical-drift))]
-                           ;; (prn :debug :blocking? @blocking-scroll? :horizontal-intent horizontal-intent)
-                          ;; as soon as we detect horizontal intent, block vertical scrolling
+                            ;; as soon as we detect horizontal intent, block vertical scrolling
                             (when (or @blocking-scroll? horizontal-intent)
                               (reset! blocking-scroll? true)
                               (.preventDefault e))       ;; <-- stops page from scrolling
@@ -102,18 +101,11 @@
 
 (rum/defc block-cp
   [block]
-  (let [*ref (hooks/use-ref nil)]
-    (hooks/use-effect!
-     (fn []
-       (when-let [ref (rum/deref *ref)]
-         (setup-sidebar-touch-swipe! ref)))
-     [(rum/deref *ref)])
-    [:div.app-silk-scroll-content-inner
-     {:ref *ref}
-     ;; block page content
-     [:div.block-modal-page-content
-      (mobile-ui/classic-app-container-wrap
-       (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]))
+  [:div.app-silk-scroll-content-inner
+   ;; block page content
+   [:div.block-modal-page-content
+    (mobile-ui/classic-app-container-wrap
+     (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
 
 (rum/defc block-sheet-topbar
   [block {:keys [favorited? set-favorited!]}]
@@ -169,6 +161,28 @@
                       :type :action-sheet}))}
        (shui/tabler-icon "dots-vertical" {:size 20}))]]))
 
+(rum/defc sheet-content
+  [block favorited? set-favorited!]
+  (let [*ref (hooks/use-ref nil)]
+    (hooks/use-effect!
+     (fn []
+       (when-let [ref (rum/deref *ref)]
+         (setup-sidebar-touch-swipe! ref)))
+     [(rum/deref *ref)])
+    (silkhq/depth-sheet-content
+     {:class "app-silk-depth-sheet-content"
+      :ref *ref}
+     (block-sheet-topbar block {:favorited? favorited?
+                                :set-favorited! set-favorited!})
+     (silkhq/scroll
+      {:as-child true}
+      (silkhq/scroll-view
+       {:class "app-silk-scroll-view"
+        :scrollGestureTrap {:yEnd true}}
+       (silkhq/scroll-content
+        {:class "app-silk-scroll-content"}
+        (block-cp block)))))))
+
 (rum/defc block-sheet
   [block]
   (let [block (when-let [id (:block/uuid block)]
@@ -201,19 +215,7 @@
         :onClickOutside (bean/->js {:dismiss false
                                     :stopOverlayPropagation false})}
        (silkhq/depth-sheet-backdrop)
-       (silkhq/depth-sheet-content
-        {:class "app-silk-depth-sheet-content"}
-        (block-sheet-topbar block {:favorited? favorited?
-                                   :set-favorited! set-favorited!})
-        (silkhq/scroll
-         {:as-child true}
-         (silkhq/scroll-view
-          {:class "app-silk-scroll-view"
-           :scrollGestureTrap {:yEnd true}}
-          (silkhq/scroll-content
-           {:class "app-silk-scroll-content"}
-
-           (block-cp block))))))))))
+       (sheet-content block favorited? set-favorited!))))))
 
 (rum/defc blocks-modal < rum/reactive
   []
