@@ -801,10 +801,11 @@
 (declare expand-block!)
 
 (defn delete-block-inner!
-  [repo {:keys [block-id value format config block-container]}]
+  [repo {:keys [block-id value format config block-container current-block next-block delete-concat?]}]
   (when block-id
     (when-let [block-e (db/entity [:block/uuid block-id])]
-      (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))]
+      (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
+            input-empty? (string/blank? (state/get-edit-content))]
         (cond
           (and (nil? prev-block)
                (nil? (:block/parent block-e)))
@@ -835,6 +836,27 @@
                        (not= (:db/id prev-block) (:db/id (:block/parent block)))
                        (db-model/hidden-page? (:block/page block))) ; embed page
                   nil
+
+                  (and concat-prev-block? input-empty? delete-concat?)
+                  (let [children (:block/_parent (db/entity (:db/id current-block)))]
+                    (p/do!
+                     (ui-outliner-tx/transact!
+                      transact-opts
+                      (when (= (:db/id current-block) (:db/id (:block/parent next-block)))
+                        (property-handler/set-block-properties!
+                         repo
+                         (:block/uuid next-block)
+                         {:block/parent (:db/id (:block/parent current-block))
+                          :block/order (:block/order current-block)}))
+
+                      (when (seq children)
+                        (outliner-op/move-blocks!
+                         (remove (fn [c] (= (:db/id c) (:db/id next-block))) children)
+                         next-block
+                         {:sibling? false}))
+
+                      (delete-block-aux! current-block))
+                     (edit-block! (db/entity (:db/id next-block)) 0)))
 
                   concat-prev-block?
                   (let [children (:block/_parent (db/entity (:db/id block)))]
@@ -2745,7 +2767,10 @@
                                 :value (:block/title next-block)
                                 :block-container (util/get-next-block-non-collapsed
                                                   (util/rec-get-node (state/get-input) "ls-block")
-                                                  {:exclude-property? true}))]
+                                                  {:exclude-property? true})
+                                :current-block current-block
+                                :next-block next-block
+                                :delete-concat? true)]
         (delete-block-inner! repo editor-state)))))
 
 (defn keydown-delete-handler

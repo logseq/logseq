@@ -131,11 +131,12 @@
   (let [cancel (task (or succ (constantly nil)) (or fail fail-case-default-handler))]
     #(cancel)))
 
-(defn run-task-throw
-  "Return the canceler"
-  [key' task & {:keys [succ]}]
-  (let [cancel (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %})))]
-    #(cancel)))
+(comment
+  (defn run-task-throw
+    "Return the canceler"
+    [key' task & {:keys [succ]}]
+    (let [cancel (task (or succ #(log/info :key key' :succ %)) #(throw (ex-info "task stopped" {:key key' :e %})))]
+      #(cancel))))
 
 (defonce ^:private *background-task-cancelers ; key -> canceler
   (volatile! {}))

@@ -4,9 +4,6 @@
             [logseq.db.frontend.kv-entity :as kv-entity]
             [logseq.db.frontend.property :as db-property]))
 
-(goog-define RTC-E2E-TEST* false)
-(def RTC-E2E-TEST RTC-E2E-TEST*)
-
 (defkeywords
   :rtc/ignore-attr-when-init-upload
   {:doc "keyword option for RTC. ignore this *attr* when initial uploading graph. Default false"}
