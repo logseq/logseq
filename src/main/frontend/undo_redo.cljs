@@ -197,6 +197,37 @@
                     not-exists-in-current-db
                     (not removed-before-parent))))))))
 
+(defn- transform-datoms
+  [conn tx-data]
+  (let [schema (:schema @conn)
+        ;; :block/uuid has been assigned to another entity, could be caused by remote RTC op
+        reassigned-uuid-maps (keep (fn [[e a v _tx _add]]
+                                     (when (and (= :block/uuid a)
+                                                (uuid? v))
+                                       (when-let [existing-entity (d/entity @conn [:block/uuid v])]
+                                         (when (not= e (:db/id existing-entity))
+                                           {:block-uuid v
+                                            :old-id e
+                                            :new-id (:db/id existing-entity)})))) tx-data)
+        old-ids (map :old-id reassigned-uuid-maps)
+        new-ids (map :new-id reassigned-uuid-maps)
+        reassigned-uuids (set (map :block-uuid reassigned-uuid-maps))
+        old-id->new-id (zipmap old-ids new-ids)
+        result (keep (fn [[e a v tx add?]]
+                       (let [ref? (= :db.type/ref (get-in schema [a :db/valueType]))]
+                         (when-not (and (contains? reassigned-uuids v) (= a :block/uuid))
+                           [(get old-id->new-id e e)
+                            a
+                            (if ref? (get old-id->new-id v v) v)
+                            tx add?]))) tx-data)]
+    (when (not= result tx-data)
+      (prn :debug
+           :reassigned-uuids reassigned-uuids
+           :old-id->new-id old-id->new-id
+           :before-tx-data tx-data
+           :after-tx-data result))
+    result))
+
 (defn get-reversed-datoms
   [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
   (try
@@ -205,7 +236,8 @@
                          (group-by :e))
           schema (:schema @conn)
           added-and-retracted-ids (set/union added-ids retracted-ids)
-          moved-blocks (get-moved-blocks e->datoms)]
+          moved-blocks (get-moved-blocks e->datoms)
+          tx-data (transform-datoms conn tx-data)]
       (->>
        (mapcat
         (fn [[e datoms]]
@@ -231,8 +263,8 @@
 
               ;; block has been moved or target got deleted by another client
               (block-moved-and-target-deleted? conn e->datoms e moved-blocks tx-data)
-              (throw (ex-info "This block has been moved or its target has been deleted"
-                              (merge op {:error :block-moved-or-target-deleted
+              (throw (ex-info "This block has been moved and its target has been deleted"
+                              (merge op {:error :block-moved-and-target-deleted
                                          :undo? undo?})))
 
               ;; The entity should be deleted instead of retracting its attributes
