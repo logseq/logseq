@@ -256,20 +256,6 @@
          (for [{:keys [graph-uuid graph-schema-version graph-status]} (:remote-graphs debug-state*)]
            (shui/select-item {:value [graph-uuid graph-schema-version] :disabled (some? graph-status)} graph-uuid)))))]
 
-     [:div.pb-2.flex.flex-row.items-center.gap-2
-      (ui/button "Run server-migrations"
-                 {:on-click (fn []
-                              (let [repo (state/get-current-repo)]
-                                (when-let [server-schema-version (:server-schema-version debug-state*)]
-                                  (state/<invoke-db-worker :thread-api/rtc-add-migration-client-ops
-                                                           repo server-schema-version))))})
-      [:input.form-input.my-2.py-1.w-32
-       {:on-change (fn [e] (swap! debug-state assoc :server-schema-version (util/evalue e)))
-        :on-focus (fn [e] (let [v (.-value (.-target e))]
-                            (when (= v "server migration start version here(e.g. \"64.2\")")
-                              (set! (.-value (.-target e)) ""))))
-        :placeholder "server migration start version here(e.g. \"64.2\")"}]]
-
      [:hr.my-2]
 
      (let [*keys-state (get state ::keys-state)
