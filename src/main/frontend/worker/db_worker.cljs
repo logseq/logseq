@@ -29,6 +29,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
+            [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -287,13 +288,16 @@
           (d/reset-schema! client-ops-conn client-op/schema-in-db))
         (when (and db-based? (not initial-data-exists?) (not datoms))
           (let [config (or config "")
-                initial-data (sqlite-create-graph/build-db-initial-data config
-                                                                        (select-keys opts [:import-type :graph-git-sha]))]
+                initial-data (sqlite-create-graph/build-db-initial-data
+                              config (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (db-migrate/migrate conn)
+        (let [migration-result (db-migrate/migrate conn)]
+          (when (client-op/rtc-db-graph? repo)
+            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+              (client-op/add-ops! repo client-ops))))
 
         (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
 

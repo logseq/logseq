@@ -40,7 +40,7 @@
     (fn write-transit-str* [o]
       (try (transit/write writer o)
            (catch :default e
-             (prn ::write-transit-str o)
+             (prn ::write-transit-str (type o) o)
              (js/console.trace)
              (throw e))))))
 
