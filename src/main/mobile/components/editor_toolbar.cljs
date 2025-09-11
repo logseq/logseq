@@ -73,6 +73,7 @@
 (rum/defc mobile-bar < rum/reactive
   []
   (when (and (util/mobile?)
+             (not (state/sub :editor/code-block-context))
              (or (state/sub :editor/editing?)
                  (= "app-keep-keyboard-open-input" (some-> js/document.activeElement (.-id)))))
     (let [commands' (commands)]
