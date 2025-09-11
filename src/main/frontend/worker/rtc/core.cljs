@@ -14,7 +14,6 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.migrate :as r.migrate]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
@@ -69,7 +68,7 @@
         merge-flow (m/latest vector auto-push-flow clock-flow)]
     (m/eduction (filter first)
                 (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-block-ops-count repo)) v)))
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
                 merge-flow)))
 
 (defn- create-pull-remote-updates-flow
@@ -164,17 +163,6 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
-(defn- add-migration-client-ops!
-  [repo db server-schema-version]
-  (when server-schema-version
-    (let [client-schema-version (ldb/get-graph-schema-version db)
-          added-ops (r.migrate/add-migration-client-ops! repo db server-schema-version client-schema-version)]
-      (when (seq added-ops)
-        (log/info :add-migration-client-ops
-                  {:repo repo
-                   :server-schema-version server-schema-version
-                   :client-schema-version client-schema-version})))))
-
 (defn- update-remote-schema-version!
   [conn server-schema-version]
   (when server-schema-version
@@ -252,7 +240,6 @@
           (m/? get-ws-create-task)
           (started-dfv true)
           (update-remote-schema-version! conn @*server-schema-version)
-          (add-migration-client-ops! repo @conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
                     assets-sync-loop-task))
@@ -655,11 +642,6 @@
   (def-thread-api :thread-api/rtc-download-info-list
     [token graph-uuid schema-version]
     (new-task--download-info-list token graph-uuid schema-version)))
-
-(def-thread-api :thread-api/rtc-add-migration-client-ops
-  [repo server-schema-version]
-  (when-let [db @(worker-state/get-datascript-conn repo)]
-    (add-migration-client-ops! repo db server-schema-version)))
 
 ;;; ================ API (ends) ================
 
