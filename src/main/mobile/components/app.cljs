@@ -50,10 +50,11 @@
         blocking-scroll? (atom false)
         sidebar-initial-open? (atom false)
         max-x (atom 0)
+        max-y (atom 0)
+        min-y (atom 0)
         swipe-trigger-distance 50         ;; distance to actually open/close
         horiz-intent-threshold 10         ;; start blocking scroll when horizontal intent is clear
-        max-vertical-drift 50
-
+        max-vertical-drift 30
         on-touch-start (fn [^js e]
                          (when-not (sidebar-not-allowed-to-open?)
                            (let [t (aget e "touches" 0)]
@@ -62,14 +63,18 @@
                              (reset! touch-start-y (.-pageY t))
                              (reset! has-triggered? false)
                              (reset! blocking-scroll? false)
-                             (reset! max-x 0))))
+                             (reset! max-x 0)
+                             (reset! max-y (.-pageY t))
+                             (reset! min-y (.-pageY t)))))
 
         on-touch-move (fn [^js e]
                         (when-not (sidebar-not-allowed-to-open?)
                           (let [t (aget e "touches" 0)
                                 _ (reset! max-x (max (.-pageX t) @max-x))
+                                _ (reset! max-y (max (.-pageY t) @max-y))
+                                _ (reset! min-y (min (.-pageY t) @min-y))
                                 dx (- (.-pageX t) @touch-start-x)
-                                dy (js/Math.abs (- (.-pageY t) @touch-start-y))
+                                dy (js/Math.abs (- @max-y @min-y))
                                 abs-dx (js/Math.abs dx)
                                 horizontal-intent (and (> abs-dx horiz-intent-threshold)
                                                        (> abs-dx dy))
@@ -80,7 +85,7 @@
                                                   (> (- @max-x (.-pageX t)) swipe-trigger-distance)
                                                   (< dy max-vertical-drift))]
 
-                            ;; Block vertical scroll as soon as horizontal intent is clear
+                             ;; Block vertical scroll as soon as horizontal intent is clear
                             (when (or @blocking-scroll? (and horizontal-intent
                                                              (not @sidebar-initial-open?)
                                                              (mobile-state/left-sidebar-open?)))

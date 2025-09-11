@@ -34,6 +34,7 @@
 (defonce *db-worker (atom nil))
 (defonce *db-worker-client-id (atom nil))
 (defonce *editor-info (atom nil))
+(defonce app-ready-promise (p/deferred))
 
 (def db-worker-ready-flow
   "`<invoke-db-worker` throws err if `*db-worker` not ready yet.
