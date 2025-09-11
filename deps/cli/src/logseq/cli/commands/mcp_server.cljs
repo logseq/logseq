@@ -10,6 +10,7 @@
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]
             [logseq.outliner.tree :as otree]
             [nbb.core :as nbb]
             [promesa.core :as p]))
@@ -84,13 +85,54 @@
                 :updatedAt (:block/updated-at e)}))
        mcp-success-response))
 
+(defn- local-list-properties [conn _args]
+  (->> (d/datoms @conn :avet :block/tags :logseq.class/Property)
+       (map #(d/entity @conn (:e %)))
+       #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
+       (map (fn [e]
+              (cond-> (into {} e)
+                true
+                (dissoc e :block/tags :block/order :block/refs :block/name :db/index
+                        :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
+                true
+                (update :block/uuid str)
+                (:logseq.property/classes e)
+                (update :logseq.property/classes #(mapv :db/ident %))
+                (:logseq.property/description e)
+                (update :logseq.property/description db-property/property-value-content))))
+       mcp-success-response))
+
+(defn- local-list-tags [conn _args]
+  (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
+       (map #(d/entity @conn (:e %)))
+       (map (fn [e]
+              (cond-> (into {} e)
+                true
+                (dissoc e :block/tags :block/order :block/refs :block/name
+                        :logseq.property.embedding/hnsw-label-updated-at)
+                true
+                (update :block/uuid str)
+                (:logseq.property.class/extends e)
+                (update :logseq.property.class/extends #(mapv :db/ident %))
+                (:logseq.property.class/properties e)
+                (update :logseq.property.class/properties #(mapv :db/ident %))
+                (:logseq.property.view/type e)
+                (update :logseq.property.view/type :db/ident)
+                (:logseq.property/description e)
+                (update :logseq.property/description db-property/property-value-content))))
+       mcp-success-response))
+
 (def ^:private local-tools
   "MCP Tools when running with a local graph"
   (merge-with
    merge
    api-tools
    {:getPage {:fn local-get-page}
-    :getAllPages {:fn local-get-all-pages}}))
+    :getAllPages {:fn local-get-all-pages}
+    :listProperties {:fn local-list-properties
+                     :config #js {:title "List Properties"}}
+    :listTags {:fn local-list-tags
+               :config #js {:title "List Tags"}}}))
 
 (defn start [{{:keys [debug-tool graph] :as opts} :opts :as m}]
   (when (and graph (not (fs/existsSync (cli-util/get-graph-dir graph))))
