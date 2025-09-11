@@ -35,66 +35,85 @@
       :class "-ml-2"}
      (shui/tabler-icon (if back? "arrow-left" "chevron-down") {:size 24}))))
 
-(rum/defc block-cp
-  [block]
-  [:div.app-silk-scroll-content-inner
-   ;; block page content
-   [:div.block-modal-page-content
-    (mobile-ui/classic-app-container-wrap
-     (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
+(defn- skip-touch-check?
+  []
+  (or (seq @mobile-state/*popup-data)
+      (:mobile/show-action-bar? @state/state)
+      (state/editing?)))
 
 (defn- setup-sidebar-touch-swipe!
-  []
+  [ref]
   (let [touch-start-x (atom 0)
         touch-start-y (atom 0)
         has-triggered? (atom false)
         blocking-scroll? (atom false)
-
+        max-y (atom 0)
+        min-y (atom 0)
         swipe-trigger-distance 50         ;; when to actually open sidebar
         horiz-intent-threshold 10         ;; when to start blocking scroll
         max-vertical-drift 50
-
         on-touch-start (fn [^js e]
-                         (let [t (aget e "touches" 0)]
-                           (reset! touch-start-x (.-pageX t))
-                           (reset! touch-start-y (.-pageY t))
-                           (reset! has-triggered? false)
-                           (reset! blocking-scroll? false)))
+                         (when-not (skip-touch-check?)
+                           (let [t (aget e "touches" 0)]
+                             (reset! touch-start-x (.-pageX t))
+                             (reset! touch-start-y (.-pageY t))
+                             (reset! has-triggered? false)
+                             (reset! blocking-scroll? false)
+                             (reset! max-y (.-pageY t))
+                             (reset! min-y (.-pageY t)))))
 
         on-touch-move (fn [^js e]
-                        (let [t (aget e "touches" 0)
-                              dx (- (.-pageX t) @touch-start-x)
-                              dy (js/Math.abs (- (.-pageY t) @touch-start-y))
-                              horizontal-intent (and (> dx horiz-intent-threshold)
-                                                     (> dx dy))
-                              is-horizontal-swipe (and (> dx swipe-trigger-distance)
-                                                       (< dy max-vertical-drift))]
-
+                        (when-not (skip-touch-check?)
+                          (let [t (aget e "touches" 0)
+                                dx (- (.-pageX t) @touch-start-x)
+                                dy (js/Math.abs (- @max-y @min-y))
+                                _ (reset! max-y (max (.-pageY t) @max-y))
+                                _ (reset! min-y (min (.-pageY t) @min-y))
+                                horizontal-intent (and (> dx horiz-intent-threshold)
+                                                       (> dx dy))
+                                is-horizontal-swipe (and (> dx swipe-trigger-distance)
+                                                         (< dy max-vertical-drift))]
+                           ;; (prn :debug :blocking? @blocking-scroll? :horizontal-intent horizontal-intent)
                           ;; as soon as we detect horizontal intent, block vertical scrolling
-                          (when (or @blocking-scroll? horizontal-intent)
-                            (reset! blocking-scroll? true)
-                            (.preventDefault e))       ;; <-- stops page from scrolling
+                            (when (or @blocking-scroll? horizontal-intent)
+                              (reset! blocking-scroll? true)
+                              (.preventDefault e))       ;; <-- stops page from scrolling
 
-                          (when (and (not @has-triggered?)
-                                     is-horizontal-swipe)
-                            (reset! has-triggered? true)
-                            (mobile-state/pop-navigation-history!))))
+                            (when (and (not @has-triggered?)
+                                       is-horizontal-swipe)
+                              (reset! has-triggered? true)
+                              (mobile-state/pop-navigation-history!)))))
 
         on-touch-end (fn [_]
                        (reset! blocking-scroll? false))]
 
     ;; IMPORTANT: passive:false so preventDefault actually works
-    (.addEventListener js/document "touchstart" on-touch-start #js {:passive false})
-    (.addEventListener js/document "touchmove"  on-touch-move  #js {:passive false})
-    (.addEventListener js/document "touchend"   on-touch-end   #js {:passive false})
-    (.addEventListener js/document "touchcancel" on-touch-end  #js {:passive false})
+    (.addEventListener ref "touchstart" on-touch-start #js {:passive false})
+    (.addEventListener ref "touchmove"  on-touch-move  #js {:passive false})
+    (.addEventListener ref "touchend"   on-touch-end   #js {:passive false})
+    (.addEventListener ref "touchcancel" on-touch-end  #js {:passive false})
 
     ;; cleanup
     #(do
-       (.removeEventListener js/document "touchstart" on-touch-start)
-       (.removeEventListener js/document "touchmove"  on-touch-move)
-       (.removeEventListener js/document "touchend"   on-touch-end)
-       (.removeEventListener js/document "touchcancel" on-touch-end))))
+       (.removeEventListener ref "touchstart" on-touch-start)
+       (.removeEventListener ref "touchmove"  on-touch-move)
+       (.removeEventListener ref "touchend"   on-touch-end)
+       (.removeEventListener ref "touchcancel" on-touch-end))))
+
+(rum/defc block-cp
+  [block]
+  (let [*ref (hooks/use-ref nil)]
+    (hooks/use-effect!
+     (fn []
+       (when-let [ref (rum/deref *ref)]
+         (setup-sidebar-touch-swipe! ref)))
+     [(rum/deref *ref)])
+    [:div.app-silk-scroll-content-inner
+     {:ref *ref}
+     ;; block page content
+     [:div.block-modal-page-content
+      (mobile-ui/classic-app-container-wrap
+       (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]))
 
 (rum/defc block-sheet-topbar
   [block {:keys [favorited? set-favorited!]}]
@@ -156,12 +175,6 @@
                 (db/entity [:block/uuid id]))
         open? (boolean block)
         [favorited? set-favorited!] (hooks/use-state false)]
-
-    (hooks/use-effect!
-     (fn []
-       (setup-sidebar-touch-swipe!))
-     [])
-
     (hooks/use-effect!
      (fn []
        (set-favorited! (page-handler/favorited? (str (:block/uuid block)))))
