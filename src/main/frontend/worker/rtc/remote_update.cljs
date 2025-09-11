@@ -580,6 +580,18 @@ so need to pull earlier remote-data from websocket."})
                                                          :parents [(:block/parent refed-block)])
                                                   (dissoc :block/uuid))])))))))
 
+(defn- reuse-old-eid
+  [conn move-ops-map refed-blocks]
+  (let [tx-data (->> (keys move-ops-map)
+                     (concat (map :block/uuid refed-blocks))
+                     (remove nil?)
+                     distinct
+                     (keep (fn [block-uuid]
+                             (when-let [old-eid (@worker-state/*deleted-block-uuid->db-id block-uuid)]
+                               [:db/add old-eid :block/uuid block-uuid]))))]
+    (prn :debug :reuse-old-eid :tx-data tx-data)
+    (ldb/transact! conn tx-data {:persist-op? false :gen-undo-ops? false :rtc-op? true})))
+
 (defn apply-remote-update
   "Apply remote-update(`remote-update-event`)"
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
@@ -619,6 +631,7 @@ so need to pull earlier remote-data from websocket."})
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
                                              :gen-undo-ops? false}
+            (worker-util/profile :reuse-old-eid-for-deleted-blocks (reuse-old-eid conn move-ops-map refed-blocks))
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
