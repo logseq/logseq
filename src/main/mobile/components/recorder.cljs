@@ -1,10 +1,14 @@
 (ns mobile.components.recorder
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.util :as util]
             [rum.core :as rum]
             [goog.functions :as gfun]
             [frontend.rum :as r]
             [frontend.state :as state]
+            [frontend.date :as date]
+            [frontend.handler.editor :as editor-handler]
+            [promesa.core :as p]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.silkhq :as silkhq]))
@@ -21,11 +25,29 @@
       (.padStart (str seconds) 2 "0") "."
       (.padStart (str centiseconds) 2 "0"))))
 
+(defn save-asset-audio!
+  [blob]
+  (let [ext (some-> blob
+              (.-type)
+              (string/split ";")
+              (first)
+              (string/split "/")
+              (last))]
+    (when-let [filename (some->> ext (str "record-" (date/get-date-time-string-2) "."))]
+      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
+              asset-entity (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
+              asset-entity (some-> asset-entity (first))
+              url (util/format "[[%s]]" (:block/uuid asset-entity))]
+        (editor-handler/api-insert-new-block! url
+          {:page (date/today)
+           :container-id :unknown-container})))))
+
 (rum/defc audio-recorder-aux
   [{:keys [open?]}]
   (let [*wave-ref (rum/use-ref nil)
         *micid-ref (rum/use-ref nil)
         *timer-ref (rum/use-ref nil)
+        *save-ref (rum/use-ref false)
         [^js wavesurfer set-wavesurfer!] (rum/use-state nil)
         [^js recorder set-recorder!] (rum/use-state nil)
         [mic-devices set-mic-devices!] (rum/use-state nil)
@@ -84,7 +106,10 @@
                                          (set-status-pulse! (js/Date.now)))]
             (doto r
               (.on "record-end" (fn [^js blob]
-                                  (js/console.log "===>> record saved (stopped)!" blob)
+                                  (when (true? (rum/deref *save-ref))
+                                    (save-asset-audio! blob)
+                                    (rum/set-ref! *save-ref false)
+                                    (set-open? false))
                                   (handle-status-changed!)))
               (.on "record-progress" (gfun/throttle
                                        (fn [time]
@@ -142,7 +167,9 @@
           (when (true? paused?)
             (shui/button {:variant :outline
                           :class "border-green-500"
-                          :on-click #(.stopRecording recorder)}
+                          :on-click (fn []
+                                      (rum/set-ref! *save-ref true)
+                                      (.stopRecording recorder))}
               "✅ Save"))]
 
          [:span.flex.items-center.gap-1
@@ -154,7 +181,7 @@
               {:variant :outline
                :on-click handle-record!}
               (if (true? paused?)
-                "🔁 Resume"
+                "⏯️ Resume"
                 "▶️ Start")
               ))]])]]))
 
