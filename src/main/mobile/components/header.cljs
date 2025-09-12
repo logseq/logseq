@@ -1,7 +1,6 @@
 (ns mobile.components.header
   "App top header"
-  (:require [clojure.string :as string]
-            [frontend.common.missionary :as c.m]
+  (:require [frontend.common.missionary :as c.m]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
@@ -103,7 +102,7 @@
        {:variant :ghost
         :size :sm
         :on-click (fn []
-                    (util/copy-to-clipboard! (string/join @mobile-state/*log "\n\n")))}
+                    (util/copy-to-clipboard! (mobile-state/log->str)))}
        "Copy")]
 
      [:div.flex.flex-row.gap-2
