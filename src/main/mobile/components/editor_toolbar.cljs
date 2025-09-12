@@ -11,6 +11,7 @@
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [mobile.init :as init]
+            [mobile.components.recorder :as recorder]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -93,6 +94,7 @@
         ;; (timestamp-submenu parent-id)
         (for [command' commands']
           command')
+        (command #(recorder/open-dialog!) {:icon "microphone"})
         (command #(let [parent-id (state/get-edit-input-id)]
                     (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
        [:div.toolbar-hide-keyboard

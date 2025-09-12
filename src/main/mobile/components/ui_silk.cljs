@@ -53,9 +53,9 @@
       (shui/button {:variant :icon}
                    (shui/tabler-icon "adjustments-horizontal" {:size 30}))
       ]
-     [:span.as-item
-      {:class (when (= current-tab "debug") "active")
-       :data-tab "debug"}
-      (shui/button {:variant :icon}
-        (shui/tabler-icon "bug" {:size 30}))]
+     ;[:span.as-item
+     ; {:class (when (= current-tab "debug") "active")
+     ;  :data-tab "debug"}
+     ; (shui/button {:variant :icon}
+     ;   (shui/tabler-icon "bug" {:size 30}))]
      ]))

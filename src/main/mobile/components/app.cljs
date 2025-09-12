@@ -211,8 +211,6 @@
                           (home *home tab)
                           :settings
                           (settings/page)
-                          :debug
-                          (recorder/card)
                           :search
                           (search/search)
                           "Not Found")])))
@@ -232,6 +230,7 @@
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
       (modal/blocks-modal)
+      (recorder/card)
       (popup/popup)))))
 
 (rum/defc main < rum/reactive

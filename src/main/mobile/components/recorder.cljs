@@ -9,6 +9,8 @@
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
+            [frontend.db.model :as db-model]
+            [mobile.init :as init]
             [promesa.core :as p]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -16,6 +18,8 @@
 
 (defonce *open? (atom false))
 (defn set-open? [v?] (reset! *open? v?))
+(def *last-edit-block (atom nil))
+(defn set-last-edit-block! [block] (reset! *last-edit-block block))
 
 (defn ms-to-time-format [ms]
   (let [total-seconds (quot ms 1000)
@@ -39,9 +43,16 @@
               asset-entity (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
               asset-entity (some-> asset-entity (first))
               url (util/format "[[%s]]" (:block/uuid asset-entity))]
-        (editor-handler/api-insert-new-block! url
-          {:page (date/today)
-           :container-id :unknown-container})))))
+        (if-let [last-block @*last-edit-block]
+          (if (string/blank? (:block/title last-block))
+            (editor-handler/save-block! (state/get-current-repo)
+              last-block url)
+            (editor-handler/api-insert-new-block!
+              url {:block-uuid (:block/uuid last-block)
+                   :sibling? true}))
+          (editor-handler/api-insert-new-block! url
+            {:page (date/today)
+             :container-id :unknown-container}))))))
 
 (rum/defc audio-recorder-aux
   [{:keys [open?]}]
@@ -190,18 +201,27 @@
 (rum/defc card
   []
   (let [[open?] (r/use-atom *open?)]
-    [:<>
-     (silkhq/card-sheet
-       {:presented open?
-        :onPresentedChange (fn [v?] (set-open? v?))}
-       (silkhq/card-sheet-portal
-         (silkhq/card-sheet-view
-           {:onClickOutside (bean/->js {:dismiss false
-                                        :stopOverlayPropagation false})}
-           (silkhq/card-sheet-backdrop)
-           (silkhq/card-sheet-content
-             (audio-recorder-aux {:open? open? :set-open? set-open?})))))
+    (silkhq/card-sheet
+      {:presented open?
+       :onPresentedChange (fn [v?] (set-open? v?))}
+      (silkhq/card-sheet-portal
+        (silkhq/card-sheet-view
+          {:onClickOutside (bean/->js {:dismiss false
+                                       :stopOverlayPropagation false})}
+          (silkhq/card-sheet-backdrop)
+          (silkhq/card-sheet-content
+            (audio-recorder-aux {:open? open? :set-open? set-open?})))))))
 
-     [:p.p-8
-      (shui/button {:on-click #(set-open? true)} "🎙️ Record Audio")]]))
-
+(defn open-dialog!
+  []
+  (let [editing-id (state/get-edit-input-id)]
+    (set-last-edit-block! nil)
+    (when-not (string/blank? editing-id)
+      (p/do!
+        (editor-handler/save-current-block!)
+        (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
+          (set-last-edit-block! block)
+          (state/clear-edit!)
+          (init/keyboard-hide)
+          (js/setTimeout #(set-open? true) 200)))
+      (set-open? true))))
