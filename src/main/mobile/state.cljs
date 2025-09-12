@@ -54,7 +54,9 @@
 (defonce *log (atom []))
 (defn log-append!
   [record]
-  (swap! *log conj record))
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))
 
 (defn log->str
   []
