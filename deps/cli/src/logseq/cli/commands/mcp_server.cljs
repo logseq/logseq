@@ -4,14 +4,9 @@
             ["@modelcontextprotocol/sdk/server/stdio.js" :refer [StdioServerTransport]]
             ["fs" :as fs]
             ["zod/v3" :as z]
-            [datascript.core :as d]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.cli.util :as cli-util]
-            [logseq.db :as ldb]
-            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
-            [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.tree :as otree]
             [nbb.core :as nbb]
             [promesa.core :as p]))
 
@@ -30,97 +25,62 @@
        #js [#js {:type "text"
                  :text (str "Unexpected API error: " (.-message error))}]})
 
-(defn- api-get-all-pages
-  [{{:keys [api-server-token]} :opts} _args]
-  (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.editor.getAllPages" [])]
-        (if (= 200 (.-status resp))
-          (p/let [body (.json resp)
-                  pages (map #(hash-map :title (.-title %)
-                                        :createdAt (.-createdAt %)
-                                        :updatedAt (.-updatedAt %)
-                                        :id (.-uuid %))
-                             body)]
-            (mcp-success-response pages))
-          (cli-util/api-handle-error-response resp mcp-error-response)))
-      (p/catch unexpected-api-error)))
-
-(defn- api-get-page
-  [{{:keys [api-server-token]} :opts} args]
-  (-> (p/let [resp (cli-util/api-fetch api-server-token "logseq.Editor.getPageBlocksTree" [(aget args "pageName")])]
+(defn- api-tool
+  "Calls API method w/ args and returns a MCP response"
+  [api-server-token api-method method-args]
+  (-> (p/let [resp (cli-util/api-fetch api-server-token api-method method-args)]
         (if (= 200 (.-status resp))
           (p/let [body (.json resp)]
             (mcp-success-response body))
           (cli-util/api-handle-error-response resp mcp-error-response)))
       (p/catch unexpected-api-error)))
 
+(defn- api-get-page
+  [{{:keys [api-server-token]} :opts} args]
+  (api-tool api-server-token "logseq.cli.getPageData" [(aget args "pageName")]))
+
+(defn- api-list-pages
+  [{{:keys [api-server-token]} :opts} _args]
+  (api-tool api-server-token "logseq.cli.listPages" []))
+
+(defn- api-list-tags
+  [{{:keys [api-server-token]} :opts} _args]
+  (api-tool api-server-token "logseq.cli.listTags" []))
+
+(defn- api-list-properties
+  [{{:keys [api-server-token]} :opts} _args]
+  (api-tool api-server-token "logseq.cli.listProperties" []))
+
 (def ^:private api-tools
   "MCP Tools when running with API server"
-  {:getAllPages
-   {:fn api-get-all-pages
+  {:listPages
+   {:fn api-list-pages
     :config #js {:title "List Pages"}}
    :getPage
    {:fn api-get-page
     :config #js {:title "Get Page"
-                 :description "Get a page's content"
-                 :inputSchema #js {:pageName (z/string)}}}})
+                 :description "Get a page's content including its blocks"
+                 :inputSchema #js {:pageName (z/string)}}}
+   :listTags
+   {:fn api-list-tags
+    :config #js {:title "List Tags"}}
+   :listProperties
+   {:fn api-list-properties
+    :config #js {:title "List Properties"}}})
 
 (defn- local-get-page [conn args]
-  (let [db @conn
-        page-id (common-initial-data/get-first-page-by-title db (aget args "pageName"))
-        blocks (when page-id (ldb/get-page-blocks db page-id))]
-    (if page-id
-      (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
-           (map #(update % :block/uuid str))
-           mcp-success-response)
-      (mcp-error-response (str "Error: Page " (pr-str (aget args "pageName")) " not found")))))
+  (if-let [blocks (cli-common-mcp-tools/get-page-blocks @conn (aget args "pageName"))]
+    (mcp-success-response blocks)
+    (mcp-error-response (str "Error: Page " (pr-str (aget args "pageName")) " not found"))))
 
-(defn- local-get-all-pages [conn _args]
-  (->> (d/datoms @conn :avet :block/name)
-       (map #(d/entity @conn (:e %)))
-       (remove entity-util/hidden?)
-       (mapv (fn [e]
-               {:id (str (:block/uuid e))
-                :title (:block/title e)
-                :createdAt (:block/created-at e)
-                :updatedAt (:block/updated-at e)}))
-       mcp-success-response))
+(defn- local-list-pages [conn _args]
+  (mcp-success-response (cli-common-mcp-tools/list-pages @conn)))
 
 (defn- local-list-properties [conn _args]
-  (->> (d/datoms @conn :avet :block/tags :logseq.class/Property)
-       (map #(d/entity @conn (:e %)))
-       #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
-       (map (fn [e]
-              (cond-> (into {} e)
-                true
-                (dissoc e :block/tags :block/order :block/refs :block/name :db/index
-                        :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
-                true
-                (update :block/uuid str)
-                (:logseq.property/classes e)
-                (update :logseq.property/classes #(mapv :db/ident %))
-                (:logseq.property/description e)
-                (update :logseq.property/description db-property/property-value-content))))
-       mcp-success-response))
+  (mcp-success-response (cli-common-mcp-tools/list-properties @conn)))
 
 (defn- local-list-tags [conn _args]
-  (->> (d/datoms @conn :avet :block/tags :logseq.class/Tag)
-       (map #(d/entity @conn (:e %)))
-       (map (fn [e]
-              (cond-> (into {} e)
-                true
-                (dissoc e :block/tags :block/order :block/refs :block/name
-                        :logseq.property.embedding/hnsw-label-updated-at)
-                true
-                (update :block/uuid str)
-                (:logseq.property.class/extends e)
-                (update :logseq.property.class/extends #(mapv :db/ident %))
-                (:logseq.property.class/properties e)
-                (update :logseq.property.class/properties #(mapv :db/ident %))
-                (:logseq.property.view/type e)
-                (update :logseq.property.view/type :db/ident)
-                (:logseq.property/description e)
-                (update :logseq.property/description db-property/property-value-content))))
-       mcp-success-response))
+  (mcp-success-response (cli-common-mcp-tools/list-tags @conn)))
 
 (def ^:private local-tools
   "MCP Tools when running with a local graph"
@@ -128,11 +88,9 @@
    merge
    api-tools
    {:getPage {:fn local-get-page}
-    :getAllPages {:fn local-get-all-pages}
-    :listProperties {:fn local-list-properties
-                     :config #js {:title "List Properties"}}
-    :listTags {:fn local-list-tags
-               :config #js {:title "List Tags"}}}))
+    :listPages {:fn local-list-pages}
+    :listProperties {:fn local-list-properties}
+    :listTags {:fn local-list-tags}}))
 
 (defn start [{{:keys [debug-tool graph] :as opts} :opts :as m}]
   (when (and graph (not (fs/existsSync (cli-util/get-graph-dir graph))))
