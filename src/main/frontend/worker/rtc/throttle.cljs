@@ -31,6 +31,7 @@
   {:count (count api-calls)})
 
 (defn create-local-updates-check-flow
+  "Return a flow: emit if need to push local-updates"
   [repo *auto-push? min-interval-ms]
   (let [auto-push-flow (m/watch *auto-push?)
         clock-flow (c.m/clock min-interval-ms :clock)
