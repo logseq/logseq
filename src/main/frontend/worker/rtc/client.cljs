@@ -11,6 +11,7 @@
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
+            [frontend.worker.rtc.throttle :as r.throttle]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
             [logseq.db :as ldb]
@@ -418,11 +419,13 @@
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
               r (try
-                  (m/? (ws-util/send&recv get-ws-create-task
-                                          (cond-> {:action "apply-ops"
-                                                   :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                                   :ops ops-for-remote :t-before (or local-tx 1)}
-                                            (true? @*remote-profile?) (assoc :profile true))))
+                  (let [message (cond-> {:action "apply-ops"
+                                         :graph-uuid graph-uuid :schema-version (str major-schema-version)
+                                         :ops ops-for-remote :t-before (or local-tx 1)}
+                                  (true? @*remote-profile?) (assoc :profile true))
+                        r (m/? (ws-util/send&recv get-ws-create-task message))]
+                    (r.throttle/add-rtc-api-call-record! message)
+                    r)
                   (catch :default e
                     (rollback repo block-ops-map-coll update-kv-value-ops-map-coll rename-db-ident-ops-map-coll)
                     (throw e)))]
@@ -456,9 +459,11 @@
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn]
   (m/sp
     (let [local-tx (client-op/get-local-tx repo)
-          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops"
-                                                        :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                                        :ops [] :t-before (or local-tx 1)}))]
+          message {:action "apply-ops"
+                   :graph-uuid graph-uuid :schema-version (str major-schema-version)
+                   :ops [] :t-before (or local-tx 1)}
+          r (m/? (ws-util/send&recv get-ws-create-task message))]
+      (r.throttle/add-rtc-api-call-record! message)
       (if-let [remote-ex (:ex-data r)]
         (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
             (case (:type remote-ex)
