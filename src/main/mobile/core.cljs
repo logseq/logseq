@@ -74,15 +74,12 @@
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 
-(log/add-handler (fn [record]
-                   (mobile-state/log-append! record)))
-
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
   (prn "[Mobile] init!")
-
+  (log/add-handler mobile-state/log-append!)
   (set-router!)
   (init/init!)
   (fhandler/start! render!))
