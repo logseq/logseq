@@ -524,7 +524,8 @@
                            (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
-          (contains? config/audio-formats ext)
+          (or (contains? config/audio-formats ext)
+            (and (= ext :webm) (string/starts-with? title "record-")))
           (if db-based?
             (audio-cp @src)
             (file-based-asset-loader @src #(audio-cp @src)))
@@ -537,7 +538,7 @@
           (if db-based?
             (resizable-image config title @src metadata full_text true)
             (file-based-asset-loader @src
-                                     #(resizable-image config title @src metadata full_text true)))
+              #(resizable-image config title @src metadata full_text true)))
 
           (and (not db-based?) (contains? (common-config/text-formats) ext))
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})

@@ -8,12 +8,13 @@
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [promesa.core :as p]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [logseq.shui.silkhq :as silkhq]))
 
-(defonce *open? (atom true))
+(defonce *open? (atom false))
 (defn set-open? [v?] (reset! *open? v?))
 
 (defn ms-to-time-format [ms]
@@ -159,7 +160,8 @@
                 ;; start recording
                 :else
                 (let [micid (some-> (rum/deref *micid-ref) (.-value))]
-                  (.startRecording recorder #js {:deviceId micid}))
+                  (-> (.startRecording recorder #js {:deviceId micid})
+                    (.catch #(notification/show! (.-message %) :error))))
                 ))]
 
         [:<>
