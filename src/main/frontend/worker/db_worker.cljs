@@ -537,7 +537,8 @@
       (catch :default e
         (prn :debug :error)
         (js/console.error e)
-        (prn :debug :tx-meta tx-meta :tx-data tx-data)))))
+        (prn :debug :tx-meta tx-meta :tx-data tx-data)
+        (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data
   [repo]
