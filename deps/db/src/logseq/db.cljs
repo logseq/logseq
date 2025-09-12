@@ -107,7 +107,7 @@
            (f repo-or-conn tx-data tx-meta)
            (catch :default e
              (js/console.trace)
-             (prn :debug-tx-data tx-data)
+             (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
              (throw e))))))))
 
 (def page? common-entity-util/page?)

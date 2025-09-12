@@ -49,7 +49,7 @@
 
 (def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
-(defonce max-stack-length 100)
+(defonce max-stack-length 25)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
 
@@ -275,7 +275,8 @@
                                        :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
-                                :undo? undo?))
+                                :undo? undo?
+                                :redo? (not undo?)))
                   handler (fn handler []
                             ((if undo? push-redo-op push-undo-op) repo op)
                             (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)

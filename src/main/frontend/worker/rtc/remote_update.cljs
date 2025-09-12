@@ -31,6 +31,14 @@ so need to pull earlier remote-data from websocket."})
 
 (defmulti ^:private transact-db! (fn [action & _args] action))
 
+(defn- block-reuse-db-id
+  [block]
+  (if-let [old-eid (@worker-state/*deleted-block-uuid->db-id (:block/uuid block))]
+    (assoc block
+           :db/id old-eid
+           :block.temp/use-old-db-id? true)
+    block))
+
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
@@ -105,8 +113,9 @@ so need to pull earlier remote-data from websocket."})
     :outliner-op :insert-blocks
     :transact-opts {:repo repo
                     :conn conn}}
-   (let [opts' (assoc opts :keep-block-order? true)]
-     (outliner-core/insert-blocks! repo conn blocks target opts')))
+   (let [opts' (assoc opts :keep-block-order? true)
+         blocks' (map block-reuse-db-id blocks)]
+     (outliner-core/insert-blocks! repo conn blocks' target opts')))
   (doseq [block blocks]
     (assert (some? (d/entity @conn [:block/uuid (:block/uuid block)]))
             {:msg "insert-block failed"
@@ -200,7 +209,7 @@ so need to pull earlier remote-data from websocket."})
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]
         (do (if move?
-              (transact-db! :move-blocks repo conn [b] local-parent {:sibling? false})
+              (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
               (transact-db! :insert-blocks repo conn
                             [{:block/uuid block-uuid
                               :block/title ""}]
@@ -580,18 +589,6 @@ so need to pull earlier remote-data from websocket."})
                                                          :parents [(:block/parent refed-block)])
                                                   (dissoc :block/uuid))])))))))
 
-(defn- reuse-old-eid
-  [conn move-ops-map refed-blocks]
-  (let [tx-data (->> (keys move-ops-map)
-                     (concat (map :block/uuid refed-blocks))
-                     (remove nil?)
-                     distinct
-                     (keep (fn [block-uuid]
-                             (when-let [old-eid (@worker-state/*deleted-block-uuid->db-id block-uuid)]
-                               [:db/add old-eid :block/uuid block-uuid]))))]
-    (prn :debug :reuse-old-eid :tx-data tx-data)
-    (ldb/transact! conn tx-data {:persist-op? false :gen-undo-ops? false :rtc-op? true})))
-
 (defn apply-remote-update
   "Apply remote-update(`remote-update-event`)"
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
@@ -631,7 +628,6 @@ so need to pull earlier remote-data from websocket."})
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
                                              :gen-undo-ops? false}
-            (worker-util/profile :reuse-old-eid-for-deleted-blocks (reuse-old-eid conn move-ops-map refed-blocks))
             (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
