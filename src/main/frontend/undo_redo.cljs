@@ -218,13 +218,6 @@
         (fn [[e datoms]]
           (let [entity (d/entity @conn e)]
             (cond
-              ;; entity has been deleted
-              (and (nil? entity)
-                   (not (contains? added-and-retracted-ids e)))
-              (throw (ex-info "Entity has been deleted"
-                              (merge op {:error :entity-deleted
-                                         :undo? undo?})))
-
               ;; new children blocks have been added
               (and
                (not (:local-tx? tx-meta))
@@ -254,8 +247,7 @@
        (remove nil?)))
     (catch :default e
       (prn :debug :undo-redo :error (:error (ex-data e)))
-      (when-not (contains? #{:entity-deleted
-                             :block-moved-or-target-deleted
+      (when-not (contains? #{:block-moved-or-target-deleted
                              :block-children-exists}
                            (:error (ex-data e)))
         (throw e)))))

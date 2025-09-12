@@ -564,8 +564,11 @@ so need to pull earlier remote-data from websocket."})
     (doseq [{:keys [self _page-name]
              title :block/title
              :as op-value} update-page-ops]
-      (let [create-opts {:uuid self}
-            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config (ldb/read-transit-str title) create-opts)]
+      (let [create-opts {:uuid self
+                         :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
+            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
+                                                                  (ldb/read-transit-str title)
+                                                                  create-opts)]
         ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
         ;; if there's already existing same name page
         (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
