@@ -1,49 +1,43 @@
 (ns frontend.worker.rtc.migrate
   "migrate server data according to schema-version and client's migration-updates"
   (:require [datascript.core :as d]
-            [frontend.worker.db.migrate :as db-migrate]
-            [frontend.worker.rtc.client-op :as client-op]
-            [frontend.worker.rtc.gen-client-op :as gen-client-op]
-            [logseq.db.frontend.schema :as db-schema]))
+            [frontend.worker.rtc.gen-client-op :as gen-client-op]))
 
-(defn- server-client-schema-version->migrations
-  [server-schema-version client-schema-version]
-  (when (neg? (db-schema/compare-schema-version server-schema-version client-schema-version))
-    (let [sorted-schema-version->updates
-          (->> (map (fn [[schema-version updates]]
-                      [((juxt :major :minor) (db-schema/parse-schema-version schema-version))
-                       updates])
-                    db-migrate/schema-version->updates)
-               (sort-by first))]
-      (->> sorted-schema-version->updates
-           (drop-while (fn [[schema-version _updates]]
-                         (not (neg? (db-schema/compare-schema-version server-schema-version schema-version)))))
-           (take-while (fn [[schema-version _updates]]
-                         (not (neg? (db-schema/compare-schema-version client-schema-version schema-version)))))
-           (map second)))))
+(def apply-conj (partial apply conj))
 
-(defn- migration-updates->client-ops
-  "convert :classes, :properties from frontend.worker.db.migrate/schema-version->updates into client-ops"
-  [db client-schema-version migrate-updates]
-  (let [property-ks (mapcat :properties migrate-updates)
-        class-ks (mapcat :classes migrate-updates)
-        d-entity-fn (partial d/entity db)
-        new-property-entities (keep d-entity-fn property-ks)
-        new-class-entities (keep d-entity-fn class-ks)
-        client-ops (vec (concat (gen-client-op/generate-rtc-ops-from-property-entities new-property-entities)
-                                (gen-client-op/generate-rtc-ops-from-class-entities new-class-entities)))
-        max-t (apply max 0 (map second client-ops))]
-    (conj client-ops
-          [:update-kv-value
-           max-t
-           {:db-ident :logseq.kv/schema-version
-            :value client-schema-version}])))
-
-(defn add-migration-client-ops!
-  [repo db server-schema-version client-schema-version]
-  (assert (and server-schema-version client-schema-version))
-  (when-let [ops (not-empty
-                  (some->> (server-client-schema-version->migrations server-schema-version client-schema-version)
-                           (migration-updates->client-ops db client-schema-version)))]
-    (client-op/add-ops! repo ops)
-    ops))
+(defn migration-results=>client-ops
+  [{:keys [_from-version to-version upgrade-result-coll] :as _migration-result}]
+  (when to-version
+    (let [client-ops
+          (mapcat
+           (fn [{:keys [tx-data db-before db-after migrate-updates]}]
+             (let [*tx-data (atom [])]
+               (when-let [rename-db-idents (:rename-db-idents migrate-updates)]
+                 (swap! *tx-data apply-conj
+                        (gen-client-op/generate-rtc-rename-db-ident-ops rename-db-idents)))
+               (when (:fix migrate-updates)
+                 (let [{:keys [same-entity-datoms-coll id->same-entity-datoms]}
+                       (gen-client-op/group-datoms-by-entity tx-data)
+                       e->a->add?->v->t
+                       (update-vals
+                        id->same-entity-datoms
+                        gen-client-op/entity-datoms=>a->add?->v->t)]
+                   (swap! *tx-data apply-conj
+                          (gen-client-op/generate-rtc-ops
+                           db-before db-after same-entity-datoms-coll e->a->add?->v->t))))
+               (let [property-ks (seq (:properties migrate-updates))
+                     class-ks (:classes migrate-updates)
+                     d-entity-fn (partial d/entity db-after)
+                     new-property-entities (keep d-entity-fn property-ks)
+                     new-class-entities (keep d-entity-fn class-ks)]
+                 (swap! *tx-data apply-conj
+                        (concat (gen-client-op/generate-rtc-ops-from-property-entities new-property-entities)
+                                (gen-client-op/generate-rtc-ops-from-class-entities new-class-entities))))
+               @*tx-data))
+           upgrade-result-coll)
+          max-t (apply max 0 (map second client-ops))]
+      (conj (vec client-ops)
+            [:update-kv-value
+             max-t
+             {:db-ident :logseq.kv/schema-version
+              :value to-version}]))))

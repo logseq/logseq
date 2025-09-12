@@ -89,3 +89,10 @@
                "-"
                (rand-nth non-int-char-range)
                (nano-id 7))))))
+
+(defn replace-db-ident-random-suffix
+  [db-ident-kw new-suffix]
+  (assert (keyword? db-ident-kw))
+  (assert (and (string? new-suffix) (= 8 (count new-suffix))))
+  (keyword (namespace db-ident-kw)
+           (string/replace-first (name db-ident-kw) #"-.{8}$" (str "-" new-suffix))))

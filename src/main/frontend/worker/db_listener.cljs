@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.rtc.gen-client-op :as gen-client-op]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
@@ -82,13 +83,7 @@
           get-batch-txs #(->> @*batch-all-txs
                               (sort-by :tx)
                               (common-util/distinct-by-last-wins (fn [[e a v _tx added]] [e a v added])))
-          additional-args (fn [tx-data]
-                            (let [datom-vec-coll (map vec tx-data)
-                                  id->same-entity-datoms (group-by first datom-vec-coll)
-                                  id-order (distinct (map first datom-vec-coll))
-                                  same-entity-datoms-coll (map id->same-entity-datoms id-order)]
-                              [[:same-entity-datoms-coll same-entity-datoms-coll]
-                               [:id->same-entity-datoms id->same-entity-datoms]]))]
+          additional-args gen-client-op/group-datoms-by-entity]
       (d/listen! conn ::listen-db-changes!
                  (fn listen-db-changes!-inner
                    [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
@@ -119,8 +114,7 @@
                                  tx-report' (if sync-db-to-main-thread?
                                               (sync-db-to-main-thread repo conn tx-report)
                                               tx-report)
-                                 opt (into {:repo repo}
-                                           (additional-args (:tx-data tx-report')))]
+                                 opt (assoc (additional-args (:tx-data tx-report')) :repo repo)]
                              (doseq [[k handler-fn] handlers]
                                (handler-fn k opt tx-report'))))
 
@@ -129,7 +123,6 @@
                          (let [tx-report' (if sync-db-to-main-thread?
                                             (sync-db-to-main-thread repo conn tx-report)
                                             tx-report)
-                               opt (into {:repo repo}
-                                         (additional-args (:tx-data tx-report')))]
+                               opt (assoc (additional-args (:tx-data tx-report')) :repo repo)]
                            (doseq [[k handler-fn] handlers]
                              (handler-fn k opt tx-report')))))))))))

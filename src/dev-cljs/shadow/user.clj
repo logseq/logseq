@@ -18,11 +18,13 @@
 
 ;; Get the runtime id from http://localhost:9630/runtimes, pick the one which shows `browser-worker`
 (defn worker-repl
-  []
-  (let [runtime-id (->> (api/repl-runtimes :db-worker)
-                        (map :client-id)
-                        first)]
-    (api/repl :db-worker {:runtime-id runtime-id})))
+  ([]
+   (let [runtime-id (->> (api/repl-runtimes :db-worker)
+                         (map :client-id)
+                         first)]
+     (api/repl :db-worker {:runtime-id runtime-id})))
+  ([runtime-id]
+   (api/repl :db-worker {:runtime-id runtime-id})))
 
 (defn runtime-id-list
   [app]
