@@ -538,7 +538,7 @@
         nil)
       (catch :default e
         (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
-        (js/console.error e)
+        (log/error ::worker-transact-failed e)
         (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data
@@ -775,6 +775,10 @@
       (when @conn
         {:available? (some? (d/entity @conn :logseq.class/Tag))}))))
 
+(def-thread-api :thread-api/mobile-logs
+  []
+  @worker-state/*log)
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -901,6 +905,7 @@
                       bean/->js)]
     (glogi-console/install!)
     (log/set-levels {:glogi/root :info})
+    (log/add-handler worker-state/log-append!)
     (check-worker-scope!)
     (outliner-register-op-handlers!)
     (<ratelimit-file-writes!)
