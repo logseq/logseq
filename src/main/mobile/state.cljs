@@ -34,6 +34,10 @@
   [data]
   (reset! *popup-data data))
 
+(defn quick-add-open?
+  []
+  (= :ls-quick-add (get-in @*popup-data [:opts :id])))
+
 (defonce *left-sidebar-open? (atom false))
 
 (defn open-left-sidebar!

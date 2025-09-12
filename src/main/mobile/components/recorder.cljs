@@ -216,7 +216,7 @@
   []
   (let [editing-id (state/get-edit-input-id)]
     (set-last-edit-block! nil)
-    (when-not (string/blank? editing-id)
+    (if-not (string/blank? editing-id)
       (p/do!
         (editor-handler/save-current-block!)
         (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]

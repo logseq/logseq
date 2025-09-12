@@ -10,8 +10,9 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
-            [mobile.init :as init]
             [mobile.components.recorder :as recorder]
+            [mobile.init :as mobile-init]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -98,7 +99,13 @@
         (command #(let [parent-id (state/get-edit-input-id)]
                     (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
        [:div.toolbar-hide-keyboard
-        (command #(p/do!
-                   (editor-handler/save-current-block!)
-                   (state/clear-edit!)
-                   (init/keyboard-hide)) {:icon "keyboard-show"})]])))
+        (if (mobile-state/quick-add-open?)
+          (command (fn []
+                     (mobile-state/set-popup! nil)
+                     (js/setTimeout #(recorder/open-dialog!) 100))
+            {:icon "microphone" :class "text-green-900"})
+          (command #(p/do!
+                      (editor-handler/save-current-block!)
+                      (state/clear-edit!)
+                      (mobile-init/keyboard-hide)) {:icon "keyboard-show"}))
+        ]])))
