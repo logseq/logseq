@@ -61,17 +61,6 @@
           (recur)
           x)))))
 
-(defn- create-local-updates-check-flow
-  "Return a flow: emit if need to push local-updates"
-  [repo *auto-push? interval-ms]
-  (let [auto-push-flow (m/watch *auto-push?)
-        clock-flow (c.m/clock interval-ms :clock)
-        merge-flow (m/latest vector auto-push-flow clock-flow)]
-    (m/eduction (filter first)
-                (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
-                merge-flow)))
-
 (defn- create-pull-remote-updates-flow
   "Return a flow: emit to pull remote-updates.
   reschedule next emit(INTERVAL-MS later) every time RESCHEDULE-FLOW emit a value.

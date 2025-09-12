@@ -1,6 +1,7 @@
 (ns mobile.components.header
   "App top header"
-  (:require [frontend.common.missionary :as c.m]
+  (:require [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
             [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
@@ -102,7 +103,9 @@
        {:variant :ghost
         :size :sm
         :on-click (fn []
-                    (util/copy-to-clipboard! (mobile-state/log->str)))}
+                    (util/copy-to-clipboard! (str (string/join "\n\n" @mobile-state/*log)
+                                                  "\n\n================================================================\n\n"
+                                                  (string/join "\n\n" worker-records))))}
        "Copy")]
 
      [:div.flex.flex-row.gap-2
@@ -135,11 +138,9 @@
                      (filter (fn [record] (contains? #{:error :severe} (:level record))))
                      reversed?
                      reverse)]
-       [:p
-        [:ul
-         (for [record records]
-           [:li (:message record)])]
-        [:br]])]))
+       [:ul
+        (for [record records]
+          [:li (:message record)])])]))
 
 (rum/defc header
   [tab login?]
