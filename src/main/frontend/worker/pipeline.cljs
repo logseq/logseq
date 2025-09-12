@@ -105,13 +105,15 @@
   "Validate db is slow, we probably don't want to enable it for production."
   [repo conn tx-report tx-meta context]
   (when (and (not (::skip-validate-db? tx-meta false))
-             (:dev? context)
+             (or (:dev? context) (:undo? tx-meta) (:redo? tx-meta))
              (not (:importing? context)) (sqlite-util/db-based-graph? repo))
     (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
                    true
                    (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
       (when-not valid?
-        (when (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
+        (when (and (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
+                   ;; don't notify on production when undo/redo failed
+                   (not (and (not (:dev? context)) (or (:undo? tx-meta) (:repo? tx-meta)))))
           (shared-service/broadcast-to-clients! :notification
                                                 [["Invalid DB!"] :error]))
         (throw (ex-info "Invalid data" {:graph repo})))))
@@ -379,6 +381,14 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
+(defn- reverse-tx!
+  [conn tx-data]
+  (let [reversed-tx-data (map (fn [[e a v _tx add?]]
+                                (let [op (if add? :db/retract :db/add)]
+                                  [op e a v])) tx-data)]
+    (d/transact! conn reversed-tx-data {:revert-tx-data? true
+                                        :gen-undo-ops? false})))
+
 (defn- undo-tx-data-if-disallowed!
   [conn {:keys [tx-data tx-meta]}]
   (when-not (:rtc-download-graph? tx-meta)
@@ -389,10 +399,7 @@
                                                     (not (ldb/page? (d/entity db (:v d)))))) tx-data)]
       ;; TODO: add other cases that need to be undo
       (when page-has-block-parent?
-        (let [reversed-tx-data (map (fn [[e a v _tx add?]]
-                                      (let [op (if add? :db/retract :db/add)]
-                                        [op e a v])) tx-data)]
-          (d/transact! conn reversed-tx-data {:op :undo-tx-data}))
+        (reverse-tx! conn tx-data)
         (throw (ex-info "Page can't have block as parent"
                         {:type :notification
                          :payload {:message "Page can't have block as parent"
@@ -452,7 +459,18 @@
           tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true
                                                      ;; Ensure db persisted
                                                      :db-persist? true})
-          _ (validate-db! repo conn tx-report* tx-meta context)
+          _ (when-not (:revert-tx-data? tx-meta)
+              (try
+                (validate-db! repo conn tx-report* tx-meta context)
+                (catch :default e
+                  (when-not (rtc-tx-or-download-graph? tx-meta)
+                    (prn :debug :revert-invalid-tx
+                         :tx-meta
+                         tx-meta
+                         :tx-data
+                         (:tx-data tx-report*))
+                    (reverse-tx! conn (:tx-data tx-report*)))
+                  (throw e))))
           full-tx-data (concat (:tx-data tx-report*)
                                (:tx-data refs-tx-report)
                                (:tx-data tx-report'))
@@ -476,7 +494,8 @@
 
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
-  (when-not (:pipeline-replace? tx-meta)
+  (when-not (or (:pipeline-replace? tx-meta)
+                (:revert-tx-data? tx-meta))
     (let [{:keys [from-disk? new-graph?]} tx-meta]
       (cond
         (or from-disk? new-graph?)

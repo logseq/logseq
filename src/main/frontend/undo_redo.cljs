@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [malli.core :as m]
@@ -52,6 +53,12 @@
 (defonce max-stack-length 25)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
+
+(defn clear-history!
+  [repo]
+  (prn :debug :clear-undo-history repo)
+  (swap! *undo-ops assoc repo [])
+  (swap! *redo-ops assoc repo []))
 
 (defn- conj-op
   [col op]
@@ -293,10 +300,14 @@
                   (do
                     (ldb/transact! conn reversed-tx-data tx-meta')
                     (handler))
-                  (p/do!
-                   ;; async write to the master worker
-                   (ldb/transact! repo reversed-tx-data tx-meta')
-                   (handler)))))))))
+                  (->
+                   (p/do!
+                    ;; async write to the master worker
+                    (ldb/transact! repo reversed-tx-data tx-meta')
+                    (handler))
+                   (p/catch (fn [e]
+                              (log/error ::undo-redo-failed e)
+                              (clear-history! repo)))))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))
