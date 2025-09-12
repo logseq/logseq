@@ -249,9 +249,10 @@
                (:remote-update :remote-asset-block-update)
                (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
                     (catch :default e
-                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                      (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn)))))
+                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
+                        (throw e))))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops

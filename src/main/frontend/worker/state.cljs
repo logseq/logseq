@@ -56,6 +56,7 @@
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
+;;; ================================================================
 (defn get-sqlite-conn
   ([repo] (get-sqlite-conn repo :db))
   ([repo which-db]
@@ -127,3 +128,12 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+
+;;; ========================== mobile log ======================================
+(defonce *log (atom []))
+(defn log-append!
+  [record]
+  (swap! *log conj record)
+  (when (> (count @*log) 1000)
+    (reset! *log (subvec @*log 800))))
