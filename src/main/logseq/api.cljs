@@ -48,6 +48,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -1155,6 +1156,28 @@
   [^js args]
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
+
+;; Internal CLI API
+;; TODO: Use transit for internal APIs
+(defn ^:export list_tags
+  []
+  (clj->js (cli-common-mcp-tools/list-tags (db/get-db))))
+
+(defn ^:export list_properties
+  []
+  (clj->js (cli-common-mcp-tools/list-properties (db/get-db))))
+
+(defn ^:export get_page_data
+  "Like get_page_blocks_tree but for MCP tools"
+  [page-title]
+  (when-let [tools (cli-common-mcp-tools/get-page-blocks (db/get-db) page-title)]
+    (->> tools
+         (map #(dissoc % :block.temp/has-children? :block.temp/load-status))
+         clj->js)))
+
+(defn ^:export list_pages
+  []
+  (clj->js (cli-common-mcp-tools/list-pages (db/get-db))))
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
