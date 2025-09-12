@@ -1,6 +1,8 @@
 (ns mobile.components.header
   "App top header"
-  (:require [frontend.components.repo :as repo]
+  (:require [clojure.string :as string]
+            [frontend.common.missionary :as c.m]
+            [frontend.components.repo :as repo]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -15,6 +17,7 @@
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
+            [missionary.core :as m]
             [mobile.components.ui :as ui-component]
             [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
@@ -83,9 +86,15 @@
 
 (rum/defc log
   []
-  (let [log-str (mobile-state/log->str)
-        [error-only? set-error-only!] (hooks/use-state false)
-        [reversed? set-reversed!] (hooks/use-state false)]
+  (let [[error-only? set-error-only!] (hooks/use-state false)
+        [reversed? set-reversed!] (hooks/use-state false)
+        [show-worker-log? set-show-worker-log!] (hooks/use-state false)
+        [worker-records set-worker-records!] (hooks/use-state [])]
+    (hooks/use-effect!
+     #(c.m/run-task*
+       (m/sp
+         (set-worker-records! (c.m/<? (state/<invoke-db-worker :thread-api/mobile-logs)))))
+     [])
     [:div.flex.flex-col.gap-1.p-2.ls-debug-log
      [:div.flex.flex-row.justify-between
       [:div.text-lg.font-medium.mb-2 "Full log: "]
@@ -94,7 +103,7 @@
        {:variant :ghost
         :size :sm
         :on-click (fn []
-                    (util/copy-to-clipboard! log-str))}
+                    (util/copy-to-clipboard! (string/join @mobile-state/*log "\n\n")))}
        "Copy")]
 
      [:div.flex.flex-row.gap-2
@@ -112,17 +121,26 @@
                     (set-reversed! (not reversed?)))}
        (if reversed?
          "New record first"
-         "Old record first"))]
+         "Old record first"))
 
-     (let [records (cond->> @mobile-state/*log
+      (shui/button
+       {:size :sm
+        :on-click (fn []
+                    (set-show-worker-log! (not show-worker-log?)))}
+       (if show-worker-log?
+         "Show UI logs"
+         "Show worker logs"))]
+
+     (let [records (cond->> (if show-worker-log? worker-records @mobile-state/*log)
                      error-only?
                      (filter (fn [record] (contains? #{:error :severe} (:level record))))
                      reversed?
                      reverse)]
-       (when (seq records)
-         [:ul
-          (for [record records]
-            [:li (str record)])]))]))
+       [:p
+        [:ul
+         (for [record records]
+           [:li (:message record)])]
+        [:br]])]))
 
 (rum/defc header
   [tab login?]
