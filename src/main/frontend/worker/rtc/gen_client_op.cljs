@@ -138,10 +138,10 @@
    {} entity-datoms))
 
 (defn generate-rtc-ops
-  [db-before db-after same-entity-datoms-coll e->a->v->add?->t]
+  [db-before db-after same-entity-datoms-coll e->a->add?->v->t]
   (mapcat
    (partial entity-datoms=>ops
-            db-before db-after e->a->v->add?->t rtc-const/ignore-attrs-when-syncing)
+            db-before db-after e->a->add?->v->t rtc-const/ignore-attrs-when-syncing)
    same-entity-datoms-coll))
 
 (defn- generate-rtc-ops-from-entities
@@ -154,8 +154,8 @@
                            datoms (d/datoms db :eavt e)]
                        [e datoms])))
               ents)
-        e->a->v->add?->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
-    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->v->add?->t)))
+        e->a->add?->v->t (update-vals id->same-entity-datoms entity-datoms=>a->add?->v->t)]
+    (generate-rtc-ops db db (vals id->same-entity-datoms) e->a->add?->v->t)))
 
 (defn generate-rtc-ops-from-property-entities
   [property-ents]
