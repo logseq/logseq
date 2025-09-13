@@ -410,19 +410,22 @@
 
 (defn- assign-temp-id
   [blocks replace-empty-target? target-block]
-  (->> (map-indexed (fn [idx block]
-                      (let [replacing-block? (and replace-empty-target? (zero? idx))]
-                        (if replacing-block?
-                          (let [db-id (or (:db/id block) (dec (- idx)))]
-                            (if (seq (:block/_parent target-block)) ; target-block has children
+  (->> blocks
+       (map-indexed
+        (fn [idx block]
+          (let [replacing-block? (and replace-empty-target? (zero? idx))
+                db-id (or (when (:block.temp/use-old-db-id? block)
+                            (:db/id block))
+                          (dec (- idx)))]
+            (if replacing-block?
+              (if (seq (:block/_parent target-block)) ; target-block has children
                               ;; update block properties
-                              [(assoc block
-                                      :db/id (:db/id target-block)
-                                      :block/uuid (:block/uuid target-block))]
-                              [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                               (assoc block
-                                      :db/id db-id)]))
-                          [(assoc block :db/id (dec (- idx)))]))) blocks)
+                [(assoc block
+                        :db/id (:db/id target-block)
+                        :block/uuid (:block/uuid target-block))]
+                [[:db/retractEntity (:db/id target-block)] ; retract target-block first
+                 (assoc block :db/id db-id)])
+              [(assoc block :db/id db-id)]))))
        (apply concat)))
 
 (defn- get-id
@@ -604,8 +607,10 @@
                                                                                 (page-ref/->page-ref (uuids id))))
                                                               value
                                                               template-ref-block-ids)
-                                                             value)))
-                                    (dissoc :db/id))
+                                                             value))))
+                           result* (if (:block.temp/use-old-db-id? result*)
+                                     result*
+                                     (dissoc result* :db/id))
                            page? (or (ldb/page? block) (:block/name block))
                            result (cond-> result*
                                     (not page?)
@@ -754,17 +759,17 @@
                        (if-let [eid (or (:db/id b)
                                         (when-let [id (:block/uuid b)]
                                           [:block/uuid id]))]
-                         (let [b (if-let [e (if (de/entity? b) b (d/entity db eid))]
-                                   (merge
-                                    (into {} e)
-                                    {:db/id (:db/id e)
-                                     :block/title (or (:block/raw-title e) (:block/title e))}
+                         (let [b' (if-let [e (if (de/entity? b) b (d/entity db eid))]
+                                    (merge
+                                     (into {} e)
+                                     {:db/id (:db/id e)
+                                      :block/title (or (:block/raw-title e) (:block/title e))}
+                                     b)
                                     b)
-                                   b)
                                dissoc-keys (concat [:block/tx-id]
                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
                                                      [:block/refs]))]
-                           (apply dissoc b dissoc-keys))
+                           (apply dissoc b' dissoc-keys))
                          b))
                      blocks)
         [target-block sibling?] (get-target-block db blocks target-block opts)
@@ -800,10 +805,14 @@
                            :tx (vec blocks-tx)
                            :blocks (vec blocks)
                            :target-block target-block}))
-          (let [uuids-tx (->> (map :block/uuid blocks-tx)
+          (let [tx (assign-temp-id blocks-tx replace-empty-target? target-block)
+                old-db-id-blocks (->> (filter :block.temp/use-old-db-id? tx)
+                                      (map :block/uuid)
+                                      (set))
+                uuids-tx (->> (map :block/uuid blocks-tx)
+                              (remove old-db-id-blocks)
                               (remove nil?)
                               (map (fn [uuid'] {:block/uuid uuid'})))
-                tx (assign-temp-id blocks-tx replace-empty-target? target-block)
                 from-property (:logseq.property/created-from-property target-block)
                 many? (= :db.cardinality/many (:db/cardinality from-property))
                 property-values-tx (when (and sibling? from-property many?)
