@@ -16,6 +16,7 @@
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
+            [frontend.worker.rtc.throttle :as r.throttle]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util :refer [gen-get-ws-create-map--memoized]]
             [frontend.worker.shared-service :as shared-service]
@@ -59,17 +60,6 @@
         (if (identical? x sentinel)
           (recur)
           x)))))
-
-(defn- create-local-updates-check-flow
-  "Return a flow: emit if need to push local-updates"
-  [repo *auto-push? interval-ms]
-  (let [auto-push-flow (m/watch *auto-push?)
-        clock-flow (c.m/clock interval-ms :clock)
-        merge-flow (m/latest vector auto-push-flow clock-flow)]
-    (m/eduction (filter first)
-                (map second)
-                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
-                merge-flow)))
 
 (defn- create-pull-remote-updates-flow
   "Return a flow: emit to pull remote-updates.
@@ -137,7 +127,7 @@
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
-                                  (create-local-updates-check-flow repo *auto-push? 2000))
+                                  (r.throttle/create-local-updates-check-flow repo *auto-push? 2000))
         inject-user-info-flow (create-inject-users-info-flow repo (m/watch *online-users))
         mix-flow (c.m/mix remote-updates-flow local-updates-check-flow inject-user-info-flow)]
     (c.m/mix mix-flow (create-pull-remote-updates-flow 60000 mix-flow))))

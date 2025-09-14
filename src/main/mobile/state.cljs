@@ -1,7 +1,6 @@
 (ns mobile.state
   "Mobile state"
-  (:require [clojure.string :as string]
-            [frontend.rum :as r]))
+  (:require [frontend.rum :as r]))
 
 (defonce *tab (atom "home"))
 (defn set-tab! [tab] (reset! *tab tab))
@@ -61,8 +60,3 @@
   (swap! *log conj record)
   (when (> (count @*log) 1000)
     (reset! *log (subvec @*log 800))))
-
-(defn log->str
-  []
-  (->> @*log
-       (string/join "\n\n")))
