@@ -2630,7 +2630,7 @@
 
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (when-not @(:ui/scrolling? @state/state)
+  (when (or (util/rtc-test?) (not @(:ui/scrolling? @state/state)))
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)
@@ -4413,7 +4413,7 @@
   (let [mobile? (util/mobile?)
         [ready? set-ready?] (hooks/use-state
                              (not (and mobile? (not (:journals? config)))))
-        [virtualized? _] (hooks/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
+        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
                                                    (if (:journals? config)
                                                      (< (count blocks) 50)
                                                      (< (count blocks) 10))
