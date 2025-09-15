@@ -211,7 +211,6 @@
           e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
           schema (:schema @conn)
-          added-and-retracted-ids (set/union added-ids retracted-ids)
           moved-blocks (get-moved-blocks e->datoms)]
       (->>
        (mapcat
