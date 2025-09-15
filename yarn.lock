@@ -179,6 +179,11 @@
   resolved "https://registry.yarnpkg.com/@capacitor-community/safe-area/-/safe-area-7.0.0-alpha.1.tgz#9749cd59ca6a21942da006a3b8c7f0da5cd902e3"
   integrity sha512-N6ktkRiofqrt+N/vQzh4jcWY8IzJ4TVw1tKAPssvbddWFTyZzXzSdBeX/l/nracJF0PZqmLdA7JYTBfnOxXQYw==
 
+"@capacitor-community/speech-recognition@^7.0.1":
+  version "7.0.1"
+  resolved "https://registry.yarnpkg.com/@capacitor-community/speech-recognition/-/speech-recognition-7.0.1.tgz#218e1c3bd8f7181312c9ce3af57fcdae7ede8e89"
+  integrity sha512-ykpBZziR575X0eURO5vXaD9gVrXXC/7Ra2qql/2KP6/jxWOqAFuw4eKjSPjwdAgGE6a/Z+v8FJm4SVh57MVwDA==
+
 "@capacitor/action-sheet@7.0.1":
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/action-sheet/-/action-sheet-7.0.1.tgz#8b6fd171375d1e4d9392ee9968ef4152309dcaa7"

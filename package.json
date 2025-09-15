@@ -109,6 +109,7 @@
     },
     "dependencies": {
         "@capacitor-community/safe-area": "7.0.0-alpha.1",
+        "@capacitor-community/speech-recognition": "^7.0.1",
         "@capacitor/action-sheet": "7.0.1",
         "@capacitor/android": "7.2.0",
         "@capacitor/app": "7.0.1",
@@ -192,8 +193,8 @@
         "threads": "1.6.5",
         "url": "^0.11.0",
         "util": "^0.12.5",
-        "yargs-parser": "20.2.4",
-        "wavesurfer.js": "7.10.1"
+        "wavesurfer.js": "7.10.1",
+        "yargs-parser": "20.2.4"
     },
     "resolutions": {
         "pixi-graph-fork/@pixi/app": "6.2.0",
