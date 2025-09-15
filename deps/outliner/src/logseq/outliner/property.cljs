@@ -416,7 +416,8 @@
       (validate-batch-deletion-of-property [block] property-id))
     (when block
       (cond
-        (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
+        (or (= :logseq.property/empty-placeholder (:db/ident (get block property-id)))
+            (nil? (get block property-id)))
         nil
 
         (= :logseq.property/status property-id)
