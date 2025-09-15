@@ -539,19 +539,43 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 }
 
 .app-audio-recorder-inner {
-  @apply relative;
+  @apply relative pb-1;
 
   h1 {
-    @apply pl-10;
+    @apply pl-6 flex flex-col;
+
+    > small {
+      @apply opacity-40 text-sm;
+    }
 
     &:after {
-      @apply content-[''] absolute top-[35px] left-[25px] bg-red-700
+      @apply content-[''] absolute top-[35px] left-[70px] bg-red-700
       w-1.5 h-1.5 overflow-hidden rounded-full;
     }
   }
 
   select {
     @apply bg-transparent;
+  }
+
+  .record-ctrl-btn {
+    @apply w-12 h-12 text-green-800 bg-green-200 border-none;
+
+    &.recording {
+      @apply bg-red-200 border-red-500 text-red-700;
+    }
+  }
+
+  .timer-wrap {
+    @apply select-none;
+
+    > .timer {
+      @apply text-[28px] font-[500] font-mono opacity-90;
+    }
+
+    > small {
+      @apply opacity-50 -mt-1;
+    }
   }
 }
 
