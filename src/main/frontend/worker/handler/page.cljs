@@ -12,14 +12,16 @@
             [logseq.graph-parser.db :as gp-db]))
 
 (defn rtc-create-page!
-  [conn config title {:keys [uuid]}]
+  [conn config title {:keys [uuid old-db-id]}]
   (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
   (let [date-formatter    (common-config/get-date-formatter config)
         title (db-worker-page/sanitize-title title)
         page-name (common-util/page-name-sanity-lc title)
-        page              (gp-block/page-name->map title @conn true date-formatter
-                                                   {:page-uuid uuid
-                                                    :skip-existing-page-check? true})
+        page              (cond-> (gp-block/page-name->map title @conn true date-formatter
+                                                           {:page-uuid uuid
+                                                            :skip-existing-page-check? true})
+                            old-db-id
+                            (assoc :db/id old-db-id))
         result            (ldb/transact! conn [page] {:persist-op? false
                                                       :outliner-op :create-page
                                                       :rtc-op? true})]
