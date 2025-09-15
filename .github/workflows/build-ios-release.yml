@@ -25,7 +25,9 @@ jobs:
           ref: ${{ github.event.inputs.git-ref }}
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.0-beta'
+      - name: Install iOS
+        run: xcodebuild -downloadPlatform iOS
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
         with:
