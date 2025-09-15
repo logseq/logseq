@@ -182,8 +182,8 @@
           quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
           children (cond
                      (and (= id quick-add-page-id)
-                          (> (count (get @(:rtc/users-info @state/state) (state/get-current-repo))) 1)
-                          (user-handler/user-uuid)) ; other collaborator
+                          (user-handler/user-uuid)
+                          (ldb/get-graph-rtc-uuid (db/get-db)))
                      (let [user-id (uuid (user-handler/user-uuid))
                            user-db-id (:db/id (db/entity [:block/uuid user-id]))]
                        (if user-db-id
