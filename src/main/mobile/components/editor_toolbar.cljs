@@ -8,6 +8,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.components.svg :as svg]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [mobile.components.recorder :as recorder]
@@ -44,7 +45,8 @@
                         (if event?
                           (command-handler e)
                           (command-handler)))}
-    (ui/icon icon {:size ui/icon-size :class class})]])
+    (if (string? icon)
+      (ui/icon icon {:size ui/icon-size :class class}) icon)]])
 
 (defn- insert-text
   [text opts]
@@ -103,7 +105,7 @@
           (command (fn []
                      (mobile-state/set-popup! nil)
                      (js/setTimeout #(recorder/open-dialog!) 100))
-            {:icon "microphone" :class "text-green-900"})
+            {:icon (svg/audio-lines 17)})
           (command #(p/do!
                       (editor-handler/save-current-block!)
                       (state/clear-edit!)
