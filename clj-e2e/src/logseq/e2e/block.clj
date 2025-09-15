@@ -12,6 +12,7 @@
   [& {:keys [retry?]}]
   (util/double-esc)
   (assert/assert-in-normal-mode?)
+
   (let [blocks-count (util/page-blocks-count)
         last-block (-> (if (zero? blocks-count)
                          (w/query ".ls-page-blocks .block-add-button")
