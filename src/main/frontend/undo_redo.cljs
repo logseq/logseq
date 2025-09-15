@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db :as ldb]
             [malli.core :as m]
@@ -52,6 +53,12 @@
 (defonce max-stack-length 100)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
+
+(defn clear-history!
+  [repo]
+  (prn :debug :clear-undo-history repo)
+  (swap! *undo-ops assoc repo [])
+  (swap! *redo-ops assoc repo []))
 
 (defn- conj-op
   [col op]
@@ -204,20 +211,12 @@
           e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
           schema (:schema @conn)
-          added-and-retracted-ids (set/union added-ids retracted-ids)
           moved-blocks (get-moved-blocks e->datoms)]
       (->>
        (mapcat
         (fn [[e datoms]]
           (let [entity (d/entity @conn e)]
             (cond
-              ;; entity has been deleted
-              (and (nil? entity)
-                   (not (contains? added-and-retracted-ids e)))
-              (throw (ex-info "Entity has been deleted"
-                              (merge op {:error :entity-deleted
-                                         :undo? undo?})))
-
               ;; new children blocks have been added
               (and
                (not (:local-tx? tx-meta))
@@ -247,8 +246,7 @@
        (remove nil?)))
     (catch :default e
       (prn :debug :undo-redo :error (:error (ex-data e)))
-      (when-not (contains? #{:entity-deleted
-                             :block-moved-or-target-deleted
+      (when-not (contains? #{:block-moved-or-target-deleted
                              :block-children-exists}
                            (:error (ex-data e)))
         (throw e)))))
@@ -275,7 +273,8 @@
                                        :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
-                                :undo? undo?))
+                                :undo? undo?
+                                :redo? (not undo?)))
                   handler (fn handler []
                             ((if undo? push-redo-op push-undo-op) repo op)
                             (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
@@ -292,10 +291,14 @@
                   (do
                     (ldb/transact! conn reversed-tx-data tx-meta')
                     (handler))
-                  (p/do!
-                   ;; async write to the master worker
-                   (ldb/transact! repo reversed-tx-data tx-meta')
-                   (handler)))))))))
+                  (->
+                   (p/do!
+                    ;; async write to the master worker
+                    (ldb/transact! repo reversed-tx-data tx-meta')
+                    (handler))
+                   (p/catch (fn [e]
+                              (log/error ::undo-redo-failed e)
+                              (clear-history! repo)))))))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))
