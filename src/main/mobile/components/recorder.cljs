@@ -134,7 +134,9 @@
                                        50))
               (.on "record-start" handle-status-changed!)
               (.on "record-pause" handle-status-changed!)
-              (.on "record-resume" handle-status-changed!)))
+              (.on "record-resume" handle-status-changed!))
+              ;; auto start
+              (.startRecording r))
           #()))
       [])
 
