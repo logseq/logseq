@@ -146,7 +146,10 @@
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
    (map (fn [m]
-          (if (= "Internal server error" (:message m))
+          (if (contains?
+               #{"Endpoint request timed out"
+                 "Internal server error"}
+               (:message m))
             (throw r.ex/ex-unknown-server-error)
             m)))
    (map rtc-schema/data-from-ws-coercer)
