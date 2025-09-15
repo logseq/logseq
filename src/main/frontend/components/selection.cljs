@@ -10,7 +10,7 @@
             [rum.core :as rum]))
 
 (rum/defc action-bar < rum/reactive
-  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border?]
+  [& {:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent]
       :or {on-cut #(editor-handler/cut-selection-blocks true)}}]
   (when-not (or (state/sub :search/mode)
                 (state/sub :ui/show-property-dialog?))
@@ -66,13 +66,14 @@
                                                                               :select-opts {:show-new-when-not-exact-match? false}
                                                                               :on-dialog-close #(state/pub-event! [:editor/hide-action-bar])}])))
            "Unset property"))
-        (shui/button
-         (assoc button-opts
-                :on-pointer-down (fn [e]
-                                   (util/stop e)
-                                   (on-cut)
-                                   (state/pub-event! [:editor/hide-action-bar])))
-         (ui/icon "trash" {:size 13}))
+        (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
+          (shui/button
+           (assoc button-opts
+                  :on-pointer-down (fn [e]
+                                     (util/stop e)
+                                     (on-cut)
+                                     (state/pub-event! [:editor/hide-action-bar])))
+           (ui/icon "trash" {:size 13})))
         (when-not hide-dots?
           (shui/button
            (assoc button-opts
