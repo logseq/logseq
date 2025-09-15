@@ -842,18 +842,18 @@
                     (p/do!
                      (ui-outliner-tx/transact!
                       transact-opts
-                      (when (= (:db/id current-block) (:db/id (:block/parent next-block)))
-                        (property-handler/set-block-properties!
-                         repo
-                         (:block/uuid next-block)
-                         {:block/parent (:db/id (:block/parent current-block))
-                          :block/order (:block/order current-block)}))
 
                       (when (seq children)
                         (outliner-op/move-blocks!
                          (remove (fn [c] (= (:db/id c) (:db/id next-block))) children)
                          next-block
                          {:sibling? false}))
+
+                      (when (= (:db/id current-block) (:db/id (:block/parent next-block)))
+                        (outliner-op/move-blocks!
+                         [next-block]
+                         current-block
+                         {:sibling? true}))
 
                       (delete-block-aux! current-block))
                      (edit-block! (db/entity (:db/id next-block)) 0)))
