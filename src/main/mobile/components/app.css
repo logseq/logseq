@@ -434,7 +434,7 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   @apply flex border-t overflow-hidden select-none
   bg-gray-02 absolute left-0 -bottom-0 w-full z-[1] dark:bg-gray-01;
 
-  padding-top: 6px;
+  padding-top: 4px;
   padding-bottom: calc(env(safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
 
   > .as-item {
