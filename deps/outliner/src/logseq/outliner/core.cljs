@@ -382,18 +382,23 @@
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [block-id (:block/uuid this)
-          ids (cons (:db/id this) (ldb/get-block-full-children-ids db block-id))
-          txs (map (fn [id] [:db.fn/retractEntity id]) ids)
-          page-tx (let [block (d/entity db [:block/uuid block-id])]
-                    (when (:block/pre-block? block)
-                      (when-let [id (:db/id (:block/page block))]
-                        [[:db/retract id :block/properties]
-                         [:db/retract id :block/properties-order]
-                         [:db/retract id :block/properties-text-values]
-                         [:db/retract id :block/alias]
-                         [:db/retract id :block/tags]])))]
-      (swap! *txs-state concat txs page-tx)
-      block-id)))
+          block (d/entity db [:block/uuid block-id])]
+      (if (ldb/page? block)
+        (swap! *txs-state concat [[:db/retract (:db/id block) :block/parent]
+                                  [:db/retract (:db/id block) :block/order]
+                                  [:db/retract (:db/id block) :block/page]])
+        (let [ids (cons (:db/id this) (ldb/get-block-full-children-ids db block-id))
+              txs (map (fn [id] [:db.fn/retractEntity id]) ids)
+              page-tx (let [block (d/entity db [:block/uuid block-id])]
+                        (when (:block/pre-block? block)
+                          (when-let [id (:db/id (:block/page block))]
+                            [[:db/retract id :block/properties]
+                             [:db/retract id :block/properties-order]
+                             [:db/retract id :block/properties-text-values]
+                             [:db/retract id :block/alias]
+                             [:db/retract id :block/tags]])))]
+          (swap! *txs-state concat txs page-tx)
+          block-id)))))
 
 (defn- assoc-level-aux
   [tree-vec children-key init-level]
@@ -847,11 +852,6 @@
               (ldb/sort-page-random-blocks db blocks))
             page-blocks)))
 
-(defn- delete-block
-  [db txs-state node]
-  (otree/-del node txs-state db)
-  @txs-state)
-
 (defn- get-top-level-blocks
   [top-level-blocks non-consecutive?]
   (let [reversed? (and (not non-consecutive?)
@@ -892,9 +892,6 @@
                 tx-data (map (fn [d] {:db/id (:e d)
                                       (:db/ident from-property) :logseq.property/empty-placeholder}) datoms)]
             (when (seq tx-data) (swap! txs-state concat tx-data)))
-
-          delete-one-block?
-          (delete-block db txs-state start-block)
 
           :else
           (doseq [id block-ids]
