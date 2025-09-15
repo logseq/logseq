@@ -2630,7 +2630,7 @@
 
 (defn- block-content-on-pointer-down
   [e block block-id edit-input-id content config]
-  (when (or (util/rtc-test?) (not @(:ui/scrolling? @state/state)))
+  (when-not @(:ui/scrolling? @state/state)
     (let [target (.-target e)
           selection-blocks (state/get-selection-blocks)
           starting-block (state/get-selection-start-block-or-first)

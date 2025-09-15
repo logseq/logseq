@@ -9,7 +9,7 @@
 
 (defn open-last-block
   "Open the last existing block or pressing add button to create a new block"
-  []
+  [& {:keys [retry?]}]
   (util/double-esc)
   (assert/assert-in-normal-mode?)
   (let [blocks-count (util/page-blocks-count)
@@ -17,7 +17,13 @@
                          (w/query ".ls-page-blocks .block-add-button")
                          (w/query ".ls-page-blocks .page-blocks-inner .ls-block .block-content"))
                        (last))]
-    (w/click last-block)))
+    (w/click last-block)
+    (if retry?
+      (assert/assert-editor-mode)
+      (try
+        (assert/assert-editor-mode)
+        (catch Error _e
+          (open-last-block {:retry? true}))))))
 
 (defn save-block
   [text]
@@ -30,7 +36,6 @@
   [title]
   (let [editor (util/get-editor)]
     (when-not editor (open-last-block))
-    (assert/assert-editor-mode)
     (let [last-id (.getAttribute (w/-query ".editor-wrapper textarea") "id")]
       (is (some? last-id))
       (k/press "Control+e")
@@ -47,7 +52,6 @@
   [titles]
   (let [editor? (util/get-editor)]
     (when-not editor? (open-last-block))
-    (assert/assert-editor-mode)
     (let [value (util/get-edit-content)]
       (if (string/blank? value)         ; empty block
         (save-block (first titles))
