@@ -802,7 +802,7 @@
 
 (defn delete-block-inner!
   [repo {:keys [block-id value format config block-container current-block next-block delete-concat?]}]
-  (when block-id
+  (when (and block-id (not (some ldb/page? [current-block next-block])))
     (when-let [block-e (db/entity [:block/uuid block-id])]
       (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
             input-empty? (string/blank? (state/get-edit-content))]
@@ -859,20 +859,22 @@
                      (edit-block! (db/entity (:db/id next-block)) 0)))
 
                   concat-prev-block?
-                  (let [children (:block/_parent (db/entity (:db/id block)))]
-                    (p/do!
-                     (state/set-state! :editor/edit-block-fn edit-block-f)
-                     (ui-outliner-tx/transact!
-                      transact-opts
-                      (when (seq children)
-                        (outliner-op/move-blocks! children prev-block {:sibling? false}))
-                      (delete-block-aux! block)
-                      (save-block! repo prev-block new-content {}))))
+                  (when-not (some ldb/page? [prev-block block])
+                    (let [children (:block/_parent (db/entity (:db/id block)))]
+                      (p/do!
+                       (state/set-state! :editor/edit-block-fn edit-block-f)
+                       (ui-outliner-tx/transact!
+                        transact-opts
+                        (when (seq children)
+                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
+                        (delete-block-aux! block)
+                        (save-block! repo prev-block new-content {})))))
 
                   :else
-                  (p/do!
-                   (state/set-state! :editor/edit-block-fn edit-block-f)
-                   (delete-block-aux! block)))))))))))
+                  (when-not (some ldb/page? [prev-block block])
+                    (p/do!
+                     (state/set-state! :editor/edit-block-fn edit-block-f)
+                     (delete-block-aux! block))))))))))))
 
 (defn move-blocks!
   [blocks target opts]
@@ -1114,20 +1116,12 @@
         (let [repo (state/get-current-repo)
               block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))
               lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-              blocks (map db/entity lookup-refs)
-              pages (filter ldb/page? blocks)
-              pages-with-parent (filter (fn [page] (and (:block/parent page) (not (string/blank? (:block/title page))))) pages)]
+              blocks (map db/entity lookup-refs)]
           (ui-outliner-tx/transact!
            {:outliner-op :delete-blocks}
-           (doseq [page pages-with-parent]
-             (outliner-op/remove-block-property! (:db/id page) :block/parent))
-           (let [blocks' (if (seq pages-with-parent)
-                           (let [ids (set (map :db/id pages-with-parent))]
-                             (remove (fn [b] (ids (:db/id b))) blocks))
-                           blocks)]
-             (when (seq blocks')
-               (let [top-level-blocks (block-handler/get-top-level-blocks blocks')
-                     sorted-blocks (mapcat (fn [block]
+           (let [top-level-blocks (block-handler/get-top-level-blocks blocks)]
+             (when (seq top-level-blocks)
+               (let [sorted-blocks (mapcat (fn [block]
                                              (tree/get-sorted-block-and-children repo (:db/id block)))
                                            top-level-blocks)]
                  (when (seq sorted-blocks)
