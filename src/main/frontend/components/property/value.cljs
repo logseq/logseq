@@ -1259,7 +1259,8 @@
                                           :or {exit-editing? true}}]
                               (p/do!
                                (if (string/blank? value)
-                                 (db-property-handler/remove-block-property! (:db/id block) (:db/ident property))
+                                 (when (get block (:db/ident property))
+                                   (db-property-handler/remove-block-property! (:db/id block) (:db/ident property)))
                                  (when (not= (string/trim (str number-value))
                                              (string/trim (str value)))
                                    (db-property-handler/set-block-property! (:db/id block)
