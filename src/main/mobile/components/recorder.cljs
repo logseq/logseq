@@ -139,7 +139,7 @@
 
     [:div.app-audio-recorder-inner
      [:div.flex.items-center.justify-between
-      [:h1.text-xl.p-6.bold "REC 🎙️"]
+      [:h1.text-xl.p-6.bold.relative "REC"]
       (shui/button
         {:variant :icon
          :class "mr-2 opacity-60"

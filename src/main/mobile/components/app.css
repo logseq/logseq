@@ -540,6 +540,19 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 
 .app-audio-recorder-inner {
   @apply relative;
+
+  h1 {
+    @apply pl-10;
+
+    &:after {
+      @apply content-[''] absolute top-[35px] left-[25px] bg-red-700
+      w-1.5 h-1.5 overflow-hidden rounded-full;
+    }
+  }
+
+  select {
+    @apply bg-transparent;
+  }
 }
 
 .left-sidebar-inner {
