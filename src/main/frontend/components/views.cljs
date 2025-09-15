@@ -584,7 +584,8 @@
     {:on-cut #(on-delete-rows table selected-rows)
      :selected-blocks selected-rows
      :hide-dots? true
-     :button-border? true})))
+     :button-border? true
+     :view-parent (:logseq.property/view-for (:view-entity table))})))
 
 (rum/defc column-resizer
   [_column on-sized!]
@@ -714,9 +715,10 @@
       (case view-feature-type
         :class-objects
         (when (seq page-ids)
-          (let [tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id view-parent)]) page-ids)]
-            (when (seq tx-data)
-              (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+          (when-not (= :logseq.class/Page (:db/ident view-parent))
+            (let [tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id view-parent)]) page-ids)]
+              (when (seq tx-data)
+                (outliner-op/transact! tx-data {:outliner-op :save-block})))))
 
         :property-objects
         ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
