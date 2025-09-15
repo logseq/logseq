@@ -113,7 +113,7 @@
       (when-not valid?
         (when (and (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
                    ;; don't notify on production when undo/redo failed
-                   (not (and (not (:dev? context)) (or (:undo? tx-meta) (:repo? tx-meta)))))
+                   (not (and (not (:dev? context)) (or (:undo? tx-meta) (:redo? tx-meta)))))
           (shared-service/broadcast-to-clients! :notification
                                                 [["Invalid DB!"] :error]))
         (throw (ex-info "Invalid data" {:graph repo})))))

@@ -50,7 +50,7 @@
 
 (def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
-(defonce max-stack-length 25)
+(defonce max-stack-length 100)
 (defonce *undo-ops (atom {}))
 (defonce *redo-ops (atom {}))
 
