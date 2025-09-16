@@ -1,6 +1,7 @@
 (ns mobile.components.editor-toolbar
   "Mobile editor toolbar"
   (:require [frontend.commands :as commands]
+            [frontend.components.svg :as svg]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.camera :as mobile-camera]
             [frontend.mobile.haptics :as haptics]
@@ -8,7 +9,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [frontend.components.svg :as svg]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
             [mobile.components.recorder :as recorder]
@@ -80,7 +80,8 @@
              (not (state/sub :editor/code-block-context))
              (or (state/sub :editor/editing?)
                  (= "app-keep-keyboard-open-input" (some-> js/document.activeElement (.-id)))))
-    (let [commands' (commands)]
+    (let [commands' (commands)
+          quick-add? (mobile-state/quick-add-open?)]
       [:div#mobile-editor-toolbar
        {:on-click #(util/stop %)}
        [:div.toolbar-commands
@@ -97,17 +98,17 @@
         ;; (timestamp-submenu parent-id)
         (for [command' commands']
           command')
-        (command #(recorder/open-dialog!) {:icon "microphone"})
+        (when-not quick-add?
+          (command #(recorder/open-dialog!) {:icon "microphone"}))
         (command #(let [parent-id (state/get-edit-input-id)]
                     (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)]
        [:div.toolbar-hide-keyboard
-        (if (mobile-state/quick-add-open?)
+        (if quick-add?
           (command (fn []
                      (mobile-state/set-popup! nil)
                      (js/setTimeout #(recorder/open-dialog!) 100))
-            {:icon (svg/audio-lines 17)})
+                   {:icon (svg/audio-lines 17)})
           (command #(p/do!
-                      (editor-handler/save-current-block!)
-                      (state/clear-edit!)
-                      (mobile-init/keyboard-hide)) {:icon "keyboard-show"}))
-        ]])))
+                     (editor-handler/save-current-block!)
+                     (state/clear-edit!)
+                     (mobile-init/keyboard-hide)) {:icon "keyboard-show"}))]])))
