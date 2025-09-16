@@ -45,7 +45,7 @@
               ext)]
 
     ;; save local
-    (when-let [filename (some->> ext (str "Audio "
+    (when-let [filename (some->> ext (str "Audio-"
                                           (date/get-date-time-string (t/now)
                                                                      {:formatter-str audio-file-format})
                                           "."))]
