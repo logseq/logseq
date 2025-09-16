@@ -50,7 +50,9 @@
                                                                      {:formatter-str audio-file-format})
                                           "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
-              result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
+              result (editor-handler/db-based-save-assets! (state/get-current-repo)
+                                                           [file]
+                                                           {:last-edit-block @*last-edit-block})
               asset-entity (first result)]
         (when asset-entity
           (p/let [buffer-data (.arrayBuffer blob)

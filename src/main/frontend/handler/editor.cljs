@@ -1501,7 +1501,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: asset entity"
-  [repo files & {:keys [pdf-area?]}]
+  [repo files & {:keys [pdf-area? last-edit-block]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)]
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
@@ -1532,7 +1532,7 @@
                                 :edit-block? false
                                 :properties properties}
                    _ (db-based-save-asset! repo dir file file-rpath)
-                   edit-block (state/get-edit-block)
+                   edit-block (or (state/get-edit-block) last-edit-block)
                    today-page-name (date/today)
                    today-page-e (db-model/get-journal-page today-page-name)
                    today-page (if (nil? today-page-e)
