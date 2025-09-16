@@ -109,7 +109,6 @@
     },
     "dependencies": {
         "@capacitor-community/safe-area": "7.0.0-alpha.1",
-        "@capacitor-community/speech-recognition": "^7.0.1",
         "@capacitor/action-sheet": "7.0.1",
         "@capacitor/android": "7.2.0",
         "@capacitor/app": "7.0.1",

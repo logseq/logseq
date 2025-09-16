@@ -5,9 +5,6 @@ project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/
 include ':capacitor-community-safe-area'
 project(':capacitor-community-safe-area').projectDir = new File('../node_modules/@capacitor-community/safe-area/android')
 
-include ':capacitor-community-speech-recognition'
-project(':capacitor-community-speech-recognition').projectDir = new File('../node_modules/@capacitor-community/speech-recognition/android')
-
 include ':capacitor-action-sheet'
 project(':capacitor-action-sheet').projectDir = new File('../node_modules/@capacitor/action-sheet/android')
 
