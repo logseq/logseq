@@ -912,17 +912,25 @@
           block (first blocks)
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
-          blocks' (block-handler/get-top-level-blocks blocks)]
+          blocks' (block-handler/get-top-level-blocks blocks)
+          mobile? (util/capacitor-new?)]
       (p/do!
-       (when (and sibling-block (not (util/capacitor-new?)))
+       (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
                                                           (get block :block/format :markdown)
                                                           "")]
            (state/set-state! :editor/edit-block-fn edit-block-f)))
-       (ui-outliner-tx/transact!
-        {:outliner-op :delete-blocks
-         :mobile-action-bar? mobile-action-bar?}
-        (outliner-op/delete-blocks! blocks' nil))))))
+       (let [journals (and mobile? (filter ldb/journal? blocks'))
+             blocks (remove (fn [b] (contains? (set (map :db/id journals)) (:db/id b))) blocks)]
+         (when (or (seq journals) (seq blocks))
+           (ui-outliner-tx/transact!
+            {:outliner-op :delete-blocks
+             :mobile-action-bar? mobile-action-bar?}
+            (when (seq blocks)
+              (outliner-op/delete-blocks! blocks nil))
+            (when (seq journals)
+              (doseq [journal journals]
+                (outliner-op/delete-page! (:block/uuid journal)))))))))))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1493,7 +1501,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: asset entity"
-  [repo files & {:keys [pdf-area?]}]
+  [repo files & {:keys [pdf-area? last-edit-block]}]
   (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)]
     (p/all
      (for [[_index ^js file] (map-indexed vector files)]
@@ -1524,19 +1532,23 @@
                                 :edit-block? false
                                 :properties properties}
                    _ (db-based-save-asset! repo dir file file-rpath)
-                   edit-block (state/get-edit-block)
+                   edit-block (or (state/get-edit-block) last-edit-block)
+                   today-page-name (date/today)
+                   today-page-e (db-model/get-journal-page today-page-name)
+                   today-page (if (nil? today-page-e)
+                                (state/pub-event! [:page/create today-page-name])
+                                today-page-e)
                    insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
                    insert-opts' (if insert-to-current-block-page?
                                   (assoc insert-opts
                                          :block-uuid (:block/uuid edit-block)
                                          :replace-empty-target? true
                                          :sibling? true)
-                                  (assoc insert-opts :page (:block/uuid asset)))
-                   result (api-insert-new-block! file-name-without-ext insert-opts')
-                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
+                                  (assoc insert-opts :page (:block/uuid today-page)))
+                   new-block (api-insert-new-block! file-name-without-ext insert-opts')]
              (when insert-to-current-block-page?
                (state/clear-edit!))
-             (or new-entity
+             (or new-block
                  (throw (ex-info "Can't save asset" {:files files}))))))))))
 
 (def insert-command! editor-common-handler/insert-command!)

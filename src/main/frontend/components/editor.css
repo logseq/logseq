@@ -1,15 +1,3 @@
-#audio-record-toolbar {
-  position: fixed;
-  background-color: var(--ls-secondary-background-color);
-  width: 90px;
-  justify-content: left;
-  left: 5px;
-  transition: none;
-  z-index: 9999;
-  padding: 5px 5px 5px 8px;
-  border-radius: 5px;
-}
-
 .editor-inner {
   @apply relative flex;
 

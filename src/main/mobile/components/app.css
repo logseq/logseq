@@ -87,6 +87,10 @@ html {
         background: var(--ls-secondary-background-color);
       }
 
+      .Card-content {
+        background: var(--ls-primary-background-color);
+      }
+
       .BottomSheet-handle {
         @apply bg-gray-03;
       }
@@ -430,23 +434,21 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   @apply flex border-t overflow-hidden select-none
   bg-gray-02 absolute left-0 -bottom-0 w-full z-[1] dark:bg-gray-01;
 
-  padding-top: 6px;
+  padding-top: 4px;
   padding-bottom: calc(env(safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
 
   > .as-item {
-    @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
-    @apply opacity-60 active:opacity-90;
-
-    &.active {
-      @apply text-accent-10 opacity-100;
-
-      > small {
-        @apply font-semibold;
-      }
-    }
+    @apply flex flex-1 flex-col items-center pb-1 transition-opacity opacity-60;
 
     > small {
       @apply text-[9px] -mt-2;
+    }
+  }
+
+  .as-item.active {
+    @apply opacity-90 text-accent-10;
+    small {
+      @apply font-semibold;
     }
   }
 }
@@ -532,6 +534,47 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   /* APPEARANCE */
   border-radius: 0;
   overflow: hidden;
+}
+
+.app-audio-recorder-inner {
+  @apply relative pb-1;
+
+  h1 {
+    @apply pl-6 flex flex-col;
+
+    > small {
+      @apply opacity-40 text-sm;
+    }
+
+    &:after {
+      @apply content-[''] absolute top-[35px] left-[70px] bg-red-700
+      w-1.5 h-1.5 overflow-hidden rounded-full;
+    }
+  }
+
+  select {
+    @apply bg-transparent;
+  }
+
+  .record-ctrl-btn {
+    @apply w-12 h-12 text-green-800 bg-green-200 border-none;
+
+    &.recording {
+      @apply bg-red-200 border-red-500 text-red-700;
+    }
+  }
+
+  .timer-wrap {
+    @apply select-none;
+
+    > .timer {
+      @apply text-[28px] font-[500] font-mono opacity-90;
+    }
+
+    > small {
+      @apply opacity-50 -mt-1;
+    }
+  }
 }
 
 .left-sidebar-inner {

@@ -132,13 +132,6 @@
   dependencies:
     "@babel/types" "^7.28.0"
 
-"@babel/runtime@7.11.2":
-  version "7.11.2"
-  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.11.2.tgz#f549c13c754cc40b87644b9fa9f09a6a95fe0736"
-  integrity sha512-TeWkU52so0mPtDcaCTxNBI/IHiz0pZgr8VEFqXFtZWpYD08ZB6FaSwVAS8MKRQAP3bYKiVjwysOJgMFY28o6Tw==
-  dependencies:
-    regenerator-runtime "^0.13.4"
-
 "@babel/runtime@^7.10.2", "@babel/runtime@^7.5.5", "@babel/runtime@^7.8.7":
   version "7.28.2"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.28.2.tgz#2ae5a9d51cc583bd1f5673b3bb70d6d819682473"
@@ -337,16 +330,6 @@
   version "7.0.1"
   resolved "https://registry.yarnpkg.com/@capacitor/status-bar/-/status-bar-7.0.1.tgz#6bd3769ef35158c961ff2a6b571c03e9bce55809"
   integrity sha512-iDv3mXYo9CdxYRVwt3/pRyuk25p7Sn4GfaS/zMZyVIqTzsvKLCIIH3GdKK+ta+nsNcAVpCw/t5jFEBt1D18ctA==
-
-"@capawesome/capacitor-background-task@7.0.1":
-  version "7.0.1"
-  resolved "https://registry.yarnpkg.com/@capawesome/capacitor-background-task/-/capacitor-background-task-7.0.1.tgz#5531717de4cea255156c7f83fd4bf0f1e472c534"
-  integrity sha512-ILkJ0bCOLperUc+fezzhpiH3Bfnr/318TI9XSrPU/vwvBXjMH7p7xYxKtjDA4VpJfbVh1cHmWLtRSWIk2wUglg==
-
-"@capgo/capacitor-navigation-bar@7.1.2":
-  version "7.1.2"
-  resolved "https://registry.yarnpkg.com/@capgo/capacitor-navigation-bar/-/capacitor-navigation-bar-7.1.2.tgz#d017f22007e6e848c6a94aa38d70546b08d95473"
-  integrity sha512-lganepu29pay05+clCE41yEICE34xDzB61dmvtwWxZlWccvlu+XWbS8WnMSncvIotqBUmU1owfivG+usfrp4CA==
 
 "@colors/colors@1.5.0":
   version "1.5.0"
@@ -2543,13 +2526,6 @@ canvas@^2.11.2:
     nan "^2.17.0"
     simple-get "^3.0.3"
 
-capacitor-voice-recorder@^5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/capacitor-voice-recorder/-/capacitor-voice-recorder-5.0.0.tgz#ec8e421283de19063461838fd340d91f352c8875"
-  integrity sha512-rCZgbmdmj9eXlotziRnIXWoo+7/aGKM1dSeSrgaEmayu9aTs8xkwhpx9eeVe24VDC6sfMHTnwMl5311Ryr/yFA==
-  dependencies:
-    get-blob-duration "^1.2.0"
-
 chalk@2.4.2, chalk@^2.4.1:
   version "2.4.2"
   resolved "https://registry.yarnpkg.com/chalk/-/chalk-2.4.2.tgz#cd42541677a54333cf541a49108c1432b44c9424"
@@ -4687,13 +4663,6 @@ gensync@^1.0.0-beta.2:
   version "1.0.0-beta.2"
   resolved "https://registry.yarnpkg.com/gensync/-/gensync-1.0.0-beta.2.tgz#32a6ee76c3d7f52d46b2b1ae5d93fea8580a25e0"
   integrity sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==
-
-get-blob-duration@^1.2.0:
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/get-blob-duration/-/get-blob-duration-1.2.0.tgz#73cf7dac2fbaa219a5a03d5e5093e06e43814d49"
-  integrity sha512-2xNJa+oKznR21eC2ThMzw4a1931a3ogA8aHoY92xruZufc/02G7pl/P793GJZytkyI8xMJ2DepEQ7MWvg/tn/Q==
-  dependencies:
-    "@babel/runtime" "7.11.2"
 
 get-caller-file@^1.0.1:
   version "1.0.3"
@@ -8652,11 +8621,6 @@ reflect.getprototypeof@^1.0.6, reflect.getprototypeof@^1.0.9:
     get-proto "^1.0.1"
     which-builtin-type "^1.2.1"
 
-regenerator-runtime@^0.13.4:
-  version "0.13.11"
-  resolved "https://registry.yarnpkg.com/regenerator-runtime/-/regenerator-runtime-0.13.11.tgz#f6dca3e7ceec20590d07ada785636a90cdca17f9"
-  integrity sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg==
-
 regex-not@^1.0.0, regex-not@^1.0.2:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/regex-not/-/regex-not-1.0.2.tgz#1f4ece27e00b0b65e0247a6810e6a85d83a5752c"
@@ -10814,6 +10778,11 @@ watchpack@^2.4.1:
   dependencies:
     glob-to-regexp "^0.4.1"
     graceful-fs "^4.1.2"
+
+wavesurfer.js@7.10.1:
+  version "7.10.1"
+  resolved "https://registry.yarnpkg.com/wavesurfer.js/-/wavesurfer.js-7.10.1.tgz#c2f799a05d939cbb1e5df8aa7e0485ab44ad7594"
+  integrity sha512-tF1ptFCAi8SAqKbM1e7705zouLC3z4ulXCg15kSP5dQ7VDV30Q3x/xFRcuVIYTT5+jB/PdkhiBRCfsMshZG1Ug==
 
 webidl-conversions@^3.0.0:
   version "3.0.1"

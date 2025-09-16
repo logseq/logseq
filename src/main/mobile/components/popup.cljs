@@ -70,6 +70,7 @@
   []
   (let [{:keys [open? content-fn opts]} (rum/react mobile-state/*popup-data)
         quick-add? (= :ls-quick-add (:id opts))
+        audio-record? (= :ls-audio-record (:id opts))
         action-sheet? (= :action-sheet (:type opts))
         default-height (:default-height opts)]
 
@@ -94,7 +95,7 @@
                                   (editor-handler/quick-add-open-last-block!)))
         :onPresentAutoFocus #js {:focus false}}
        (silkhq/bottom-sheet-backdrop
-        (when quick-add?
+        (when (or quick-add? audio-record?)
           {:travelAnimation {:opacity (fn [data]
                                         (let [progress (gobj/get data "progress")]
                                           (js/Math.min (* progress 0.9) 0.9)))}}))

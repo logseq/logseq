@@ -459,11 +459,16 @@
                     (editor-handler/resize-image! config block-id metadata full-text {:width width'})))
                 (reset! *resizing-image? false))))))])))
 
-(rum/defc audio-cp [src]
-  ;; Change protocol to allow media fragment uris to play
-  [:audio {:src (string/replace-first src common-config/asset-protocol "file://")
-           :controls true
-           :on-touch-start #(util/stop %)}])
+(rum/defc audio-cp
+  ([src] (audio-cp src nil))
+  ([src ext]
+   ;; Change protocol to allow media fragment uris to play
+   (let [src (string/replace-first src common-config/asset-protocol "file://")
+         opts {:controls true
+               :on-touch-start #(util/stop %)}]
+     (case ext
+       :m4a [:audio opts [:source {:src src :type "audio/mp4"}]]
+       [:audio (assoc opts :src src)]))))
 
 (defn- open-pdf-file
   [e block href]
@@ -524,9 +529,10 @@
                            (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
-          (contains? config/audio-formats ext)
+          (or (contains? config/audio-formats ext)
+            (and (= ext :webm) (string/starts-with? title "record-")))
           (if db-based?
-            (audio-cp @src)
+            (audio-cp @src ext)
             (file-based-asset-loader @src #(audio-cp @src)))
 
           (contains? config/video-formats ext)
@@ -537,7 +543,7 @@
           (if db-based?
             (resizable-image config title @src metadata full_text true)
             (file-based-asset-loader @src
-                                     #(resizable-image config title @src metadata full_text true)))
+              #(resizable-image config title @src metadata full_text true)))
 
           (and (not db-based?) (contains? (common-config/text-formats) ext))
           [:a.asset-ref.is-plaintext {:href (rfe/href :file {:path path})

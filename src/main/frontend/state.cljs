@@ -177,9 +177,6 @@
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
 
-      ;; for audio record
-      :editor/record-status                  "NONE"
-
       :editor/code-block-context             nil
       :editor/latest-shortcut                (atom nil)
 
@@ -225,7 +222,6 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/show-recording-bar?            false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?
@@ -733,7 +729,9 @@ Similar to re-frame subscriptions"
   ([]
    (enable-journals? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-journals? (sub-config repo))))))
+   (if (sqlite-util/db-based-graph? repo) ; db graphs rely on journals for quick capture/sharing/assets, etc.
+     true
+     (not (false? (:feature/enable-journals? (sub-config repo)))))))
 
 (defn enable-flashcards?
   ([]
