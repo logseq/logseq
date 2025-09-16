@@ -239,7 +239,8 @@
      ["inject-users-info" [:map]]
      [nil data-from-ws-schema-fallback]]))
 
-(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer))
+(def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer nil
+                                     #(m/-fail! ::data-from-ws-schema (select-keys % [:value]))))
 (def data-from-ws-validator (m/validator data-from-ws-schema))
 
 (def ^:large-vars/data-var data-to-ws-schema
