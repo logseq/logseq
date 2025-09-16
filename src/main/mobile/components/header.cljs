@@ -114,8 +114,8 @@
         :on-click (fn []
                     (set-error-only! (not error-only?)))}
        (if error-only?
-         "Show all"
-         "Show errors only"))
+         "All"
+         "Errors only"))
 
       (shui/button
        {:size :sm
@@ -130,8 +130,8 @@
         :on-click (fn []
                     (set-show-worker-log! (not show-worker-log?)))}
        (if show-worker-log?
-         "Show UI logs"
-         "Show worker logs"))]
+         "UI logs"
+         "worker logs"))]
 
      (let [records (cond->> (if show-worker-log? worker-records @mobile-state/*log)
                      error-only?
@@ -140,7 +140,7 @@
                      reverse)]
        [:ul
         (for [record records]
-          [:li (:message record)])])]))
+          [:li (str (:level record) " " (:message record))])])]))
 
 (rum/defc header
   [tab login?]
