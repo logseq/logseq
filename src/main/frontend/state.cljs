@@ -729,7 +729,9 @@ Similar to re-frame subscriptions"
   ([]
    (enable-journals? (get-current-repo)))
   ([repo]
-   (not (false? (:feature/enable-journals? (sub-config repo))))))
+   (if (sqlite-util/db-based-graph? repo) ; db graphs rely on journals for quick capture/sharing/assets, etc.
+     true
+     (not (false? (:feature/enable-journals? (sub-config repo)))))))
 
 (defn enable-flashcards?
   ([]

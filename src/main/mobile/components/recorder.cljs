@@ -1,21 +1,21 @@
 (ns mobile.components.recorder
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.util :as util]
-            [rum.core :as rum]
-            [goog.functions :as gfun]
-            [frontend.rum :as r]
-            [frontend.state :as state]
             [frontend.date :as date]
+            [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
-            [frontend.db.model :as db-model]
-            [mobile.init :as init]
             [frontend.mobile.util :as mobile-util]
-            [promesa.core :as p]
+            [frontend.rum :as r]
+            [frontend.state :as state]
+            [goog.functions :as gfun]
             [logseq.shui.hooks :as hooks]
+            [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
-            [logseq.shui.silkhq :as silkhq]))
+            [mobile.init :as init]
+            ;; [mobile.speech :as speech]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce *open? (atom false))
 (defn set-open? [v?] (reset! *open? v?))
@@ -25,11 +25,9 @@
 (defn ms-to-time-format [ms]
   (let [total-seconds (quot ms 1000)
         minutes (quot total-seconds 60)
-        seconds (mod total-seconds 60)
-        centiseconds (quot (mod ms 1000) 10)]
+        seconds (mod total-seconds 60)]
     (str (.padStart (str minutes) 2 "0") ":"
-         (.padStart (str seconds) 2 "0") "."
-         (.padStart (str centiseconds) 2 "0"))))
+         (.padStart (str seconds) 2 "0"))))
 
 (defn save-asset-audio!
   [blob]
@@ -54,20 +52,8 @@
 
     ;; save local
     (when-let [filename (some->> ext (str "record-" (date/get-date-time-string-2) "."))]
-      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
-              asset-entity (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
-              asset-entity (some-> asset-entity (first))
-              url (util/format "[[%s]]" (:block/uuid asset-entity))]
-        (if-let [last-block @*last-edit-block]
-          (if (string/blank? (:block/title last-block))
-            (editor-handler/save-block! (state/get-current-repo)
-                                        last-block url)
-            (editor-handler/api-insert-new-block!
-             url {:block-uuid (:block/uuid last-block)
-                  :sibling? true}))
-          (editor-handler/api-insert-new-block! url
-                                                {:page (date/today)
-                                                 :container-id :unknown-container}))))))
+      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})]
+        (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})))))
 
 (rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
   [{:keys [open?]}]
@@ -122,8 +108,8 @@
                                              #js {:renderRecordedAudio false
                                                   :scrollingWaveform false
                                                   :continuousWaveform true
-                                                  :mimeType "audio/mp4" ;; m4a
-                                                  :audioBitsPerSecond 128000 ;; 128kbps，适合 AAC-LC
+                                                  :mimeType "audio/mp4"          ;; m4a
+                                                  :audioBitsPerSecond 128000   ;; 128kbps，适合 AAC-LC
                                                   :continuousWaveformDuration 30 ;; optional
                                                   }))]
          (set-wavesurfer! w)
@@ -158,7 +144,7 @@
     [:div.app-audio-recorder-inner
      [:div.flex.items-center.justify-between
       [:h1.text-xl.p-6.relative
-       [:span "REC"]
+       [:span.font-medium "REC"]
        [:small (date/get-date-time-string-3)]]
       (shui/button
        {:variant :icon
@@ -198,19 +184,16 @@
         [:div.flex.justify-between.items-center.w-full
          [:span.flex.flex-col.timer-wrap
           [:strong.timer {:ref *timer-ref} "00:00"]
-          [:small "Duration limit 5:00 "]]
-         [:span.flex.items-center.gap-1
-          (shui/button {:variant :outline
-                        :class (str "record-ctrl-btn rounded-full" (when recording? " recording"))
-                        :on-click (fn []
-                                    (if recording?          ;; save audio
-                                      (do
-                                        (rum/set-ref! *save-ref true)
-                                        (.stopRecording recorder))
-                                      (handle-record!)))}
-                       (if recording?
-                         (shui/tabler-icon "player-stop" {:size 22})
-                         (shui/tabler-icon "player-play" {:size 22})))]])]]))
+          [:small "05:00"]]
+         (shui/button {:variant :outline
+                       :class (str "record-ctrl-btn rounded-full" (when recording? " recording"))
+                       :on-click (fn []
+                                   (if recording?          ;; save audio
+                                     (do
+                                       (rum/set-ref! *save-ref true)
+                                       (.stopRecording recorder))
+                                     (handle-record!)))}
+                      (shui/tabler-icon "player-stop" {:size 22}))])]]))
 
 (rum/defc card
   []

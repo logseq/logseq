@@ -1533,13 +1533,18 @@
                                 :properties properties}
                    _ (db-based-save-asset! repo dir file file-rpath)
                    edit-block (state/get-edit-block)
+                   today-page-name (date/today)
+                   today-page-e (db-model/get-journal-page today-page-name)
+                   today-page (if (nil? today-page-e)
+                                (state/pub-event! [:page/create today-page-name])
+                                today-page-e)
                    insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
                    insert-opts' (if insert-to-current-block-page?
                                   (assoc insert-opts
                                          :block-uuid (:block/uuid edit-block)
                                          :replace-empty-target? true
                                          :sibling? true)
-                                  (assoc insert-opts :page (:block/uuid asset)))
+                                  (assoc insert-opts :page (:block/uuid today-page)))
                    result (api-insert-new-block! file-name-without-ext insert-opts')
                    new-entity (db/entity [:block/uuid (:block/uuid result)])]
              (when insert-to-current-block-page?
