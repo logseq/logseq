@@ -1,4 +1,5 @@
 (ns mobile.components.recorder
+  "Audio record"
   (:require [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.date :as date]
