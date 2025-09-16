@@ -438,19 +438,17 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   padding-bottom: calc(env(safe-area-inset-bottom) + var(--silk-tabbar-bottom-paddding));
 
   > .as-item {
-    @apply flex flex-1 flex-col items-center pb-1 transition-opacity;
-    @apply opacity-60 active:opacity-90;
-
-    &.active {
-      @apply text-accent-10 opacity-100;
-
-      > small {
-        @apply font-semibold;
-      }
-    }
+    @apply flex flex-1 flex-col items-center pb-1 transition-opacity opacity-60;
 
     > small {
       @apply text-[9px] -mt-2;
+    }
+  }
+
+  .as-item.active {
+    @apply opacity-90 text-accent-10;
+    small {
+      @apply font-semibold;
     }
   }
 }
