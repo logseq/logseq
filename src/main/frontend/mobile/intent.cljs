@@ -85,26 +85,13 @@
 
 (defn- embed-asset-file [url _format]
   (p/let [basename (node-path/basename url)
-          _label (-> basename util/node-path.name)
-          _path (assets-handler/get-asset-path basename)
-          time (date/get-current-time)
-          date-ref-name (date/today)
           file (.readFile Filesystem #js {:path url})
           file-base64-str (some-> file (.-data))
           file (some-> file-base64-str (util/base64string-to-unit8array)
-                 (vector) (clj->js) (js/File. basename #js {}))
-          asset-entity (editor-handler/db-based-save-assets!
-                         (state/get-current-repo) [file] {})
-          asset-entity (some-> asset-entity (first))
-          url (util/format "[[%s]]" (:block/uuid asset-entity))
-          template (get-in (state/get-config)
-                           [:quick-capture-templates :media]
-                           "**{time}** [[quick capture]]: {url}")]
-    (-> template
-        (string/replace "{time}" time)
-        (string/replace "{date}" date-ref-name)
-        (string/replace "{text}" "")
-        (string/replace "{url}" (or url "")))))
+                       (vector) (clj->js) (js/File. basename #js {}))
+          result (editor-handler/db-based-save-assets!
+                  (state/get-current-repo) [file] {})]
+    (first result)))
 
 (defn- embed-text-file
   "Store external content with url into Logseq repo"
@@ -136,13 +123,8 @@
 (defn- handle-received-media [result]
   (p/let [{:keys [url]} result
           page (or (state/get-current-page) (string/lower-case (date/journal-name)))
-          format (db/get-page-format page)
-          content (embed-asset-file url format)]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+          format (db/get-page-format page)]
+    (embed-asset-file url format)))
 
 (defn- handle-received-application [result]
   (p/let [{:keys [title url type]} result
@@ -155,7 +137,9 @@
 
                     (contains? (set/union config/doc-formats config/media-formats)
                                (keyword application-type))
-                    (embed-asset-file url format)
+                    (do
+                      (embed-asset-file url format)
+                      nil)
 
                     :else
                     (notification/show!
@@ -165,11 +149,12 @@
                            :target "_blank"} "Github"]
                       ". We will look into it soon."]
                      :warning false))]
-    (if (state/get-edit-block)
-      (editor-handler/insert content)
-      (editor-handler/api-insert-new-block! content {:page page
-                                                     :edit-block? false
-                                                     :replace-empty-target? true}))))
+    (when content
+      (if (state/get-edit-block)
+        (editor-handler/insert content)
+        (editor-handler/api-insert-new-block! content {:page page
+                                                       :edit-block? false
+                                                       :replace-empty-target? true})))))
 
 (defn decode-received-result [m]
   (into {} (for [[k v] m]
@@ -191,13 +176,13 @@
               file (.readFile Filesystem #js {:path url})
               file-base64-str (some-> file (.-data))
               file (some-> file-base64-str (util/base64string-to-unit8array)
-                     (vector) (clj->js) (js/File. basename #js {}))
-              asset-entity (editor-handler/db-based-save-assets!
-                             (state/get-current-repo) [file] {})
-              asset-entity (some-> asset-entity (first))
+                           (vector) (clj->js) (js/File. basename #js {}))
+              result (editor-handler/db-based-save-assets!
+                      (state/get-current-repo) [file] {})
+              asset-entity (first result)
               url-link (util/format "[[%s]]" (:block/uuid asset-entity))]
         url-link)
-    (p/catch #(js/console.error "Error(handle asset file):" %))))
+      (p/catch #(js/console.error "Error(handle asset file):" %))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
@@ -245,7 +230,7 @@
                                          (handle-payload-resource resource format))
                                        resources))
                            (p/then (partial string/join "\n")))]
-    (when (or (not-empty text) (not-empty rich-content))
+    (when (not-empty text)
       (let [time (date/get-current-time)
             date-ref-name (date/today)
             content (-> template

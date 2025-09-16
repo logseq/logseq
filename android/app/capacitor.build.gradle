@@ -21,7 +21,6 @@ dependencies {
     implementation project(':capacitor-share')
     implementation project(':capacitor-splash-screen')
     implementation project(':capacitor-status-bar')
-    implementation project(':capacitor-voice-recorder')
     implementation project(':send-intent')
     implementation project(':jcesarmobile-ssl-skip')
 
