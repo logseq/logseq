@@ -23,10 +23,13 @@
 (rum/defc app-silk-tabs []
   (let [[current-tab set-tab!] (mobile-state/use-tab)]
     [:div.app-silk-tabs
-     {:on-pointer-down #(some-> (.-target ^js %)
-                                ^js (.closest ".as-item")
-                                ^js (.-dataset)
-                                ^js (.-tab) (set-tab!))}
+     {:on-pointer-down (fn [^js e]
+                         (when (= current-tab "home")
+                           (util/scroll-to-top false))
+                         (some-> (.-target e)
+                                 ^js (.closest ".as-item")
+                                 ^js (.-dataset)
+                                 ^js (.-tab) (set-tab!)))}
      [:span.as-item
       {:class (when (= current-tab "home") "active")
        :data-tab "home"}
