@@ -95,6 +95,14 @@
       "Upload to server")]]
    :warning false))
 
+(defn <rtc-get-users-info
+  []
+  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+    (p/let [token (state/get-auth-id-token)
+            repo (state/get-current-repo)
+            result (state/<invoke-db-worker :thread-api/rtc-get-users-info token graph-uuid)]
+      (state/set-state! :rtc/users-info {repo result}))))
+
 (defn <rtc-start!
   [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
   (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
@@ -147,14 +155,6 @@
                                (dissoc graph :graph-uuid :graph-name)))))]
     (state/set-state! :rtc/graphs result)
     (repo-handler/refresh-repos!)))
-
-(defn <rtc-get-users-info
-  []
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-    (p/let [token (state/get-auth-id-token)
-            repo (state/get-current-repo)
-            result (state/<invoke-db-worker :thread-api/rtc-get-users-info token graph-uuid)]
-      (state/set-state! :rtc/users-info {repo result}))))
 
 (defn <rtc-invite-email
   [graph-uuid email]

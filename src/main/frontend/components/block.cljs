@@ -4419,7 +4419,7 @@
   (let [mobile? (util/mobile?)
         [ready? set-ready?] (hooks/use-state
                              (not (and mobile? (not (:journals? config)))))
-        [virtualized? _] (hooks/use-state (not (or (string/includes? js/window.location.search "?rtc-test=true")
+        [virtualized? _] (hooks/use-state (not (or (util/rtc-test?)
                                                    (if (:journals? config)
                                                      (< (count blocks) 50)
                                                      (< (count blocks) 10))

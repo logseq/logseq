@@ -5,6 +5,7 @@
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
+            [frontend.undo-redo :as undo-redo]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
@@ -43,6 +44,9 @@
 
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
+
+(defmethod handle :clear-undo-history [_ _worker [repo]]
+  (undo-redo/clear-history! repo))
 
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))

@@ -35,6 +35,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
@@ -42,9 +43,11 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
+            [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
+            [logseq.db.frontend.db :as db-db]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -176,7 +179,18 @@
           block-id (:block/uuid block)
           block? (not (db/page? block))
           children (:block/_parent block)
+          quick-add-page-id (:db/id (db-db/get-built-in-page (db/get-db) common-config/quick-add-page-name))
           children (cond
+                     (and (= id quick-add-page-id)
+                          (user-handler/user-uuid)
+                          (ldb/get-graph-rtc-uuid (db/get-db)))
+                     (let [user-id (uuid (user-handler/user-uuid))
+                           user-db-id (:db/id (db/entity [:block/uuid user-id]))]
+                       (if user-db-id
+                         (filter (fn [block]
+                                   (= user-db-id (:db/id (:logseq.property/created-by-ref block)))) children)
+                         children))
+
                      (ldb/class? block)
                      (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 

@@ -72,10 +72,10 @@
      [focused?])
 
     (hooks/use-effect!
-      (fn []
-        (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 32)
-        #())
-      [])
+     (fn []
+       (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 32)
+       #())
+     [])
 
     [:div.app-silk-search-page
      [:div.hd
@@ -131,25 +131,29 @@
              {:on-click #(set-input! item)}
              item)])])
 
-      [:ul.px-3
-       {:class (when (and (not (string/blank? input))
-                          (seq search-result))
-                 "as-results")}
-       (for [{:keys [page? icon text header source-block]} result]
-         (let [block source-block]
-           [:li.flex.gap-1
-            {:on-click (fn []
-                         (when-let [id (:block/uuid block)]
-                           (p/let [block (db-async/<get-block (state/get-current-repo) id
-                                                              {:children? false
-                                                               :skip-transact? true
-                                                               :skip-refresh? true})]
-                             (when block (mobile-state/open-block-modal! block)))))}
-            [:div.flex.flex-col.gap-1.py-1
-             (when header
-               [:div.opacity-60.text-sm
-                header])
-             [:div.flex.flex-row.items-start.gap-1
-              (when (and page? icon) (ui/icon icon {:size 15
-                                                    :class "text-muted-foreground mt-1"}))
-              [:div text]]]]))]]]))
+      (if (seq result)
+        [:ul.px-3
+         {:class (when (and (not (string/blank? input))
+                            (seq search-result))
+                   "as-results")}
+         (for [{:keys [page? icon text header source-block]} result]
+           (let [block source-block]
+             [:li.flex.gap-1
+              {:on-click (fn []
+                           (when-let [id (:block/uuid block)]
+                             (p/let [block (db-async/<get-block (state/get-current-repo) id
+                                                                {:children? false
+                                                                 :skip-transact? true
+                                                                 :skip-refresh? true})]
+                               (when block (mobile-state/open-block-modal! block)))))}
+              [:div.flex.flex-col.gap-1.py-1
+               (when header
+                 [:div.opacity-60.text-sm
+                  header])
+               [:div.flex.flex-row.items-start.gap-1
+                (when (and page? icon) (ui/icon icon {:size 15
+                                                      :class "text-muted-foreground mt-1"}))
+                [:div text]]]]))]
+        (when-not (string/blank? input)
+          [:div.px-4.text-muted-foreground
+           "No results"]))]]))

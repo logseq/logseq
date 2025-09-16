@@ -409,6 +409,8 @@
 
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
+  (when-not (= repo (worker-state/get-current-repo)) ; graph switched
+    (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
 (def-thread-api :thread-api/q
@@ -535,9 +537,8 @@
                                (ldb/transact! conn tx-data' tx-meta')))
         nil)
       (catch :default e
-        (prn :debug :error)
-        (js/console.error e)
-        (prn :debug :tx-meta tx-meta :tx-data tx-data)
+        (prn :debug :worker-transact-failed :tx-meta tx-meta :tx-data tx-data)
+        (log/error ::worker-transact-failed e)
         (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data

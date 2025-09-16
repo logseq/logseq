@@ -29,7 +29,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
             [frontend.version :refer [version]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -44,22 +43,6 @@
             [react-draggable]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]))
-
-(rum/defc recording-bar
-  []
-  [:> react-draggable
-   {:onStart (fn [_event]
-               (when-let [pos (some-> (state/get-input) cursor/pos)]
-                 (state/set-editor-last-pos! pos)))
-    :onStop (fn [_event]
-              (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
-                (editor-handler/edit-block! block :max)
-                (when-let [input (state/get-input)]
-                  (when-let [saved-cursor (state/get-editor-last-pos)]
-                    (cursor/move-cursor-to input saved-cursor)))))}
-   [:div#audio-record-toolbar
-    {:style {:bottom (+ @util/keyboard-height 45)}}
-    (footer/audio-record-cp)]])
 
 (rum/defc main <
   {:did-mount (fn [state]
@@ -79,7 +62,7 @@
                    (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-recording-bar?]}]
+  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -102,9 +85,6 @@
        {:data-is-margin-less-pages margin-less-pages?
         :data-is-full-width (or margin-less-pages?
                                 (contains? #{:all-files :all-pages :my-publishing} route-name))}
-
-       (when show-recording-bar?
-         (recording-bar))
 
        (footer/footer)
 
@@ -453,7 +433,6 @@
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)
         show-action-bar? (state/sub :mobile/show-action-bar?)
-        show-recording-bar? (state/sub :mobile/show-recording-bar?)
         preferred-language (state/sub [:preferred-language])]
     (theme/container
      {:t t
@@ -522,8 +501,7 @@
                  :light? light?
                  :db-restoring? db-restoring?
                  :main-content main-content'
-                 :show-action-bar? show-action-bar?
-                 :show-recording-bar? show-recording-bar?}))]
+                 :show-action-bar? show-action-bar?}))]
 
        (when window-controls?
          (window-controls/container))

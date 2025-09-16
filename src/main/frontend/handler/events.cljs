@@ -219,9 +219,6 @@
 
 (defmethod handle :mobile/keyboard-will-show [[_ keyboard-height]]
   (let [_main-node (util/app-scroll-container-node)]
-    (state/set-state! :mobile/show-action-bar? false)
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? true))
     (when-let [^js html (js/document.querySelector ":root")]
       (.setProperty (.-style html) "--ls-native-kb-height" (str keyboard-height "px"))
       (.add (.-classList html) "has-mobile-keyboard")
@@ -234,8 +231,6 @@
 
 (defmethod handle :mobile/keyboard-will-hide [[_]]
   (let [main-node (util/app-scroll-container-node)]
-    (when (= (state/sub :editor/record-status) "RECORDING")
-      (state/set-state! :mobile/show-recording-bar? false))
     (when-let [^js html (js/document.querySelector ":root")]
       (.removeProperty (.-style html) "--ls-native-kb-height")
       (.setProperty (.-style html) "--ls-native-toolbar-opacity" 0)
