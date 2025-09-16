@@ -34,7 +34,11 @@
                                                                      (fn [^de/entity entity]
                                                                        (assert (some? (:db/id entity)))
                                                                        (assoc (.-kv entity)
-                                                                              :db/id (:db/id entity)))))
+                                                                              :db/id (:db/id entity))))
+                                    ExceptionInfo (transit/write-handler (constantly "error")
+                                                                         (fn [e]
+                                                                           {:message (ex-message e)
+                                                                            :data (ex-data e)})))
                              (merge write-handlers))
         writer (transit/writer :json {:handlers write-handlers*})]
     (fn write-transit-str* [o]
@@ -46,7 +50,8 @@
 
 (def read-transit-str
   (let [read-handlers* (->> (assoc dt/read-handlers
-                                   "datascript/Entity" identity)
+                                   "datascript/Entity" identity
+                                   "error" (fn [m] (ex-info (:message m) (:data m))))
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
     (fn read-transit-str* [s]
