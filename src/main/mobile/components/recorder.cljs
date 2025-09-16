@@ -5,13 +5,11 @@
             [frontend.date :as date]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [goog.functions :as gfun]
-            [lambdaisland.glogi :as log]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.ui :as shui] ;; [mobile.speech :as speech]
+            [logseq.shui.ui :as shui]
             [mobile.init :as init]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
@@ -63,49 +61,19 @@
                                                                      :sibling? false
                                                                      :replace-empty-target? true
                                                                      :edit-block? false})))))
-                (p/catch #(log/error :transcribe-audio-2-text %)))))))))
+                (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
 
-(rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
+(rum/defc record-button
   []
-  (let [*wave-ref (hooks/use-ref nil)
-        *micid-ref (hooks/use-ref nil)
-        *timer-ref (hooks/use-ref nil)
-        *save-ref (hooks/use-ref false)
-        *wavesurfer (atom nil)
+  (let [*timer-ref (hooks/use-ref nil)
+        [*wavesurfer _] (hooks/use-state (atom nil))
         [^js _wavesurfer set-wavesurfer!] (hooks/use-state nil)
-        [^js recorder set-recorder!] (hooks/use-state nil)
-        [mic-devices set-mic-devices!] (hooks/use-state nil)
-        [_ set-status-pulse!] (hooks/use-state 0)
-        recording? (some-> recorder (.isRecording))]
-
-    (hooks/use-effect!
-     (fn []
-       #(some-> @*wavesurfer (.destroy)))
-     [])
-
-    ;; load mic devices
-    (hooks/use-effect!
-     (fn []
-       (when recorder
-         (-> js/window.WaveSurfer.Record
-             (.getAvailableAudioDevices)
-             (.then (fn [^js devices]
-                      (let [*vs (volatile! [])]
-                        (.forEach devices
-                                  (fn [^js device]
-                                    (vswap! *vs conj {:text (or (.-label device) (.-deviceId device))
-                                                      :value (.-deviceId device)})))
-                        (set-mic-devices! @*vs))))
-             (.catch (fn [^js err]
-                       (log/error :load-mic-devices err)))))
-       #())
-     [recorder])
-
+        [^js recorder set-recorder!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (let [dark? (= "dark" (state/sub :ui/theme))
              ^js w (.create js/window.WaveSurfer
-                            #js {:container (rum/deref *wave-ref)
+                            #js {:container (js/document.getElementById "wave-container")
                                  :waveColor "rgb(167, 167, 167)"
                                  :progressColor (if dark? "rgb(219, 216, 216)" "rgb(10, 10, 10)")
                                  :barWidth 2
@@ -113,80 +81,53 @@
              ^js r (.registerPlugin w
                                     (.create js/window.WaveSurfer.Record
                                              #js {:renderRecordedAudio false
-                                                  :scrollingWaveform false
-                                                  :continuousWaveform true
+                                                  :scrollingWaveform true
+                                                  :scrollingWaveformWindow 5
                                                   :mimeType "audio/mp4"          ;; m4a
-                                                  :audioBitsPerSecond 128000   ;; 128kbps，适合 AAC-LC
-                                                  :continuousWaveformDuration 30 ;; optional
-                                                  }))]
-         (do
-           (set-wavesurfer! w)
-           (reset! *wavesurfer w))
+                                                  :audioBitsPerSecond 128000}))]
+         (set-wavesurfer! w)
+         (reset! *wavesurfer w)
          (set-recorder! r)
 
          ;; events
-         (let [handle-status-changed! (fn []
-                                        (set-status-pulse! (js/Date.now)))]
-           (doto r
-             (.on "record-end" (fn [^js blob]
-                                 (when (true? (rum/deref *save-ref))
-                                   (save-asset-audio! blob)
-                                   (rum/set-ref! *save-ref false)
-                                   (mobile-state/close-popup!))
-                                 (handle-status-changed!)))
-             (.on "record-progress" (gfun/throttle
-                                     (fn [time]
-                                       (try
-                                         (let [t (ms-to-time-format time)]
-                                           (set! (. (rum/deref *timer-ref) -textContent) t))
-                                         (catch js/Error e
-                                           (log/warn :bad-progress-time e))))
-                                     50))
-             (.on "record-start" handle-status-changed!)
-             (.on "record-pause" handle-status-changed!)
-             (.on "record-resume" handle-status-changed!))
+         (doto r
+           (.on "record-end" (fn [^js blob]
+                               (save-asset-audio! blob)
+                               (mobile-state/close-popup!)))
+           (.on "record-progress" (gfun/throttle
+                                   (fn [time]
+                                     (try
+                                       (let [t (ms-to-time-format time)]
+                                         (set! (. (rum/deref *timer-ref) -textContent) t))
+                                       (catch js/Error e
+                                         (js/console.warn "WARN: bad progress time:" e))))
+                                   33)))
            ;; auto start
-           (.startRecording r))
-         #()))
+         (.startRecording r)
+         #(some-> @*wavesurfer (.destroy))))
      [])
+    [:div.p-6.flex.justify-between
+     [:div.flex.justify-between.items-center.w-full
+      [:span.flex.flex-col.timer-wrap
+       [:strong.timer {:ref *timer-ref} "00:00"]
+       [:small "05:00"]]
+      (shui/button {:variant :outline
+                    :class "record-ctrl-btn rounded-full recording"
+                    :on-click (fn []
+                                (.stopRecording recorder))}
+                   (shui/tabler-icon "player-stop" {:size 22}))]]))
 
-    [:div.app-audio-recorder-inner
-     [:h1.text-xl.p-6.relative
-      [:span.font-bold "REC"]
-      [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
+(rum/defc audio-recorder-aux < rum/static
+  []
+  [:div.app-audio-recorder-inner
+   [:h1.text-xl.p-6.relative
+    [:span.font-bold "REC"]
+    [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
 
-     [:div.px-6
-      [:div.flex.justify-between.items-center.hidden
-       [:span "&nbsp;"]
-       [:select.opacity-60
-        {:name "mic-select"
-         :style {:max-width "220px" :border "none"}
-         :ref *micid-ref}
-        (for [d mic-devices]
-          [:option {:value (:value d)}
-           (str "Mic: " (if (string/blank? (:text d)) "Default" (:text d)))])]]
-      [:div.wave.border.rounded {:ref *wave-ref}]]
+   [:div.px-6
+    [:div#wave-container.wave.border.rounded]]
 
-     [:div.p-6.flex.justify-between
-      (let [handle-record!
-            (fn []
-              (let [micid (some-> (rum/deref *micid-ref) (.-value))]
-                (-> (.startRecording recorder #js {:deviceId micid})
-                    (.catch #(notification/show! (.-message %) :error)))))]
-
-        [:div.flex.justify-between.items-center.w-full
-         [:span.flex.flex-col.timer-wrap
-          [:strong.timer {:ref *timer-ref} "00:00"]
-          [:small "05:00"]]
-         (shui/button {:variant :outline
-                       :class "record-ctrl-btn rounded-full recording"
-                       :on-click (fn []
-                                   (if recording?          ;; save audio
-                                     (do
-                                       (rum/set-ref! *save-ref true)
-                                       (.stopRecording recorder))
-                                     (handle-record!)))}
-                      (shui/tabler-icon "player-stop" {:size 22}))])]]))
+   (record-button)])
 
 (defn- show-recorder
   []
