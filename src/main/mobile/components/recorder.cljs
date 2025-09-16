@@ -1,27 +1,22 @@
 (ns mobile.components.recorder
-  (:require [cljs-bean.core :as bean]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db.model :as db-model]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.mobile.util :as mobile-util]
-            [frontend.rum :as r]
             [frontend.state :as state]
             [goog.functions :as gfun]
             [logseq.shui.hooks :as hooks]
-            [logseq.shui.silkhq :as silkhq]
-            [logseq.shui.ui :as shui]
+            [logseq.shui.ui :as shui] ;; [mobile.speech :as speech]
             [mobile.init :as init]
-            ;; [mobile.speech :as speech]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
 (defonce audio-file-format "MM-dd HH:mm")
 
-(defonce *open? (atom false))
-(defn set-open? [v?] (reset! *open? v?))
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
 
@@ -69,7 +64,7 @@
                 (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
 
 (rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
-  [{:keys [open?]}]
+  []
   (let [*wave-ref (rum/use-ref nil)
         *micid-ref (rum/use-ref nil)
         *timer-ref (rum/use-ref nil)
@@ -81,12 +76,8 @@
         recording? (some-> recorder (.isRecording))]
 
     (hooks/use-effect!
-     (fn []
-       (when (false? open?)
-         (js/setTimeout
-          #(some-> wavesurfer (.destroy)) 500))
-       #())
-     [open?])
+     (fn [] #(some-> wavesurfer (.destroy)))
+     [])
 
     ;; load mic devices
     (hooks/use-effect!
@@ -135,7 +126,7 @@
                                  (when (true? (rum/deref *save-ref))
                                    (save-asset-audio! blob)
                                    (rum/set-ref! *save-ref false)
-                                   (set-open? false))
+                                   (mobile-state/close-popup!))
                                  (handle-status-changed!)))
              (.on "record-progress" (gfun/throttle
                                      (fn [time]
@@ -154,16 +145,9 @@
      [])
 
     [:div.app-audio-recorder-inner
-     [:div.flex.items-center.justify-between
-      [:h1.text-xl.p-6.relative
-       [:span.font-bold "REC"]
-       [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
-      (shui/button
-       {:variant :icon
-        :autofocus false
-        :class "mr-2 opacity-60"
-        :on-click #(set-open? false)}
-       (shui/tabler-icon "x" {:size 20}))]
+     [:h1.text-xl.p-6.relative
+      [:span.font-bold "REC"]
+      [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
 
      [:div.px-6
       [:div.flex.justify-between.items-center.hidden
@@ -198,30 +182,26 @@
                                      (handle-record!)))}
                       (shui/tabler-icon "player-stop" {:size 22}))])]]))
 
-(rum/defc card
+(defn- show-recorder
   []
-  (let [[open?] (r/use-atom *open?)]
-    (silkhq/card-sheet
-     {:presented open?
-      :onPresentedChange (fn [v?] (set-open? v?))}
-     (silkhq/card-sheet-portal
-      (silkhq/card-sheet-view
-       {:onClickOutside (bean/->js {:dismiss false
-                                    :stopOverlayPropagation false})}
-       (silkhq/card-sheet-backdrop)
-       (silkhq/card-sheet-content
-        (audio-recorder-aux {:open? open? :set-open? set-open?})))))))
+  (mobile-state/set-popup! {:open? true
+                            :content-fn (fn [] (audio-recorder-aux))
+                            :opts {:id :ls-audio-record}}))
 
-(defn open-dialog!
+(defn record!
   []
-  (let [editing-id (state/get-edit-input-id)]
+  (let [editing-id (state/get-edit-input-id)
+        quick-add? (mobile-state/quick-add-open?)]
     (set-last-edit-block! nil)
     (if-not (string/blank? editing-id)
       (p/do!
        (editor-handler/save-current-block!)
        (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
-         (set-last-edit-block! block)
-         (state/clear-edit!)
-         (init/keyboard-hide)
-         (js/setTimeout #(set-open? true) 200)))
-      (set-open? true))))
+         (if quick-add?
+           (p/do!
+            (state/clear-edit!)
+            (init/keyboard-hide)
+            (show-recorder))
+           (do (set-last-edit-block! block)
+               (show-recorder)))))
+      (show-recorder))))

@@ -101,12 +101,10 @@
         (command #(let [parent-id (state/get-edit-input-id)]
                     (mobile-camera/embed-photo parent-id)) {:icon "camera"} true)
         (when-not quick-add?
-          (command #(recorder/open-dialog!) {:icon (svg/audio-lines 20)}))]
+          (command (fn [] (recorder/record!)) {:icon (svg/audio-lines 20)}))]
        [:div.toolbar-hide-keyboard
         (if quick-add?
-          (command (fn []
-                     (mobile-state/set-popup! nil)
-                     (js/setTimeout #(recorder/open-dialog!) 100))
+          (command (fn [] (recorder/record!))
                    {:icon (svg/audio-lines 20)})
           (command #(p/do!
                      (editor-handler/save-current-block!)

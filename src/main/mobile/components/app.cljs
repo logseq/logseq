@@ -19,10 +19,10 @@
             [mobile.components.left-sidebar :as mobile-left-sidebar]
             [mobile.components.modal :as modal]
             [mobile.components.popup :as popup]
+            [mobile.components.recorder :as recorder]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.settings :as settings]
-            [mobile.components.recorder :as recorder]
             [mobile.components.ui :as ui-component]
             [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
@@ -230,7 +230,6 @@
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
       (modal/blocks-modal)
-      (recorder/card)
       (popup/popup)))))
 
 (rum/defc main < rum/reactive
