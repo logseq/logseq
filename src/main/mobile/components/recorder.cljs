@@ -11,7 +11,7 @@
             [frontend.handler.notification :as notification]
             [frontend.db.model :as db-model]
             [mobile.init :as init]
-            [mobile.speech :as speech]
+            [frontend.mobile.util :as mobile-util]
             [promesa.core :as p]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -38,7 +38,21 @@
               (string/split ";")
               (first)
               (string/split "/")
-              (last))]
+              (last))
+        ext (case ext
+              "mp4" "m4a"
+              ext)]
+
+    ;; TODO: transcribeAudio2Text
+    (p/let [buffer-data (.arrayBuffer blob)
+            unit8-data (js/Uint8Array. buffer-data)]
+      (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
+        (p/then (fn [r]
+                  (js/console.log "transcription:" r)
+                  (shui/popup-show! nil [:strong (js/JSON.stringify r)])))
+        (p/catch #(js/console.error "Error(transcribeAudio2Text):" %))))
+
+    ;; save local
     (when-let [filename (some->> ext (str "record-" (date/get-date-time-string-2) "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
               asset-entity (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
@@ -109,6 +123,8 @@
                         #js {:renderRecordedAudio false
                              :scrollingWaveform false
                              :continuousWaveform true
+                             :mimeType "audio/mp4"          ;; m4a
+                             :audioBitsPerSecond 128000   ;; 128kbps，适合 AAC-LC
                              :continuousWaveformDuration 30 ;; optional
                              }))]
           (set-wavesurfer! w)
@@ -135,8 +151,8 @@
               (.on "record-start" handle-status-changed!)
               (.on "record-pause" handle-status-changed!)
               (.on "record-resume" handle-status-changed!))
-              ;; auto start
-              (.startRecording r))
+            ;; auto start
+            (.startRecording r))
           #()))
       [])
 

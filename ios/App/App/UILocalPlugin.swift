@@ -7,6 +7,7 @@
 
 import Capacitor
 import Foundation
+import Speech
 
 func isDarkMode() -> Bool {
   if #available(iOS 12.0, *) {
@@ -204,8 +205,72 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
   private var datepickerDialogView: UIView?
 
   public let pluginMethods: [CAPPluginMethod] = [
-    CAPPluginMethod(name: "showDatePicker", returnType: CAPPluginReturnPromise)
+    CAPPluginMethod(name: "showDatePicker", returnType: CAPPluginReturnPromise),
+    CAPPluginMethod(name: "transcribeAudio2Text", returnType: CAPPluginReturnPromise)
   ]
+
+  // 语音识别方法
+  private func recognizeSpeech(from url: URL, completion: @escaping (String?, Error?) -> Void) {
+      SFSpeechRecognizer.requestAuthorization { authStatus in
+          guard authStatus == .authorized else {
+              completion(nil, NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "语音识别权限未授权"]))
+              return
+          }
+
+          let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+          let request = SFSpeechURLRecognitionRequest(url: url)
+          request.shouldReportPartialResults = false
+        
+          recognizer?.recognitionTask(with: request) { result, error in
+              if let result = result {
+                  let transcription = result.bestTranscription.formattedString
+                  completion(transcription, nil)
+              } else if let error = error {
+                  completion(nil, error)
+              }
+          }
+      }
+  }
+
+  @objc func transcribeAudio2Text(_ call: CAPPluginCall) {
+    self.call = call
+
+    // 接收音频数据 arrayBuffer
+    guard let audioArray = call.getArray("audioData", NSNumber.self) as? [UInt8] else {
+      call.reject("无效的音频数据")
+      return
+    }
+
+    // 将数组转换为 Data
+    let audioData = Data(audioArray)
+
+    // 保存为本地文件
+    let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("recordedAudio.m4a")
+    
+    do {
+      try audioData.write(to: fileURL)
+      
+      let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
+      
+      print("文件是否存在: \(fileExists), 路径: \(fileURL.path)")
+      if !fileExists {
+          call.reject("文件保存失败，文件不存在")
+          return
+      }
+      
+      
+      // 调用语音识别
+      self.recognizeSpeech(from: fileURL) { result, error in
+          if let result = result {
+            call.resolve(["transcription": result])
+          } else if let error = error {
+            call.reject("语音识别失败: \(error.localizedDescription)")
+          }
+        }
+    } catch {
+      call.reject("保存文件失败: \(error.localizedDescription)")
+    }
+  }
 
   @objc func showDatePicker(_ call: CAPPluginCall) {
     self.call = call
