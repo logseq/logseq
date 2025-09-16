@@ -120,7 +120,7 @@
 
 (defn close!
   []
-  (when (and @*server (contains? #{:running :error} (:status @*state)))
+  (when (and @*server (contains? #{:running :error nil} (:status @*state)))
     (logger/debug "[server] closing ...")
     (set-status! :closing)
     (-> (.close @*server)
@@ -167,7 +167,7 @@
     :start (when (contains? #{nil :closed :error} (:status @*state))
              (start!))
     :stop (close!)
-    :restart (start!)
+    :restart (p/do! (close!) (start!))
     :else :dune))
 
 (defn setup!
