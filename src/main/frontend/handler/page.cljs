@@ -342,13 +342,13 @@
                 format (state/get-preferred-format repo)
                 db-based? (config/db-based-graph? repo)
                 create-f (fn []
-                           (p/do!
-                            (<create! title {:redirect? false
-                                             :split-namespace? false
-                                             :today-journal? true})
-                            (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
-                            (ui-handler/re-render-root!)
-                            (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
+                           (p/let [result (<create! title {:redirect? false
+                                                           :split-namespace? false
+                                                           :today-journal? true})]
+                             (when-not db-based? (state/pub-event! [:journal/insert-template today-page]))
+                             (ui-handler/re-render-root!)
+                             (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})
+                             result))]
             (when-not (db/get-page today-page)
               (if db-based?
                 (create-f)
