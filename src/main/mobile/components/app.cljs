@@ -19,7 +19,6 @@
             [mobile.components.left-sidebar :as mobile-left-sidebar]
             [mobile.components.modal :as modal]
             [mobile.components.popup :as popup]
-            [mobile.components.recorder :as recorder]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
             [mobile.components.settings :as settings]
