@@ -177,9 +177,6 @@
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
 
-      ;; for audio record
-      :editor/record-status                  "NONE"
-
       :editor/code-block-context             nil
       :editor/latest-shortcut                (atom nil)
 
@@ -225,7 +222,6 @@
       ;; mobile
       :mobile/container-urls                 nil
       :mobile/show-action-bar?               false
-      :mobile/show-recording-bar?            false
 
       ;; plugin
       :plugin/enabled                        (and util/plugin-platform?

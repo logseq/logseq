@@ -146,7 +146,6 @@
         "@tabler/icons-webfont": "^2.47.0",
         "@tippyjs/react": "4.2.5",
         "bignumber.js": "^9.0.2",
-        "capacitor-voice-recorder": "^5.0.0",
         "check-password-strength": "2.0.7",
         "chokidar": "3.5.1",
         "chrono-node": "2.2.4",
