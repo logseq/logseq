@@ -60,7 +60,9 @@
 
 (def ^:private normalized-remote-blocks-coercer
   (ma/coercer [:sequential normalized-remote-block-schema]
-              (mt/transformer {:name :custom} mt/string-transformer)))
+              (mt/transformer {:name :custom} mt/string-transformer)
+              nil
+              #(ma/-fail! ::normalized-remote-block-schema (select-keys % [:value]))))
 
 (defn- schema->ref-type-attrs
   [db-schema]
