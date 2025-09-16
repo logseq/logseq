@@ -32,6 +32,7 @@
             [frontend.handler.property.file :as property-file]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as tree]
@@ -3994,10 +3995,19 @@
   (let [graph (state/get-current-repo)]
     (p/do!
      (db-async/<get-block graph (date/today))
-     (p/let [add-page (db-async/<get-block graph (:db/id (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))]
-       (when-not (:block/_parent add-page)
+     (p/let [add-page (db-async/<get-block graph (:db/id (ldb/get-built-in-page (db/get-db) common-config/quick-add-page-name)))
+             user-id (when-let [id-str (user-handler/user-uuid)] (uuid id-str))
+             user-db-id (when user-id (:db/id (db/entity [:block/uuid user-id])))
+             children (:block/_parent add-page)
+             children' (if user-db-id
+                         (filter (fn [block]
+                                   (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
+                                     (= user-db-id create-by-id))) children)
+                         children)]
+       (when (empty? children')
          (api-insert-new-block! "" {:page (:block/uuid add-page)
-                                    :container-id :unknown-container})))
+                                    :container-id :unknown-container
+                                    :replace-empty-target? false})))
      (state/pub-event! [(if (util/mobile?)
                           :dialog/mobile-quick-add
                           :dialog/quick-add)]))))
