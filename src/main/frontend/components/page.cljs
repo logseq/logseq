@@ -188,7 +188,9 @@
                            user-db-id (:db/id (db/entity [:block/uuid user-id]))]
                        (if user-db-id
                          (filter (fn [block]
-                                   (= user-db-id (:db/id (:logseq.property/created-by-ref block)))) children)
+                                   (let [create-by-id (:db/id (:logseq.property/created-by-ref block))]
+                                     (or (= user-db-id create-by-id)
+                                         (nil? create-by-id)))) children)
                          children))
 
                      (ldb/class? block)
