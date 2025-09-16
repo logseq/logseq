@@ -64,7 +64,6 @@
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
   [^js state]
   (println :debug :app-state-change-handler state (js/Date.))
-  (reset! mobile-flows/*mobile-app-state (.-isActive state))
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (if (not is-active?)
@@ -79,7 +78,8 @@
             500)
            (p/catch (fn [error]
                       (js/console.error error)
-                      (js/window.location.reload)))))))))
+                      (js/window.location.reload))))))))
+  (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
 (defn- general-init
   "Initialize event listeners used by both iOS and Android"
