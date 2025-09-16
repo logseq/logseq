@@ -209,6 +209,7 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
     CAPPluginMethod(name: "transcribeAudio2Text", returnType: CAPPluginReturnPromise)
   ]
 
+  // TODO: switch to use https://developer.apple.com/documentation/speech/speechanalyzer for iOS 26+
   // 语音识别方法
   private func recognizeSpeech(from url: URL, completion: @escaping (String?, Error?) -> Void) {
       SFSpeechRecognizer.requestAuthorization { authStatus in
@@ -219,8 +220,16 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
 
           let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
           let request = SFSpeechURLRecognitionRequest(url: url)
+
+          // Setting up offline speech recognition
+          recognizer?.supportsOnDeviceRecognition = true
           request.shouldReportPartialResults = false
-        
+          request.requiresOnDeviceRecognition = true
+          request.taskHint = .dictation
+          if #available(iOS 16, *) {
+              request.addsPunctuation = true
+          }
+
           recognizer?.recognitionTask(with: request) { result, error in
               if let result = result {
                   let transcription = result.bestTranscription.formattedString
@@ -246,19 +255,19 @@ public class UILocalPlugin: CAPPlugin, CAPBridgedPlugin {
 
     // 保存为本地文件
     let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("recordedAudio.m4a")
-    
+
     do {
       try audioData.write(to: fileURL)
-      
+
       let fileExists = FileManager.default.fileExists(atPath: fileURL.path)
-      
+
       print("文件是否存在: \(fileExists), 路径: \(fileURL.path)")
       if !fileExists {
           call.reject("文件保存失败，文件不存在")
           return
       }
-      
-      
+
+
       // 调用语音识别
       self.recognizeSpeech(from: fileURL) { result, error in
           if let result = result {
