@@ -30,8 +30,10 @@
 (defn get-date-time-string
   ([]
    (get-date-time-string (t/now)))
-  ([date-time]
-   (tf/unparse custom-formatter date-time)))
+  ([date-time & {:keys [formatter-str]}]
+   (tf/unparse (if formatter-str
+                 (tf/formatter formatter-str)
+                 custom-formatter) date-time)))
 
 (defn get-locale-string
   "Accepts a :date-time-no-ms string representation, or a cljs-time date object"
