@@ -102,12 +102,13 @@
        ;; (cljs.pprint/pprint tx-data)
        ;; (js/console.trace)
 
-       (let [f (or @*transact-fn d/transact!)]
+       (if-let [transact-fn @*transact-fn]
+         (transact-fn repo-or-conn tx-data tx-meta)
          (try
-           (f repo-or-conn tx-data tx-meta)
+           (d/transact! repo-or-conn tx-data tx-meta)
            (catch :default e
              (js/console.trace)
-             (prn :debug-tx-data tx-data)
+             (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
              (throw e))))))))
 
 (def page? common-entity-util/page?)

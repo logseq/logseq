@@ -1487,3 +1487,8 @@ Arg *stop: atom, reset to true to stop the loop"
         (let [f #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
                    (.focus node))]
           (if schedule? (schedule f) (f)))))))
+
+#?(:cljs
+   (defn rtc-test?
+     []
+     (string/includes? js/window.location.search "?rtc-test=true")))
