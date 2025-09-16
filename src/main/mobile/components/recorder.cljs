@@ -66,18 +66,20 @@
 
 (rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
   []
-  (let [*wave-ref (rum/use-ref nil)
-        *micid-ref (rum/use-ref nil)
-        *timer-ref (rum/use-ref nil)
-        *save-ref (rum/use-ref false)
-        [^js wavesurfer set-wavesurfer!] (rum/use-state nil)
-        [^js recorder set-recorder!] (rum/use-state nil)
-        [mic-devices set-mic-devices!] (rum/use-state nil)
-        [_ set-status-pulse!] (rum/use-state 0)
+  (let [*wave-ref (hooks/use-ref nil)
+        *micid-ref (hooks/use-ref nil)
+        *timer-ref (hooks/use-ref nil)
+        *save-ref (hooks/use-ref false)
+        *wavesurfer (atom nil)
+        [^js _wavesurfer set-wavesurfer!] (hooks/use-state nil)
+        [^js recorder set-recorder!] (hooks/use-state nil)
+        [mic-devices set-mic-devices!] (hooks/use-state nil)
+        [_ set-status-pulse!] (hooks/use-state 0)
         recording? (some-> recorder (.isRecording))]
 
     (hooks/use-effect!
-     (fn [] #(some-> wavesurfer (.destroy)))
+     (fn []
+       #(some-> @*wavesurfer (.destroy)))
      [])
 
     ;; load mic devices
@@ -116,7 +118,9 @@
                                                   :audioBitsPerSecond 128000   ;; 128kbps，适合 AAC-LC
                                                   :continuousWaveformDuration 30 ;; optional
                                                   }))]
-         (set-wavesurfer! w)
+         (do
+           (set-wavesurfer! w)
+           (reset! *wavesurfer w))
          (set-recorder! r)
 
          ;; events
