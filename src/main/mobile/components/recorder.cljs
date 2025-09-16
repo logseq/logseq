@@ -9,6 +9,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [goog.functions :as gfun]
+            [lambdaisland.glogi :as log]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui] ;; [mobile.speech :as speech]
             [mobile.init :as init]
@@ -62,7 +63,7 @@
                                                                      :sibling? false
                                                                      :replace-empty-target? true
                                                                      :edit-block? false})))))
-                (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
+                (p/catch #(log/error :transcribe-audio-2-text %)))))))))
 
 (rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
   []
@@ -96,7 +97,7 @@
                                                       :value (.-deviceId device)})))
                         (set-mic-devices! @*vs))))
              (.catch (fn [^js err]
-                       (js/console.error "ERR: load mic devices" err)))))
+                       (log/error :load-mic-devices err)))))
        #())
      [recorder])
 
@@ -139,7 +140,7 @@
                                          (let [t (ms-to-time-format time)]
                                            (set! (. (rum/deref *timer-ref) -textContent) t))
                                          (catch js/Error e
-                                           (js/console.warn "WARN: bad progress time:" e))))
+                                           (log/warn :bad-progress-time e))))
                                      50))
              (.on "record-start" handle-status-changed!)
              (.on "record-pause" handle-status-changed!)
