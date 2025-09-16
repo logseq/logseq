@@ -182,7 +182,7 @@
               asset-entity (first result)
               url-link (util/format "[[%s]]" (:block/uuid asset-entity))]
         url-link)
-      (p/catch #(js/console.error "Error(handle asset file):" %))))
+      (p/catch #(log/error :handle-asset-file %))))
 
 (defn- handle-payload-resource
   [{:keys [type name ext url] :as resource} format]
