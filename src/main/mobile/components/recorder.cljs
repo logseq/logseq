@@ -1,5 +1,6 @@
 (ns mobile.components.recorder
   (:require [cljs-bean.core :as bean]
+            [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db.model :as db-model]
@@ -16,6 +17,8 @@
             ;; [mobile.speech :as speech]
             [promesa.core :as p]
             [rum.core :as rum]))
+
+(defonce audio-file-format "MM-dd HH:mm")
 
 (defonce *open? (atom false))
 (defn set-open? [v?] (reset! *open? v?))
@@ -41,19 +44,27 @@
               "mp4" "m4a"
               ext)]
 
-    ;; TODO: transcribeAudio2Text
-    (p/let [buffer-data (.arrayBuffer blob)
-            unit8-data (js/Uint8Array. buffer-data)]
-      (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
-          (p/then (fn [r]
-                    (js/console.log "transcription:" r)
-                    (shui/popup-show! nil [:strong (js/JSON.stringify r)])))
-          (p/catch #(js/console.error "Error(transcribeAudio2Text):" %))))
-
     ;; save local
-    (when-let [filename (some->> ext (str "record-" (date/get-date-time-string-2) "."))]
-      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})]
-        (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})))))
+    (when-let [filename (some->> ext (str "Audio "
+                                          (date/get-date-time-string (t/now)
+                                                                     {:formatter-str audio-file-format})
+                                          "."))]
+      (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
+              result (editor-handler/db-based-save-assets! (state/get-current-repo) [file] {})
+              asset-entity (first result)]
+        (when asset-entity
+          (p/let [buffer-data (.arrayBuffer blob)
+                  unit8-data (js/Uint8Array. buffer-data)]
+            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
+                (p/then (fn [^js r]
+                          (let [content (.-transcription r)]
+                            (when-not (string/blank? content)
+                              (editor-handler/api-insert-new-block! content
+                                                                    {:block-uuid (:block/uuid asset-entity)
+                                                                     :sibling? false
+                                                                     :replace-empty-target? true
+                                                                     :edit-block? false})))))
+                (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
 
 (rum/defc ^:large-vars/cleanup-todo audio-recorder-aux
   [{:keys [open?]}]
@@ -65,8 +76,7 @@
         [^js recorder set-recorder!] (rum/use-state nil)
         [mic-devices set-mic-devices!] (rum/use-state nil)
         [_ set-status-pulse!] (rum/use-state 0)
-        recording? (some-> recorder (.isRecording))
-        paused? (some-> recorder (.isPaused))]
+        recording? (some-> recorder (.isRecording))]
 
     (hooks/use-effect!
      (fn []
@@ -144,8 +154,8 @@
     [:div.app-audio-recorder-inner
      [:div.flex.items-center.justify-between
       [:h1.text-xl.p-6.relative
-       [:span.font-medium "REC"]
-       [:small (date/get-date-time-string-3)]]
+       [:span.font-bold "REC"]
+       [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
       (shui/button
        {:variant :icon
         :autofocus false
@@ -168,25 +178,16 @@
      [:div.p-6.flex.justify-between
       (let [handle-record!
             (fn []
-              (cond
-                (true? paused?)
-                (.resumeRecording recorder)
-
-                (true? recording?)
-                (.pauseRecording recorder)
-
-                ;; start recording
-                :else
-                (let [micid (some-> (rum/deref *micid-ref) (.-value))]
-                  (-> (.startRecording recorder #js {:deviceId micid})
-                      (.catch #(notification/show! (.-message %) :error))))))]
+              (let [micid (some-> (rum/deref *micid-ref) (.-value))]
+                (-> (.startRecording recorder #js {:deviceId micid})
+                    (.catch #(notification/show! (.-message %) :error)))))]
 
         [:div.flex.justify-between.items-center.w-full
          [:span.flex.flex-col.timer-wrap
           [:strong.timer {:ref *timer-ref} "00:00"]
           [:small "05:00"]]
          (shui/button {:variant :outline
-                       :class (str "record-ctrl-btn rounded-full" (when recording? " recording"))
+                       :class "record-ctrl-btn rounded-full recording"
                        :on-click (fn []
                                    (if recording?          ;; save audio
                                      (do

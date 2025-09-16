@@ -1545,11 +1545,10 @@
                                          :replace-empty-target? true
                                          :sibling? true)
                                   (assoc insert-opts :page (:block/uuid today-page)))
-                   result (api-insert-new-block! file-name-without-ext insert-opts')
-                   new-entity (db/entity [:block/uuid (:block/uuid result)])]
+                   new-block (api-insert-new-block! file-name-without-ext insert-opts')]
              (when insert-to-current-block-page?
                (state/clear-edit!))
-             (or new-entity
+             (or new-block
                  (throw (ex-info "Can't save asset" {:files files}))))))))))
 
 (def insert-command! editor-common-handler/insert-command!)
