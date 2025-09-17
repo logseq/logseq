@@ -17,6 +17,9 @@ project(':capacitor-camera').projectDir = new File('../node_modules/@capacitor/c
 include ':capacitor-clipboard'
 project(':capacitor-clipboard').projectDir = new File('../node_modules/@capacitor/clipboard/android')
 
+include ':capacitor-device'
+project(':capacitor-device').projectDir = new File('../node_modules/@capacitor/device/android')
+
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../node_modules/@capacitor/filesystem/android')
 
