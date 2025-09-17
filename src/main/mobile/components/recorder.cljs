@@ -11,6 +11,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
+            [mobile.record :as record]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -117,6 +118,27 @@
                                 (.stopRecording recorder))}
                    (shui/tabler-icon "player-stop" {:size 22}))]]))
 
+(rum/defc record-button-2
+  []
+  (hooks/use-effect!
+   (fn []
+     (record/start
+      {:on-record-end (fn [^js blob]
+                        (save-asset-audio! blob)
+                        (mobile-state/close-popup!))})
+     #(record/destroy!))
+   [])
+  [:div.p-6.flex.justify-between
+   [:div.flex.justify-between.items-center.w-full
+      ;; [:span.flex.flex-col.timer-wrap
+      ;;  [:strong.timer {:ref *timer-ref} "00:00"]
+      ;;  [:small "05:00"]]
+    (shui/button {:variant :outline
+                  :class "record-ctrl-btn rounded-full recording"
+                  :on-click (fn []
+                              (record/stop))}
+                 (shui/tabler-icon "player-stop" {:size 22}))]])
+
 (rum/defc audio-recorder-aux < rum/static
   []
   [:div.app-audio-recorder-inner
@@ -127,7 +149,9 @@
    [:div.px-6
     [:div#wave-container.wave.border.rounded]]
 
-   (record-button)])
+   (record-button)
+   ;; (record-button-2)
+   ])
 
 (defn- show-recorder
   []
