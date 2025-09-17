@@ -1,6 +1,7 @@
 (ns mobile.components.recorder
   "Audio record"
-  (:require [cljs-time.core :as t]
+  (:require ["@capacitor/device" :refer [Device]]
+            [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db.model :as db-model]
@@ -28,8 +29,20 @@
     (str (.padStart (str minutes) 2 "0") ":"
          (.padStart (str seconds) 2 "0"))))
 
+(defn- get-locale
+  []
+  (->
+   (p/let [^js lang (.getLanguageTag ^js Device)
+           value (.-value lang)]
+     (if (= value "en_CN")
+       "zh"
+       (string/replace value "-" "_")))
+   (p/catch (fn [e]
+              (js/console.error e)
+              "en_US"))))
+
 (defn save-asset-audio!
-  [blob]
+  [blob locale]
   (let [ext (some-> blob
                     (.-type)
                     (string/split ";")
@@ -53,7 +66,8 @@
         (when asset-entity
           (p/let [buffer-data (.arrayBuffer blob)
                   unit8-data (js/Uint8Array. buffer-data)]
-            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
+            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)
+                                                                 :locale locale})
                 (p/then (fn [^js r]
                           (let [content (.-transcription r)]
                             (when-not (string/blank? content)
@@ -93,7 +107,7 @@
          ;; events
          (doto r
            (.on "record-end" (fn [^js blob]
-                               (save-asset-audio! blob)
+                               (save-asset-audio! blob "en_US")
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
@@ -120,31 +134,44 @@
 
 (rum/defc record-button-2
   []
-  (hooks/use-effect!
-   (fn []
-     (record/start
-      {:on-record-end (fn [^js blob]
-                        (save-asset-audio! blob)
-                        (mobile-state/close-popup!))})
-     (record/attach-visualizer!
-      (js/document.getElementById "wave-canvas")
-      {:mode :rolling
-       :fps 30
-       :fft-size 2048
-       :smoothing 0.8})
+  (let [[locale set-locale!] (hooks/use-state nil)
+        [*locale] (hooks/use-state (atom nil))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [locale (get-locale)]
+         (set-locale! locale)
+         (reset! *locale locale)
+         (record/start
+          {:on-record-end (fn [^js blob]
+                            (save-asset-audio! blob @*locale)
+                            (mobile-state/close-popup!))})
+         (record/attach-visualizer!
+          (js/document.getElementById "wave-canvas")
+          {:mode :rolling
+           :fps 30
+           :fft-size 2048
+           :smoothing 0.8}))
 
-     #(record/destroy!))
-   [])
-  [:div.p-6.flex.justify-between
-   [:div.flex.justify-between.items-center.w-full
-      ;; [:span.flex.flex-col.timer-wrap
-      ;;  [:strong.timer {:ref *timer-ref} "00:00"]
-      ;;  [:small "05:00"]]
-    (shui/button {:variant :outline
-                  :class "record-ctrl-btn rounded-full recording"
-                  :on-click (fn []
-                              (record/stop))}
-                 (shui/tabler-icon "player-stop" {:size 22}))]])
+       #(record/destroy!))
+     [])
+    [:div.p-6.flex.justify-between
+     [:div.flex.justify-between.items-center.w-full
+    ;; [:span.flex.flex-col.timer-wrap
+    ;;  [:strong.timer "00:00"]
+    ;;  [:small "05:00"]]
+      (shui/button {:variant :outline
+                    :class "record-ctrl-btn rounded-full recording"
+                    :on-click (fn []
+                                (record/stop))}
+                   (shui/tabler-icon "player-stop" {:size 22}))
+
+      (when locale
+        (when-not (string/starts-with? locale "en_")
+          (shui/button {:variant :outline
+                        :on-click (fn []
+                                    (reset! *locale "en_US")
+                                    (set-locale! "en_US"))}
+                       "English transcribe")))]]))
 
 (rum/defc audio-recorder-aux < rum/static
   []
@@ -158,7 +185,7 @@
     [:div.wave.border.rounded
      [:canvas#wave-canvas
       {:height 200
-       :width 400}]]]
+       :width 320}]]]
 
    ;; (record-button)
    (record-button-2)])
