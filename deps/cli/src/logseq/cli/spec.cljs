@@ -61,6 +61,8 @@
           :default 3000
           :coerce :long
           :desc "Port for streamable HTTP server"}
+   :host {:default "localhost"
+          :desc "Host for streamable HHP server"}
    :debug-tool {:alias :t
                 :coerce :keyword
                 :desc "Debug mcp tool with direct invocation"}})
