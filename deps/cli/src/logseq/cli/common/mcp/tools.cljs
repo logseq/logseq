@@ -42,7 +42,7 @@
                 (:logseq.property.class/properties e)
                 (update :logseq.property.class/properties #(mapv :db/ident %))
                 (:logseq.property.view/type e)
-                (update :logseq.property.view/type :db/ident)
+                (assoc :logseq.property.view/type (:db/ident (:logseq.property.view/type e)))
                 (:logseq.property/description e)
                 (update :logseq.property/description db-property/property-value-content))))))
 
