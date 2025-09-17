@@ -17,7 +17,7 @@ env:
 
 jobs:
   build-app:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v4
@@ -25,13 +25,13 @@ jobs:
           ref: ${{ github.event.inputs.git-ref }}
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: 16.4
+          xcode-version: '26.0-beta'
       - name: Show runtimes
         run: |
           xcrun simctl list > /dev/null
       - name: Install iOS platform
         run: |
-          xcodebuild -downloadPlatform iOS -buildVersion 18.6
+          xcodebuild -downloadPlatform iOS
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v4
         with:
