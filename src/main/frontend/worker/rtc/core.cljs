@@ -209,8 +209,8 @@
         {:keys [*current-ws get-ws-create-task]}
         (gen-get-ws-create-map--memoized ws-url)
         get-ws-create-task (r.client/ensure-register-graph-updates--memoized
-                            get-ws-create-task graph-uuid major-schema-version
-                            repo conn *last-calibrate-t *online-users *server-schema-version add-log-fn)
+                            get-ws-create-task graph-uuid major-schema-version repo conn date-formatter
+                            *last-calibrate-t *online-users *server-schema-version add-log-fn)
         {:keys [assets-sync-loop-task]}
         (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
@@ -226,9 +226,9 @@
       (m/sp
         (try
           (log/info :rtc :loop-starting)
+          (started-dfv true)
           ;; init run to open a ws
           (m/? get-ws-create-task)
-          (started-dfv true)
           (update-remote-schema-version! conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
