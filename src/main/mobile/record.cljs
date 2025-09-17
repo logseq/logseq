@@ -1,5 +1,7 @@
 (ns mobile.record
   "Web audio record"
+  {:clj-kondo/config {:linters {:unused-binding {:level :off}
+                                :unused-private-var {:level :off}}}}
   (:require [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
