@@ -42,8 +42,7 @@
           get-graph-skeleton? (or (nil? @*last-calibrate-t)
                                   (< 500 (- t-before @*last-calibrate-t)))]
       (try
-        (let [t-before (client-op/get-local-tx repo)
-              {remote-t :t
+        (let [{remote-t :t
                server-schema-version :server-schema-version
                server-builtin-db-idents :server-builtin-db-idents
                :as resp}
