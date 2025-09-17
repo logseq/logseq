@@ -197,6 +197,12 @@
       [:map
        [:ex-message :string]
        [:ex-data [:map [:type :keyword]]]]]
+     ["init-request"
+      (concat [:map
+               [:max-remote-schema-version {:optional true} :string]
+               [:server-schema-version {:optional true} :string]
+               [:server-builtin-db-idents {:optional true} [:set :keyword]]]
+              (m/children apply-ops-response-schema))]
      ["register-graph-updates"
       [:map
        [:t :int]
@@ -252,6 +258,12 @@
      [:multi {:dispatch :action}
       ["list-graphs"
        [:map]]
+      ["init-request"
+       [:map
+        [:graph-uuid :uuid]
+        [:schema-version db-schema/major-schema-version-string-schema]
+        [:t-before :int]
+        [:get-graph-skeleton :boolean]]]
       ["register-graph-updates"
        [:map
         [:graph-uuid :uuid]
