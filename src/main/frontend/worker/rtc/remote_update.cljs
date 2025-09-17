@@ -600,7 +600,6 @@ so need to pull earlier remote-data from websocket."})
     (let [remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
           local-tx (client-op/get-local-tx repo)]
-      (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (cond
         (not (and (pos? remote-t)
                   (pos? remote-t-before)))
@@ -627,6 +626,7 @@ so need to pull earlier remote-data from websocket."})
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)
               db-before @conn]
+          (rtc-log-and-state/update-remote-t graph-uuid remote-t)
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
                                              :persist-op? false
