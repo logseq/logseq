@@ -126,6 +126,13 @@
       {:on-record-end (fn [^js blob]
                         (save-asset-audio! blob)
                         (mobile-state/close-popup!))})
+     (record/attach-visualizer!
+      (js/document.getElementById "wave-canvas")
+      {:mode :rolling
+       :fps 30
+       :fft-size 2048
+       :smoothing 0.8})
+
      #(record/destroy!))
    [])
   [:div.p-6.flex.justify-between
@@ -147,11 +154,14 @@
     [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
 
    [:div.px-6
-    [:div#wave-container.wave.border.rounded]]
+    [:div#wave-container.wave.border.rounded]
+    [:div.wave.border.rounded
+     [:canvas#wave-canvas
+      {:height 200
+       :width 400}]]]
 
-   (record-button)
-   ;; (record-button-2)
-   ])
+   ;; (record-button)
+   (record-button-2)])
 
 (defn- show-recorder
   []
