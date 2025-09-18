@@ -82,21 +82,22 @@
 (rum/defc record-button
   []
   (let [*timer-ref (hooks/use-ref nil)
-        [^js _waverecord set-waverecord!] (hooks/use-state nil)
+        *save? (hooks/use-ref nil)
         [^js recorder set-recorder!] (hooks/use-state nil)
         [*recorder _] (hooks/use-state (atom nil))
         [locale set-locale!] (hooks/use-state nil)
         [*locale] (hooks/use-state (atom nil))]
+
     (hooks/use-effect!
      (fn []
-       (let [;; dark? (= "dark" (state/sub :ui/theme))
-             node (js/document.getElementById "wave-container")
+       (let [^js node (js/document.getElementById "wave-container")
+             ^js wave-l (.querySelector node ".wave-left")
+             ^js wave-r (.querySelector node ".wave-right")
              ^js beats (BeatsObserver.)
-             ^js w1 (renderWaveform node #js {:beatsObserver beats})
-             ^js w2 (renderWaveform node #js {})
+             ^js w1 (renderWaveform wave-l #js {:beatsObserver beats})
+             ^js w2 (renderWaveform wave-r #js {})
              ^js r (Recorder.create #js {:mimeType "audio/mp4"
                                          :mediaRecorderTimeslice 1000})]
-         (set-waverecord! w1)
          (set-recorder! r)
          (reset! *recorder r)
          (p/let [locale (get-locale)]
@@ -111,7 +112,8 @@
            (.on "record-end" (fn [^js blob]
                                (.stop w1)
                                (.stop w2)
-                               (save-asset-audio! blob @*locale)
+                               (when (true? (rum/deref *save?))
+                                 (save-asset-audio! blob @*locale))
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
@@ -135,6 +137,7 @@
             (.stop w1)
             (.stop w2))))
      [])
+
     [:div
      [:div.p-6.flex.justify-between
       [:div.flex.justify-between.items-center.w-full
@@ -144,6 +147,7 @@
        (shui/button {:variant :outline
                      :class "record-ctrl-btn rounded-full recording"
                      :on-click (fn []
+                                 (rum/set-ref! *save? true)
                                  (.stopRecording recorder))}
                     (shui/tabler-icon "player-stop" {:size 22}))]]
 
@@ -163,7 +167,10 @@
     [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
 
    [:div.px-6
-    [:div#wave-container.wave.border.rounded]]
+    [:div#wave-container.app-wave-container
+     [:div.app-wave-needle]
+     [:div.wave-left]
+     [:div.wave-right.mirror]]]
 
    (record-button)])
 
