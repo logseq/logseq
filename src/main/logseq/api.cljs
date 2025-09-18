@@ -1187,10 +1187,11 @@
 (defn ^:export get_page_data
   "Like get_page_blocks_tree but for MCP tools"
   [page-title]
-  (when-let [tools (cli-common-mcp-tools/get-page-blocks (db/get-db) page-title)]
+  (if-let [tools (cli-common-mcp-tools/get-page-blocks (db/get-db) page-title)]
     (->> tools
          (map #(dissoc % :block.temp/has-children? :block.temp/load-status))
-         clj->js)))
+         clj->js)
+    #js {:error (str "Page " (pr-str page-title) " not found")}))
 
 (defn ^:export list_pages
   []
