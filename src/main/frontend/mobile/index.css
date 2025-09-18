@@ -30,8 +30,7 @@
 }
 
 #mobile-editor-toolbar {
-  @apply absolute bottom-0 left-0 w-full z-[99999] flex justify-between bg-gray-100 border-t border-gray-200
-  dark:border-gray-800 dark:bg-[#222];
+  @apply absolute bottom-0 left-0 w-full z-[99999] flex justify-between bg-background px-2;
 
   will-change: transform;
   transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
@@ -39,7 +38,7 @@
   transition: transform 250ms ease-out, opacity 50ms ease-out;
 
   button {
-    @apply flex items-center py-2 px-2 opacity-95;
+    @apply flex items-center py-2 px-2;
   }
 
   .submenu {
@@ -57,10 +56,6 @@
     &::-webkit-scrollbar {
       @apply h-1;
     }
-  }
-
-  .toolbar-hide-keyboard {
-    @apply border-l border-gray-200 dark:border-gray-700;
   }
 }
 
