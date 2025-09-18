@@ -1025,9 +1025,7 @@
             last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
                    last-top-block-right
-                   (let [parent (:block/parent last-top-block)
-                         parent (when (:block/page (d/entity db (:db/id parent)))
-                                  parent)]
+                   (let [parent (:block/parent last-top-block)]
                      (ldb/get-right-sibling parent)))
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
