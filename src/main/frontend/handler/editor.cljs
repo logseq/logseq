@@ -852,7 +852,7 @@
                   nil
 
                   (and concat-prev-block? input-empty? delete-concat?)
-                  (let [children (:block/_parent (db/entity (:db/id current-block)))]
+                  (let [children (:block/_parent (db/entity (:db/id current-block)))] ; del
                     (p/do!
                      (ui-outliner-tx/transact!
                       transact-opts
@@ -871,6 +871,19 @@
 
                       (delete-block-aux! current-block))
                      (edit-block! (db/entity (:db/id next-block)) 0)))
+
+                  (and concat-prev-block? (string/blank? (:block/title prev-block)) (not delete-concat?)) ; backspace
+                  (p/do!
+                   (ui-outliner-tx/transact!
+                    transact-opts
+                    (when-not (= (:db/id (:block/parent block)) (:db/id (:block/parent prev-block)))
+                      (outliner-op/move-blocks!
+                       [block]
+                       prev-block
+                       {:sibling? true}))
+
+                    (delete-block-aux! prev-block))
+                   (edit-block! (db/entity (:db/id current-block)) 0))
 
                   concat-prev-block?
                   (let [children (:block/_parent (db/entity (:db/id block)))]
