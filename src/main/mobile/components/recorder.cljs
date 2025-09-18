@@ -177,11 +177,10 @@
      [:div.flex.flex-row.justify-between.items-center.font-medium
       [:div.opacity-70 (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
       (when (util/ios?)
-        (let [non-en-locale? (and locale (not (string/starts-with? locale "en_")))]
+        (let [en? (and locale (string/starts-with? locale "en_"))]
           (shui/button
-           {:variant :outline
-            :class (str "rounded-full " (if (= locale "en_US") "opacity-100" "opacity-70"))
-            :disabled (and (not= locale "en_US") (not non-en-locale?))
+           {:variant (if en? :default :outline)
+            :class (str "rounded-full " (if en? "opacity-100" "opacity-70"))
             :on-click (fn []
                         (reset! *locale "en_US")
                         (set-locale! "en_US"))}
