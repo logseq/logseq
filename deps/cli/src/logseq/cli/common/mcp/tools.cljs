@@ -3,7 +3,6 @@
   (:require [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.tree :as otree]))
 
@@ -48,8 +47,8 @@
 
 (defn get-page-blocks
   "Get page blocks for GetPage tool"
-  [db page-title]
-  (when-let [page-id (common-initial-data/get-first-page-by-title db page-title)]
+  [db page-name-or-uuid]
+  (when-let [page-id (:db/id (ldb/get-page db page-name-or-uuid))]
     (let [blocks (ldb/get-page-blocks db page-id)]
       ;; Use repo stub since this is a DB only tool
       (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
