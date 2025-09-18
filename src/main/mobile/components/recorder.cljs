@@ -94,7 +94,8 @@
              ^js beats (BeatsObserver.)
              ^js w1 (renderWaveform node #js {:beatsObserver beats})
              ^js w2 (renderWaveform node #js {})
-             ^js r (Recorder.create #js {:mimeType "audio/mp4"})]
+             ^js r (Recorder.create #js {:mimeType "audio/mp4"
+                                         :mediaRecorderTimeslice 1000})]
          (set-waverecord! w1)
          (set-recorder! r)
          (reset! *recorder r)
