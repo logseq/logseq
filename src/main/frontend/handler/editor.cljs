@@ -807,9 +807,16 @@
 
 (declare expand-block!)
 
+(defn- one-page-another-block
+  [block1 block2]
+  (and
+   (not (every? ldb/page? [block1 block2]))
+   (or (ldb/page? block1)
+       (ldb/page? block2))))
+
 (defn delete-block-inner!
   [repo {:keys [block-id value format config block-container current-block next-block delete-concat?]}]
-  (when (and block-id (not (some ldb/page? [current-block next-block])))
+  (when (and block-id (not (one-page-another-block current-block next-block)))
     (when-let [block-e (db/entity [:block/uuid block-id])]
       (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
             input-empty? (string/blank? (state/get-edit-content))]
@@ -866,22 +873,20 @@
                      (edit-block! (db/entity (:db/id next-block)) 0)))
 
                   concat-prev-block?
-                  (when-not (some ldb/page? [prev-block block])
-                    (let [children (:block/_parent (db/entity (:db/id block)))]
-                      (p/do!
-                       (state/set-state! :editor/edit-block-fn edit-block-f)
-                       (ui-outliner-tx/transact!
-                        transact-opts
-                        (when (seq children)
-                          (outliner-op/move-blocks! children prev-block {:sibling? false}))
-                        (delete-block-aux! block)
-                        (save-block! repo prev-block new-content {})))))
-
-                  :else
-                  (when-not (some ldb/page? [prev-block block])
+                  (let [children (:block/_parent (db/entity (:db/id block)))]
                     (p/do!
                      (state/set-state! :editor/edit-block-fn edit-block-f)
-                     (delete-block-aux! block))))))))))))
+                     (ui-outliner-tx/transact!
+                      transact-opts
+                      (when (seq children)
+                        (outliner-op/move-blocks! children prev-block {:sibling? false}))
+                      (delete-block-aux! block)
+                      (save-block! repo prev-block new-content {}))))
+
+                  :else
+                  (p/do!
+                   (state/set-state! :editor/edit-block-fn edit-block-f)
+                   (delete-block-aux! block)))))))))))
 
 (defn move-blocks!
   [blocks target opts]
