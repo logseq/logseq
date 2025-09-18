@@ -174,17 +174,18 @@
      [])
 
     [:div.app-audio-recorder
-     [:div.flex.flex-row.justify-between.items-center.font-medium.opacity-70
-      [:div (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
-      (let [non-en-locale? (and locale (not (string/starts-with? locale "en_")))]
-        (shui/button
-         {:variant :outline
-          :class "rounded-full"
-          :disabled (not non-en-locale?)
-          :on-click (fn []
-                      (reset! *locale "en_US")
-                      (set-locale! "en_US"))}
-         "EN transcribe"))]
+     [:div.flex.flex-row.justify-between.items-center.font-medium
+      [:div.opacity-70 (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
+      (when (util/ios?)
+        (let [non-en-locale? (and locale (not (string/starts-with? locale "en_")))]
+          (shui/button
+           {:variant :outline
+            :class (str "rounded-full " (if (= locale "en_US") "opacity-100" "opacity-70"))
+            :disabled (and (not= locale "en_US") (not non-en-locale?))
+            :on-click (fn []
+                        (reset! *locale "en_US")
+                        (set-locale! "en_US"))}
+           "EN transcribe")))]
 
      [:div#wave-container.app-wave-container
       [:div.app-wave-needle]
