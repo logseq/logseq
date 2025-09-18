@@ -26,13 +26,14 @@
 
 (def ^:private local-tools
   "MCP Tools when running with a local graph"
-  (merge-with
-   merge
-   cli-common-mcp-server/api-tools
-   {:getPage {:fn local-get-page}
-    :listPages {:fn local-list-pages}
-    :listProperties {:fn local-list-properties}
-    :listTags {:fn local-list-tags}}))
+  (let [tools {:getPage {:fn local-get-page}
+               :listPages {:fn local-list-pages}
+               :listProperties {:fn local-list-properties}
+               :listTags {:fn local-list-tags}}]
+    (merge-with
+     merge
+     (select-keys cli-common-mcp-server/api-tools (keys tools))
+     tools)))
 
 (defn- create-http-server
   [mcp-server opts]
