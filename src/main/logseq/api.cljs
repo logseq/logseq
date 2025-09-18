@@ -794,18 +794,24 @@
        {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo}))))
 
 (def ^:export update_block
+  "Updates block with 3rd arg being a js map with following keys:
+   * :mcp - When set behaves as MCP tools expect
+   * :properties - A map of properties to update
+   * Remaining keys are passed to save-block!"
   (fn [block-uuid content ^js opts]
     (p/let [repo (state/get-current-repo)
             db-base? (config/db-based-graph? repo)
             block (<pull-block block-uuid)
             opts (bean/->clj opts)]
-      (when block
+      (if block
         (p/do!
          (when (and db-base? (seq (:properties opts)))
            (api-block/save-db-based-block-properties! block (:properties opts)))
          (editor-handler/save-block! repo
                                      (sdk-utils/uuid-or-throw-error block-uuid) content
-                                     (if db-base? (dissoc opts :properties) opts)))))))
+                                     (if db-base? (dissoc opts :properties) opts)))
+        (when (:mcp opts)
+          (throw (ex-info (str "Block " (pr-str block-uuid) " not found") {})))))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
@@ -1077,10 +1083,16 @@
                       (insert_block target content (bean/->js opts)))))))))
 
 (defn ^:export append_block_in_page
+  "Append a block to a page and creates page if it does not exist.
+   If the 'mcp-options' opts key is set, this fn assumes MCP defaults by not creating a page unless explicitly
+   forced to. `opts` arg are options passed to `insert_block` except for
+   key the 'mcp-options', which has the following keys:
+   * :force - When set forces creation of nonexistent page"
   [uuid-or-page-name content ^js opts]
   (let [current-page? (or (and (nil? content) (nil? opts))
                           (and (nil? opts) (some->> content (instance? js/Object))))
         opts (if current-page? content opts)
+        mcp-options (bean/->clj (aget opts "mcp-options"))
         content (if current-page? uuid-or-page-name content)
         uuid-or-page-name (if current-page?
                             (or (state/get-current-page) (date/today))
@@ -1088,12 +1100,17 @@
     (p/let [_ (<ensure-page-loaded uuid-or-page-name)
             page? (not (util/uuid-string? uuid-or-page-name))
             page-not-exist? (and page? (nil? (db-model/get-page uuid-or-page-name)))
-            _ (and page-not-exist? (page-handler/<create! uuid-or-page-name
-                                                          {:redirect? false
-                                                           :format (state/get-preferred-format)}))]
-      (when-let [block (db-model/get-page uuid-or-page-name)]
+            _ (when (and page-not-exist?
+                         (or (nil? mcp-options)
+                             (:force mcp-options)))
+                (page-handler/<create! uuid-or-page-name
+                                       {:redirect? false
+                                        :format (state/get-preferred-format)}))]
+      (if-let [block (db-model/get-page uuid-or-page-name)]
         (let [target (str (:block/uuid block))]
-          (insert_block target content opts))))))
+          (insert_block target content opts))
+        (when mcp-options
+          (throw (ex-info (str "Page " (pr-str uuid-or-page-name) " not found") {})))))))
 
 ;; plugins
 (defn ^:export validate_external_plugins [urls]
@@ -1264,7 +1281,7 @@
 (defn ^:export search
   [q' & [opts]]
   (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
-      (p/then #(bean/->js %))))
+      (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers
 (defn ^:export set_focused_settings

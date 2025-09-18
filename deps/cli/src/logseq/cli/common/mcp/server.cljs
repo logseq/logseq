@@ -8,8 +8,8 @@
 
 ;; Server util fns
 ;; ===============
-(def ^:private transports
-  "Stores transports by session ID"
+;; "Stores transports by session ID"
+(defonce ^:private transports
   (atom {}))
 
 ;; See https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http
@@ -85,11 +85,14 @@
 
 (defn- api-tool
   "Calls API method w/ args and returns a MCP response"
-  [api-fn api-method method-args]
+  [api-fn api-method method-args & {:keys [write-tool?]}]
   (-> (p/let [body (api-fn api-method method-args)]
-        (if-let [error (aget body "error")]
+        (if-let [error (and body (aget body "error"))]
           (mcp-error-response (str "API Error: " error))
-          (mcp-success-response body)))
+          (if write-tool?
+            ;; Writes that return have succeeded since writes fail fast if they don't write
+            (mcp-success-response {:ok true})
+            (mcp-success-response body))))
       (p/catch unexpected-api-error)))
 
 (defn- api-get-page
@@ -108,22 +111,65 @@
   [call-api-fn _args]
   (call-api-fn "logseq.cli.listProperties" []))
 
+(defn- api-add-to-page
+  [call-api-fn args]
+  (call-api-fn "logseq.editor.appendBlockInPage"
+               [(aget args "pageName")
+                (aget args "content")
+                #js {:mcp-options #js {:force (aget args "force")}}]
+               {:write-tool? true}))
+
+(defn- api-update-block
+  [call-api-fn args]
+  (call-api-fn "logseq.editor.updateBlock"
+               [(aget args "blockUUID")
+                (aget args "content")
+                #js {:mcp true}]
+               {:write-tool? true}))
+
+(defn- api-search-blocks
+  [call-api-fn args]
+  (call-api-fn "logseq.app.search" [(aget args "searchTerm") #js {:enable-snippet? false}]))
+
 (def api-tools
   "MCP Tools when calling API server"
   {:listPages
    {:fn api-list-pages
-    :config #js {:title "List Pages"}}
+    :config #js {:title "List Pages"
+                 :description "List all pages in a graph"}}
    :getPage
    {:fn api-get-page
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks"
                  :inputSchema #js {:pageName (z/string)}}}
+   :addToPage
+   {:fn api-add-to-page
+    :config #js {:title "Add to Page"
+                 :description "Add a block to a page"
+                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))
+                                   :content (-> (z/string) (.describe "Block content"))
+                                   :force (-> (z/boolean)
+                                              (z/optional)
+                                              (.describe "Force given page to be created"))}}}
+   :updateBlock
+   {:fn api-update-block
+    :config #js {:title "Update Block"
+                 :description "Update block with new content"
+                 :inputSchema #js {:blockUUID (z/string)
+                                   :content (-> (z/string) (.describe "Block content"))}}}
+   :searchBlocks
+   {:fn api-search-blocks
+    :config #js {:title "Search Blocks"
+                 :description "Search graph for blocks containing search term"
+                 :inputSchema #js {:searchTerm (z/string)}}}
    :listTags
    {:fn api-list-tags
-    :config #js {:title "List Tags"}}
+    :config #js {:title "List Tags"
+                 :description "List all tags in a graph"}}
    :listProperties
    {:fn api-list-properties
-    :config #js {:title "List Properties"}}})
+    :config #js {:title "List Properties"
+                 :description "List all properties in a graph"}}})
 
 (defn call-api-tool [tool-fn api-fn args]
   (tool-fn (partial api-tool api-fn) args))
