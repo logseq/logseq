@@ -141,7 +141,7 @@
    {:fn api-get-page
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks"
-                 :inputSchema #js {:pageName (z/string)}}}
+                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
    :addToPage
    {:fn api-add-to-page
     :config #js {:title "Add to Page"
