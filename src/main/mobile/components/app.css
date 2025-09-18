@@ -577,6 +577,14 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 }
 
+.app-wave-container {
+  @apply mt-0 border-none flex justify-center;
+
+  .waveform-item {
+    @apply dark:bg-gray-12;
+  }
+}
+
 .left-sidebar-inner {
   @apply -mx-4;
 
