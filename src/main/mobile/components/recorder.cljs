@@ -85,7 +85,6 @@
   [*locale]
   (let [*timer-ref (hooks/use-ref nil)
         *save? (hooks/use-ref nil)
-        [^js recorder set-recorder!] (hooks/use-state nil)
         [*recorder _] (hooks/use-state (atom nil))
         [locale set-locale!] (hooks/use-state nil)]
 
@@ -104,7 +103,6 @@
                     (.stop w1)
                     (.stop w2))]
 
-         (set-recorder! r)
          (reset! *recorder r)
 
          ;; events
@@ -152,7 +150,7 @@
                      :class "record-ctrl-btn rounded-full recording"
                      :on-click (fn []
                                  (rum/set-ref! *save? true)
-                                 (.stopRecording recorder))}
+                                 (.stopRecording ^js @*recorder))}
                     (shui/tabler-icon "player-stop" {:size 22}))]]
 
      (when locale
