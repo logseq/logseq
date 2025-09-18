@@ -107,8 +107,7 @@
        [:div.toolbar-hide-keyboard
         (if quick-add?
           (command (fn [] (recorder/record!))
-                   {:icon (svg/audio-lines 20)
-                    :button-opts {:class "text-primary"}})
+                   {:icon (svg/audio-lines 20)})
           (command #(p/do!
                      (editor-handler/save-current-block!)
                      (state/clear-edit!)
