@@ -1,6 +1,7 @@
 (ns mobile.components.recorder
   "Audio record"
   (:require ["@capacitor/device" :refer [Device]]
+            ["@xyhp915/simple-wave-record" :refer [BeatsObserver Recorder renderWaveform]]
             [cljs-time.core :as t]
             [clojure.string :as string]
             [frontend.date :as date]
@@ -12,7 +13,6 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
-            [mobile.record :as record]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -82,33 +82,35 @@
 (rum/defc record-button
   []
   (let [*timer-ref (hooks/use-ref nil)
-        [*wavesurfer _] (hooks/use-state (atom nil))
-        [^js _wavesurfer set-wavesurfer!] (hooks/use-state nil)
-        [^js recorder set-recorder!] (hooks/use-state nil)]
+        [^js _waverecord set-waverecord!] (hooks/use-state nil)
+        [^js recorder set-recorder!] (hooks/use-state nil)
+        [*recorder _] (hooks/use-state (atom nil))
+        [locale set-locale!] (hooks/use-state nil)
+        [*locale] (hooks/use-state (atom nil))]
     (hooks/use-effect!
      (fn []
-       (let [dark? (= "dark" (state/sub :ui/theme))
-             ^js w (.create js/window.WaveSurfer
-                            #js {:container (js/document.getElementById "wave-container")
-                                 :waveColor "rgb(167, 167, 167)"
-                                 :progressColor (if dark? "rgb(219, 216, 216)" "rgb(10, 10, 10)")
-                                 :barWidth 2
-                                 :barRadius 6})
-             ^js r (.registerPlugin w
-                                    (.create js/window.WaveSurfer.Record
-                                             #js {:renderRecordedAudio false
-                                                  :scrollingWaveform true
-                                                  :scrollingWaveformWindow 5
-                                                  :mimeType "audio/mp4" ;; m4a
-                                                  :audioBitsPerSecond 128000}))]
-         (set-wavesurfer! w)
-         (reset! *wavesurfer w)
+       (let [;; dark? (= "dark" (state/sub :ui/theme))
+             node (js/document.getElementById "wave-container")
+             ^js beats (BeatsObserver.)
+             ^js w1 (renderWaveform node #js {:beatsObserver beats})
+             ^js w2 (renderWaveform node #js {})
+             ^js r (Recorder.create #js {:mimeType "audio/mp4"})]
+         (set-waverecord! w1)
          (set-recorder! r)
+         (reset! *recorder r)
+         (p/let [locale (get-locale)]
+           (set-locale! locale)
+           (reset! *locale locale))
 
          ;; events
          (doto r
+           (.on "record-start" (fn []
+                                 (.start w1)
+                                 (.start w2)))
            (.on "record-end" (fn [^js blob]
-                               (save-asset-audio! blob "en_US")
+                               (.stop w1)
+                               (.stop w2)
+                               (save-asset-audio! blob @*locale)
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
@@ -117,62 +119,40 @@
                                          (set! (. (rum/deref *timer-ref) -textContent) t))
                                        (catch js/Error e
                                          (js/console.warn "WARN: bad progress time:" e))))
-                                   33)))
+                                   33))
+           (.on "record-beat" (fn [value]
+                                (let [value' (cond
+                                               (= value 0) 10
+                                               (< value 20) (+ value 20)
+                                               (and (> value 0) (< value 50)) (+ value 30)
+                                               :else value)]
+                                  (.notify beats value')))))
          ;; auto start
          (.startRecording r)
-         #(some-> @*wavesurfer (.destroy))))
+         #(do
+            (some-> @*recorder (.destroy))
+            (.stop w1)
+            (.stop w2))))
      [])
-    [:div.p-6.flex.justify-between
-     [:div.flex.justify-between.items-center.w-full
-      [:span.flex.flex-col.timer-wrap
-       [:strong.timer {:ref *timer-ref} "00:00"]
-       [:small "05:00"]]
-      (shui/button {:variant :outline
-                    :class "record-ctrl-btn rounded-full recording"
-                    :on-click (fn []
-                                (.stopRecording recorder))}
-                   (shui/tabler-icon "player-stop" {:size 22}))]]))
+    [:div
+     [:div.p-6.flex.justify-between
+      [:div.flex.justify-between.items-center.w-full
+       [:span.flex.flex-col.timer-wrap
+        [:strong.timer {:ref *timer-ref} "00:00"]
+        [:small "05:00"]]
+       (shui/button {:variant :outline
+                     :class "record-ctrl-btn rounded-full recording"
+                     :on-click (fn []
+                                 (.stopRecording recorder))}
+                    (shui/tabler-icon "player-stop" {:size 22}))]]
 
-(rum/defc record-button-2
-  []
-  (let [[locale set-locale!] (hooks/use-state nil)
-        [*locale] (hooks/use-state (atom nil))]
-    (hooks/use-effect!
-     (fn []
-       (p/let [locale (get-locale)]
-         (set-locale! locale)
-         (reset! *locale locale)
-         (record/start
-          {:on-record-end (fn [^js blob]
-                            (save-asset-audio! blob @*locale)
-                            (mobile-state/close-popup!))})
-         (record/attach-visualizer!
-          (js/document.getElementById "wave-canvas")
-          {:mode :rolling
-           :fps 30
-           :fft-size 2048
-           :smoothing 0.8}))
-
-       #(record/destroy!))
-     [])
-    [:div.p-6.flex.justify-between
-     [:div.flex.justify-between.items-center.w-full
-      ;; [:span.flex.flex-col.timer-wrap
-      ;;  [:strong.timer "00:00"]
-      ;;  [:small "05:00"]]
-      (shui/button {:variant :outline
-                    :class "record-ctrl-btn rounded-full recording"
-                    :on-click (fn []
-                                (record/stop))}
-                   (shui/tabler-icon "player-stop" {:size 22}))
-
-      (when locale
-        (when-not (string/starts-with? locale "en_")
-          (shui/button {:variant :outline
-                        :on-click (fn []
-                                    (reset! *locale "en_US")
-                                    (set-locale! "en_US"))}
-                       "English transcribe")))]]))
+     (when locale
+       (when-not (string/starts-with? locale "en_")
+         (shui/button {:variant :outline
+                       :on-click (fn []
+                                   (reset! *locale "en_US")
+                                   (set-locale! "en_US"))}
+                      "English transcribe")))]))
 
 (rum/defc audio-recorder-aux < rum/static
   []
@@ -182,14 +162,9 @@
     [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
 
    [:div.px-6
-    [:div#wave-container.wave.border.rounded]
-    [:div.wave.border.rounded
-     [:canvas#wave-canvas
-      {:height 200
-       :width 320}]]]
+    [:div#wave-container.wave.border.rounded]]
 
-   ;; (record-button)
-   (record-button-2)])
+   (record-button)])
 
 (defn- show-recorder
   []
