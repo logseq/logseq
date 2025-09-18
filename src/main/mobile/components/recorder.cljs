@@ -17,7 +17,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce audio-file-format "MM-dd HH:mm")
+(defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
 
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
@@ -80,13 +80,11 @@
                 (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
 
 (rum/defc record-button
-  []
+  [*locale]
   (let [*timer-ref (hooks/use-ref nil)
         [^js _waverecord set-waverecord!] (hooks/use-state nil)
         [^js recorder set-recorder!] (hooks/use-state nil)
-        [*recorder _] (hooks/use-state (atom nil))
-        [locale set-locale!] (hooks/use-state nil)
-        [*locale] (hooks/use-state (atom nil))]
+        [*recorder _] (hooks/use-state (atom nil))]
     (hooks/use-effect!
      (fn []
        (let [;; dark? (= "dark" (state/sub :ui/theme))
@@ -99,9 +97,6 @@
          (set-waverecord! w1)
          (set-recorder! r)
          (reset! *recorder r)
-         (p/let [locale (get-locale)]
-           (set-locale! locale)
-           (reset! *locale locale))
 
          ;; events
          (doto r
@@ -135,43 +130,49 @@
             (.stop w1)
             (.stop w2))))
      [])
-    [:div
-     [:div.p-6.flex.justify-between
-      [:div.flex.justify-between.items-center.w-full
-       [:span.flex.flex-col.timer-wrap
-        [:strong.timer {:ref *timer-ref} "00:00"]
-        [:small "05:00"]]
-       (shui/button {:variant :outline
-                     :class "record-ctrl-btn rounded-full recording"
-                     :on-click (fn []
-                                 (.stopRecording recorder))}
-                    (shui/tabler-icon "player-stop" {:size 22}))]]
-
-     (when locale
-       (when-not (string/starts-with? locale "en_")
-         (shui/button {:variant :outline
-                       :on-click (fn []
-                                   (reset! *locale "en_US")
-                                   (set-locale! "en_US"))}
-                      "English transcribe")))]))
+    [:div.flex.justify-between.items-center.w-full
+     [:span.flex.flex-col.timer-wrap
+      [:strong.timer {:ref *timer-ref} "00:00"]
+      [:small "05:00"]]
+     (shui/button {:variant :outline
+                   :class "record-ctrl-btn rounded-full recording"
+                   :on-click (fn []
+                               (.stopRecording recorder))}
+                  (shui/tabler-icon "player-stop" {:size 22}))]))
 
 (rum/defc audio-recorder-aux < rum/static
   []
-  [:div.app-audio-recorder-inner
-   [:h1.text-xl.p-6.relative
-    [:span.font-bold "REC"]
-    [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
+  (let [[locale set-locale!] (hooks/use-state nil)
+        [*locale] (hooks/use-state (atom nil))]
+    (hooks/use-effect!
+     (fn []
+       (p/let [locale (get-locale)]
+         (set-locale! locale)
+         (reset! *locale locale)))
+     [])
+    [:div.app-audio-recorder
+     [:div.flex.flex-row.justify-between.items-center.font-medium.opacity-70
+      [:div (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
+      (when locale
+        (when-not (string/starts-with? locale "en_")
+          (shui/button
+           {:variant :outline
+            :class "rounded-full"
+            :on-click (fn []
+                        (reset! *locale "en_US")
+                        (set-locale! "en_US"))}
+           "EN transcribe")))]
 
-   [:div.px-6
-    [:div#wave-container.wave.border.rounded]]
+     [:div#wave-container.wave]
 
-   (record-button)])
+     (record-button *locale)]))
 
 (defn- show-recorder
   []
   (mobile-state/set-popup! {:open? true
                             :content-fn (fn [] (audio-recorder-aux))
-                            :opts {:id :ls-audio-record}}))
+                            :opts {:id :ls-audio-record
+                                   :default-height 300}}))
 
 (defn record!
   []

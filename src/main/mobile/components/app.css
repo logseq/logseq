@@ -536,21 +536,8 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   overflow: hidden;
 }
 
-.app-audio-recorder-inner {
-  @apply relative pb-1;
-
-  h1 {
-    @apply pl-6 flex flex-col;
-
-    > small {
-      @apply opacity-40 text-sm;
-    }
-
-    &:after {
-      @apply content-[''] absolute top-[35px] left-[70px] bg-red-700
-      w-1.5 h-1.5 overflow-hidden rounded-full;
-    }
-  }
+.app-audio-recorder {
+  @apply flex flex-col p-4 gap-4;
 
   select {
     @apply bg-transparent;
