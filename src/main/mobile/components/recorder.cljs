@@ -9,6 +9,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
+            [frontend.util :as util]
             [goog.functions :as gfun]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -18,6 +19,7 @@
             [rum.core :as rum]))
 
 (defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
+(def audio-length-limit 10)     ; 10 minutes
 
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
@@ -96,7 +98,12 @@
              ^js w1 (renderWaveform wave-l #js {:beatsObserver beats})
              ^js w2 (renderWaveform wave-r #js {})
              ^js r (Recorder.create #js {:mimeType "audio/mp4"
-                                         :mediaRecorderTimeslice 1000})]
+                                         :mediaRecorderTimeslice 1000})
+             stop (fn []
+                    (some-> @*recorder (.destroy))
+                    (.stop w1)
+                    (.stop w2))]
+
          (set-recorder! r)
          (reset! *recorder r)
 
@@ -106,18 +113,19 @@
                                  (.start w1)
                                  (.start w2)))
            (.on "record-end" (fn [^js blob]
-                               (.stop w1)
-                               (.stop w2)
+                               (stop)
                                (when (true? (rum/deref *save?))
                                  (save-asset-audio! blob @*locale))
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
-                                     (try
-                                       (let [t (ms-to-time-format time)]
-                                         (set! (. (rum/deref *timer-ref) -textContent) t))
-                                       (catch js/Error e
-                                         (js/console.warn "WARN: bad progress time:" e))))
+                                     (if (>= time (* audio-length-limit 60 1000))
+                                       (.click (js/document.getElementById "recording-button"))
+                                       (try
+                                         (let [t (ms-to-time-format time)]
+                                           (set! (. (rum/deref *timer-ref) -textContent) t))
+                                         (catch js/Error e
+                                           (js/console.warn "WARN: bad progress time:" e)))))
                                    33))
            (.on "record-beat" (fn [value]
                                 (let [value' (cond
@@ -126,12 +134,10 @@
                                                (and (> value 0) (< value 50)) (+ value 30)
                                                :else value)]
                                   (.notify beats value')))))
+
          ;; auto start
          (.startRecording r)
-         #(do
-            (some-> @*recorder (.destroy))
-            (.stop w1)
-            (.stop w2))))
+         #(stop)))
      [])
 
     [:div
@@ -139,7 +145,9 @@
       [:div.flex.justify-between.items-center.w-full
        [:span.flex.flex-col.timer-wrap
         [:strong.timer {:ref *timer-ref} "00:00"]
-        [:small "05:00"]]
+        [:small (if (> audio-length-limit 9)
+                  (util/format "%d:00" audio-length-limit)
+                  (util/format "0%d:00" audio-length-limit))]]
        (shui/button {:variant :outline
                      :class "record-ctrl-btn rounded-full recording"
                      :on-click (fn []
@@ -170,15 +178,15 @@
     [:div.app-audio-recorder
      [:div.flex.flex-row.justify-between.items-center.font-medium.opacity-70
       [:div (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
-      (when locale
-        (when-not (string/starts-with? locale "en_")
-          (shui/button
-           {:variant :outline
-            :class "rounded-full"
-            :on-click (fn []
-                        (reset! *locale "en_US")
-                        (set-locale! "en_US"))}
-           "EN transcribe")))]
+      (let [non-en-locale? (and locale (not (string/starts-with? locale "en_")))]
+        (shui/button
+         {:variant :outline
+          :class "rounded-full"
+          :disabled (not non-en-locale?)
+          :on-click (fn []
+                      (reset! *locale "en_US")
+                      (set-locale! "en_US"))}
+         "EN transcribe"))]
 
      [:div#wave-container.app-wave-container
       [:div.app-wave-needle]
