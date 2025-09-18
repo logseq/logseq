@@ -164,27 +164,35 @@
 (rum/defc audio-recorder-aux < rum/static
   []
   (let [[locale set-locale!] (hooks/use-state nil)
+        [system-locale set-system-locale!] (hooks/use-state nil)
         [*locale] (hooks/use-state (atom nil))]
 
     (hooks/use-effect!
      (fn []
        (p/let [locale (get-locale)]
          (set-locale! locale)
+         (set-system-locale! locale)
          (reset! *locale locale)))
      [])
 
     [:div.app-audio-recorder
      [:div.flex.flex-row.justify-between.items-center.font-medium
       [:div.opacity-70 (date/get-date-time-string (tl/local-now) {:formatter-str "yyyy-MM-dd"})]
-      (when (util/ios?)
-        (let [en? (and locale (string/starts-with? locale "en_"))]
+      (if (and (util/ios?) locale
+               (not (string/starts-with? system-locale "en_")))
+        (let [en? (string/starts-with? locale "en_")]
           (shui/button
            {:variant (if en? :default :outline)
             :class (str "rounded-full " (if en? "opacity-100" "opacity-70"))
             :on-click (fn []
                         (reset! *locale "en_US")
                         (set-locale! "en_US"))}
-           "EN transcribe")))]
+           "EN transcribe"))
+        ;; hack: same height with en transcribe button
+        (shui/button
+         {:variant :outline
+          :class "rounded-full opacity-0"}
+         "EN transcribe"))]
 
      [:div#wave-container.app-wave-container
       [:div.app-wave-needle]
