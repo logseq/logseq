@@ -111,19 +111,20 @@
                                  (.start w1)
                                  (.start w2)))
            (.on "record-end" (fn [^js blob]
-                               (stop)
                                (when (true? (rum/deref *save?))
                                  (save-asset-audio! blob @*locale))
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
-                                     (if (>= time (* audio-length-limit 60 1000))
-                                       (.click (js/document.getElementById "recording-button"))
-                                       (try
-                                         (let [t (ms-to-time-format time)]
-                                           (set! (. (rum/deref *timer-ref) -textContent) t))
-                                         (catch js/Error e
-                                           (js/console.warn "WARN: bad progress time:" e)))))
+                                     (when @*recorder
+                                       (if (>= time (* audio-length-limit 60 1000))
+                                         (.click (js/document.getElementById "recording-button"))
+                                         (try
+                                           (let [t (ms-to-time-format time)]
+                                             (when-let [node (rum/deref *timer-ref)]
+                                               (set! (. node -textContent) t)))
+                                           (catch js/Error e
+                                             (js/console.warn "WARN: bad progress time:" e))))))
                                    33))
            (.on "record-beat" (fn [value]
                                 (let [value' (cond
@@ -209,7 +210,7 @@
                                    :default-height 300}}))
 
 (defn record!
-  []
+  [& {:keys [save-to-today?]}]
   (let [editing-id (state/get-edit-input-id)
         quick-add? (mobile-state/quick-add-open?)]
     (set-last-edit-block! nil)
@@ -217,7 +218,7 @@
       (p/do!
        (editor-handler/save-current-block!)
        (let [block (db-model/query-block-by-uuid (:block/uuid (state/get-edit-block)))]
-         (if quick-add?
+         (if (or quick-add? save-to-today?)
            (p/do!
             (state/clear-edit!)
             (init/keyboard-hide)
