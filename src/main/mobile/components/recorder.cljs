@@ -2,7 +2,7 @@
   "Audio record"
   (:require ["@capacitor/device" :refer [Device]]
             ["@xyhp915/simple-wave-record" :refer [BeatsObserver Recorder renderWaveform]]
-            [cljs-time.core :as t]
+            [cljs-time.local :as tl]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db.model :as db-model]
@@ -58,7 +58,7 @@
     ;; save local
     (when-let [filename (some->> ext (str "Audio-"
                                           (date/get-date-time-string
-                                           (t/now)
+                                           (tl/local-now)
                                            {:formatter-str audio-file-format})
                                           "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
@@ -175,7 +175,7 @@
 
     [:div.app-audio-recorder
      [:div.flex.flex-row.justify-between.items-center.font-medium
-      [:div.opacity-70 (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
+      [:div.opacity-70 (date/get-date-time-string (tl/local-now) {:formatter-str "yyyy-MM-dd"})]
       (when (util/ios?)
         (let [en? (and locale (string/starts-with? locale "en_"))]
           (shui/button
