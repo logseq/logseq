@@ -17,7 +17,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce audio-file-format "MM-dd HH:mm")
+(defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
 
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
@@ -80,13 +80,12 @@
                 (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
 
 (rum/defc record-button
-  []
+  [*locale]
   (let [*timer-ref (hooks/use-ref nil)
         *save? (hooks/use-ref nil)
         [^js recorder set-recorder!] (hooks/use-state nil)
         [*recorder _] (hooks/use-state (atom nil))
-        [locale set-locale!] (hooks/use-state nil)
-        [*locale] (hooks/use-state (atom nil))]
+        [locale set-locale!] (hooks/use-state nil)]
 
     (hooks/use-effect!
      (fn []
@@ -100,9 +99,6 @@
                                          :mediaRecorderTimeslice 1000})]
          (set-recorder! r)
          (reset! *recorder r)
-         (p/let [locale (get-locale)]
-           (set-locale! locale)
-           (reset! *locale locale))
 
          ;; events
          (doto r
@@ -139,7 +135,7 @@
      [])
 
     [:div
-     [:div.p-6.flex.justify-between
+     [:div.p-2.flex.justify-between
       [:div.flex.justify-between.items-center.w-full
        [:span.flex.flex-col.timer-wrap
         [:strong.timer {:ref *timer-ref} "00:00"]
@@ -161,24 +157,42 @@
 
 (rum/defc audio-recorder-aux < rum/static
   []
-  [:div.app-audio-recorder-inner
-   [:h1.text-xl.p-6.relative
-    [:span.font-bold "REC"]
-    [:small (date/get-date-time-string (t/now) {:formatter-str audio-file-format})]]
+  (let [[locale set-locale!] (hooks/use-state nil)
+        [*locale] (hooks/use-state (atom nil))]
 
-   [:div.px-6
-    [:div#wave-container.app-wave-container
-     [:div.app-wave-needle]
-     [:div.wave-left]
-     [:div.wave-right.mirror]]]
+    (hooks/use-effect!
+     (fn []
+       (p/let [locale (get-locale)]
+         (set-locale! locale)
+         (reset! *locale locale)))
+     [])
 
-   (record-button)])
+    [:div.app-audio-recorder
+     [:div.flex.flex-row.justify-between.items-center.font-medium.opacity-70
+      [:div (date/get-date-time-string (t/now) {:formatter-str "yyyy-MM-dd"})]
+      (when locale
+        (when-not (string/starts-with? locale "en_")
+          (shui/button
+           {:variant :outline
+            :class "rounded-full"
+            :on-click (fn []
+                        (reset! *locale "en_US")
+                        (set-locale! "en_US"))}
+           "EN transcribe")))]
+
+     [:div#wave-container.app-wave-container
+      [:div.app-wave-needle]
+      [:div.wave-left]
+      [:div.wave-right.mirror]]
+
+     (record-button *locale)]))
 
 (defn- show-recorder
   []
   (mobile-state/set-popup! {:open? true
                             :content-fn (fn [] (audio-recorder-aux))
-                            :opts {:id :ls-audio-record}}))
+                            :opts {:id :ls-audio-record
+                                   :default-height 300}}))
 
 (defn record!
   []
