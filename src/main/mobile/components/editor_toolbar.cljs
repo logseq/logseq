@@ -11,6 +11,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.shui.ui :as shui]
             [mobile.components.recorder :as recorder]
             [mobile.init :as mobile-init]
             [mobile.state :as mobile-state]
@@ -25,28 +26,29 @@
     (let [textarea-el (gdom/getElement edit-input-id)]
       (.blur textarea-el))))
 
-(rum/defc indent-outdent [indent? icon]
-  [:div
-   [:button.bottom-action
-    {:on-pointer-down (fn [e]
-                        (util/stop e)
-                        (haptics/haptics)
-                        (blur-if-compositing)
-                        (editor-handler/indent-outdent indent?))}
-    (ui/icon icon {:size ui/icon-size})]])
-
 (rum/defc command
-  [command-handler {:keys [icon class]} & [event?]]
-  [:div
-   [:button.bottom-action
-    {:on-pointer-down (fn [e]
+  [command-handler {:keys [icon class button-opts]} & [event?]]
+  (shui/button
+   (merge
+    {:variant :ghost
+     :on-pointer-down (fn [e]
                         (util/stop e)
                         (haptics/haptics)
                         (if event?
                           (command-handler e)
                           (command-handler)))}
-    (if (string? icon)
-      (ui/icon icon {:size ui/icon-size :class class}) icon)]])
+    button-opts)
+   (if (string? icon)
+     (ui/icon icon {:size ui/icon-size :class class})
+     icon)))
+
+(rum/defc indent-outdent
+  [indent? icon]
+  (command
+   (fn []
+     (blur-if-compositing)
+     (editor-handler/indent-outdent indent?))
+   {:icon icon}))
 
 (defn- insert-text
   [text opts]
@@ -105,7 +107,8 @@
        [:div.toolbar-hide-keyboard
         (if quick-add?
           (command (fn [] (recorder/record!))
-                   {:icon (svg/audio-lines 20)})
+                   {:icon (svg/audio-lines 20)
+                    :button-opts {:class "text-primary"}})
           (command #(p/do!
                      (editor-handler/save-current-block!)
                      (state/clear-edit!)
