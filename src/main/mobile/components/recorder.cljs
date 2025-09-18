@@ -55,8 +55,9 @@
 
     ;; save local
     (when-let [filename (some->> ext (str "Audio-"
-                                          (date/get-date-time-string (t/now)
-                                                                     {:formatter-str audio-file-format})
+                                          (date/get-date-time-string
+                                           (t/now)
+                                           {:formatter-str audio-file-format})
                                           "."))]
       (p/let [file (js/File. [blob] filename #js {:type (.-type blob)})
               result (editor-handler/db-based-save-assets! (state/get-current-repo)
@@ -98,7 +99,7 @@
                                              #js {:renderRecordedAudio false
                                                   :scrollingWaveform true
                                                   :scrollingWaveformWindow 5
-                                                  :mimeType "audio/mp4"          ;; m4a
+                                                  :mimeType "audio/mp4" ;; m4a
                                                   :audioBitsPerSecond 128000}))]
          (set-wavesurfer! w)
          (reset! *wavesurfer w)
@@ -117,7 +118,7 @@
                                        (catch js/Error e
                                          (js/console.warn "WARN: bad progress time:" e))))
                                    33)))
-           ;; auto start
+         ;; auto start
          (.startRecording r)
          #(some-> @*wavesurfer (.destroy))))
      [])
@@ -156,9 +157,9 @@
      [])
     [:div.p-6.flex.justify-between
      [:div.flex.justify-between.items-center.w-full
-    ;; [:span.flex.flex-col.timer-wrap
-    ;;  [:strong.timer "00:00"]
-    ;;  [:small "05:00"]]
+      ;; [:span.flex.flex-col.timer-wrap
+      ;;  [:strong.timer "00:00"]
+      ;;  [:small "05:00"]]
       (shui/button {:variant :outline
                     :class "record-ctrl-btn rounded-full recording"
                     :on-click (fn []
