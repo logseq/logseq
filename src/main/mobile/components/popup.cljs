@@ -76,56 +76,56 @@
 
     (when open?
       (state/clear-edit!)
-      (init/keyboard-hide))
+      (init/keyboard-hide)
 
-    (silkhq/bottom-sheet
-     (merge
-      {:presented (boolean open?)
-       :onPresentedChange (fn [v?]
-                            (when (false? v?)
-                              (js/setTimeout
-                               #(mobile-state/set-popup! nil) 300)))}
-      (:modal-props opts))
-     (silkhq/bottom-sheet-portal
-      (silkhq/bottom-sheet-view
-       {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
-        :inertOutside false
-        :onTravelStatusChange (fn [status]
-                                (when (and quick-add? (= status "entering"))
-                                  (editor-handler/quick-add-open-last-block!)))
-        :onPresentAutoFocus #js {:focus false}}
-       (silkhq/bottom-sheet-backdrop
-        (when (or quick-add? audio-record?)
-          {:travelAnimation {:opacity (fn [data]
-                                        (let [progress (gobj/get data "progress")]
-                                          (js/Math.min (* progress 0.9) 0.9)))}}))
-       (silkhq/bottom-sheet-content
-        {:class "flex flex-col items-center p-2"}
-        (silkhq/bottom-sheet-handle)
-        (silkhq/scroll
-         {:as-child true}
-         (silkhq/scroll-view
-          {:class "app-silk-scroll-view overflow-y-scroll"
-           :scrollGestureTrap {:yEnd true}
-           :style {:min-height (cond
-                                 (false? default-height)
-                                 nil
-                                 (number? default-height)
-                                 default-height
-                                 :else
-                                 400)
-                   :max-height "80vh"}}
-          (silkhq/scroll-content
-           (let [title (or (:title opts) (when (string? content-fn) content-fn))
-                 content (if (fn? content-fn)
-                           (content-fn)
-                           (if-let [buttons (and action-sheet? (:buttons opts))]
-                             [:div.-mx-2
-                              (for [{:keys [role text]} buttons]
-                                (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
-                                               :data-role role}
-                                              [:span.text-lg.flex.items-center text]))]
-                             (when-not (string? content-fn) content-fn)))]
-             [:div.w-full.app-silk-popup-content-inner.p-2
-              (when title [:h2.py-2.opacity-40 title])
-              content]))))))))))
+      (silkhq/bottom-sheet
+       (merge
+        {:presented (boolean open?)
+         :onPresentedChange (fn [v?]
+                              (when (false? v?)
+                                (js/setTimeout
+                                 #(mobile-state/set-popup! nil) 300)))}
+        (:modal-props opts))
+       (silkhq/bottom-sheet-portal
+        (silkhq/bottom-sheet-view
+         {:class (str "app-silk-popup-sheet-view as-" (name (or (:type opts) "default")))
+          :inertOutside false
+          :onTravelStatusChange (fn [status]
+                                  (when (and quick-add? (= status "entering"))
+                                    (editor-handler/quick-add-open-last-block!)))
+          :onPresentAutoFocus #js {:focus false}}
+         (silkhq/bottom-sheet-backdrop
+          (when (or quick-add? audio-record?)
+            {:travelAnimation {:opacity (fn [data]
+                                          (let [progress (gobj/get data "progress")]
+                                            (js/Math.min (* progress 0.9) 0.9)))}}))
+         (silkhq/bottom-sheet-content
+          {:class "flex flex-col items-center p-2"}
+          (silkhq/bottom-sheet-handle)
+          (silkhq/scroll
+           {:as-child true}
+           (silkhq/scroll-view
+            {:class "app-silk-scroll-view overflow-y-scroll"
+             :scrollGestureTrap {:yEnd true}
+             :style {:min-height (cond
+                                   (false? default-height)
+                                   nil
+                                   (number? default-height)
+                                   default-height
+                                   :else
+                                   400)
+                     :max-height "80vh"}}
+            (silkhq/scroll-content
+             (let [title (or (:title opts) (when (string? content-fn) content-fn))
+                   content (if (fn? content-fn)
+                             (content-fn)
+                             (if-let [buttons (and action-sheet? (:buttons opts))]
+                               [:div.-mx-2
+                                (for [{:keys [role text]} buttons]
+                                  (ui/menu-link {:on-click #(some-> (:on-action opts) (apply [{:role role}]))
+                                                 :data-role role}
+                                                [:span.text-lg.flex.items-center text]))]
+                               (when-not (string? content-fn) content-fn)))]
+               [:div.w-full.app-silk-popup-content-inner.p-2
+                (when title [:h2.py-2.opacity-40 title])
+                content])))))))))))
