@@ -130,16 +130,7 @@
            result []]
       (if-not block
         result
-        (let [block' (->> block
-                          (map
-                           (fn [[a v]]
-                             (m/sp
-                               (if (and (contains? encrypt-attr-set a) (string? v))
-                                 [a (ldb/write-transit-str (c.m/<? (rtc-encrypt/<encrypt-text encrypt-key v)))]
-                                 [a v]))))
-                          (apply m/join vector)
-                          (m/?)
-                          (into {}))]
+        (let [block' (c.m/<? (rtc-encrypt/<encrypt-map encrypt-key encrypt-attr-set block))]
           (recur rest-blocks (conj result block')))))))
 
 (comment
@@ -150,7 +141,6 @@
                    (let [k (c.m/<? (rtc-encrypt/<salt+password->key salt "password"))]
                      (m/? (task--encrypt-blocks k #{:block/title :block/name} blocks))))
                  #(def encrypted-blocks %) prn))
-
   )
 
 (defn new-task--upload-graph
