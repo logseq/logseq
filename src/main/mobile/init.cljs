@@ -4,7 +4,6 @@
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mobile.deeplink :as deeplink]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
             [frontend.mobile.util :as mobile-util]
@@ -13,6 +12,7 @@
             [lambdaisland.glogi :as log]
             [logseq.shui.dialog.core :as shui-dialog]
             [mobile.components.ui :as cc-ui]
+            [mobile.deeplink :as deeplink]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
