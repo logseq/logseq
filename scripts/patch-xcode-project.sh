@@ -13,7 +13,6 @@ ls -lah App.xcodeproj/project.pbxproj
 
 FILE="App.xcodeproj/project.pbxproj"
 
-/usr/libexec/PlistBuddy -c 'Set :objects:504EC2FC1FED79650016851F:attributes:TargetAttributes:504EC3031FED79650016851F:ProvisioningStyle Manual' $FILE
 /usr/libexec/PlistBuddy -c 'Set :objects:504EC2FC1FED79650016851F:attributes:TargetAttributes:5FFF7D6927E343FA00B00DA8:ProvisioningStyle Manual' $FILE
 
 /usr/libexec/PlistBuddy -c 'Set :objects:504EC3171FED79650016851F:buildSettings:CODE_SIGN_STYLE Manual' $FILE
