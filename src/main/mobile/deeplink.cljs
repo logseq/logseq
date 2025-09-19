@@ -29,10 +29,12 @@
                    (remove #(= (:url %) config/demo-repo))
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
+    (prn :debug :hostname hostname
+         :pathname pathname)
     (cond
-      (and (= hostname "go") (= pathname "/audio"))
+      (and (= hostname "mobile") (= pathname "/go/audio"))
       (state/pub-event! [:mobile/start-audio-record])
-      (and (= hostname "go") (= pathname "/quick-add"))
+      (and (= hostname "mobile") (= pathname "/go/quick-add"))
       (state/pub-event! [:dialog/mobile-quick-add])
       (= hostname "graph")
       (let [graph-name (some-> pathname
