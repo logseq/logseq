@@ -15,7 +15,8 @@
 (def *link-to-another-graph (atom false))
 
 (defn deeplink [url]
-  (let [^js/Uri parsed-url (.parse Uri url)
+  (let [url (string/replace url "logseq.com/" "")
+        ^js/Uri parsed-url (.parse Uri url)
         hostname (.getDomain parsed-url)
         pathname (.getPath parsed-url)
         search-params (.getQueryData parsed-url)
