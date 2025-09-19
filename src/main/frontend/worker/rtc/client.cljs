@@ -6,6 +6,8 @@
             [frontend.worker.flows :as worker-flows]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.encrypt :as rtc-encrypt]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
@@ -437,6 +439,28 @@
     (client-op/add-ops! repo rename-db-ident-ops)
     nil))
 
+(defn- task--encrypt-remote-ops
+  [encrypt-key remote-ops]
+  (let [encrypt-attr-set (conj rtc-const/encrypt-attr-set :page-name)]
+    (m/sp
+      (loop [[remote-op & rest-remote-ops] remote-ops
+             result []]
+        (if-not remote-op
+          result
+          (let [[op-type op-value] remote-op]
+            (case op-type
+              :update-page
+              (recur rest-remote-ops
+                     (conj result (c.m/<? (rtc-encrypt/<encrypt-map encrypt-key encrypt-attr-set op-value))))
+              :update
+              (recur rest-remote-ops
+                     (conj result
+                           (c.m/<?
+                            (rtc-encrypt/<encrypt-av-coll
+                             encrypt-key rtc-const/encrypt-attr-set (:av-coll op-value)))))
+              ;; else
+              (recur rest-remote-ops (conj result remote-op)))))))))
+
 (defn new-task--push-local-ops
   "Return a task: push local updates"
   [repo conn graph-uuid major-schema-version date-formatter get-ws-create-task *remote-profile? add-log-fn]
@@ -453,6 +477,8 @@
                       other-remote-ops)]
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
+              encrypt-key-for-test (c.m/<? (rtc-encrypt/<salt+password->key (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt) "test-password"))
+              encrypted-remote-ops (m/? (task--encrypt-remote-ops encrypt-key-for-test ops-for-remote))
               r (try
                   (let [message (cond-> {:action "apply-ops"
                                          :graph-uuid graph-uuid :schema-version (str major-schema-version)
