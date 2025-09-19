@@ -41,8 +41,9 @@ platform :ios do
       destination: "generic/platform=iOS",
       scheme: "Logseq",
       configuration: "Release",
+      xcargs: "-allowProvisioningUpdates"
     )
-
+    
     upload_to_testflight(
       skip_submission: true,
       skip_waiting_for_build_processing: true,
