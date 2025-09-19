@@ -28,6 +28,8 @@
 		D3490CC62E7CE9EA00E796A6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */; };
 		D3490CC82E7CE9EA00E796A6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */; };
 		D3490CD52E7CE9EB00E796A6 /* shortcutsExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D3490CC42E7CE9EA00E796A6 /* shortcutsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D39D1FDD2E7D6D8A00C903D1 /* LogseqIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39D1FDB2E7D6D8A00C903D1 /* LogseqIntents.swift */; };
+		D39D1FDE2E7D6D8A00C903D1 /* LogseqShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39D1FDC2E7D6D8A00C903D1 /* LogseqShortcuts.swift */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
@@ -98,6 +100,8 @@
 		D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		D3490CDA2E7CEA3900E796A6 /* shortcutsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = shortcutsExtension.entitlements; sourceTree = "<group>"; };
+		D39D1FDB2E7D6D8A00C903D1 /* LogseqIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogseqIntents.swift; sourceTree = "<group>"; };
+		D39D1FDC2E7D6D8A00C903D1 /* LogseqShortcuts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogseqShortcuts.swift; sourceTree = "<group>"; };
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
@@ -183,6 +187,8 @@
 				D32752BC275496A60039291C /* App.entitlements */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				D39D1FDB2E7D6D8A00C903D1 /* LogseqIntents.swift */,
+				D39D1FDC2E7D6D8A00C903D1 /* LogseqShortcuts.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -415,6 +421,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D39D1FDD2E7D6D8A00C903D1 /* LogseqIntents.swift in Sources */,
+				D39D1FDE2E7D6D8A00C903D1 /* LogseqShortcuts.swift in Sources */,
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				5FF8632C283B5BFD0047731B /* Utils.m in Sources */,
 				FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */,
@@ -616,6 +624,7 @@
 				DEVELOPMENT_TEAM = K378MFWK59;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -648,6 +657,7 @@
 				DEVELOPMENT_TEAM = K378MFWK59;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

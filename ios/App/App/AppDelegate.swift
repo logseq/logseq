@@ -59,11 +59,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      open url: URL,
                      options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        print("🔥 opened with URL:", url)
+
+        // Forward to Capacitor
         return ApplicationDelegateProxy.shared.application(application,
                                                            open: url,
                                                            options: options)
     }
-
     private func openURL(_ urlString: String) {
         if let url = URL(string: urlString) {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
