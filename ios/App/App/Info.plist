@@ -120,5 +120,25 @@
         <string></string>
         <key>ITSAppUsesNonExemptEncryption</key>
         <false/>
+        <key>UIApplicationShortcutItems</key>
+        <array>
+            <dict>
+                <key>UIApplicationShortcutItemType</key>
+                <string>logseq.voice</string>
+                <key>UIApplicationShortcutItemTitle</key>
+                <string>Voice</string>
+                <key>UIApplicationShortcutItemIconSymbolName</key>
+                <string>waveform</string>
+            </dict>
+            <dict>
+                <key>UIApplicationShortcutItemType</key>
+                <string>logseq.quickadd</string>
+                <key>UIApplicationShortcutItemTitle</key>
+                <string>Quick Add</string>
+                <key>UIApplicationShortcutItemIconSymbolName</key>
+                <string>plus</string>
+            </dict>
+        </array>
+
 </dict>
 </plist>
