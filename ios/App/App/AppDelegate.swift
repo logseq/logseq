@@ -57,17 +57,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if userActivity.activityType == NSUserActivityTypeBrowsingWeb,
            let url = userActivity.webpageURL {
             print("🌐 Universal link opened:", url)
-
-            // Forward to Capacitor (so JS gets `appUrlOpen`)
-            NotificationCenter.default.post(
-              name: .capacitorOpenURL,
-              object: nil,
-              userInfo: [
-                "url": url,
-                "options": [:]
-              ]
-            )
-            return true
         }
 
         // Default: let Capacitor handle other cases
