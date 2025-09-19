@@ -9,46 +9,54 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-struct shortcutsControl: ControlWidget {
+@available(iOS 18.0, *)
+struct QuickAddButton: ControlWidget {
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(
-            kind: "com.logseq.logseq.shortcuts",
-            provider: Provider()
-        ) { value in
-            ControlWidgetToggle(
-                "Start Timer",
-                isOn: value,
-                action: StartTimerIntent()
-            ) { isRunning in
-                Label(isRunning ? "On" : "Off", systemImage: "timer")
+          kind: "com.logseq.logseq.quickAddButton"
+        ) {
+            ControlWidgetButton(action: QuickAddIntent()) {
+                Label("Quick Add", systemImage: "plus.circle")
             }
         }
-        .displayName("Timer")
-        .description("A an example control that runs a timer.")
+          .displayName("Quick Add")
+          .description("Quick note.")
     }
 }
 
-extension shortcutsControl {
-    struct Provider: ControlValueProvider {
-        var previewValue: Bool {
-            false
+@available(iOS 18.0, *)
+struct RecordAudioButton: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(
+          kind: "com.logseq.logseq.recordAudioButton"
+        ) {
+            ControlWidgetButton(action: RecordAudioIntent()) {   // ✅ fixed
+                Label("Record Audio", systemImage: "waveform")
+            }
         }
-
-        func currentValue() async throws -> Bool {
-            let isRunning = true // Check if the timer is running
-            return isRunning
-        }
+          .displayName("Record Audio")
+          .description("Record Audio.")
     }
 }
 
-struct StartTimerIntent: SetValueIntent {
-    static let title: LocalizedStringResource = "Start a timer"
+@available(iOS 18.0, *)
+struct QuickAddIntent: AppIntent {
+    static var title: LocalizedStringResource = "Quick Add"
+    static var description = IntentDescription("Open Logseq Quick Add")
 
-    @Parameter(title: "Timer is running")
-    var value: Bool
-
+    // TODO: use https://logseq.com/mobile/go/quick-add
     func perform() async throws -> some IntentResult {
-        // Start / stop the timer based on `value`.
-        return .result()
+        .result()
+    }
+}
+
+@available(iOS 18.0, *)
+struct RecordAudioIntent: AppIntent {
+    static var title: LocalizedStringResource = "Record Audio"
+    static var description = IntentDescription("Open Logseq Record Audio")
+
+    // TODO: https://logseq.com/mobile/go/record-audio
+    func perform() async throws -> some IntentResult {
+        .result()
     }
 }

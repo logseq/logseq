@@ -9,9 +9,11 @@ import WidgetKit
 import SwiftUI
 
 @main
+@available(iOSApplicationExtension 18.0, *)
 struct shortcutsBundle: WidgetBundle {
     var body: some Widget {
         Shortcuts()
-        shortcutsControl()
+        QuickAddButton()
+        RecordAudioButton()
     }
 }
