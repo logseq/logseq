@@ -28,11 +28,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         switch shortcutItem.type {
         case "logseq.quickadd":
             donateQuickAddShortcut()
-            openURL("logseq://go/quick-add")
+            openURL("logseq://mobile/go/quick-add")
             return true
         case "logseq.voice":
             donateAudioShortcut()
-            openURL("logseq://go/audio")
+            openURL("logseq://mobile/go/audio")
             return true
         default:
             return false
@@ -40,17 +40,37 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication,
-                     continue userActivity: NSUserActivity,
-                     restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+                 continue userActivity: NSUserActivity,
+                 restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
+
+        // Case 1: custom NSUserActivities
         if userActivity.activityType == "com.logseq.quickadd" {
-            openURL("logseq://go/quick-add")
+            openURL("logseq://mobile/go/quick-add")
             return true
         }
         if userActivity.activityType == "com.logseq.audio" {
-            openURL("logseq://go/audio")
+            openURL("logseq://mobile/go/audio")
             return true
         }
 
+        // Case 2: Universal Links
+        if userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+           let url = userActivity.webpageURL {
+            print("🌐 Universal link opened:", url)
+
+            // Forward to Capacitor (so JS gets `appUrlOpen`)
+            NotificationCenter.default.post(
+              name: .capacitorOpenURL,
+              object: nil,
+              userInfo: [
+                "url": url,
+                "options": [:]
+              ]
+            )
+            return true
+        }
+
+        // Default: let Capacitor handle other cases
         return ApplicationDelegateProxy.shared.application(application,
                                                            continue: userActivity,
                                                            restorationHandler: restorationHandler)

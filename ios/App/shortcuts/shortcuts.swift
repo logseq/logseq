@@ -27,7 +27,7 @@ struct ShortcutsEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        Link(destination: URL(string: "logseq://go/quick-add")!) {
+        Link(destination: URL(string: "logseq://mobile/go/quick-add")!) {
             VStack(alignment: .leading, spacing: 0) {
                 // Top heading
                 Text("Logseq")
@@ -46,7 +46,7 @@ struct ShortcutsEntryView: View {
                 // Bottom buttons row
                 HStack(spacing: 8) {
                     // Left button (audio waves)
-                    Link(destination: URL(string: "logseq://go/audio")!) {
+                    Link(destination: URL(string: "logseq://mobile/go/audio")!) {
                         Image(systemName: "waveform")
                             .font(.body)
                             .foregroundColor(Color(hex: "#002b36"))
@@ -57,7 +57,7 @@ struct ShortcutsEntryView: View {
                     }
 
                     // Right button (quick add)
-                    Link(destination: URL(string: "logseq://go/quick-add")!) {
+                    Link(destination: URL(string: "logseq://mobile/go/quick-add")!) {
                         Image(systemName: "plus")
                             .font(.body)
                             .foregroundColor(.white)

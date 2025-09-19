@@ -30,33 +30,11 @@ struct RecordAudioButton: ControlWidget {
         StaticControlConfiguration(
           kind: "com.logseq.logseq.recordAudioButton"
         ) {
-            ControlWidgetButton(action: RecordAudioIntent()) {   // ✅ fixed
+            ControlWidgetButton(action: RecordAudioIntent()) {
                 Label("Record Audio", systemImage: "waveform")
             }
         }
           .displayName("Record Audio")
           .description("Record Audio.")
-    }
-}
-
-@available(iOS 18.0, *)
-struct QuickAddIntent: AppIntent {
-    static var title: LocalizedStringResource = "Quick Add"
-    static var description = IntentDescription("Open Logseq Quick Add")
-
-    // TODO: use https://logseq.com/mobile/go/quick-add
-    func perform() async throws -> some IntentResult {
-        .result()
-    }
-}
-
-@available(iOS 18.0, *)
-struct RecordAudioIntent: AppIntent {
-    static var title: LocalizedStringResource = "Record Audio"
-    static var description = IntentDescription("Open Logseq Record Audio")
-
-    // TODO: https://logseq.com/mobile/go/record-audio
-    func perform() async throws -> some IntentResult {
-        .result()
     }
 }

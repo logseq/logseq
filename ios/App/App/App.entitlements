@@ -4,10 +4,6 @@
 <dict>
 	<key>aps-environment</key>
 	<string>development</string>
-	<key>com.apple.developer.associated-domains</key>
-	<array>
-		<string>applinks:https://logseq.com</string>
-	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
 		<string>iCloud.com.logseq.logseq</string>
@@ -23,6 +19,10 @@
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.com.logseq.logseq</string>
+	</array>
+        <key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:logseq.com</string>
 	</array>
 </dict>
 </plist>
