@@ -81,7 +81,7 @@
      false
      #js ["encrypt" "decrypt"])))
 
-(defn <encrypt-text
+(defn- <encrypt-text
   [key' plaintext]
   (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
           data (.encode encoder plaintext)
@@ -92,7 +92,7 @@
                           data)]
     [iv (js/Uint8Array. encrypted-data)]))
 
-(defn <decrypt-text
+(defn- <decrypt-text
   [key' encrypted-package]
   (let [[iv ciphertext] encrypted-package]
     (assert (and (some? iv) (some? ciphertext)))
@@ -104,11 +104,52 @@
       (.decode decoder decrypted-data))))
 
 (defn <decrypt-text-if-encrypted
-  [key' s]
-  (let [maybe-encrypted-package (ldb/read-transit-str s)]
-    (if (string? maybe-encrypted-package)
-      maybe-encrypted-package
-      (<decrypt-text key' maybe-encrypted-package))))
+  "return nil if not a encrypted-package"
+  [key' maybe-encrypted-package]
+  (when (and (vector? maybe-encrypted-package)
+             (<= 2 (count maybe-encrypted-package)))
+    (<decrypt-text key' maybe-encrypted-package)))
+
+(defn <encrypt-map
+  [key' encrypt-attr-set m]
+  (assert (map? m))
+  (reduce
+   (fn [map-p encrypt-attr]
+     (p/let [m map-p]
+       (if-let [v (get m encrypt-attr)]
+         (p/let [v' (p/chain (<encrypt-text key' v) ldb/write-transit-str)]
+           (assoc m encrypt-attr v'))
+         m)))
+   (p/promise m) encrypt-attr-set))
+
+(defn <encrypt-av-coll
+  "see also `rtc-schema/av-schema`"
+  [key' encrypt-attr-set av-coll]
+  (p/all
+   (mapv
+    (fn [[a v & others]]
+      (p/let [v' (if (and (contains? encrypt-attr-set a)
+                          (string? v))
+                   (p/chain (<encrypt-text key' v) ldb/write-transit-str)
+                   v)]
+        (apply conj [a v'] others)))
+    av-coll)))
+
+(defn <decrypt-map
+  [key' encrypt-attr-set m]
+  (assert (map? m))
+  (reduce
+   (fn [map-p encrypt-attr]
+     (p/let [m map-p]
+       (if-let [v (get m encrypt-attr)]
+         (if (string? v)
+           (p/let [v' (<decrypt-text-if-encrypted key' (ldb/read-transit-str v))]
+             (if v'
+               (assoc m encrypt-attr v')
+               m))
+           m)
+         m)))
+   (p/promise m) encrypt-attr-set))
 
 (comment
   (->
