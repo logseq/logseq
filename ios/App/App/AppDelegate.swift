@@ -6,10 +6,54 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
-
+    // Cold start
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
+            // Delay a tick so Capacitor bridge is ready
+            DispatchQueue.main.async {
+                _ = self.handleShortcutItem(shortcutItem)
+            }
+        }
         return true
+    }
+
+    // Warm start (app already running/in background)
+    func application(_ application: UIApplication,
+                     performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        let handled = handleShortcutItem(shortcutItem)
+        completionHandler(handled)
+    }
+
+    // Shared handler
+    private func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem) -> Bool {
+        var urlString: String?
+
+        switch shortcutItem.type {
+        case "logseq.voice":
+            urlString = "logseq://go/audio"
+        case "logseq.quickadd":
+            urlString = "logseq://go/quick-add"
+        default:
+            break
+        }
+
+        if let urlString {
+            print("Quick action URL:", urlString)
+            if let url = URL(string: urlString) {
+                UIApplication.shared.open(url, options: [:]) { success in
+                    if success {
+                        print("Opened \(url)")
+                    } else {
+                        print("Failed to open \(url)")
+                    }
+                }
+            }
+            return true
+        }
+
+        return false
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

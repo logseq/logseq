@@ -30,9 +30,9 @@
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond
-      (= pathname "/audio")
+      (and (= hostname "go") (= pathname "/audio"))
       (state/pub-event! [:mobile/start-audio-record])
-      (= pathname "/quick-add")
+      (and (= hostname "go") (= pathname "/quick-add"))
       (state/pub-event! [:dialog/mobile-quick-add])
       (= hostname "graph")
       (let [graph-name (some-> pathname
