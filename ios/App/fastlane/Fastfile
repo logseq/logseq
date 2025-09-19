@@ -31,6 +31,11 @@ platform :ios do
       readonly: false
     )
 
+    sync_code_signing(
+      type: "development",
+      readonly: false
+    )
+
     build_number = increment_build_number(
       xcodeproj: "App.xcodeproj",
       build_number: latest_testflight_build_number + 1,
