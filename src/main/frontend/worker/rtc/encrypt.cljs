@@ -6,7 +6,7 @@
   (let [binary (apply str (map js/String.fromCharCode (js/Uint8Array. buffer)))]
     (js/btoa binary)))
 
-(defn- base64->array-buffer [base64]
+(defn base64->array-buffer [base64]
   (let [binary-string (js/atob base64)
         len (.-length binary-string)
         bytes' (js/Uint8Array. len)]
@@ -17,10 +17,17 @@
 (def ^:private encoder (js/TextEncoder.))
 (def ^:private decoder (js/TextDecoder.))
 
-(defn- <salt+password->key
+(defn gen-salt
+  []
+  (array-buffer->base64 (js/crypto.getRandomValues (js/Uint8Array. 16))))
+
+(defn <salt+password->key
   [salt password]
-  (assert (instance? js/Uint8Array salt))
-  (p/let [key-material (js/crypto.subtle.importKey
+  (p/let [salt' (cond
+                  (string? salt) (base64->array-buffer salt)
+                  (instance? js/Uint8Array salt) salt
+                  :else (throw (ex-info "invalid salt value" {:value salt})))
+          key-material (js/crypto.subtle.importKey
                         "raw"
                         (.encode encoder password)
                         #js {:name "PBKDF2"}
@@ -28,40 +35,35 @@
                         #js ["deriveKey"])]
     (js/crypto.subtle.deriveKey
      #js {:name "PBKDF2"
-          :salt salt
+          :salt salt'
           :iterations 100000
           :hash "SHA-256"}
      key-material
      #js {:name "AES-GCM" :length 256}
-     true
+     false
      #js ["encrypt" "decrypt"])))
 
-(defn <gen-encrypt-text-fn
-  [salt password]
-  (p/let [key' (<salt+password->key salt password)]
-    (fn <encrypt-text [plaintext]
-      (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
-              data (.encode encoder plaintext)
-              encrypted-data (js/crypto.subtle.encrypt
-                              #js {:name "AES-GCM"
-                                   :iv iv}
-                              key'
-                              data)]
-        [iv (js/Uint8Array. encrypted-data)]))))
+(defn <encrypt-text
+  [key' plaintext]
+  (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
+          data (.encode encoder plaintext)
+          encrypted-data (js/crypto.subtle.encrypt
+                          #js {:name "AES-GCM"
+                               :iv iv}
+                          key'
+                          data)]
+    [iv (js/Uint8Array. encrypted-data)]))
 
-(defn <gen-decrypt-text-fn
-  [salt password]
-  (assert (instance? js/Uint8Array salt))
-  (p/let [key' (<salt+password->key salt password)]
-    (fn <decrypt-text [encrypted-package]
-      (let [[iv ciphertext] encrypted-package]
-        (assert (and (some? iv) (some? ciphertext)))
-        (p/let [decrypted-data (js/crypto.subtle.decrypt
-                                #js {:name "AES-GCM"
-                                     :iv iv}
-                                key'
-                                ciphertext)]
-          (.decode decoder decrypted-data))))))
+(defn <decrypt-text
+  [key' encrypted-package]
+  (let [[iv ciphertext] encrypted-package]
+    (assert (and (some? iv) (some? ciphertext)))
+    (p/let [decrypted-data (js/crypto.subtle.decrypt
+                            #js {:name "AES-GCM"
+                                 :iv iv}
+                            key'
+                            ciphertext)]
+      (.decode decoder decrypted-data))))
 
 (comment
   (->
@@ -69,15 +71,13 @@
            range' (range 10 ;; 100000
                          )
            start (.getTime (js/Date.))
-           <encrypt-text (<gen-encrypt-text-fn salt "password")
-           _ (def <encrypt-text <encrypt-text)
-           encrypted-package-coll (p/all (map #(<encrypt-text "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq") range'))
+           key' (<salt+password->key salt "password")
+           encrypted-package-coll (p/all (map #(<encrypt-text key' "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq") range'))
            end (.getTime (js/Date.))]
      ;; (prn :encrypted-package-coll encrypted-package-coll)
      (println :encrypt-bench (count range') "in" (- end start) "ms")
      (p/let [start2 (.getTime (js/Date.))
-             <decrypt-text (<gen-decrypt-text-fn salt "password")
-             xx (p/all (map <decrypt-text encrypted-package-coll))
+             xx (p/all (map #(<decrypt-text key' %) encrypted-package-coll))
              end2 (.getTime (js/Date.))]
        ;; (prn :xx xx)
        (println :decrypt-bench (count range') "in" (- end2 start2) "ms")))
