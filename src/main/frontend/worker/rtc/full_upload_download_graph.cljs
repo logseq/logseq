@@ -123,6 +123,36 @@
                   (:db/ident block) (update :db/ident ldb/read-transit-str)
                   (:block/order block) (update :block/order ldb/read-transit-str)))))))
 
+(defn- task--encrypt-blocks
+  [encrypt-key encrypt-attr-set blocks]
+  (m/sp
+    (loop [[block & rest-blocks] blocks
+           result []]
+      (if-not block
+        result
+        (let [block' (->> block
+                          (map
+                           (fn [[a v]]
+                             (m/sp
+                               (if (and (contains? encrypt-attr-set a) (string? v))
+                                 [a (ldb/write-transit-str (c.m/<? (rtc-encrypt/<encrypt-text encrypt-key v)))]
+                                 [a v]))))
+                          (apply m/join vector)
+                          (m/?)
+                          (into {}))]
+          (recur rest-blocks (conj result block')))))))
+
+(comment
+  (def db @(frontend.worker.state/get-datascript-conn (frontend.worker.state/get-current-repo)))
+  (def blocks (export-as-blocks db))
+  (def salt (rtc-encrypt/gen-salt))
+  (def canceler ((m/sp
+                   (let [k (c.m/<? (rtc-encrypt/<salt+password->key salt "password"))]
+                     (m/? (task--encrypt-blocks k #{:block/title :block/name} blocks))))
+                 #(def encrypted-blocks %) prn))
+
+  )
+
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
@@ -138,8 +168,10 @@
               (let [all-blocks (export-as-blocks
                                 @conn
                                 :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
-                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)]
-                (ldb/write-transit-str all-blocks)))))]
+                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)
+                    encrypt-key-for-test (c.m/<? (rtc-encrypt/<salt+password->key (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt) "test-password"))
+                    encrypted-blocks (c.m/<? (task--encrypt-blocks encrypt-key-for-test rtc-const/encrypt-attr-set all-blocks))]
+                (ldb/write-transit-str encrypted-blocks)))))]
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
                                                   :message "uploading data"})
       (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
