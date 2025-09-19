@@ -139,6 +139,12 @@
                 <string>plus</string>
             </dict>
         </array>
-
+        <key>AppIntentsEnabled</key>
+        <true/>
+        <key>NSUserActivityTypes</key>
+        <array>
+            <string>com.logseq.quickadd</string>
+            <string>com.logseq.audio</string>
+        </array>
 </dict>
 </plist>
