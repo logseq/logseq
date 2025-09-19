@@ -1,6 +1,47 @@
 (ns frontend.worker.rtc.encrypt
   "rtc e2ee related"
-  (:require [promesa.core :as p]))
+  (:require ["/frontend/idbkv" :as idb-keyval]
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
+
+(def ^:private encoder (js/TextEncoder.))
+(def ^:private decoder (js/TextDecoder.))
+
+;;; TODO: move frontend.idb to deps/, then we can use it in both frontend and db-worker
+;;; now, I just direct use "/frontend/idbkv" here
+(defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
+
+(defn- <get-item
+  [k]
+  (when (and k @store)
+    (idb-keyval/get k @store)))
+
+(defn- <set-item!
+  [k value]
+  (when (and k @store)
+    (idb-keyval/set k value @store)))
+
+(defn- <remove-item!
+  [k]
+  (idb-keyval/del k @store))
+
+(defn- graph-encrypt-key-idb-key
+  [graph-uuid]
+  (assert (some? graph-uuid))
+  (str "rtc-encrypt-key###" graph-uuid))
+
+(defn <get-encrypt-key
+  [graph-uuid]
+  (<get-item (graph-encrypt-key-idb-key graph-uuid)))
+
+(defn <set-encrypt-key!
+  [graph-uuid k]
+  (assert (instance? js/CryptoKey k))
+  (<set-item! (graph-encrypt-key-idb-key graph-uuid) k))
+
+(defn <remove-encrypt-key!
+  [graph-uuid]
+  (<remove-item! (graph-encrypt-key-idb-key graph-uuid)))
 
 (defn- array-buffer->base64 [buffer]
   (let [binary (apply str (map js/String.fromCharCode (js/Uint8Array. buffer)))]
@@ -13,9 +54,6 @@
     (dotimes [i len]
       (aset bytes' i (.charCodeAt binary-string i)))
     (.-buffer bytes')))
-
-(def ^:private encoder (js/TextEncoder.))
-(def ^:private decoder (js/TextDecoder.))
 
 (defn gen-salt
   []
@@ -64,6 +102,13 @@
                             key'
                             ciphertext)]
       (.decode decoder decrypted-data))))
+
+(defn <decrypt-text-if-encrypted
+  [key' s]
+  (let [maybe-encrypted-package (ldb/read-transit-str s)]
+    (if (string? maybe-encrypted-package)
+      maybe-encrypted-package
+      (<decrypt-text key' maybe-encrypted-package))))
 
 (comment
   (->
