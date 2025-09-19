@@ -96,6 +96,7 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_URL }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          XCODE_XCARGS: "-allowProvisioningUpdates"
 
       - name: Save Static File
         uses: actions/upload-artifact@v4
