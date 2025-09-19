@@ -27,48 +27,50 @@ struct ShortcutsEntryView: View {
     var entry: Provider.Entry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Top heading
-            Text("Logseq")
-                .font(.headline)
-                .bold()
-                .foregroundColor(Color(hex: "#002b36"))
+        Link(destination: URL(string: "logseq://go/quick-add")!) {
+            VStack(alignment: .leading, spacing: 0) {
+                // Top heading
+                Text("Logseq")
+                    .font(.headline)
+                    .bold()
+                    .foregroundColor(Color(hex: "#002b36"))
 
-            // Middle text
-            Text("I have an idea...")
-                .font(.subheadline) // larger than subheadline
-                .bold()
-                .foregroundColor(.primary.opacity(0.8))
+                // Middle text
+                Text("I have an idea...")
+                    .font(.subheadline)
+                    .bold()
+                    .foregroundColor(.primary.opacity(0.8))
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            // Bottom buttons row
-            HStack(spacing: 8) {
-                // Left button (audio waves)
-                Link(destination: URL(string: "logseq://go/audio")!) {
-                    Image(systemName: "waveform")
-                        .font(.body) // smaller icon
-                        .foregroundColor(Color(hex: "#002b36"))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(Color.gray.opacity(0.05))
-                        .clipShape(Capsule())
-                        .contentShape(Capsule())
-                }
+                // Bottom buttons row
+                HStack(spacing: 8) {
+                    // Left button (audio waves)
+                    Link(destination: URL(string: "logseq://go/audio")!) {
+                        Image(systemName: "waveform")
+                            .font(.body)
+                            .foregroundColor(Color(hex: "#002b36"))
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(Color.gray.opacity(0.05))
+                            .clipShape(Capsule())
+                            .contentShape(Capsule())
+                    }
 
-                // Right button (quick add)
-                Link(destination: URL(string: "logseq://go/quick-add")!) {
-                    Image(systemName: "plus")
-                        .font(.body) // smaller icon
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(Color(hex: "#002b36"))
-                        .clipShape(Capsule())
-                        .contentShape(Capsule())
+                    // Right button (quick add)
+                    Link(destination: URL(string: "logseq://go/quick-add")!) {
+                        Image(systemName: "plus")
+                            .font(.body)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity, minHeight: 36)
+                            .background(Color(hex: "#002b36"))
+                            .clipShape(Capsule())
+                            .contentShape(Capsule())
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(-3)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(-3)
     }
 }
 
