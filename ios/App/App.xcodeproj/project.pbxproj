@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 48;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -25,6 +25,9 @@
 		CBF2D2DA2DE83CB8006338BE /* UILocalPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */; };
 		CBF2D2E22DE95970006338BE /* AppViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF2D2E12DE95970006338BE /* AppViewController.swift */; };
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
+		D3490CC62E7CE9EA00E796A6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */; };
+		D3490CC82E7CE9EA00E796A6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */; };
+		D3490CD52E7CE9EB00E796A6 /* shortcutsExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = D3490CC42E7CE9EA00E796A6 /* shortcutsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
 		FE647FF427BDFEDE00F3206B /* FsWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE647FF327BDFEDE00F3206B /* FsWatcher.swift */; };
@@ -40,6 +43,13 @@
 			remoteGlobalIDString = 5FFF7D6927E343FA00B00DA8;
 			remoteInfo = ShareViewController;
 		};
+		D3490CD32E7CE9EB00E796A6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D3490CC32E7CE9EA00E796A6;
+			remoteInfo = shortcutsExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -49,6 +59,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				D3490CD52E7CE9EB00E796A6 /* shortcutsExtension.appex in Embed App Extensions */,
 				5FFF7D7427E343FA00B00DA8 /* ShareViewController.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
@@ -83,6 +94,10 @@
 		D32752BC275496A60039291C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		D32752BD275496C60039291C /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		D32752BF2754C5AB0039291C /* AppDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppDebug.entitlements; sourceTree = "<group>"; };
+		D3490CC42E7CE9EA00E796A6 /* shortcutsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = shortcutsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		D3490CDA2E7CEA3900E796A6 /* shortcutsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = shortcutsExtension.entitlements; sourceTree = "<group>"; };
 		D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
 		D3D62A0B275C928F0003FBDC /* FileContainer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = FileContainer.m; sourceTree = "<group>"; };
 		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
@@ -90,6 +105,20 @@
 		FE647FF527BDFEF500F3206B /* FsWatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FsWatcher.m; sourceTree = "<group>"; };
 		FE96D60F2A1B811A001ECE32 /* SharedData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		D3490CD82E7CE9EB00E796A6 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = D3490CC32E7CE9EA00E796A6 /* shortcutsExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		D3490CC92E7CE9EA00E796A6 /* shortcuts */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (D3490CD82E7CE9EB00E796A6 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = shortcuts; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		504EC3011FED79650016851F /* Frameworks */ = {
@@ -108,14 +137,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D3490CC12E7CE9EA00E796A6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3490CC82E7CE9EA00E796A6 /* SwiftUI.framework in Frameworks */,
+				D3490CC62E7CE9EA00E796A6 /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
+				D3490CDA2E7CEA3900E796A6 /* shortcutsExtension.entitlements */,
 				504EC3061FED79650016851F /* App */,
 				5FFF7D6B27E343FA00B00DA8 /* ShareViewController */,
+				D3490CC92E7CE9EA00E796A6 /* shortcuts */,
 				504EC3051FED79650016851F /* Products */,
 				D337740F89DEEAD18C87762B /* Pods */,
 				9FC5AB18C7E7E43B09B33A61 /* Frameworks */,
@@ -127,6 +167,7 @@
 			children = (
 				504EC3041FED79650016851F /* Logseq.app */,
 				5FFF7D6A27E343FA00B00DA8 /* ShareViewController.appex */,
+				D3490CC42E7CE9EA00E796A6 /* shortcutsExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -176,6 +217,8 @@
 			children = (
 				D32752BD275496C60039291C /* CloudKit.framework */,
 				B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */,
+				D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */,
+				D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -207,6 +250,7 @@
 			);
 			dependencies = (
 				5FFF7D7327E343FA00B00DA8 /* PBXTargetDependency */,
+				D3490CD42E7CE9EB00E796A6 /* PBXTargetDependency */,
 			);
 			name = Logseq;
 			productName = App;
@@ -230,13 +274,35 @@
 			productReference = 5FFF7D6A27E343FA00B00DA8 /* ShareViewController.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D3490CC32E7CE9EA00E796A6 /* shortcutsExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D3490CD92E7CE9EB00E796A6 /* Build configuration list for PBXNativeTarget "shortcutsExtension" */;
+			buildPhases = (
+				D3490CC02E7CE9EA00E796A6 /* Sources */,
+				D3490CC12E7CE9EA00E796A6 /* Frameworks */,
+				D3490CC22E7CE9EA00E796A6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D3490CC92E7CE9EA00E796A6 /* shortcuts */,
+			);
+			name = shortcutsExtension;
+			packageProductDependencies = (
+			);
+			productName = shortcutsExtension;
+			productReference = D3490CC42E7CE9EA00E796A6 /* shortcutsExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
 		504EC2FC1FED79650016851F /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1330;
+				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 1310;
 				TargetAttributes = {
 					504EC3031FED79650016851F = {
@@ -247,6 +313,9 @@
 					5FFF7D6927E343FA00B00DA8 = {
 						CreatedOnToolsVersion = 13.3;
 						ProvisioningStyle = Automatic;
+					};
+					D3490CC32E7CE9EA00E796A6 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -265,6 +334,7 @@
 			targets = (
 				504EC3031FED79650016851F /* Logseq */,
 				5FFF7D6927E343FA00B00DA8 /* ShareViewController */,
+				D3490CC32E7CE9EA00E796A6 /* shortcutsExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -288,6 +358,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				5FFF7D7027E343FA00B00DA8 /* MainInterface.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D3490CC22E7CE9EA00E796A6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -361,6 +438,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		D3490CC02E7CE9EA00E796A6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -368,6 +452,11 @@
 			isa = PBXTargetDependency;
 			target = 5FFF7D6927E343FA00B00DA8 /* ShareViewController */;
 			targetProxy = 5FFF7D7227E343FA00B00DA8 /* PBXContainerItemProxy */;
+		};
+		D3490CD42E7CE9EB00E796A6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D3490CC32E7CE9EA00E796A6 /* shortcutsExtension */;
+			targetProxy = D3490CD32E7CE9EB00E796A6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -507,7 +596,8 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
-				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -527,7 +617,10 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 0.11.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
@@ -556,7 +649,10 @@
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 0.11.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -583,7 +679,11 @@
 				INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				MARKETING_VERSION = 0.11.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -612,7 +712,11 @@
 				INFOPLIST_KEY_CFBundleDisplayName = ShareViewController;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
 				MARKETING_VERSION = 0.11.0;
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.ShareViewController;
@@ -620,6 +724,88 @@
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		D3490CD62E7CE9EB00E796A6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = shortcutsExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K378MFWK59;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = shortcuts/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = shortcuts;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.shortcuts;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		D3490CD72E7CE9EB00E796A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CODE_SIGN_ENTITLEMENTS = shortcutsExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K378MFWK59;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = shortcuts/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = shortcuts;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq.shortcuts;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -651,6 +837,15 @@
 			buildConfigurations = (
 				5FFF7D7627E343FA00B00DA8 /* Debug */,
 				5FFF7D7727E343FA00B00DA8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D3490CD92E7CE9EB00E796A6 /* Build configuration list for PBXNativeTarget "shortcutsExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D3490CD62E7CE9EB00E796A6 /* Debug */,
+				D3490CD72E7CE9EB00E796A6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
