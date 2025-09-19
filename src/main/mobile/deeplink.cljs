@@ -1,4 +1,5 @@
-(ns frontend.mobile.deeplink
+(ns mobile.deeplink
+  "Share/open link"
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db.async :as db-async]
@@ -29,6 +30,10 @@
                    (map :url))
         repo-names (map #(get-graph-name-fn %) repos)]
     (cond
+      (= pathname "/audio")
+      (state/pub-event! [:mobile/start-audio-record])
+      (= pathname "/quick-add")
+      (state/pub-event! [:dialog/mobile-quick-add])
       (= hostname "graph")
       (let [graph-name (some-> pathname
                                (string/replace "/" "")
