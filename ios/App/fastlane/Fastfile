@@ -26,7 +26,7 @@ platform :ios do
       key_filepath: ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"],
     )
 
-    sync_code_signing(type: "appstore", readonly: true)
+    sync_code_signing(type: "appstore", readonly: false)
 
     build_number = increment_build_number(
       xcodeproj: "App.xcodeproj",
@@ -43,7 +43,7 @@ platform :ios do
       configuration: "Release",
       xcargs: "-allowProvisioningUpdates"
     )
-    
+
     upload_to_testflight(
       skip_submission: true,
       skip_waiting_for_build_processing: true,
