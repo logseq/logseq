@@ -29,6 +29,7 @@
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
             [frontend.worker.rtc.db-listener]
+            [frontend.worker.rtc.encrypt :as rtc-encrypt]
             [frontend.worker.rtc.migrate :as rtc-migrate]
             [frontend.worker.search :as search]
             [frontend.worker.shared-service :as shared-service]
@@ -253,8 +254,8 @@
       (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
                                      :kv/value (common-util/time-ms)}]))))
 
-(defn- create-or-open-db!
-  [repo {:keys [config datoms] :as opts}]
+(defn- <create-or-open-db!
+  [repo {:keys [config datoms rtc-e2ee-password] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
@@ -291,15 +292,17 @@
                 initial-data (sqlite-create-graph/build-db-initial-data
                               config (select-keys opts [:import-type :graph-git-sha]))]
             (d/transact! conn initial-data {:initial-db? true})))
+        (p/let [rtc-e2ee-salt (rtc-encrypt/gen-salt)
+                _ (d/transact! conn [(ldb/kv :logseq.kv/graph-rtc-encrypt-salt rtc-e2ee-salt)])
+                _ (rtc-encrypt/<persist-encrypt-key! repo rtc-e2ee-salt rtc-e2ee-password)]
+          (gc-sqlite-dbs! db client-ops-db conn {})
 
-        (gc-sqlite-dbs! db client-ops-db conn {})
+          (let [migration-result (db-migrate/migrate conn)]
+            (when (client-op/rtc-db-graph? repo)
+              (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
+                (client-op/add-ops! repo client-ops))))
 
-        (let [migration-result (db-migrate/migrate conn)]
-          (when (client-op/rtc-db-graph? repo)
-            (let [client-ops (rtc-migrate/migration-results=>client-ops migration-result)]
-              (client-op/add-ops! repo client-ops))))
-
-        (db-listener/listen-db-changes! repo (get @*datascript-conns repo))))))
+          (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
 
 (defn- iter->vec [iter']
   (when iter'
@@ -404,7 +407,7 @@
    (when close-other-db?
      (close-other-dbs! repo))
    (when @shared-service/*master-client?
-     (create-or-open-db! repo (dissoc opts :close-other-db?)))
+     (<create-or-open-db! repo (dissoc opts :close-other-db?)))
    nil))
 
 (def-thread-api :thread-api/create-or-open-db

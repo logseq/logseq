@@ -35,14 +35,15 @@
   [repo]
   (<get-item (graph-encrypt-key-idb-key repo)))
 
-(defn <set-encrypt-key!
+(defn- <set-encrypt-key!
   [repo k]
   (assert (instance? js/CryptoKey k))
   (<set-item! (graph-encrypt-key-idb-key repo) k))
 
-(defn <remove-encrypt-key!
-  [repo]
-  (<remove-item! (graph-encrypt-key-idb-key repo)))
+(comment
+  (defn <remove-encrypt-key!
+    [repo]
+    (<remove-item! (graph-encrypt-key-idb-key repo))))
 
 (defn- array-buffer->base64 [buffer]
   (let [binary (apply str (map js/String.fromCharCode (js/Uint8Array. buffer)))]
@@ -81,6 +82,14 @@
      #js {:name "AES-GCM" :length 256}
      false
      #js ["encrypt" "decrypt"])))
+
+(defn <persist-encrypt-key!
+  [repo salt password]
+  (p/let [encrypt-key (<salt+password->key salt password)
+          encrypt-key' (<get-encrypt-key repo)
+          _ (assert (nil? encrypt-key'))
+          _ (<set-encrypt-key! repo encrypt-key)]
+    nil))
 
 (defn- <encrypt-text
   [key' plaintext]
@@ -151,14 +160,6 @@
            m)
          m)))
    (p/promise m) encrypt-attr-set))
-
-(def-thread-api :thread-api/generate&persist-encrypt-key
-  [repo salt password]
-  (p/let [encrypt-key (<salt+password->key salt password)
-          encrypt-key' (<get-encrypt-key repo)
-          _ (assert (nil? encrypt-key'))
-          _ (<set-encrypt-key! repo encrypt-key)]
-    nil))
 
 (comment
   (->
