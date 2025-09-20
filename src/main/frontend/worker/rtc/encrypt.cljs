@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.encrypt
   "rtc e2ee related"
   (:require ["/frontend/idbkv" :as idb-keyval]
+            [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -26,22 +27,22 @@
   (idb-keyval/del k @store))
 
 (defn- graph-encrypt-key-idb-key
-  [graph-uuid]
-  (assert (some? graph-uuid))
-  (str "rtc-encrypt-key###" graph-uuid))
+  [repo]
+  (assert (some? repo))
+  (str "rtc-encrypt-key###" repo))
 
 (defn <get-encrypt-key
-  [graph-uuid]
-  (<get-item (graph-encrypt-key-idb-key graph-uuid)))
+  [repo]
+  (<get-item (graph-encrypt-key-idb-key repo)))
 
 (defn <set-encrypt-key!
-  [graph-uuid k]
+  [repo k]
   (assert (instance? js/CryptoKey k))
-  (<set-item! (graph-encrypt-key-idb-key graph-uuid) k))
+  (<set-item! (graph-encrypt-key-idb-key repo) k))
 
 (defn <remove-encrypt-key!
-  [graph-uuid]
-  (<remove-item! (graph-encrypt-key-idb-key graph-uuid)))
+  [repo]
+  (<remove-item! (graph-encrypt-key-idb-key repo)))
 
 (defn- array-buffer->base64 [buffer]
   (let [binary (apply str (map js/String.fromCharCode (js/Uint8Array. buffer)))]
@@ -150,6 +151,14 @@
            m)
          m)))
    (p/promise m) encrypt-attr-set))
+
+(def-thread-api :thread-api/generate&persist-encrypt-key
+  [repo salt password]
+  (p/let [encrypt-key (<salt+password->key salt password)
+          encrypt-key' (<get-encrypt-key repo)
+          _ (assert (nil? encrypt-key'))
+          _ (<set-encrypt-key! repo encrypt-key)]
+    nil))
 
 (comment
   (->

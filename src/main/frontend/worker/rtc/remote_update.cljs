@@ -659,17 +659,12 @@ so need to pull earlier remote-data from websocket."})
 (defn task--apply-remote-update
   "Apply remote-update(`remote-update-event`)"
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
-  ;; Re apply-remote-update-check to ensure the remote-update-event still passes the check,
-  ;; Because asynchronous functions may have been executed between the previous check and the current apply-remote-update.
   (m/sp
     (when (apply-remote-update-check repo remote-update-event add-log-fn)
       (let [remote-update-data (:value remote-update-event)
-            encrypt-key-for-test
-            (c.m/<? (rtc-encrypt/<salt+password->key
-                     (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt)
-                     "test-password"))
+            encrypt-key (c.m/<? (rtc-encrypt/<get-encrypt-key repo))
             remote-update-data (m/? (task--decrypt-blocks-in-remote-update-data
-                                     encrypt-key-for-test rtc-const/encrypt-attr-set
+                                     encrypt-key rtc-const/encrypt-attr-set
                                      remote-update-data))
             remote-t (:t remote-update-data)
             {affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
