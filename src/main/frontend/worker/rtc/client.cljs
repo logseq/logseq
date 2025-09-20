@@ -480,8 +480,9 @@
                       other-remote-ops)]
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
-              encrypt-key-for-test (c.m/<? (rtc-encrypt/<salt+password->key (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt) "test-password"))
-              encrypted-remote-ops (m/? (task--encrypt-remote-ops encrypt-key-for-test ops-for-remote))
+              encrypt-key (c.m/<? (rtc-encrypt/<get-encrypt-key repo))
+              _ (assert (some? encrypt-key))
+              encrypted-remote-ops (m/? (task--encrypt-remote-ops encrypt-key ops-for-remote))
               r (try
                   (let [message (cond-> {:action "apply-ops"
                                          :graph-uuid graph-uuid :schema-version (str major-schema-version)
