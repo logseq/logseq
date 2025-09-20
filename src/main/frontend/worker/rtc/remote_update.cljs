@@ -4,11 +4,13 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
+            [frontend.common.missionary :as c.m]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.encrypt :as rtc-encrypt]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.malli-schema :as rtc-schema]
             [frontend.worker.state :as worker-state]
@@ -22,7 +24,8 @@
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.batch-tx :as batch-tx]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]))
+            [logseq.outliner.transaction :as outliner-tx]
+            [missionary.core :as m]))
 
 (defkeywords
   ::need-pull-remote-data {:doc "
@@ -600,9 +603,31 @@ so need to pull earlier remote-data from websocket."})
                                                          :parents [(:block/parent refed-block)])
                                                   (dissoc :block/uuid))])))))))
 
-(defn apply-remote-update
-  "Apply remote-update(`remote-update-event`)"
-  [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
+(defn task--decrypt-blocks-in-remote-update-data
+  [encrypt-key encrypt-attr-set remote-update-data]
+  (m/sp
+    (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
+          affected-blocks-map'
+          (loop [[[block-uuid affected-block] & rest-affected-blocks] affected-blocks-map
+                 affected-blocks-map-result {}]
+            (if-not block-uuid
+              affected-blocks-map-result
+              (let [affected-block' (c.m/<? (rtc-encrypt/<decrypt-map encrypt-key encrypt-attr-set affected-block))]
+                (recur rest-affected-blocks (assoc affected-blocks-map-result block-uuid affected-block')))))
+          refed-blocks'
+          (loop [[refed-block & rest-refed-blocks] refed-blocks
+                 refed-blocks-result []]
+            (if-not refed-block
+              refed-blocks-result
+              (let [refed-block' (c.m/<? (rtc-encrypt/<decrypt-map encrypt-key encrypt-attr-set refed-block))]
+                (recur rest-refed-blocks (conj refed-blocks-result refed-block')))))]
+      (assoc remote-update-data
+             :affected-blocks affected-blocks-map'
+             :refed-blocks refed-blocks'))))
+
+(defn apply-remote-update-check
+  "If the check passes, return true"
+  [repo remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
     (assert (rtc-schema/data-from-ws-validator remote-update-data) remote-update-data)
     (let [remote-t (:t remote-update-data)
@@ -614,7 +639,8 @@ so need to pull earlier remote-data from websocket."})
         (throw (ex-info "invalid remote-data" {:data remote-update-data}))
 
         (<= remote-t local-tx)
-        (add-log-fn :rtc.log/apply-remote-update {:sub-type :skip :remote-t remote-t :local-t local-tx})
+        (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :skip :remote-t remote-t :local-t local-tx})
+            false)
 
         (< local-tx remote-t-before)
         (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
@@ -624,37 +650,55 @@ so need to pull earlier remote-data from websocket."})
                             {:type ::need-pull-remote-data
                              :local-tx local-tx})))
 
-        (<= remote-t-before local-tx remote-t)
-        (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
-              {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
-              (affected-blocks->diff-type-ops repo affected-blocks-map)
-              remove-ops (vals remove-ops-map)
-              sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
-              update-ops (vals update-ops-map)
-              update-page-ops (vals update-page-ops-map)
-              remove-page-ops (vals remove-page-ops-map)
-              db-before @conn]
-          (rtc-log-and-state/update-remote-t graph-uuid remote-t)
-          (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
-                                             :persist-op? false
-                                             :gen-undo-ops? false}
-            (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
-            (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
-            (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
-            (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
-            (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops)))
-          ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
-          ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
-          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
-          ;; wait all remote-ops transacted into db,
-          ;; then start to check any asset-updates in remote
-          (let [db-after @conn]
-            (r.asset/emit-remote-asset-updates-from-block-ops db-before db-after remove-ops update-ops))
-          (js/console.groupEnd)
+        (<= remote-t-before local-tx remote-t) true
 
-          (client-op/update-local-tx repo remote-t)
-          (rtc-log-and-state/update-local-t graph-uuid remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
+
+(defn task--apply-remote-update
+  "Apply remote-update(`remote-update-event`)"
+  [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
+  ;; Re apply-remote-update-check to ensure the remote-update-event still passes the check,
+  ;; Because asynchronous functions may have been executed between the previous check and the current apply-remote-update.
+  (m/sp
+    (when (apply-remote-update-check repo remote-update-event add-log-fn)
+      (let [remote-update-data (:value remote-update-event)
+            encrypt-key-for-test
+            (c.m/<? (rtc-encrypt/<salt+password->key
+                     (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt)
+                     "test-password"))
+            remote-update-data (m/? (task--decrypt-blocks-in-remote-update-data
+                                     encrypt-key-for-test rtc-const/encrypt-attr-set
+                                     remote-update-data))
+            remote-t (:t remote-update-data)
+            {affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
+            {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
+            (affected-blocks->diff-type-ops repo affected-blocks-map)
+            remove-ops (vals remove-ops-map)
+            sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
+            update-ops (vals update-ops-map)
+            update-page-ops (vals update-page-ops-map)
+            remove-page-ops (vals remove-page-ops-map)
+            db-before @conn]
+        (rtc-log-and-state/update-remote-t graph-uuid remote-t)
+        (js/console.groupCollapsed "rtc/apply-remote-ops-log")
+        (batch-tx/with-batch-tx-mode conn {:rtc-tx? true
+                                           :persist-op? false
+                                           :gen-undo-ops? false}
+          (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
+          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
+          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
+          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
+          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops)))
+        ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
+        ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
+        (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+        ;; wait all remote-ops transacted into db,
+        ;; then start to check any asset-updates in remote
+        (let [db-after @conn]
+          (r.asset/emit-remote-asset-updates-from-block-ops db-before db-after remove-ops update-ops))
+        (js/console.groupEnd)
+
+        (client-op/update-local-tx repo remote-t)
+        (rtc-log-and-state/update-local-t graph-uuid remote-t)))))

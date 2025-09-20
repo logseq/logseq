@@ -21,21 +21,23 @@
             [missionary.core :as m]
             [tick.core :as tick]))
 
-(defn- apply-remote-updates-from-apply-ops
+(defn- task--apply-remote-updates-from-apply-ops
   [apply-ops-resp graph-uuid repo conn date-formatter add-log-fn]
-  (if-let [remote-ex (:ex-data apply-ops-resp)]
-    (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
-        (case (:type remote-ex)
-          :graph-lock-failed nil
-          :graph-lock-missing
-          (throw r.ex/ex-remote-graph-lock-missing)
-          :rtc.exception/get-s3-object-failed
-          (throw (ex-info (:ex-message apply-ops-resp) (:ex-data apply-ops-resp)))
-          ;;else
-          (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
-    (do (assert (pos? (:t apply-ops-resp)) apply-ops-resp)
-        (r.remote-update/apply-remote-update
-         graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} add-log-fn))))
+  (m/sp
+    (if-let [remote-ex (:ex-data apply-ops-resp)]
+      (do (add-log-fn :rtc.log/pull-remote-data (assoc remote-ex :sub-type :pull-remote-data-exception))
+          (case (:type remote-ex)
+            :graph-lock-failed nil
+            :graph-lock-missing
+            (throw r.ex/ex-remote-graph-lock-missing)
+            :rtc.exception/get-s3-object-failed
+            (throw (ex-info (:ex-message apply-ops-resp) (:ex-data apply-ops-resp)))
+            ;;else
+            (throw (ex-info "Unavailable3" {:remote-ex remote-ex}))))
+      (do (assert (pos? (:t apply-ops-resp)) apply-ops-resp)
+          (m/?
+           (r.remote-update/task--apply-remote-update
+            graph-uuid repo conn date-formatter {:type :remote-update :value apply-ops-resp} add-log-fn))))))
 
 (defn- new-task--init-request
   [get-ws-create-task graph-uuid major-schema-version repo conn *last-calibrate-t *server-schema-version add-log-fn]
@@ -143,7 +145,8 @@
                          :repo repo
                          :graph-uuid graph-uuid
                          :remote-schema-version max-remote-schema-version}))
-          (apply-remote-updates-from-apply-ops init-request-resp graph-uuid repo conn date-formatter add-log-fn)))
+          (m/? (task--apply-remote-updates-from-apply-ops
+                init-request-resp graph-uuid repo conn date-formatter add-log-fn))))
       ws)))
 
 (defn- ->pos
@@ -512,8 +515,9 @@
                       (throw (ex-info "Unavailable1" {:remote-ex remote-ex})))))
 
             (do (assert (pos? (:t r)) r)
-                (r.remote-update/apply-remote-update
-                 graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+                (m/?
+                 (r.remote-update/task--apply-remote-update
+                  graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn))
                 (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)}))))))))
 
 (defn new-task--pull-remote-data
@@ -525,4 +529,4 @@
                    :ops [] :t-before (or local-tx 1)}
           r (m/? (ws-util/send&recv get-ws-create-task message))]
       (r.throttle/add-rtc-api-call-record! message)
-      (apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter add-log-fn))))
+      (m/? (task--apply-remote-updates-from-apply-ops r graph-uuid repo conn date-formatter add-log-fn)))))
