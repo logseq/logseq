@@ -479,7 +479,7 @@
                          (notification/show! [:p "Password and password confirmation do not match!"] :warning false)
                          (do
                            (reset! *creating-db? true)
-                           (p/let [repo (repo-handler/new-db! @*graph-name {:password @*password})]
+                           (p/let [repo (repo-handler/new-db! @*graph-name {:rtc-e2ee-password @*password})]
                              (when @*cloud?
                                (->
                                 (p/do
