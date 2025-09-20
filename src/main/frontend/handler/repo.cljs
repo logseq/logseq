@@ -189,7 +189,7 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn- create-db [full-graph-name {:keys [file-graph-import?]}]
+(defn- create-db [full-graph-name {:keys [file-graph-import? password]}]
   (->
    (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
            _ (persist-db/<new full-graph-name
