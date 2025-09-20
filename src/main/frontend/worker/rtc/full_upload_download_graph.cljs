@@ -146,7 +146,6 @@
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
-    (ldb/transact! conn [(ldb/kv :logseq.kv/graph-rtc-encrypt-salt (rtc-encrypt/gen-salt))])
     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
                                                 :message "fetching presigned put-url"})
     (let [[{:keys [url key]} all-blocks-str]
