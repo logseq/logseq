@@ -159,8 +159,9 @@
                                 @conn
                                 :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
                                 :ignore-entity-set rtc-const/ignore-entities-when-init-upload)
-                    encrypt-key-for-test (c.m/<? (rtc-encrypt/<salt+password->key (ldb/get-key-value @conn :logseq.kv/graph-rtc-encrypt-salt) "test-password"))
-                    encrypted-blocks (c.m/<? (task--encrypt-blocks encrypt-key-for-test rtc-const/encrypt-attr-set all-blocks))]
+                    encrypt-key (c.m/<? (rtc-encrypt/<get-encrypt-key repo))
+                    _ (assert (some? encrypt-key))
+                    encrypted-blocks (c.m/<? (task--encrypt-blocks encrypt-key rtc-const/encrypt-attr-set all-blocks))]
                 (ldb/write-transit-str encrypted-blocks)))))]
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
                                                   :message "uploading data"})
