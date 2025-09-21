@@ -1,13 +1,12 @@
 (ns frontend.extensions.zotero.extractor
   (:require [clojure.set :refer [rename-keys]]
-            [clojure.string :as str]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.handler.notification :as notification]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn item-type [item] (-> item :data :item-type))
 
@@ -16,17 +15,17 @@
 (defn citation-key [item]
   (let [extra (-> item :data :extra)
         citation (->> extra
-                      (str/split-lines)
-                      (filterv (fn [s] (str/includes? s "Citation Key: ")))
+                      (string/split-lines)
+                      (filterv (fn [s] (string/includes? s "Citation Key: ")))
                       first)]
     (when citation
-      (str/trim (str/replace citation "Citation Key: " "")))))
+      (string/trim (string/replace citation "Citation Key: " "")))))
 
-(defn title [item] (-> item :data :title))
+(defn ->title [item] (-> item :data :title))
 
-(defn item-key [item] (:key item))
+(defn ->item-key [item] (:key item))
 
-(defn page-name [item]
+(defn ->page-name [item]
   (let [page-title
         (case (item-type item)
           "case"
@@ -36,14 +35,14 @@
           "statute"
           (-> item :data :name-of-act)
           ;; default use title
-          (title item))
+          (->title item))
         citekey (citation-key item)]
     (if (and (setting/setting :prefer-citekey?)
-             (not (str/blank? citekey)))
+             (not (string/blank? citekey)))
       (str (setting/setting :page-insert-prefix) citekey)
       (str (setting/setting :page-insert-prefix) page-title))))
 
-(defn authors [item]
+(defn ->authors [item]
   (let [creators (-> item :data :creators)
         authors
         (into []
@@ -54,33 +53,33 @@
               creators)]
     (distinct authors)))
 
-(defn tags [item]
+(defn ->tags [item]
   (let [tags
         (->> (-> item :data :tags)
              (mapv (fn [{:keys [tag]}] (string/trim tag)))
              (mapcat #(string/split % #",\s?")))
-        extra-tags (->> (str/split (setting/setting :extra-tags) #",")
-                        (map str/trim)
-                        (remove str/blank?))]
+        extra-tags (->> (string/split (setting/setting :extra-tags) #",")
+                        (map string/trim)
+                        (remove string/blank?))]
     (distinct (concat tags extra-tags))))
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date
-                      (date/journal-name-s))]
-    (util/format "[[%s]]" date)
+                    (date/journal-name-s))]
+    (page-ref/->page-ref date)
     (-> item :data :date)))
 
 (defn wrap-in-doublequotes [m]
   (->> m
        (map (fn [[k v]]
-              (if (str/includes? (str v) ",")
+              (if (string/includes? (str v) ",")
                 [k (pr-str v)]
                 [k v])))
        (into (array-map))))
 
 (defn skip-newline-properties [m]
   (->> m
-       (remove (fn [[_ v]] (str/includes? (str v) "\n")))
+       (remove (fn [[_ v]] (string/includes? (str v) "\n")))
        (into (array-map))))
 
 (defn markdown-link
@@ -116,11 +115,11 @@
        ", "
        (markdown-link "Web library" (web-link item))))
 
-(defn properties [item]
+(defn ->properties [item]
   (let [type    (item-type item)
         fields  (schema/fields type)
-        authors (authors item)
-        tags    (tags item)
+        authors (->authors item)
+        tags    (->tags item)
         links   (zotero-links item)
         date    (date->journal item)
         data    (-> item :data
@@ -131,56 +130,51 @@
                                 :authors authors
                                 :tags tags
                                 :date date
-                                :item-type (util/format "[[%s]]" type))
+                                :item-type (page-ref/->page-ref type))
                          (dissoc :creators :abstract-note)
                          (rename-keys {:title :original-title})
-                         (assoc :title (page-name item)))]
+                         (assoc :title (->page-name item)))]
     (->> data
-         (remove (comp (fn [v] (or (str/blank? v) (empty? v))) second))
+         (remove (comp (fn [v] (or (string/blank? v) (empty? v))) second))
          (into {}))))
 
 (defmethod extract "note"
   [item]
   (let [note-html (-> item :data :note)]
-    (html-parser/parse :markdown note-html)))
+    (html-parser/convert :markdown note-html)))
 
 (defn zotero-imported-file-macro [item-key filename]
   (util/format "{{zotero-imported-file %s, %s}}" item-key (pr-str filename)))
 
 (defn zotero-linked-file-macro [path]
-  (util/format "{{zotero-linked-file %s}}" (pr-str path)))
+  (util/format "{{zotero-linked-file %s}}" (pr-str (string/replace-first path "attachments:" ""))))
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title url link-mode path content-type filename]} (-> item :data)]
+  (let [{:keys [title url link-mode path filename]} (-> item :data)]
     (case link-mode
       "imported_file"
       (str
        (markdown-link title (local-link item))
        " "
-       (zotero-imported-file-macro (item-key item) filename))
+       (zotero-imported-file-macro (->item-key item) filename))
       "linked_file"
-      (if (str/starts-with? path "attachments:")
-        (str
-         (markdown-link title (local-link item))
-         " "
-         (zotero-linked-file-macro path))
-        (let [path (str/replace path " " "%20")]
-          (if (= content-type "application/pdf")
-            (markdown-link title (str "file://" path) true)
-            (markdown-link title (str "file://" path)))))
+      (str
+       (markdown-link title (local-link item))
+       " "
+       (zotero-linked-file-macro path))
       "imported_url"
       (str
        (markdown-link title url)
        " "
-       (zotero-imported-file-macro (item-key item) filename))
+       (zotero-imported-file-macro (->item-key item) filename))
       "linked_url"
       (markdown-link title url))))
 
 (defmethod extract :default
   [item]
-  (let [page-name  (page-name item)
-        properties (properties item)
+  (let [page-name  (->page-name item)
+        properties (->properties item)
         abstract-note (-> item :data :abstract-note)]
     {:page-name  page-name
      :properties properties

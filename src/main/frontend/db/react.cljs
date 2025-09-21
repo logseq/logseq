@@ -4,340 +4,223 @@
   It'll be great if we can find an automatically resolving and performant
   solution.
   "
-  (:require [clojure.string :as string]
+  (:require [clojure.core.async :as async]
             [datascript.core :as d]
-            [frontend.config :as config]
-            [frontend.date :as date]
+            [frontend.db.async.util :as db-async-util]
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [profile react]]
-            [frontend.util.marker :as marker]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
 
-(defonce query-state (atom {}))
+(defonce *query-state (atom {}))
 
-(def ^:dynamic *query-component*)
+;; [[repo q]]
+(defonce *collapsed-queries (atom {}))
 
-;; key -> components
-(defonce query-components (atom {}))
+(defn set-q-collapsed!
+  [k collapsed?]
+  (swap! *collapsed-queries assoc k collapsed?))
+
+(defn- query-collapsed?
+  [k]
+  (@*collapsed-queries k))
+
+;; Current dynamic component
+(def ^:dynamic *query-component* nil)
+
+;; Which reactive queries are triggered by the current component
+(def ^:dynamic *reactive-queries* nil)
+
+;; component -> query-key
+(defonce component->query-key (volatile! {}))
+;; query-key -> component-set
+(defonce query-key->components (volatile! {}))
 
 (defn set-new-result!
   [k new-result]
-  (when-let [result-atom (get-in @query-state [k :result])]
+  (when-let [result-atom (get-in @*query-state [k :result])]
     (reset! result-atom new-result)))
-
-;; KV
-
-(defn kv
-  [key value]
-  {:db/id -1
-   :db/ident key
-   key value})
-
-(defn remove-key!
-  [repo-url key]
-  (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
   []
-  (reset! query-state {}))
+  (reset! *query-state {})
+  (reset! *collapsed-queries {}))
 
-(defn clear-query-state-without-refs-and-embeds!
-  []
-  (let [state @query-state
-        state (->> (filter (fn [[[_repo k] v]]
-                             (contains? #{:blocks :block/block :custom} k)) state)
-                   (into {}))]
-    (reset! query-state state)))
-
-(defn get-current-repo-refs-keys
-  []
-  (when-let [current-repo (state/get-current-repo)]
-    (->>
-     (map (fn [[repo k id]]
-            (when (and (= repo current-repo)
-                       (contains? #{:block/refed-blocks :block/unlinked-refs} k))
-              [k id]))
-       (keys @query-state))
-     (remove nil?))))
-
-;; TODO: Add components which subscribed to a specific query
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
-  (swap! query-state assoc k {:query query
-                              :inputs inputs
-                              :result result-atom
-                              :transform-fn transform-fn
-                              :query-fn query-fn
-                              :inputs-fn inputs-fn})
+  (swap! *query-state assoc k {:query query
+                               :inputs inputs
+                               :result result-atom
+                               :transform-fn transform-fn
+                               :query-fn query-fn
+                               :inputs-fn inputs-fn})
   result-atom)
 
 (defn remove-q!
   [k]
-  (swap! query-state dissoc k))
+  (swap! *query-state dissoc k))
 
 (defn add-query-component!
-  [key component]
-  (swap! query-components update key
-         (fn [components]
-           (distinct (conj components component)))))
+  [k component]
+  (when (and k component)
+    (vswap! component->query-key update component (fnil conj #{}) k)
+    (vswap! query-key->components update k (fnil conj #{}) component)))
 
 (defn remove-query-component!
   [component]
-  (reset!
-   query-components
-   (->> (for [[k components] @query-components
-              :let [new-components (remove #(= component %) components)]]
-          (if (empty? new-components) ; no subscribed components
-            (do (remove-q! k)
-                nil)
-            [k new-components]))
-        (keep identity)
-        (into {}))))
-
-(defn get-page-blocks-cache-atom
-  [repo page-id]
-  (:result (get @query-state [repo :page/blocks page-id])))
-
-(defn get-block-blocks-cache-atom
-  [repo block-id]
-  (:result (get @query-state [repo :block/block block-id])))
-
-;; TODO: rename :custom to :query/custom
-(defn remove-custom-query!
-  [repo query]
-  (remove-q! [repo :custom query]))
+  (when-let [queries (get @component->query-key component)]
+    (doseq [query queries]
+      (vswap! query-key->components
+              (fn [m]
+                (if-let [components* (not-empty (disj (get m query) component))]
+                  (assoc m query components*)
+                  (dissoc m query))))
+      (when (empty? (get @query-key->components query))
+        (remove-q! query))))
+  (vswap! component->query-key dissoc component))
 
 ;; Reactive query
 
+(defn get-query-cached-result
+  [k]
+  (when-let [result (get @*query-state k)]
+    (when (satisfies? IWithMeta @(:result result))
+      (set! (.-state (:result result))
+            @(:result result)))
+    (:result result)))
 
-(defn query-entity-in-component
-  ([id-or-lookup-ref]
-   (db-utils/entity (state/get-current-repo) id-or-lookup-ref))
-  ([repo id-or-lookup-ref]
-   (let [k [:entity id-or-lookup-ref]
-         result-atom (:result (get @query-state k))]
-     (when-let [component *query-component*]
-       (add-query-component! k component))
-     (when-let [db (conn/get-conn repo)]
-       (let [result (d/entity db id-or-lookup-ref)
-             result-atom (or result-atom (atom nil))]
-         (set! (.-state result-atom) result)
-         (add-q! k nil nil result-atom identity identity identity))))))
+(defn- <q-aux
+  [repo db query-fn inputs-fn k query inputs built-in-query?]
+  (let [kv? (and (vector? k) (= :kv (second k)))
+        q (if util/node-test?
+            (fn [query inputs] (apply d/q query db inputs))
+            (fn [query inputs]
+              (let [q-f #(apply db-async-util/<q repo {:transact-db? false} (cons query inputs))]
+                (if built-in-query?
+                  ;; delay built-in-queries to not block journal rendering
+                  (p/let [_ (p/delay 100)]
+                    (q-f))
+                  (q-f)))))]
+    (when (or query-fn query kv?)
+      (cond
+        query-fn
+        (query-fn db nil)
+
+        kv?
+        (db-utils/entity db (last k))
+
+        inputs-fn
+        (let [inputs (inputs-fn)]
+          (q query inputs))
+
+        (seq inputs)
+        (q query inputs)
+
+        :else
+        (q query nil)))))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn
+                  disable-reactive? return-promise? built-in-query?]
            :or {use-cache? true
                 transform-fn identity}} query & inputs]
-  (let [kv? (and (vector? k) (= :kv (first k)))
+  ;; {:pre [(s/valid? :frontend.worker.react/block k)]}
+  (let [origin-key k
         k (vec (cons repo k))]
-    (when-let [conn (conn/get-conn repo)]
-      (let [result-atom (:result (get @query-state k))]
+    (when-let [db (conn/get-db repo)]
+      (let [result-atom (get-query-cached-result k)]
         (when-let [component *query-component*]
           (add-query-component! k component))
+        (when-let [queries *reactive-queries*]
+          (swap! queries conj origin-key))
         (if (and use-cache? result-atom)
           result-atom
-          (let [result (cond
-                         query-fn
-                         (query-fn conn)
+          (let [result-atom (or result-atom (atom nil))
+                p-or-value (<q-aux repo db query-fn inputs-fn k query inputs built-in-query?)]
+            (when-not disable-reactive?
+              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn))
+            (cond
+              return-promise?
+              p-or-value
 
-                         inputs-fn
-                         (let [inputs (inputs-fn)]
-                           (apply d/q query conn inputs))
+              (p/promise? p-or-value)
+              (do
+                (p/let [result p-or-value
+                        result' (transform-fn result)]
+                  (reset! result-atom result'))
+                result-atom)
 
-                         kv?
-                         (d/entity conn (last k))
+              :else
+              (let [result' (transform-fn p-or-value)]
+                ;; Don't notify watches now
+                (set! (.-state result-atom) result')
+                result-atom))))))))
 
-                         (seq inputs)
-                         (apply d/q query conn inputs)
+(defn- execute-query!
+  [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result built-in-query?]
+               :or {transform-fn identity}}]
+  (p/let [p-or-value (<q-aux graph db query-fn inputs-fn k query inputs built-in-query?)
+          result' (transform-fn p-or-value)]
+    (when-not (= result' result)
+      (set-new-result! k result'))))
 
-                         :else
-                         (d/q query conn))
-                result (transform-fn result)
-                result-atom (or result-atom (atom nil))]
-            ;; Don't notify watches now
-            (set! (.-state result-atom) result)
-            (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))
-
-
-
-;; TODO: Extract several parts to handlers
-
-
-(defn get-current-page
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])
-        page (case route-name
-               :page
-               (get-in match [:path-params :name])
-
-               :file
-               (get-in match [:path-params :path])
-
-               (date/journal-name))]
-    (when page
-      (let [page-name (string/lower-case page)]
-        (db-utils/entity [:block/name page-name])))))
-
-(defn get-current-priority
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (contains? #{"a" "b" "c"} (string/lower-case page-name))
-             (string/upper-case page-name))))))
-
-(defn get-current-marker
-  []
-  (let [match (:route-match @state/state)
-        route-name (get-in match [:data :name])]
-    (when (= route-name :page)
-      (when-let [page-name (get-in match [:path-params :name])]
-        (and (marker/marker? page-name)
-             (string/upper-case page-name))))))
-
-(defn get-related-keys
-  [{:keys [key data]}]
-  (cond
-    (coll? key)
-    [key]
-
-    :else
-    (case key
-      (:block/change :block/insert)
-      (when-let [blocks (seq data)]
-        (let [pre-block? (:block/pre-block? (first blocks))
-              current-priority (get-current-priority)
-              current-marker (get-current-marker)
-              current-page-id (:db/id (get-current-page))
-              {:block/keys [page]} (first blocks)
-              related-keys (->>
-                            (util/concat-without-nil
-                             (mapcat
-                              (fn [block]
-                                (when-let [page-id (:db/id (:block/page block))]
-                                  [[:blocks (:block/uuid block)]
-                                   [:page/blocks page-id]
-                                   [:page/ref-pages page-id]]))
-                              blocks)
-
-                             (when pre-block?
-                               [[:contents]
-                                [:page/published]])
-
-                             ;; affected priority
-                             (when current-priority
-                               [[:priority/blocks current-priority]])
-
-                             (when current-marker
-                               [[:marker/blocks current-marker]])
-
-                             (when current-page-id
-                               [[:page/ref-pages current-page-id]
-                                ;; [:block/refed-blocks current-page-id]
-                                [:page/mentioned-pages current-page-id]])
-
-                             (apply concat
-                               (for [{:block/keys [refs]} blocks]
-                                 (mapcat (fn [ref]
-                                           (when-let [block (if (and (map? ref) (:block/name ref))
-                                                              (db-utils/entity [:block/name (:block/name ref)])
-                                                              (db-utils/entity ref))]
-                                             [[:page/blocks (:db/id (:block/page block))]
-                                              ;; [:block/refed-blocks (:db/id block)]
-                                              ]))
-                                         refs))))
-                            (distinct))
-              refed-pages (map
-                           (fn [[k page-id]]
-                             (if (= k :block/refed-blocks)
-                               [:page/ref-pages page-id]))
-                            related-keys)
-              all-refed-blocks (get-current-repo-refs-keys)
-              custom-queries (some->>
-                              (filter (fn [v]
-                                        (and (= (first v) (state/get-current-repo))
-                                             (= (second v) :custom)))
-                                      (keys @query-state))
-                              (map (fn [v]
-                                     (vec (drop 1 v)))))
-              block-blocks (some->>
-                            (filter (fn [v]
-                                      (and (= (first v) (state/get-current-repo))
-                                           (= (second v) :block/block)))
-                                    (keys @query-state))
-                            (map (fn [v]
-                                   (vec (drop 1 v)))))]
-          (->>
-           (util/concat-without-nil
-            related-keys
-            refed-pages
-            all-refed-blocks
-            custom-queries
-            block-blocks)
-           distinct)))
-      [[key]])))
+(defn refresh-affected-queries!
+  [repo-url affected-keys & {:keys [skip-kv-custom-keys?]
+                             :or {skip-kv-custom-keys? false}}]
+  (util/profile
+    "refresh!"
+    (let [db (conn/get-db repo-url)
+          affected-keys-set (set affected-keys)
+          state (->> (keep (fn [[k cache]]
+                             (let [k' (vec (rest k))]
+                               (when (and (= (first k) repo-url)
+                                          (or (contains? affected-keys-set k')
+                                              (contains? #{:custom :kv} (first k'))))
+                                 [k' cache]))) @*query-state)
+                     (into {}))
+          all-keys (concat (distinct affected-keys)
+                           (when-not skip-kv-custom-keys?
+                             (filter #(contains? #{:custom :kv} (first %)) (keys state))))]
+      (doseq [k all-keys]
+        (when-let [cache (get state k)]
+          (let [{:keys [query query-fn]} cache
+                custom? (= :custom (first k))]
+            (when (or query query-fn)
+              (try
+                (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
+                  (if custom?
+                   ;; perf: don't execute custom queries if they were collapsed
+                    (when-not (query-collapsed? k)
+                      (async/put! (state/get-reactive-custom-queries-chan) [f query]))
+                    (f)))
+                (catch :default e
+                  (js/console.error e)
+                  nil)))))))))
 
 (defn refresh!
-  [repo-url {:keys [key data] :as handler-opts}]
-  (let [related-keys (get-related-keys handler-opts)
-        db (conn/get-conn repo-url)]
-    (doseq [related-key related-keys]
-      (let [related-key (vec (cons repo-url related-key))]
-        (when-let [cache (get @query-state related-key)]
-          (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-            (when (or query query-fn)
-              (let [new-result (->
-                                (cond
-                                  query-fn
-                                  (profile
-                                   "Query:"
-                                   (doall (query-fn db)))
+  "Re-compute corresponding queries (from tx) and refresh the related react components."
+  [repo-url affected-keys]
+  (when (and repo-url (seq affected-keys))
+    (refresh-affected-queries! repo-url affected-keys)))
 
-                                  inputs-fn
-                                  (let [inputs (inputs-fn)]
-                                    (apply d/q query db inputs))
-
-                                  (keyword? query)
-                                  (db-utils/get-key-value repo-url query)
-
-                                  (seq inputs)
-                                  (apply d/q query db inputs)
-
-                                  :else
-                                  (d/q query db))
-                                transform-fn)]
-                (set-new-result! related-key new-result)))))))))
-
-(defn transact-react!
-  [repo-url tx-data {:keys [key data] :as handler-opts}]
-  (when-not config/publishing?
-    (let [repo-url (or repo-url (state/get-current-repo))
-          tx-data (->> (util/remove-nils tx-data)
-                       (remove nil?))
-          get-conn (fn [] (conn/get-conn repo-url false))]
-      (when (and (seq tx-data) (get-conn))
-        (d/transact! (get-conn) (vec tx-data))
-        (refresh! repo-url handler-opts)))))
-
-(defn set-key-value
-  [repo-url key value]
-  (if value
-    (transact-react! repo-url [(kv key value)]
-                     {:key [:kv key]})
-    (remove-key! repo-url key)))
-
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (conn/get-conn repo-url)
-     (-> (q repo-url [:kv key] {} key key)
-         react
-         key))))
+(defn run-custom-queries-when-idle!
+  []
+  (let [chan (state/get-reactive-custom-queries-chan)]
+    (async/go-loop []
+      (let [[f query] (async/<! chan)]
+        (try
+          (if (state/input-idle? (state/get-current-repo))
+            (f)
+            (do
+              (async/<! (async/timeout 2000))
+              (async/put! chan [f query])))
+          (catch :default error
+            (let [type :custom-query/failed]
+              (js/console.error (str type "\n" query))
+              (js/console.error error)))))
+      (recur))
+    chan))

@@ -1,0 +1,10 @@
+{:paths ["src"]
+ :deps
+ {logseq/common
+  {:local/root "../common"}
+  logseq/db
+  {:local/root "../db"}
+  io.github.nextjournal/nbb-test-runner
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
+  io.github.pez/baldr {:mvn/version "1.0.9"}}}

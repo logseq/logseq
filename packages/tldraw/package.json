@@ -1,0 +1,44 @@
+{
+  "name": "@tldraw/monorepo",
+  "private": true,
+  "version": "2.0.0-alpha.1",
+  "description": "A tiny little drawing app.",
+  "author": "@steveruizok",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tldraw/tldraw.git"
+  },
+  "license": "MIT",
+  "workspaces": [
+    "packages/core",
+    "packages/react",
+    "packages/utils/*",
+    "apps/*",
+    "demo"
+  ],
+  "scripts": {
+    "build": "yarn --cwd apps/tldraw-logseq build",
+    "postinstall": "yarn build",
+    "dev": "cd demo && yarn dev",
+    "fix:style": "yarn run pretty-quick",
+    "pretty-quick": "pretty-quick --pattern 'tldraw/**/*.{js,jsx,ts,tsx,css,html}'"
+  },
+  "devDependencies": {
+    "@types/node": "^18.13.0",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.36.1",
+    "@typescript-eslint/parser": "^5.36.1",
+    "eslint": "^8.24.0",
+    "lint-staged": "^13.0.1",
+    "prettier": "^2.6.2",
+    "prettier-plugin-jsdoc": "^0.3.38",
+    "pretty-quick": "^3.1.3",
+    "resize-observer-polyfill": "^1.5.1",
+    "tslib": "^2.4.0",
+    "typescript": "^4.8.2"
+  },
+  "dependencies": {
+    "@types/uuid": "^8.3.4"
+  }
+}

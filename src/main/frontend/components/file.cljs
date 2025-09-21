@@ -1,121 +1,173 @@
 (ns frontend.components.file
-  (:require [rum.core :as rum]
-            [frontend.util :as util]
-            [frontend.handler.export :as export-handler]
-            [frontend.config :as config]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.format :as format]
-            [frontend.components.content :as content]
-            [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.config :as config]
-            [goog.object :as gobj]
-            [frontend.date :as date]
-            [cljs-time.coerce :as tc]
+  (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
+            [clojure.string :as string]
+            [frontend.components.lazy-editor :as lazy-editor]
+            [frontend.components.svg :as svg]
+            [frontend.config :as config]
+            [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.db.async :as db-async]
+            [frontend.db.file-based.model :as file-model]
+            [frontend.fs :as fs]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.context.i18n :as i18n]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [goog.string :as gstring]
+            [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
+            [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [frontend.components.svg :as svg]))
+            [rum.core :as rum]))
 
 (defn- get-path
   [state]
   (let [route-match (first (:rum/args state))]
     (get-in route-match [:parameters :path :path])))
 
-(rum/defc files < rum/reactive
+(rum/defcs files-all < rum/reactive
+  {:init (fn [state]
+           (let [*files (atom nil)]
+             (p/let [result (db-async/<get-files (state/get-current-repo))]
+               (reset! *files result))
+             (assoc state ::files *files)))}
+  [state]
+  (let [files (rum/react (::files state))
+        files (sort-by first gstring/intAwareCompare files)
+        mobile? (util/mobile?)]
+    [:table.table-auto
+     [:thead
+      [:tr
+       [:th (t :file/name)]
+       (when-not mobile?
+         [:th (t :file/last-modified-at)])
+       (when-not mobile?
+         [:th ""])]]
+     [:tbody
+      (for [[file modified-at] files]
+        (let [file-id file]
+          [:tr {:key file-id}
+           [:td
+            (let [href (if (common-config/draw? file)
+                         (rfe/href :draw nil {:file (string/replace file (str common-config/default-draw-directory "/") "")})
+                         (rfe/href :file {:path file-id}))]
+              [:a {:href href}
+               file])]
+           (when-not mobile?
+             [:td [:span.text-gray-500.text-sm
+                   (if (or (nil? modified-at) (zero? modified-at))
+                     (t :file/no-data)
+                     (date/get-date-time-string
+                      (t/to-default-time-zone (tc/to-date-time modified-at))))]])]))]]))
+
+(rum/defc files
   []
-  (rum/with-context [[tongue] i18n/*tongue-context*]
-    [:div.flex-1.overflow-hidden
-     [:h1.title
-      (tongue :all-files)]
-     (when-let [current-repo (state/sub :git/current-repo)]
-       (let [files (db/get-files current-repo)]
-         [:table.table-auto
-          [:thead
-           [:tr
-            [:th (tongue :file/name)]
-            [:th (tongue :file/last-modified-at)]
-            [:th ""]]]
-          [:tbody
-           (for [[file modified-at] files]
-             (let [file-id file]
-               [:tr {:key file-id}
-                [:td
-                 (let [href (if (config/draw? file)
-                              (rfe/href :draw nil {:file (string/replace file (str config/default-draw-directory "/") "")})
-                              (rfe/href :file {:path file-id}))]
-                   [:a {:href href}
-                    file])]
-                [:td [:span.text-gray-500.text-sm
-                      (if (zero? modified-at)
-                        (tongue :file/no-data)
-                        (date/get-date-time-string
-                         (t/to-default-time-zone (tc/to-date-time modified-at))))]]
+  [:div.flex-1.overflow-hidden
+   [:h1.title
+    (t :all-files)]
+   (files-all)])
 
-                [:td [:a.text-sm
-                      {:on-click (fn [e]
-                                   (export-handler/download-file! file))}
-                      [:span (tongue :download)]]]]))]]))]))
+;; FIXME: misuse of rpath and fpath
+(rum/defcs file-inner < rum/reactive
+  {:will-mount (fn [state]
+                 (let [*content (atom nil)
+                       [path format] (:rum/args state)
+                       repo (state/get-current-repo)
+                       repo-dir (config/get-repo-dir repo)
+                       [dir path] (cond
+                                    (path/absolute? path)
+                                    [nil path]
 
-(rum/defcs file < rum/reactive
-  {:did-mount (fn [state]
+                                    ;; assume local file, relative path
+                                    :else
+                                    [repo-dir path])]
+                   (when (and format (contains? (common-config/text-formats) format))
+                     (p/let [content (if (and (config/db-based-graph? repo)
+                                              ;; not global
+                                              (not (string/starts-with? path "/")))
+                                       (db/get-file path)
+                                       (fs/read-file dir path))]
+                       (reset! *content (or content ""))))
+                   (assoc state ::file-content *content)))
+   :did-mount (fn [state]
                 (state/set-file-component! (:rum/react-component state))
                 state)
    :will-unmount (fn [state]
                    (state/clear-file-component!)
                    state)}
+  [state path format]
+  (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+        rel-path (when (string/starts-with? path repo-dir)
+                   (path/trim-dir-prefix repo-dir path))
+        title (file-model/get-file-page (or path rel-path))
+        in-db? (when-not (path/absolute? path)
+                 (boolean (db/get-file (or path rel-path))))
+        file-path (cond
+                    (config/db-based-graph? (state/get-current-repo))
+                    path
+
+                    in-db?
+                    (path/path-join repo-dir path)
+
+                    :else
+                    path)
+        random-id (str (common-uuid/gen-uuid))
+        content (rum/react (::file-content state))]
+    [:div.file {:id (str "file-edit-wrapper-" random-id)
+                :key path}
+     [:h1.title
+      [:bdi (or title rel-path path)]]
+     (when title
+       [:div.text-sm.mb-4.ml-1 "Page: "
+        [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
+                                :href (rfe/href :page {:name title})
+                                :on-click (fn [e]
+                                            (when (gobj/get e "shiftKey")
+                                              (when-let [page (db/get-page title)]
+                                                (state/sidebar-add-block!
+                                                 (state/get-current-repo)
+                                                 (:db/id page)
+                                                 :page))
+                                              (util/stop e)))}
+         title]])
+
+     (when (and title (not (string/starts-with? title "logseq/")))
+       [:p.text-sm.ml-1.mb-4
+        (svg/warning {:style {:width "1em"
+                              :display "inline-block"}})
+        [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
+
+     (cond
+       ;; image type
+       (and format (contains? (common-config/img-formats) format))
+       [:img {:src (path/path-join "file://" path)}]
+
+       (and format
+            (contains? (common-config/text-formats) format)
+            content)
+       (let [content' (string/trim content)
+             mode (util/get-file-ext path)]
+         (lazy-editor/editor {:file?     true
+                              :file-path file-path}
+                             (str "file-edit-" random-id)
+                             {:data-lang mode}
+                             content'
+                             {}))
+
+       ;; wait for content load
+       (and format
+            (contains? (common-config/text-formats) format))
+       (ui/loading)
+
+       :else
+       [:div (t :file/format-not-supported (name format))])]))
+
+(rum/defcs file
   [state]
   (let [path (get-path state)
-        format (format/get-format path)
-        page (db/get-file-page path)
-        config? (= path (config/get-config-path))]
-    (rum/with-context [[tongue] i18n/*tongue-context*]
-      [:div.file {:id (str "file-" path)}
-       [:h1.title
-        path]
-       (when page
-         [:div.text-sm.mb-4.ml-1 "Page: "
-          [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                  :href (rfe/href :page {:name page})
-                                  :on-click (fn [e]
-                                              (when (gobj/get e "shiftKey")
-                                                (when-let [page (db/entity [:block/name (string/lower-case page)])]
-                                                  (state/sidebar-add-block!
-                                                   (state/get-current-repo)
-                                                   (:db/id page)
-                                                   :page
-                                                   {:page page}))
-                                                (util/stop e)))}
-           page]])
-
-       (when (and page (not (string/starts-with? page "logseq/")))
-         [:p.text-sm.ml-1.mb-4
-          (svg/warning {:style {:width "1em"
-                                :display "inline-block"}})
-          [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
-
-       (cond
-         ;; image type
-         (and format (contains? (config/img-formats) format))
-         [:img {:src path}]
-
-         (and format (contains? config/markup-formats format))
-         (when-let [file-content (db/get-file path)]
-           (let [content (string/trim file-content)]
-             (content/content path {:config {:file? true
-                                             :file-path path}
-                                    :content content
-                                    :format format})))
-
-         (and format (contains? (config/text-formats) format))
-         (when-let [file-content (db/get-file path)]
-           (let [content (string/trim file-content)
-                 mode (util/get-file-ext path)
-                 mode (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} mode) "text/x-clojure" mode)]
-             (lazy-editor/editor {:file? true
-                                  :file-path path} path {:data-lang mode} content {})))
-
-         :else
-         [:div (tongue :file/format-not-supported (name format))])])))
+        format (common-util/get-format path)]
+    (rum/with-key (file-inner path format) path)))

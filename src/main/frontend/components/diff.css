@@ -1,23 +1,21 @@
-#diffs-body {
+.cp__diff-file {
+  @apply mb-3;
+
   textarea {
-    color: var(--ls-primary-text-color, #a4b5b6);
+    @apply min-h-[20vh];
+
+    @screen sm {
+      @apply min-h-[40vh];
+    }
   }
 }
 
-.cp__diff-file {
-  @apply mb-3;
- }
-
 .cp__diff-file-header {
-  background-color: var(--ls-secondary-background-color);
-  padding: 5px 10px;
-  display: flex;
-  align-items: center;
+  @apply px-1 py-2 bg-yellow-rx-04 rounded mt-4 font-medium;
 }
 
 .cp__diff-file-header-content {
-  @apply truncate
-
+  @apply truncate break-all flex items-center space-x-1 opacity-70;
 }
 
 .cp__diff-file-header-type {

@@ -1,0 +1,27 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+  :shadowed-var {:level :warning
+                 :exclude [meta time min meta name type]}
+
+  :consistent-alias
+  {:aliases {"fs" fs
+             "node-path" path
+             clojure.pprint pprint
+             clojure.string string
+             datascript.core d
+             logseq.cli.commands.graph cli-graph
+             logseq.cli.common.graph cli-common-graph
+             logseq.cli.common.export.text cli-export-text
+             logseq.cli.common.export.common cli-export-common
+             logseq.cli.common.file common-file
+             logseq.cli.util cli-util
+             logseq.cli.text-util cli-text-util
+             logseq.common.config common-config
+             logseq.common.graph common-graph
+             logseq.common.util.date-time date-time-util
+             logseq.db.common.sqlite common-sqlite}}}
+ :lint-as {promesa.core/let clojure.core/let}
+ :skip-comments true
+ :output {:progress true}}

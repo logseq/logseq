@@ -1,9 +1,7 @@
 (ns frontend.image
-  (:require [goog.object :as gobj]
-            ["/frontend/exif" :as exif]
-            [frontend.util :as util]
-            [frontend.date :as date]
-            [clojure.string :as string]))
+  "Image related utility fns"
+  (:require ["/frontend/exif" :as exif]
+            [goog.object :as gobj]))
 
 (defn reverse?
   [exif-orientation]
@@ -14,21 +12,21 @@
   (let [[width height]
         (if (reverse? exif-orientation)
           [height width]
-          [width height])]
-    (let [ratio (/ width height)
-          to-width (if (> width max-width) max-width width)
-          to-height (if (> height max-height) max-height height)
-          new-ratio (/ to-width to-height)]
-      (let [[w h] (cond
-                    (> new-ratio ratio)
-                    [(* ratio to-height) to-height]
+          [width height])
+        ratio (/ width height)
+        to-width (if (> width max-width) max-width width)
+        to-height (if (> height max-height) max-height height)
+        new-ratio (/ to-width to-height)
+        [w h] (cond
+                (> new-ratio ratio)
+                [(* ratio to-height) to-height]
 
-                    (< new-ratio ratio)
-                    [to-width (/ to-width ratio)]
+                (< new-ratio ratio)
+                [to-width (/ to-width ratio)]
 
-                    :else
-                    [to-width to-height])]
-        [(int w) (int h)]))))
+                :else
+                [to-width to-height])]
+    [(int w) (int h)]))
 
 (defn fix-orientation
   "Given image and exif orientation, ensure the photo is displayed
@@ -70,36 +68,3 @@
   (.createObjectURL (or (.-URL js/window)
                         (.-webkitURL js/window))
                     file))
-
-;; (defn build-image
-;;   []
-;;   (let [img (js/Image.)]
-;;     ))
-
-(defn upload
-  [files file-handler & {:keys [max-width max-height files-limit]
-                         :or {max-width 1920
-                              max-height 1080
-                              files-limit 1}}]
-  (doseq [file (take files-limit (array-seq files))]
-    (let [file-type (gobj/get file "type")
-          ymd (->> (vals (date/year-month-day-padded))
-                   (string/join "_"))
-          file-name (str ymd "_" (gobj/get file "name"))]
-      (when (= 0 (.indexOf file-type "image/"))
-        (file-handler file file-name file-type)
-        ;; (let [img (js/Image.)]
-        ;;   (set! (.-onload img)
-        ;;         (fn []
-        ;;           (get-orientation img
-        ;;                            (fn [^js off-canvas]
-        ;;                              (let [file-form-data ^js (js/FormData.)
-        ;;                                    data-url (.toDataURL off-canvas)
-        ;;                                    blob (blob/blob data-url)]
-        ;;                                (.append file-form-data "file" blob)
-        ;;                                (file-cb file file-form-data file-name file-type)))
-        ;;                            max-width
-        ;;                            max-height)))
-        ;;   (set! (.-src img)
-        ;;         (create-object-url file)))
-        ))))

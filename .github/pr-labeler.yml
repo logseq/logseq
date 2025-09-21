@@ -1,0 +1,4 @@
+:type/feature: ['feature/*', 'feat/*', '*:feat/*']
+:type/enhancement: ['enhancement/*', 'enh/*', 'enhance/*', 'improve/*', '*:enhance/*']
+:type/bug-fix: ['fix/*', 'fix*', 'bug/*', 'bug-fix/*', 'bugfix/*', 'bug-fixes/*', 'bugfixes/*', '*:fix/*']
+:type/dev: ['chore/*', 'test/*', 'docs/*', 'build/*', 'ci/*', 'misc/*', 'dev/*', '*:dev/*', '*:chore/*', '*:test/*']

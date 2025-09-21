@@ -1,0 +1,21 @@
+#search-in-page {
+  z-index: 999;
+  background-color: var(--ls-primary-background-color);
+
+  .form-input:focus {
+      box-shadow: none;
+  }
+
+  .ui__button[intent='link'],
+  .ui__button[intent='link']:focus {
+      border-color: none;
+  }
+
+  .ui__button {
+      margin-top: 0;
+
+      &.active {
+        color: var(--ls-link-text-color);
+      }
+  }
+}

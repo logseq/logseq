@@ -3,106 +3,143 @@
             [goog.object :as gobj]
             [electron.state :as state]
             [electron.utils :as utils]
+            [electron.logger :as logger]
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
-            ["path" :as path]
+            ["path" :as node-path]
             ["os" :as os]))
 
-(defn get-graph-path
-  []
-  (:graph/current @state/state))
+(def log-error (partial logger/error "[Git]"))
 
 (defn get-graph-git-dir
-  []
-  (when-let [graph-path (some-> (get-graph-path)
+  [graph-path & {:keys [ensure-dir?]
+                 :or {ensure-dir? true}}]
+  (when-let [graph-path (some-> graph-path
                                 (string/replace "/" "_")
                                 (string/replace ":" "comma"))]
-    (let [dir (.join path (.homedir os) ".logseq" "git" graph-path ".git")]
-      (. fs ensureDirSync dir)
+    (let [parent-dir (.join node-path (.homedir os) ".logseq" "git" graph-path)
+          dir (.join node-path parent-dir ".git")]
+      (when ensure-dir? (. fs ensureDirSync dir))
       dir)))
 
-(defn dot-git-exists?
-  []
-  (let [p (.join path (get-graph-path) ".git")]
-    (fs/existsSync p)))
-
 (defn run-git!
-  [commands]
-  (when-let [path (get-graph-path)]
-    (when (fs/existsSync path)
-      (p/let [result (.exec GitProcess commands path)]
-        (if (zero? (gobj/get result "exitCode"))
-          (let [result (gobj/get result "stdout")]
-            (p/resolved result))
-          (let [error (gobj/get result "stderr")]
-            (when-not (string/blank? error)
-              (js/console.error error))
-            (p/rejected error)))))))
+  [graph-path commands]
+  (when (and graph-path (fs/existsSync graph-path))
+    (p/let [result (.exec GitProcess commands graph-path)]
+      (if (zero? (gobj/get result "exitCode"))
+        (let [result (gobj/get result "stdout")]
+          (p/resolved result))
+        (let [error (gobj/get result "stderr")]
+          (when-not (string/blank? error)
+            (log-error error))
+          (p/rejected error))))))
+
+(defn run-git2!
+  [graph-path commands]
+  (when (and graph-path (fs/existsSync graph-path))
+    (p/let [^js result (.exec GitProcess commands graph-path)]
+      result)))
 
 (defn git-dir-exists?
-  []
+  [graph-path]
   (try
-    (let [p (.join path (get-graph-path) ".git")]
-      (.isDirectory (fs/statSync p)))
-    (catch js/Error e
+    (let [p (.join node-path graph-path ".git")]
+      (when (fs/existsSync p)
+        (.isDirectory (fs/statSync p))))
+    (catch :default _e
       nil)))
 
+(defn remove-dot-git-file!
+  [graph-path]
+  (try
+    (let [_ (when (string/blank? graph-path)
+              (utils/send-to-renderer :setCurrentGraph {})
+              (throw (js/Error. "Empty graph path")))
+          p (.join node-path graph-path ".git")]
+      (when (and (fs/existsSync p)
+                 (.isFile (fs/statSync p)))
+        (let [content (string/trim (.toString (fs/readFileSync p)))
+              dir-path (string/replace content "gitdir: " "")]
+          (when (and content
+                     (string/starts-with? content "gitdir:")
+                     (string/includes? content ".logseq/")
+                     (not (fs/existsSync dir-path)))
+            (fs/unlinkSync p)))))
+    (catch :default e
+      (log-error e))))
+
 (defn init!
-  []
-  (let [separate-git-dir (get-graph-git-dir)
+  [graph-path]
+  (let [_ (remove-dot-git-file! graph-path)
+        separate-git-dir (get-graph-git-dir graph-path)
+        dir-exists? (git-dir-exists? graph-path)
         args (cond
-               (git-dir-exists?)
+               dir-exists?
                ["init"]
                separate-git-dir
                ["init" (str "--separate-git-dir=" separate-git-dir)]
                :else
                ["init"])]
-    (-> (p/let [_ (run-git! (clj->js args))]
-          (when utils/win32?
-            (run-git! ["config" "core.safecrlf" "false"])))
-        (p/catch (fn [error]
-                   (when (string/starts-with? error "fatal: not a git repository")
-                     (let [p (.join path (get-graph-path) ".git")]
-                       (when (.isFile (fs/statSync p))
-                         (let [content (fs/readFileSync p)]
-                           (when (and content (string/starts-with? content "gitdir:"))
-                             (fs/unlinkSync p)))))))))))
+    (p/let [_ (run-git! graph-path (clj->js args))]
+      (p/do!
+       (when utils/win32?
+         (run-git! graph-path #js ["config" "core.safecrlf" "false"]))
+       (run-git! graph-path #js ["config" "diff.sqlite3.binary" "true"])
+       (run-git! graph-path #js ["config" "diff.sqlite3.textconv" "echo .dump | sqlite3"])
+       (let [path (node-path/join graph-path ".gitattributes")]
+         (when-not (fs/existsSync path)
+           (fs/writeFileSync path "*.sqlite diff=sqlite3")))))))
 
 (defn add-all!
-  []
-  (-> (run-git! #js ["add" "./*"])
+  [graph-path]
+  (-> (run-git! graph-path #js ["add" "--ignore-errors" "./*"])
       (p/catch (fn [error]
-                 (if (string/includes? error "permission denied error: unable to index file")
-                   (js/console.error error)
-                   (p/rejected error))))))
+                 (let [error (string/lower-case (str error))]
+                   (if (or (string/includes? error "permission denied")
+                           (string/includes? error "index.lock': File exists"))
+                     (log-error error)
+                     (p/rejected error)))))))
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
 (defn commit!
-  [message]
-  (run-git! #js ["commit" "-m" message]))
+  [graph-path message]
+  (p/do!
+   (run-git! graph-path #js ["config" "core.quotepath" "false"])
+   (run-git! graph-path #js ["commit" "-m" message])))
+
+(defn add-all-and-commit-single-graph!
+  [graph-path message]
+  (let [message (if (string/blank? message)
+                  "Auto saved by Logseq"
+                  message)]
+    (->
+     (p/let [_ (init! graph-path)
+             _ (add-all! graph-path)]
+       (commit! graph-path message))
+     (p/catch (fn [error]
+                (when (and
+                       (string? error)
+                       (not (string/blank? error)))
+                  (if (string/starts-with? error "Author identity unknown")
+                    (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
+                    (utils/send-to-renderer "notification" {:type "error"
+                                                            :payload (str error "\nIf you don't want to see those errors or don't need git, you can disable the \"Git auto commit\" feature on Settings > Version control.")}))))))))
 
 (defn add-all-and-commit!
   ([]
    (add-all-and-commit! nil))
   ([message]
-   (let [message (if (string/blank? message)
-                   "Auto saved by Logseq"
-                   message)]
-     (->
-      (p/let [_ (init!)
-              _ (add-all!)]
-        (commit! message))
-      (p/catch (fn [error]
-                 (when (and (not (string/blank? error))
-                            ;; FIXME: not sure why this happened
-                            (not (string/starts-with? error "fatal: not a git repository")))
-                   (if (string/starts-with? error "Author identity unknown")
-                     (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
-                     (utils/send-to-renderer "notification" {:type "error"
-                                                             :payload error}))))))
-)))
+   (doseq [path (state/get-all-graph-paths)] (add-all-and-commit-single-graph! path message))))
+
+(defn short-status!
+  [graph-path]
+  (p/do!
+   (when-not (or (fs/existsSync (git-dir-exists? graph-path))
+                 (fs/existsSync (get-graph-git-dir graph-path {:ensure-dir? false})))
+     (init! graph-path))
+   (run-git! graph-path #js ["status" "--porcelain"])))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
@@ -130,12 +167,11 @@
          (remove string/blank?))))
 
 (defn raw!
-  [args]
+  [graph-path args]
+  (init! graph-path)
   (let [args (if (string? args)
                (split-args args)
                args)
-        ok-handler (fn [result]
-                     (p/resolved result))
         error-handler (fn [error]
                         ;; TODO: why this happen?
                         (when-not (string/blank? error)
@@ -144,18 +180,36 @@
                                                                     :payload error}))
                           (p/rejected error)))]
     (->
-     (p/let [_ (when (= (first args) "commit")
-                 (add-all!))
-             result (run-git! (clj->js args))]
+     (p/let [result (when (= (first args) "commit")
+                      (add-all! graph-path))
+             result (if (= (first args) "init")
+                      result
+                      (run-git! graph-path (clj->js args)))]
        (p/resolved result))
      (p/catch error-handler))))
 
-(defn auto-commit-current-graph!
+(defonce auto-commit-interval (atom nil))
+(defn- auto-commit-tick-fn
   []
-  (when (not (state/git-auto-commit-disabled?))
-    (state/clear-git-commit-interval!)
-    (js/setTimeout add-all-and-commit! 3000)
-    (let [seconds (state/get-git-commit-seconds)]
-      (when (int? seconds)
-        (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
-          (state/set-git-commit-interval! interval))))))
+  (when (state/git-auto-commit-enabled?)
+    (add-all-and-commit!)))
+
+(defn configure-auto-commit!
+  "Configure auto commit interval, reentrantable"
+  []
+  (when @auto-commit-interval
+    (swap! auto-commit-interval js/clearInterval))
+  (when (state/git-auto-commit-enabled?)
+    (let [seconds (state/get-git-commit-seconds)
+          millis (if (int? seconds)
+                   (* seconds 1000)
+                   6000)]
+      (logger/info ::set-auto-commit-interval seconds)
+      (js/setTimeout add-all-and-commit! 100)
+      (reset! auto-commit-interval (js/setInterval auto-commit-tick-fn millis)))))
+
+(defn before-graph-close-hook!
+  []
+  (when (and (state/git-auto-commit-enabled?)
+             (state/git-commit-on-close-enabled?))
+    (add-all-and-commit!)))

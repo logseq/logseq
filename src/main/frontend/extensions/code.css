@@ -1,57 +1,66 @@
 .extensions__code {
-  @apply relative;
-  z-index: 0;
+  @apply relative z-0 flex flex-row flex-nowrap justify-between;
 
   &-lang {
-    @apply absolute right-0 p-1 text-sm;
-    top: 3px;
-    z-index: 1;
+    @apply p-1 text-sm;
     background: var(--ls-secondary-background-color);
+    word-break: keep-all;
+    position: absolute;
+    width: fit-content;
+    /* height:2rem; */
+    order: 3;
+    left: auto;
+    right: 0;
+    /* margin-top: 4px; */
+    z-index: 9999;
+    padding: 4px 6px;
+    line-height: 1em;
+    opacity: .8;
+
+    &:hover {
+      cursor: pointer;
+      opacity: 1;
+      user-select: none;
+    }
   }
 
   &-calc {
-    @apply absolute right-0 text-sm;
-    padding: 0 0.25em;
-    top: 3px;
-    z-index: 1;
-    background: transparent;
+    @apply text-sm;
+    padding: 0.35em 0.25em 0.25em 0.25em;
     width: max-content;
     text-align: right;
 
     &-output-line {
       height: 23px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-around;
+      white-space: pre;
+      font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+    }
+  }
+}
 
-      > span {
-          font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-      }
+.CodeMirror {
+  height: auto;
+  max-height: 1024px;
+  width: 100%;
+  font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+  border-radius: 2px;
+  line-height: 1.45em;
+
+  &:not(.CodeMirror-focused) {
+    .CodeMirror-activeline-background {
+      background: unset !important;
     }
   }
 
-  > .CodeMirror {
-    z-index: 0;
-    height: auto;
-    margin-top: 4px;
-    margin-bottom: 6px;
-    font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
-    max-width: var(--ls-main-content-max-width);
-    border-radius: 2px;
-    line-height: 1.45em;
-
-    &:not(.CodeMirror-focused) {
-      .CodeMirror-activeline-background {
-        background: unset !important;
-      }
-    }
-
-    pre.CodeMirror-line {
-      box-shadow: none !important;
-    }
-
-    .CodeMirror-hscrollbar {
-        cursor: pointer;
-    }
+  pre.CodeMirror-line {
+    box-shadow: none !important;
   }
+
+  .CodeMirror-hscrollbar {
+    cursor: pointer;
+  }
+}
+
+.cm-s-solarized.CodeMirror {
+    box-shadow: none;
 }

@@ -1,80 +1,93 @@
 (ns frontend.db.conn
   "Contains db connections."
   (:require [clojure.string :as string]
-            [frontend.db-schema :as db-schema]
-            [frontend.db.default :as default-db]
-            [frontend.util :as util]
-            [frontend.state :as state]
+            [datascript.core :as d]
             [frontend.config :as config]
-            [frontend.idb :as idb]
-            [datascript.core :as d]))
+            [frontend.db.conn-state :as db-conn-state]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.text :as text-util]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.graph-parser.db :as gp-db]
+            [logseq.graph-parser.text :as text]))
 
-(defonce conns (atom {}))
+(defonce conns db-conn-state/conns)
+(def get-repo-path db-conn-state/get-repo-path)
 
-(defn get-repo-path
-  [url]
-  (if (util/starts-with? url "http")
-    (->> (take-last 2 (string/split url #"/"))
-         (string/join "/"))
-    url))
-
-(defn datascript-db
-  [repo]
-  (when repo
-    (str config/idb-db-prefix (get-repo-path repo))))
-
-(defn remove-db!
-  [repo]
-  (idb/remove-item! (datascript-db repo)))
-
-(defn get-conn
+(defn get-db
   ([]
-   (get-conn (state/get-current-repo) true))
+   (get-db (state/get-current-repo) true))
   ([repo-or-deref?]
    (if (boolean? repo-or-deref?)
-     (get-conn (state/get-current-repo) repo-or-deref?)
-     (get-conn repo-or-deref? true)))
+     (get-db (state/get-current-repo) repo-or-deref?)
+     (get-db repo-or-deref? true)))
   ([repo deref?]
-   (let [repo (if repo repo (state/get-current-repo))]
-     (when-let [conn (get @conns (datascript-db repo))]
+   (when-let [repo (or repo (state/get-current-repo))]
+     (when-let [conn (db-conn-state/get-conn repo)]
        (if deref?
          @conn
          conn)))))
 
-(defn reset-conn! [conn db]
-  (reset! conn db))
+(defn get-repo-name
+  [repo-url]
+  (cond
+    (mobile-util/native-platform?)
+    (text-util/get-graph-name-from-path repo-url)
+
+    (config/local-file-based-graph? repo-url)
+    (config/get-local-dir repo-url)
+
+    :else
+    (db-conn-state/get-repo-path repo-url)))
+
+(defn get-short-repo-name
+  "repo-name: from get-repo-name. Dir/Name => Name"
+  [repo-name]
+  (let [repo-name' (cond
+                     (util/electron?)
+                     (text/get-file-basename repo-name)
+
+                     (mobile-util/native-platform?)
+                     (common-util/safe-decode-uri-component (text/get-file-basename repo-name))
+
+                     :else
+                     repo-name)]
+    (if (config/db-based-graph? repo-name')
+      (string/replace-first repo-name' config/db-version-prefix "")
+      repo-name')))
 
 (defn remove-conn!
   [repo]
-  (swap! conns dissoc (datascript-db repo)))
+  (swap! conns dissoc (db-conn-state/get-repo-path repo)))
 
-(defn me-tx
-  [db {:keys [name email avatar]}]
-  (util/remove-nils {:me/name name
-                     :me/email email
-                     :me/avatar avatar}))
-
-(defn start!
-  ([me repo]
-   (start! me repo {}))
-  ([me repo {:keys [db-type listen-handler]}]
-   (let [db-name (datascript-db repo)
-         db-conn (d/create-conn db-schema/schema)]
-     (swap! conns assoc db-name db-conn)
-     (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
-                             db-type
-                             (assoc :db/type db-type))
-                           {:block/name "card"
-                            :block/original-name "card"
-                            :block/uuid (d/squuid)}])
-     (when me
-       (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
-
-     (d/transact! db-conn default-db/built-in-pages)
-
-     (when listen-handler
-       (listen-handler repo)))))
+(if util/node-test?
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! (get-db repo false) tx-data tx-meta)))
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! repo tx-data tx-meta))))
 
 (defn destroy-all!
   []
   (reset! conns {}))
+
+(defn start!
+  ([repo]
+   (start! repo {}))
+  ([repo {:keys [listen-handler]}]
+   (let [db-name (db-conn-state/get-repo-path repo)
+         db-conn (if (config/db-based-graph? repo)
+                   (d/create-conn db-schema/schema)
+                   (gp-db/start-conn))]
+     (destroy-all!)
+     (swap! conns assoc db-name db-conn)
+     (when listen-handler
+       (listen-handler db-conn)))))

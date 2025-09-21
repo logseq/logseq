@@ -1,0 +1,31 @@
+.cp__filters-input {
+  padding: 0.5rem;
+  outline: none;
+}
+
+.cp__filters-input-panel {
+  background-color: var(--ls-primary-background-color);
+  border-radius: 0.25rem;
+  padding-left: 0.5rem;
+  align-items: center;
+}
+
+.references-blocks .breadcrumb {
+  margin-left: 1.5rem;
+}
+
+.ls-filters {
+    @screen md {
+        min-width: 700px;
+        width: 700px;
+    }
+
+    @screen sm {
+        min-width: 600px;
+        width: 600px;
+    }
+}
+
+.custom-query-page-result {
+  @apply p-4 my-1 rounded bg-gray-03;
+}

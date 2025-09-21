@@ -1,0 +1,90 @@
+name: Bug Report
+description: Report a bug encountered while using Logseq
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you very much for opening a bug report with Logseq.
+
+        If you have a feature idea or need help, please go to [our Forum](https://discuss.logseq.com/) or [our Discord](https://discord.com/invite/KpN4eHY).
+
+        Please make sure to provide a descriptive, deterministic, and reproducible report. It saves time for both the developers and users who are looking for solutions. Providing as much information as possible, including screenshots and logs, is highly appreciated. This will help us to better understand the issue and respond more effectively.
+
+        Please DO NOT use this template to ask questions. There are other appropriate channels to ask questions. This template is strictly for reporting bugs.
+  - type: checkboxes
+    id: confirm-search
+    attributes:
+      label: Search first
+      description: Please search [existing issues](https://github.com/logseq/logseq/issues) and the [Logseq Forum](https://discuss.logseq.com/) before reporting.
+      options:
+        - label: I searched and no similar issues were found
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What Happened?
+      description: |
+        Please provide as much info as possible. Not doing so may result in your bug not being addressed in a timely manner.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduce the Bug
+      description: |
+        Please tell us the steps to reproduce the bug.
+      placeholder: |
+        1. Go to '...'
+        2. Click on '....'
+        3. Scroll down to '....'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: |
+        Please tell us what's the behavior you expect.
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: |
+        If applicable, add screenshots or screen recordings to help explain your problem.
+    validations:
+      required: false
+  - type: textarea
+    id: platform
+    attributes:
+      label: Desktop or Mobile Platform Information
+      description: |
+        Would you mind to tell us the system information about your desktop or mobile platform?
+      placeholder: |
+        OS version, Browser or App, Logseq App version
+        example: macOS 12.2, Desktop App v0.5.9
+        example: iPhone 12, iOS8.1, v0.5.9
+        example: Pixel XL, Android 12, v0.5.9
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        If applicable, add additional context to help explain your problem.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: ask-pr
+    attributes:
+      label: Are you willing to submit a PR? If you know how to fix the bug.
+      description: |
+        If you are not familiar with programming, you can skip this step.
+        If you are a developer and know how to fix the bug, you can [submit a PR to fix it](https://github.com/logseq/logseq/blob/master/CONTRIBUTING.md#submit-pr).
+        Your contributions are greatly appreciated and play a vital role in helping to improve the project!
+      options:
+        - label: I'm willing to submit a PR (Thank you!)

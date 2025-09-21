@@ -1,8 +1,10 @@
 (ns frontend.error
+  "Error related utility fns"
   (:require [clojure.string :as string]))
 
 (def ignored
   #{"ResizeObserver loop limit exceeded"
+    "ResizeObserver loop completed with undelivered notifications"
     "Uncaught TypeError:"})
 
 (defn ignored?

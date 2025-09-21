@@ -1,19 +1,41 @@
 # NOTE: please keep it in sync with .github pipelines
-FROM clojure:openjdk-11-tools-deps-1.10.1.727
+# NOTE: during testing make sure to change the branch below
+# NOTE: before running the build-docker GH action edit
+#       build-docker.yml and change the release channel from :latest to :testing
 
-RUN curl -sL https://deb.nodesource.com/setup_15.x | bash - && \
-    apt-get install -y nodejs
+# Builder image
+FROM clojure:temurin-11-tools-deps-1.11.1.1208-bullseye-slim as builder
 
-RUN curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
-    apt-get update && \
-    apt-get install -y yarn
+ARG DEBIAN_FRONTEND=noninteractive
 
-RUN useradd -ms /bin/bash logseq
+# Install reqs
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    apt-transport-https \
+    gpg \
+    build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
-USER logseq
-WORKDIR /home/logseq
+# install NodeJS & yarn
+RUN curl -sL https://deb.nodesource.com/setup_18.x | bash -
 
-EXPOSE 3001
-EXPOSE 9630
-EXPOSE 8701
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | \
+    tee /etc/apt/trusted.gpg.d/yarn.gpg && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | \
+    tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && apt-get install -y nodejs yarn
+
+WORKDIR /data
+
+# build Logseq static resources
+RUN git clone -b master https://github.com/logseq/logseq.git .
+
+RUN yarn config set network-timeout 240000 -g && yarn install
+
+RUN  yarn release 
+
+# Web App Runner image
+FROM nginx:1.24.0-alpine3.17
+
+COPY --from=builder /data/static /usr/share/nginx/html
+

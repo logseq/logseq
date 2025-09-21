@@ -1,124 +1,128 @@
 (ns frontend.fs.node
-  (:require [frontend.fs.protocol :as protocol]
-            [frontend.util :as util]
-            [frontend.db :as db]
+  "Implementation of fs protocol for Electron, based on nodejs"
+  (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [promesa.core :as p]
             [electron.ipc :as ipc]
-            [cljs-bean.core :as bean]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.fs.protocol :as protocol]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [frontend.config :as config]
-            [frontend.encrypt :as encrypt]
-            [frontend.handler.notification :as notification]
-            [frontend.state :as state]))
+            [promesa.core :as p]
+            [logseq.common.path :as path]))
 
-(defn concat-path
-  [dir path]
-  (cond
-    (nil? path)
-    dir
-
-    (string/starts-with? path dir)
-    path
-
-    :else
-    (str (string/replace dir #"/$" "")
-         (when path
-           (str "/" (string/replace path #"^/" ""))))))
-
-(defn- contents-matched?
+(defn- <contents-matched?
   [disk-content db-content]
   (when (and (string? disk-content) (string? db-content))
-    (if (encrypt/encrypted-db? (state/get-current-repo))
-      (p/let [decrypted-content (encrypt/decrypt disk-content)]
-        (= (string/trim decrypted-content) (string/trim db-content)))
-      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+    (p/resolved (= (string/trim disk-content) (string/trim db-content)))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
-  (if skip-compare?
-    (p/catch
-        (p/let [result (ipc/ipc "writeFile" path content)]
-          (when ok-handler
-            (ok-handler repo path result)))
-        (fn [error]
-          (if error-handler
-            (error-handler error)
-            (log/error :write-file-failed error))))
+  [repo dir rpath content {:keys [ok-handler error-handler old-content skip-compare? skip-transact?]} stat]
+  (let [file-fpath (path/path-join dir rpath)]
+    (if skip-compare?
+      (p/catch
+       (p/let [result (ipc/ipc "writeFile" repo file-fpath content)]
+         (when ok-handler
+           (ok-handler repo rpath result)))
+       (fn [error]
+         (if error-handler
+           (error-handler error)
+           (log/error :write-file-failed error))))
 
-    (p/let [disk-content (when (not= stat :not-found)
-                           (-> (protocol/read-file this dir path nil)
-                               (p/catch (fn [error]
-                                          (js/console.error error)
-                                          nil))))
-            disk-content (or disk-content "")
-            ext (string/lower-case (util/get-file-ext path))
-            file-page (db/get-file-page-id path)
-            page-empty? (and file-page (db/page-empty? repo file-page))
-            db-content (or (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)
-            pending-writes (state/get-write-chan-length)]
-      (cond
-        (and
-         (not= stat :not-found)         ; file on the disk was deleted
-         (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn"} ext))
-         (not (string/includes? path "/.recycle/"))
-         (zero? pending-writes))
-        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
-
-        :else
+      (p/let [disk-content (when (not= stat :not-found)
+                             (-> (ipc/ipc "readFile" file-fpath)
+                                 (p/then bean/->clj)
+                                 (p/catch (fn [error]
+                                            (js/console.error error)
+                                            nil))))
+              disk-content (or disk-content "")
+              db-content (or old-content (db/get-file repo rpath) "")
+              contents-matched? (<contents-matched? disk-content db-content)]
         (->
-         (p/let [result (ipc/ipc "writeFile" path content)
+         (p/let [result (ipc/ipc "writeFile" repo file-fpath content)
                  mtime (gobj/get result "mtime")]
-           (db/set-file-last-modified-at! repo path mtime)
-           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                             (encrypt/decrypt content)
-                             content)]
-             (db/set-file-content! repo path content))
+           (when-not contents-matched?
+             (ipc/ipc "backupDbFile" (config/get-local-dir repo) rpath disk-content content))
+           (when-not skip-transact? (db/set-file-last-modified-at! repo rpath mtime))
            (when ok-handler
-             (ok-handler repo path result))
+             (ok-handler repo rpath result))
            result)
          (p/catch (fn [error]
                     (if error-handler
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
+(defn- open-dir
+  "Open a new directory"
+  [dir]
+  (p/let [dir-path (or dir (util/mocked-open-dir-path))
+          result (if dir-path
+                   (do
+                     (println "NOTE: Using mocked dir" dir-path)
+                     (ipc/ipc "getFiles" dir-path))
+                   (ipc/ipc "openDir" {}))
+          result (bean/->clj result)]
+    result))
+
 (defrecord Node []
   protocol/Fs
-  (mkdir! [this dir]
-    (ipc/ipc "mkdir" dir))
-  (mkdir-recur! [this dir]
+  (mkdir! [_this dir]
+    (-> (ipc/ipc "mkdir" dir)
+        (p/then (fn [_] (js/console.log (str "Directory created: " dir))))
+        (p/catch (fn [error]
+                   (when-not (string/includes? (str error) "EEXIST")
+                     (js/console.error (str "Error creating directory: " dir) error))))))
+
+  (mkdir-recur! [_this dir]
     (ipc/ipc "mkdir-recur" dir))
-  (readdir [this dir]                   ; recursive
-    (ipc/ipc "readdir" dir))
-  (unlink! [this repo path _opts]
+
+  (readdir [_this dir]                   ; recursive
+    (p/then (ipc/ipc "readdir" dir)
+            bean/->clj))
+
+  (unlink! [_this repo path _opts]
     (ipc/ipc "unlink"
              (config/get-repo-dir repo)
              path))
-  (rmdir! [this dir]
-    ;; Too dangerious!!! We'll never implement this.
+  (rmdir! [_this _dir]
+    ;; !Too dangerous! We'll never implement this.
     nil)
-  (read-file [this dir path _options]
-    (let [path (concat-path dir path)]
+
+  (read-file [_this dir path _options]
+    (let [path (if (nil? dir)
+                 path
+                 (path/path-join dir path))]
       (ipc/ipc "readFile" path)))
-  (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
-    (let [path (concat-path dir path)]
-      (p/let [stat (p/catch
-                       (protocol/stat this dir path)
-                       (fn [_e] :not-found))
-              sub-dir (first (util/get-dir-and-basename path))
-              _ (protocol/mkdir-recur! this sub-dir)]
-        (write-file-impl! this repo dir path content opts stat))))
-  (rename! [this repo old-path new-path]
+
+  (write-file! [this repo dir path content opts]
+    (p/let [fpath (path/path-join dir path)
+            stat (p/catch
+                  (protocol/stat this fpath)
+                  (fn [_e] :not-found))
+            parent-dir (path/parent fpath)
+            _ (protocol/mkdir-recur! this parent-dir)]
+      (write-file-impl! repo dir path content opts stat)))
+
+  (rename! [_this _repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
-  (stat [this dir path]
-    (let [path (concat-path dir path)]
-      (ipc/ipc "stat" path)))
-  (open-dir [this ok-handler]
-    (ipc/ipc "openDir" {}))
-  (get-files [this path-or-handle ok-handler]
-    (ipc/ipc "getFiles" path-or-handle))
-  (watch-dir! [this dir]
-    (ipc/ipc "addDirWatcher" dir)))
+  ;; copy with overwrite, without confirmation
+  (copy! [_this repo old-path new-path]
+    (ipc/ipc "copyFile" repo old-path new-path))
+  (stat [_this fpath]
+    (-> (ipc/ipc "stat" fpath)
+        (p/then bean/->clj)))
+
+  (open-dir [_this dir]
+    (open-dir dir))
+
+  (get-files [_this dir]
+    (-> (ipc/ipc "getFiles" dir)
+        (p/then (fn [result]
+                  (:files (bean/->clj result))))))
+
+  (watch-dir! [_this dir options]
+    (ipc/ipc "addDirWatcher" dir options))
+
+  (unwatch-dir! [_this dir]
+    (ipc/ipc "unwatchDir" dir)))

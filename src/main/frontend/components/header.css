@@ -1,74 +1,126 @@
 .cp__header {
-  @apply shadow z-10 h-12;
+  @apply shadow z-10 flex items-center justify-between sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
+
   -webkit-app-region: drag;
 
-  padding: 0 0.5rem;
-  display: flex;
-  align-items: center;
-  flex: 0 0 auto;
-  background-color: var(--ls-primary-background-color, #fff);
-  position: sticky;
-  position: -webkit-sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  user-select: none;
-  transition: width 0.3s;
-  line-height: 1;
+  padding-top: calc(var(--ls-headbar-inner-top-padding));
+  margin-top: var(--ls-win32-title-bar-height);
+  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
 
-  .it svg {
-    transform: scale(0.8);
-  }
+  > .l {
+    @apply pl-2 h-full min-w-[var(--ls-left-sidebar-width)];
 
-  .repos {
-    .dropdown-wrapper {
-      left: unset;
-      right: -46px;
-      min-width: 14rem;
+    > div {
+      @apply items-center;
     }
   }
 
-  a.button {
-    margin: 0 4px;
+  > .r {
+    @apply flex flex-1 items-center justify-end pr-1.5;
+  }
+
+  > .l, > .r {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+  }
+
+  .button {
+    @apply flex items-center justify-center;
+
+    .ti, .tie {
+      @apply text-[20px];
+    }
+  }
+
+  .ui-items-container .button {
+    @apply w-auto py-0 px-1.5;
   }
 
   svg.warning {
     transform: scale(0.6);
     color: red;
   }
+
+  &-tips {
+    position: absolute;
+    padding: 13px 0;
+    text-align: center;
+    font-weight: 500;
+    background: transparent;
+    margin-top: 0;
+    line-height: 0;
+    top: 0;
+    left: 40%;
+    transform: translateX(-50%);
+    z-index: 1000;
+
+    > p {
+      color: var(--ls-primary-text-color);
+      margin: 0;
+      display: inline-flex;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    a {
+      color: var(--ls-link-text-color, #045591) !important;
+    }
+
+    a.restart {
+      position: relative;
+      display: flex;
+      align-items: center;
+
+      svg {
+        color: currentColor !important;
+        margin-right: 2px;
+      }
+
+      > strong {
+        display: inline-block;
+        padding-left: 2px;
+        cursor: pointer;
+      }
+    }
+  }
+
+  .dropdown-wrapper {
+    .ti, .tie {
+      opacity: .9;
+    }
+  }
+
+  .add-graph-btn {
+    border: 1px dashed var(--ls-border-color);
+    padding: 0 8px;
+
+    strong {
+      padding: 0 10px;
+      position: relative;
+      top: 1px;
+    }
+  }
 }
 
 .is-electron.is-mac .cp__header {
+  > .l {
     padding-left: 78px;
-    -moz-transition: padding-left .3s ease-in;
-    -o-transition: padding-left  .3s ease-in;
-    -webkit-transition: padding-left  .3s ease-in;
-    transition: padding-left  .3s ease-in;
+  }
 }
 
-.cp__header .navigation svg {
-    transform: scale(0.7);
+.is-electron.is-mac.is-fullscreen .cp__header > .l {
+  padding-left: 1rem;
 }
 
-.is-electron.is-mac.is-fullscreen .cp__header {
-    padding-left: 0;
+/* Workaround for Linux Intel GPU text rendering issue GH#7233 */
+.is-electron.is-linux .cp__header .dropdown-wrapper .title-wrap {
+  position: relative;
 }
 
-.cp__header a, .cp__header svg {
-    -webkit-app-region: no-drag;
-}
-
-.cp__header-left-menu {
-  @apply px-4 mr-4;
-  border-right: 1px solid var(--ls-secondary-background-color);
-  color: var(--ls-link-text-color);
-  display: block;
-  height: 100%;
-}
-
-.cp__header-left-menu:focus {
-  @apply outline-none;
-  background: var(--ls-menu-hover-color);
+.cp__header a,
+.cp__header svg,
+.cp__header button {
+  -webkit-app-region: no-drag;
 }
 
 .cp__header-logo {
@@ -93,42 +145,200 @@
     @apply shadow-none;
   }
 
-  .cp__header-left-menu {
-    display: none;
-  }
-
   .cp__header-logo {
     display: block;
   }
 }
 
 .cp__header-logo svg {
-    transform: scale(0.9);
+  transform: scale(0.9);
 }
 
-#repo-name {
-  vertical-align: middle;
-  display: inline-block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
-  height: 14px;
+.button {
+  @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
+
+  &:hover {
+    @screen md {
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
+    }
+  }
 }
 
-a.button {
-    padding: 0.25rem;
-    opacity: 0.6;
-    display: block;
-    border-radius: 4px;
+.button.icon {
+  @apply w-8 h-8 p-1 flex items-center justify-center;
 }
 
-a.button:hover {
-    opacity: 1;
-    background: var(--ls-tertiary-background-color);
+.button.icon.add-graph-btn {
+    width: unset;
+    margin: 0 6px;
 }
 
-.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
-    cursor: default !important;
+.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a):not(.file-sync-item) {
+  cursor: default !important;
+}
+
+html.is-ios.is-safari {
+
+  .cp__header {
+    background-color: var(--ls-primary-background-color);
+  }
+
+  .is-vw-pending {
+    display: none !important;
+  }
+}
+
+html.is-native-iphone,
+html.is-native-iphone-without-notch,
+html.is-native-ipad {
+
+  #main-container {
+    padding-top: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #main-content-container {
+    padding-left: 22px;
+    padding-right: 14px;
+    padding-top: 0;
+    height: calc(100vh - var(--ls-headbar-inner-top-padding) - var(--ls-headbar-height));
+
+    @screen sm {
+      padding-left: 2rem;
+    }
+
+    .page {
+      margin-top: 15px;
+    }
+  }
+
+  .cp__header {
+    > .r {
+      display: flex;
+    }
+
+    .button {
+      opacity: 1;
+    }
+  }
+}
+
+html.is-native-ipad {
+  --ls-headbar-inner-top-padding: 0px;
+  --ls-headbar-height: 4rem;
+
+  .cp__header {
+    background-color: transparent !important;
+    display: flex;
+
+    > .l {
+      /* background-color: var(--ls-primary-background-color); */
+      padding-top: 20px;
+    }
+
+    > .r {
+      flex: 1;
+      background-color: var(--ls-primary-background-color);
+      height: 100%;
+      padding-top: 20px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+  }
+
+  .cp__right-sidebar {
+    &-settings {
+      margin-top: -4px;
+    }
+
+    &-topbar {
+      padding-top: 37px;
+    }
+  }
+}
+
+html.is-native-iphone {
+  --ls-headbar-inner-top-padding: 38px;
+
+  .left-sidebar-inner {
+    .create {
+      padding-bottom: 32px;
+    }
+  }
+
+  .ui__notifications {
+    top: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding) - 0.3rem);
+  }
+
+  @media (orientation: landscape) {
+    --ls-headbar-inner-top-padding: 8px;
+    --ls-headbar-height: 2.5rem;
+  }
+}
+
+html.is-native-iphone-without-notch {
+
+  --ls-headbar-inner-top-padding: 15px;
+  --ls-headbar-height: 2.5rem;
+
+  @media (orientation: landscape) {
+
+    --ls-headbar-inner-top-padding: 0px;
+    --ls-headbar-height: 2.5rem;
+  }
+}
+
+html.is-zoomed-native-ios {
+  --ls-headbar-inner-top-padding: 30px;
+
+  @media (orientation: landscape) {
+    --ls-headbar-inner-top-padding: 8px;
+    --ls-headbar-height: 2.5rem;
+  }
+}
+
+.drag-region {
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
+}
+
+/* TODO: remote for prod */
+.theme-container-inner:not(.ls-left-sidebar-open) {
+  .cp__header > .l {
+    min-width: auto;
+  }
+}
+
+
+.cp__header {
+    > .r > div:not(.ui__dropdown-trigger) a, button {
+        @apply opacity-70 text-[inherit];
+
+        &:hover {
+            @apply opacity-100;
+        }
+    }
+}
+
+.cp__header {
+    .ls-block-breadcrumb {
+        @apply text-sm pl-4;
+    }
+    .breadcrumb {
+        @apply flex items-center;
+    }
+
+    .breadcrumb a {
+        @apply !opacity-75 hover:!opacity-100;
+        span {
+            @apply whitespace-nowrap text-ellipsis inline-block overflow-x-hidden align-middle;
+            max-width: 34ch;
+        }
+    }
 }

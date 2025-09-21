@@ -1,485 +1,831 @@
 (ns frontend.db.query-dsl-test
-  (:require [frontend.db.query-dsl :as dsl]
+  (:require [cljs.test :refer [are deftest testing use-fixtures is]]
+            [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.conn :as conn]
-            [frontend.db.config :refer [test-db] :as config]
-            [datascript.core :as d]
-            [frontend.db-schema :as schema]
-            [frontend.handler.repo :as repo-handler]
-            [promesa.core :as p]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests async]]))
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.react :as react]
+            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]
+            [frontend.util :as util]
+            [logseq.common.util.page-ref :as page-ref]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
 ;; 2. find illegal queries which can't be executed by datascript
 ;; 3. find filters combinations which might break the current query implementation
 
-(defn import-test-data!
+(use-fixtures :each {:before test-helper/start-test-db!
+                     :after test-helper/destroy-test-db!})
+
+;; Test helpers
+;; ============
+
+(def db-block-attrs
+  ;; '*' needed as we need to pull user properties and don't know their names in advance
+  '[*
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
+
+(def dsl-query*
+  "Overrides dsl-query/query with ENV variables. When $EXAMPLE is set, prints query
+  result of build query. This is useful for documenting examples and debugging.
+   When $DB_QUERY_TYPE is set, runs query tests against other versions of simple query e.g.
+   more basic property rules"
+  (cond
+    (some? js/process.env.EXAMPLE)
+    (fn dsl-query-star [& args]
+      (let [old-build-query query-dsl/build-query]
+        (with-redefs [query-dsl/build-query
+                      (fn [& args']
+                        (let [res (apply old-build-query args')]
+                          (println "EXAMPLE:" (pr-str (:query res)))
+                          res))]
+          (apply query-dsl/query args))))
+    (some? js/process.env.DB_QUERY_TYPE)
+    (fn dsl-query-star [& args]
+      (let [old-build-property @#'query-dsl/build-property]
+        (with-redefs [query-dsl/build-property
+                      (fn [& args']
+                        (let [m (apply old-build-property args')
+                              m' (cond
+                                   (= (:rules m) [:simple-query-property])
+                                   {:rules [:property]
+                                    :query (apply list 'property (rest (:query m)))}
+                                   (= (:rules m) [:has-simple-query-property])
+                                   {:rules [:has-property]
+                                    :query (apply list 'has-property (rest (:query m)))}
+                                   :else
+                                   m)]
+                          m'))
+                      query-dsl/db-block-attrs db-block-attrs]
+          (apply query-dsl/query args))))
+    :else
+    (fn dsl-query-star [& args]
+      (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+        (apply query-dsl/query args)))))
+
+(defn- ->smart-query
+  "Updates to file version if js/process.env.DB_GRAPH is not set"
+  [query]
+  (if js/process.env.DB_GRAPH
+    (some-> query
+            (string/replace "(page-tags" "(tags"))
+    query))
+
+(defn- dsl-query
+  [s]
+  (react/clear-query-state!)
+  (when-let [result (dsl-query* test-helper/test-db (->smart-query s))]
+    (map first (deref result))))
+
+(defn- custom-query
+  [query]
+  (react/clear-query-state!)
+  (when-let [result (with-redefs [query-dsl/db-block-attrs db-block-attrs]
+                      (query-dsl/custom-query test-helper/test-db query {}))]
+    (map first (deref result))))
+
+;; Tests
+;; =====
+
+(deftest pre-transform-test
+  (testing "page references should be quoted and tags should be handled"
+    (are [x y] (= (query-dsl/pre-transform x) y)
+      "#foo"
+      "#tag foo"
+
+      "(and #foo)"
+      "(and #tag foo)"
+
+      "[[test #foo]]"
+      "\"[[test #foo]]\""
+
+      "(and [[test #foo]] (or #foo))"
+      "(and \"[[test #foo]]\" (or #tag foo))"
+
+      "\"for #clojure\""
+      "\"for #clojure\""
+
+      "(and \"for #clojure\")"
+      "(and \"for #clojure\")"
+
+      "(and \"for #clojure\" #foo)"
+      "(and \"for #clojure\" #tag foo)")))
+
+(defn- testable-content
+  "Only test :block/title up to page-ref as page-ref content varies between db and file graphs"
+  [{:block/keys [title]}]
+  (some->> title
+           (re-find #"[^\[]+")
+           string/trim))
+
+(defn- block-property-queries-test
   []
-  (let [files [{:file/path "journals/2020_12_26.md"
-                :file/content "---
-title: Dec 26th, 2020
-tags: [[page-tag-1]], page-tag-2
-parent: [[child page 1]]
----
-- DONE 26-b1 [[page 1]]
-created-at:: 1608968448113
-last-modified-at:: 1608968448113
+  (load-test-files [{:file/path "journals/2022_02_28.md"
+                     :file/content "a:: b
+- b1
 prop-a:: val-a
-prop-c:: [[page a]], [[page b]], [[page c]]
-- LATER 26-b2-modified-later [[page 2]] #tag1
-created-at:: 1608968448114
-last-modified-at:: 1608968448120
+prop-num:: 2000
+- b2
+prop-a:: val-a
 prop-b:: val-b
-- DONE [#A] 26-b3 [[page 1]]
-created-at:: 1608968448115
-last-modified-at:: 1608968448115
-"}
-               {:file/path "journals/2020_12_27.md"
-                :file/content "---
-title: Dec 27th, 2020
-tags: page-tag-2, [[page-tag-3]]
-parent: [[child page 1]], child page 2
----
-- NOW [#A] b1 [[page 1]]
-created-at:: 1609052958714
-last-modified-at:: 1609052958714
-- LATER [#B] b2-modified-later [[page 2]]
-created-at:: 1609052959376
-last-modified-at:: 1609052974285
-- b3 [[page 1]]
-created-at:: 1609052959954
-last-modified-at:: 1609052959954
-prop-a:: val-a
-- b4 [[page 2]]
-created-at:: 1609052961569
-last-modified-at:: 1609052961569
-- b5
-created-at:: 1609052963089
-last-modified-at:: 1609052963089"}
-               {:file/path "journals/2020_12_28.md"
-                :file/content "---
-title: Dec 28th, 2020
-parent: child page 2
----
-- 28-b1 [[page 1]]
-created-at:: 1609084800000
-last-modified-at:: 1609084800000
-- 28-b2-modified-later [[page 2]]
-created-at:: 1609084800001
-last-modified-at:: 1609084800020
-- 28-b3 [[page 1]]
-created-at:: 1609084800002
-last-modified-at:: 1609084800002"}]]
-    (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
+- b3
+prop-d:: [[no-space-link]]
+prop-c:: [[page a]], [[page b]], [[page c]]
+prop-linked-num:: [[3000]]
+- b4
+prop-d:: [[nada]]"}])
 
-(def parse (partial dsl/parse test-db))
+  (testing "Blocks have given property value"
+    (is (= #{"b1" "b2"}
+           (set (map (comp first string/split-lines :block/title)
+                     (dsl-query "(property prop-a val-a)")))))
 
-(defn- q
-  [s]
-  (db/clear-query-state!)
-  (let [parse-result (parse s)
-        query (:query parse-result)]
-    {:query (if (seq query) (vec query) query)
-     :result (dsl/query test-db s)}))
+    (is (= ["b2"]
+           (map (comp first string/split-lines :block/title)
+                (dsl-query "(property prop-b val-b)")))))
 
-(defn q-count
-  [s]
-  (let [{:keys [query result]} (q s)]
-    {:query query
-     :count (if result
-              (count @result)
-              0)}))
+  (is (= ["b2"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(and (property prop-b val-b))")))
+      "Blocks have property value with empty AND")
 
-(defn count-only
-  [s]
-  (:count (q-count s)))
+  (is (= ["b3"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(and (property prop-c \"page c\"))")))
+      "Blocks have property value from a set of values")
 
-(defonce empty-result {:query nil :result nil})
+  (is (= ["b3"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(and (property prop-c \"page c\") (property prop-c \"page b\"))")))
+      "Blocks have ANDed property values")
 
-(deftest test-parse
+  (is (= #{"b2" "b3"}
+         (set
+          (map (comp first string/split-lines :block/title)
+               (dsl-query "(or (property prop-c \"page c\") (property prop-b val-b))"))))
+      "Blocks have ORed property values")
+
+  (is (= ["b1"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(property prop-num 2000)")))
+      "Blocks have integer property value")
+
+  (is (= ["b3"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(property prop-linked-num 3000)")))
+      "Blocks have property with integer page value")
+
+  (is (= ["b3"]
+         (map (comp first string/split-lines :block/title)
+              (dsl-query "(property prop-d no-space-link)")))
+      "Blocks have property value with no space")
+
+  (is (= #{"b3" "b4"}
+         (set (map (comp first string/split-lines :block/title)
+                   (dsl-query "(property prop-d)"))))
+      "Blocks that have a property"))
+
+(deftest block-property-queries
+  (testing "block property tests with default config"
+    (test-helper/with-config {}
+      (block-property-queries-test))))
+
+(when js/process.env.DB_GRAPH
+  (deftest db-only-block-property-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:zzz {:logseq.property/type :default
+             :block/title "zzz name!"}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:Foo "bar"}}
+                 {:block/title "b2"
+                  :build/properties {:foo "bar"}}
+                 {:block/title "b3"
+                  :build/properties {:zzz "bar"}}]}]})
+
+    (is (= ["b1"]
+           (map :block/title (dsl-query "(property Foo)")))
+        "filter is case sensitive")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/foo)")))
+        "filter can handle qualified keyword properties")
+    (is (= ["b3"]
+           (map :block/title (dsl-query "(property \"zzz name!\")")))
+        "filter can handle property name")))
+
+(when (and js/process.env.DB_GRAPH (not js/process.env.DB_QUERY_TYPE))
+  (deftest property-default-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:default {:logseq.property/type :default
+                 :build/properties
+                 {:logseq.property/default-value "foo"}
+                 :build/properties-ref-types {:entity :number}}}
+      :classes {:Class1 {:build/class-properties [:default]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:default "foo"}}
+                 {:block/title "b2"
+                  :build/properties {:default "bar"}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/default)"))))
+        "Blocks with any :default property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/default \"foo\")")))
+        "Blocks with :default property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/default \"bar\")")))
+        "Blocks with :default property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest property-checkbox-type-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:checkbox {:logseq.property/type :checkbox
+                  :build/properties
+                  {:logseq.property/scalar-default-value true}}}
+      :classes {:Class1 {:build/class-properties [:checkbox]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "b1"
+                  :build/properties {:checkbox true}}
+                 {:block/title "b2"
+                  :build/properties {:checkbox false}}
+                 {:block/title "b3"
+                  :build/tags [:Class1]}]}]})
+
+    (is (= (set ["b3" "b2" "b1"])
+           (set (map :block/title (dsl-query "(property :user.property/checkbox)"))))
+        "Blocks with any :checkbox property or tagged with a tag that has that default-value property")
+    (is (= ["b1" "b3"]
+           (map :block/title (dsl-query "(property :user.property/checkbox true)")))
+        "Blocks with :checkbox property value or tagged with a tag that has that default-value property value")
+    (is (= ["b2"]
+           (map :block/title (dsl-query "(property :user.property/checkbox false)")))
+        "Blocks with :checkbox property value and not tagged with a tag that has that default-value property value"))
+
+  (deftest closed-property-default-value-queries
+    (load-test-files-for-db-graph
+     {:properties
+      {:status {:logseq.property/type :default
+                :build/closed-values
+                [{:value "Todo" :uuid (random-uuid)}
+                 {:value "Doing" :uuid (random-uuid)}]
+                :build/properties
+                {:logseq.property/default-value "Todo"}
+                :build/properties-ref-types {:entity :number}}}
+      :classes {:Mytask {:build/class-properties [:status]}
+                :Bug {:build/class-extends [:Mytask]}}
+      :pages-and-blocks
+      [{:page {:block/title "page1"}
+        :blocks [{:block/title "task1"
+                  :build/properties {:status "Doing"}
+                  :build/tags [:Mytask]}
+                 {:block/title "task2"
+                  :build/tags [:Mytask]}
+                 {:block/title "bug1"
+                  :build/properties {:status "Doing"}
+                  :build/tags [:Bug]}
+                 {:block/title "bug2"
+                  :build/tags [:Bug]}]}]})
+
+    (is (= ["task2" "bug2"]
+           (map :block/title (dsl-query "(property status \"Todo\")")))
+        "Blocks or tagged with or descended from a tag that has closed default-value property")
+    (is (= ["task1" "bug1"]
+           (map :block/title (dsl-query "(property status \"Doing\")")))
+        "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
+
+(deftest block-property-query-performance
+  (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})
+                   (map-indexed (fn [idx {:keys [tags]}]
+                                  {:file/path (str "pages/page" idx ".md")
+                                   :file/content (if (seq tags)
+                                                   (str "page-prop:: b\n- block for page" idx
+                                                        "\ntagz:: " (string/join ", " (map page-ref/->page-ref tags)))
+                                                   "")})))
+        _ (load-test-files pages)
+        {:keys [result time]}
+        (util/with-time (dsl-query "(and (property tagz tag1) (property tagz tag2))"))]
+    ;; Specific number isn't as important as ensuring query doesn't take orders
+    ;; of magnitude longer
+    (is (> 40.0 time) "multi property query perf is reasonable")
+    (is (= 10 (count result)))))
+
+(defn- page-property-queries-test
   []
-  (testing "nil or blank strings should be ignored"
-    (are [x y] (= (q x) y)
-      nil empty-result
-      "" empty-result
-      " " empty-result))
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "parent:: [[child page 1]], [[child-no-space]]\ninteresting:: true\nfoo:: baz"}
+                    {:file/path "pages/page2.md"
+                     :file/content "foo:: bar\ninteresting:: false"}
+                    {:file/path "pages/page3.md"
+                     :file/content "parent:: [[child page 1]], [[child page 2]]\nfoo:: bar\ninteresting:: false"}
+                    {:file/path "pages/page4.md"
+                     :file/content "parent:: [[child page 2]]\nfoo:: baz"}])
+  (is (= ["page1" "page3" "page4"]
+         (map :block/name (dsl-query "(page-property parent)")))
+      "Pages have given property")
 
-  (testing "Non exists page should be ignored"
-    (are [x y] (nil? (:result (q x)))
-      "[[page-not-exist]]" empty-result
-      "[[another-page-not-exist]]" empty-result))
+  (is (= #{"page1" "page3"}
+         (set (map :block/name (dsl-query "(page-property parent [[child page 1]])"))))
+      "Pages have property value that is a page and query is a page")
 
-  (testing "Single page query"
-    (are [x y] (= (q-count x) y)
-      "[[page 1]]"
-      {:query '[[?b :block/path-refs [:block/name "page 1"]]]
-       :count 6}
+  (is (= #{"page1" "page3"}
+         (set (map :block/name (dsl-query "(page-property parent \"child page 1\")"))))
+      "Pages have property value that is a page and query is a string")
 
-      "[[page 2]]"
-      {:query '[[?b :block/path-refs [:block/name "page 2"]]]
-       :count 4}))
+  (is (= ["page1"]
+         (map :block/name (dsl-query "(page-property parent [[child-no-space]])")))
+      "Pages have property value that is a page with no spaces")
 
-  (testing "Block properties query"
-    (are [x y] (= (q-count x) y)
-      "(property prop-a val-a)"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-a) ?v] (or [(= ?v "val-a")] [(contains? ?v "val-a")])]
-       :count 2}
+  (is (= ["page3"]
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))")))
+      "Page property queries ANDed")
 
-      "(property prop-b val-b)"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")])]
-       :count 1}
+  (is (= #{"page1" "page3" "page4"}
+         (set
+          (map
+           :block/name
+           (dsl-query "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"))))
+      "Page property queries ORed")
 
-      "(and (property prop-b val-b))"
-      {:query '([?b :block/properties ?prop]
-                [(missing? $ ?b :block/name)]
-                [(get ?prop :prop-b) ?v]
-                (or [(= ?v "val-b")] [(contains? ?v "val-b")]))
-       :count 1}
+  (is (= ["page1" "page3"]
+         (map :block/name
+              (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property foo baz) (page-property parent [[child page 2]])))"))))
 
-      "(and (property prop-c \"page c\"))"
-      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")])]
-       :count 1}
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
+      "Page property queries nested NOT in second clause")
 
-      ;; TODO: optimize
-      "(and (property prop-c \"page c\") (property prop-c \"page b\"))"
-      {:query '[[?b :block/properties ?prop]
-                [(missing? $ ?b :block/name)]
-                [(get ?prop :prop-c) ?v]
-                (or [(= ?v "page c")] [(contains? ?v "page c")])
-                [(get ?prop :prop-c) ?v1]
-                (or [(= ?v1 "page b")] [(contains? ?v1 "page b")])]
-       :count 1}
+  (is (= ["page4"]
+         (map
+          :block/name
+          (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
+      "Page property queries nested NOT in first clause")
 
-      "(or (property prop-c \"page c\") (property prop-b val-b))"
-      {:query '[or
-                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")]))]
-       :count 2}))
+  (testing "boolean values"
+    (is (= ["page1"]
+           (map :block/name (dsl-query "(page-property interesting true)")))
+        "Boolean true")
 
-  (testing "task queries"
-    (are [x y] (= (q-count x) y)
-      "(task now)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW"} ?marker)]]
-       :count 1}
+    (is (= #{"page2" "page3"}
+           (set (map :block/name (dsl-query "(page-property interesting false)"))))
+        "Boolean false")))
 
-      "(task NOW)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW"} ?marker)]]
-       :count 1}
+(when-not js/process.env.DB_GRAPH
+  (deftest page-property-queries
+    (testing "page property tests with default config"
+      (test-helper/with-config {}
+        (page-property-queries-test)))))
 
-      "(task later)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"LATER"} ?marker)]]
-       :count 2}
+(deftest task-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- DONE b1
+- TODO b2
+- DOING b3
+- DOING b4 [[A]]
+- DOING b5 [[B]]"}])
 
-      "(task now later)"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]]
-       :count 3}
+  (testing "Lowercase query"
+    (is (= ["DONE b1"]
+           (map testable-content (dsl-query "(task done)"))))
 
-      "(task [now later])"
-      {:query '[[?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]]
-       :count 3}))
+    (is (= #{"DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task doing)"))))))
 
-  (testing "Priority queries"
-    (are [x y] (= (q-count x) y)
-      "(priority A)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A"} ?priority)]]
-       :count 2}
+  (is (= #{"DOING b3" "DOING b4" "DOING b5"}
+         (set (map testable-content (dsl-query "(task DOING)"))))
+      "Uppercase query")
 
-      "(priority a)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A"} ?priority)]]
-       :count 2}
+  (testing "Multiple specified tasks results in ORed results"
+    (is (= #{"DONE b1" "DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task done doing)")))))
 
-      "(priority a b)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B"} ?priority)]]
-       :count 3}
+    (is (= #{"DONE b1" "DOING b3" "DOING b4" "DOING b5"}
+           (set (map testable-content (dsl-query "(task [done doing])"))))
+        "Multiple arguments specified with vector notation"))
 
-      "(priority [a b])"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B"} ?priority)]]
-       :count 3}
+  (is (= ["DONE b1" "DOING b4"]
+         (map testable-content
+              (dsl-query "(or (task done) (and (task doing) [[A]]))")))
+      "Multiple boolean operators with todo and priority operators")
 
-      "(priority a b c)"
-      {:query '[[?b :block/priority ?priority]
-                [(contains? #{"A" "B" "C"} ?priority)]]
-       :count 3}))
+  (is (= ["DOING b4" "DOING b5"]
+         (map testable-content
+              (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
 
-  (testing "all-page-tags queries"
-    (are [x y] (= (q-count x) y)
-      "(all-page-tags)"
-      {:query '[[?e :block/tags ?p]]
-       :count 3}))
+(when js/process.env.DB_GRAPH
 
-  (testing "page-tags queries"
-    (are [x y] (= (q-count x) y)
-      "(page-tags [[page-tag-1]])"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1"} ?tag1)]]
-       :count 1}
+  ;; Ensure some filters work when no data with relevant properties exist
+  (deftest queries-with-no-data
+    (load-test-files [])
+    (is (= [] (dsl-query "(task todo)")))
+    (is (= [] (dsl-query "(priority high)")))))
 
-      "(page-tags page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-2"} ?tag1)]]
-       :count 2}
+(deftest sample-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- TODO b1
+- TODO b2"}])
+  (is (= 1
+         (count (dsl-query "(and (task todo) (sample 1))")))
+      "Correctly limits block results")
+  (is (= 1
+         (count (dsl-query (if js/process.env.DB_GRAPH "(and (property foo) (sample 1))"  "(and (page-property foo) (sample 1))"))))
+      "Correctly limits page results"))
 
-      "(page-tags page-tag-1 page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}
+(deftest priority-queries
+  (load-test-files (if js/process.env.DB_GRAPH
+                     [{:page {:block/title "page1"}
+                       :blocks [{:block/title "[#A] b1"
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}
+                                {:block/title "[#B] b2"
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.medium}}
+                                {:block/title "[#A] b3"
+                                 :build/properties {:logseq.property/priority :logseq.property/priority.high}}]}]
 
-      "(page-tags page-TAG-1 page-tag-2)"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}
+                     [{:file/path "pages/page1.md"
+                       :file/content "foo:: bar
+- [#A] b1
+- [#B] b2
+- [#A] b3"}]))
 
-      "(page-tags [page-tag-1 page-tag-2])"
-      {:query '[[?p :block/tags ?t]
-                [?t :block/name ?tag1]
-                [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
-       :count 2}))
+  (testing "one arg queries"
+    (is (= #{"[#A] b1" "[#A] b3"}
+           (set (map :block/title
+                     (dsl-query (if js/process.env.DB_GRAPH "(priority high)" "(priority a)"))))))
+    (is (= #{"[#A] b1" "[#A] b3"}
+           (set (map :block/title
+                     (dsl-query (if js/process.env.DB_GRAPH "(priority high)" "(priority a)")))))))
 
-  (testing "page-property queries"
-    (are [x y] (= (q-count x) y)
-      "(page-property parent)"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?prop-v]
-                [true]], :count 3}
+  (testing "two arg queries"
+    (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
+           (set (map :block/title
+                     (dsl-query (if js/process.env.DB_GRAPH "(priority high medium)" "(priority a b)"))))))
+    (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
+           (set (map :block/title
+                     (dsl-query (if js/process.env.DB_GRAPH "(priority [high medium])" "(priority [a b])")))))
+        "Arguments with vector notation"))
 
-      "(page-property parent [[child page 1]])"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])]
-       :count 2}
+  (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
+         (set (map :block/title
+                   (dsl-query (if js/process.env.DB_GRAPH "(priority high medium low)" "(priority a b c)")))))
+      "Three arg queries and args that have no match"))
 
-      "(page-property parent \"child page 1\")"
-      {:query '[[?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or
-                 [(= ?v "child page 1")]
-                 [(contains? ?v "child page 1")])]
-       :count 2}
+(deftest nested-boolean-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- DONE b1 [[page 1]] [[page 3]]
+- DONE b2Z [[page 1]]"}
+                    {:file/path "pages/page2.md"
+                     :file/content "foo:: bar
+- NOW b3 [[page 1]]
+- LATER b4Z [[page 2]]
+"}])
 
-      "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '([?p :block/name]
-                [?p :block/properties ?prop]
-                [(get ?prop :parent) ?v]
-                (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
-                (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
-       :count 1}
+  (let [task-filter (if js/process.env.DB_GRAPH "(task doing todo)" "(task now later)")]
+    (is (= []
+           (dsl-query "(and (task done) (not [[page 1]]))")))
 
-      "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '(or (and
-                    [?p :block/name]
-                    [?p :block/properties ?prop]
-                    [(get ?prop :parent) ?v]
-                    (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
-                   (and
-                    [?p :block/name]
-                    [?p :block/properties ?prop]
-                    [(get ?prop :parent) ?v]
-                    (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
-       :count 3}))
+    (is (= ["DONE b1"]
+           (map testable-content
+                (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
+        "Nested not")
 
-  ;; boolean queries
-  (testing "AND queries"
-    (are [x y] (= (q-count x) y)
-      "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-refs [:block/name "tag1"]]
-                [?b :block/path-refs [:block/name "page 2"]])
-       :count 1})
+    (is (= ["NOW b3" "LATER b4Z"]
+           (map testable-content
+                (dsl-query (str "(and " task-filter " (or [[page 1]] [[page 2]]))")))))
 
-    (are [x y] (= (q-count x) y)
-      "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-refs [:block/name "tag1"]]
-                [?b :block/path-refs [:block/name "page 2"]])
-       :count 1}))
+    (is (= #{"NOW b3"
+             "LATER b4Z"
+             "DONE b1"
+             "DONE b2Z"}
+           (set (map testable-content
+                     (dsl-query (str "(and "
+                                     (if js/process.env.DB_GRAPH "(task doing todo done)" "(task now later done)")
+                                     " (or [[page 1]] (not [[page 1]])))"))))))
 
-  (testing "OR queries"
-    (are [x y] (= (q-count x) y)
-      "(or [[tag1]] [[page 2]])"
-      {:query '(or
-                (and [?b :block/path-refs [:block/name "tag1"]])
-                (and [?b :block/path-refs [:block/name "page 2"]]))
-       :count 4}))
+    (is (= (if js/process.env.DB_GRAPH #{"bar" "DONE b1" "DONE b2Z"} #{"foo:: bar" "DONE b1" "DONE b2Z"})
+           (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
+                (keep testable-content)
+                (remove (fn [s] (db/page? (db/get-page s))))
+                set)))
 
-  (testing "NOT queries"
-    (are [x y] (= (q-count x) y)
-      "(not [[page 1]])"
-      {:query '([?b :block/uuid]
-                (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 34}))
+    (is (= #{"DONE b2Z" "LATER b4Z"}
+           (->> (dsl-query "(and \"Z\" (or \"b2\" \"b4\"))")
+                (keep testable-content)
+                set))
+        "AND-OR with full text search"))
 
-  (testing "Between query"
-    (are [x y] (= (count-only x) y)
-      "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
-      5
-
-      ;; between with journal pages
-      "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
-      2
-
-      ;; ;; between with created-at
-      ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
-      ;; 5
-
-      ;; ;; between with last-modified-at
-      ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
-      ;; 5
-      ))
-
-  (testing "Nested boolean queries"
-    (are [x y] (= (q-count x) y)
-      "(and (todo done) (not [[page 1]]))"
-      {:query '([?b :block/uuid]
-                [?b :block/marker ?marker]
-                [(contains? #{"DONE"} ?marker)]
-                (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 0})
-
-    (are [x y] (= (q-count x) y)
-      "(and (todo now later) (or [[page 1]] [[page 2]]))"
-      {:query '([?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER"} ?marker)]
-                (or (and [?b :block/path-refs [:block/name "page 1"]])
-                    (and [?b :block/path-refs [:block/name "page 2"]])
-                    [?b]))
-       :count 3})
-
-    (are [x y] (= (q-count x) y)
-      "(not (and (todo now later) (or [[page 1]] [[page 2]])))"
-      {:query '([?b :block/uuid]
-                (not
-                 [?b :block/marker ?marker]
-                 [(contains? #{"NOW" "LATER"} ?marker)]
-                 (or
-                  (and [?b :block/path-refs [:block/name "page 1"]])
-                  (and [?b :block/path-refs [:block/name "page 2"]])
-                  [?b])))
-       :count 37})
-
-    ;; FIXME: not working
-    ;; (are [x y] (= (q-count x) y)
-    ;;   "(or (priority a) (not (priority a)))"
-    ;;   {:query '[(or-join [?b]
-    ;;                      (and
-    ;;                       [?b :block/priority ?priority]
-    ;;                       [(contains? #{"A"} ?priority)])
-    ;;                      (not-join [?b]
-    ;;                                [?b :block/priority ?priority]
-    ;;                                [(contains? #{"A"} ?priority)]))]
-    ;;    :count 5})
-
-    (are [x y] (= (q-count x) y)
-      "(and (todo now later done) (or [[page 1]] (not [[page 1]])))"
-      {:query '([?b :block/uuid]
-                [?b :block/marker ?marker]
-                [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
-                (or
-                 (and [?b :block/path-refs [:block/name "page 1"]])
-                 (and (not [?b :block/path-refs [:block/name "page 1"]]))
-                 [?b]))
-       :count 5}))
-
-  ;; (testing "sort-by (created-at defaults to desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (task now later done)
-  ;;                              (sort-by created-at))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
-
-  ;; (testing "sort-by (created-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created-at desc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
-
-  ;; (testing "sort-by (created-at asc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created-at asc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created-at"])))]
-  ;;     (is (= result
-  ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
-
-  ;; (testing "sort-by (last-modified-at defaults to desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
-
-  ;; (testing "sort-by (last-modified-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at desc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
-
-  ;; (testing "sort-by (last-modified-at desc)"
-  ;;   (db/clear-query-state!)
-  ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last-modified-at asc))")
-  ;;                     :result
-  ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
-  ;;     (is (= result
-  ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
+  ;; FIXME: not working
+  ;; Requires or-join and not-join which aren't supported yet
+  ; (is (= []
+  ;        (dsl-query "(or (priority a) (not (priority c)))")))
   )
 
-(use-fixtures :once
-  {:before (fn []
-             (async done
-                    (config/start-test-db!)
-                    (p/let [_ (import-test-data!)]
-                      (done))))
-   :after config/destroy-test-db!})
+(deftest tags-queries
+  (load-test-files
+   [{:file/path "pages/page1.md"
+     :file/content "tags:: [[page-tag-1]], [[page-tag-2]]"}
+    {:file/path "pages/page2.md"
+     :file/content "tags:: [[page-tag-2]], [[page-tag-3]]"}
+    {:file/path "pages/page3.md"
+     :file/content "tags:: [[other]]"}])
 
-#_(run-tests)
+  (are [x y] (= (set y) (set (map :block/name (dsl-query x))))
+
+    "(page-tags [[page-tag-1]])"
+    ["page1"]
+
+    "(page-tags page-tag-2)"
+    ["page1" "page2"]
+
+    "(page-tags page-tag-1 page-tag-2)"
+    ["page1" "page2"]
+
+    "(page-tags page-TAG-1 page-tag-2)"
+    ["page1" "page2"]
+
+    "(page-tags [page-tag-1 page-tag-2])"
+    ["page1" "page2"]))
+
+(deftest block-content-query
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "- b1 Hit\n- b2 Another"}])
+
+  (is (= ["b1 Hit"]
+         (map :block/title (dsl-query "\"Hit\""))))
+
+  (is (= []
+         (map :block/title (dsl-query "\"miss\"")))
+      "Correctly returns no results"))
+
+(deftest page-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo"}
+                    {:file/path "pages/page2.md"
+                     :file/content "bar"}])
+
+  (is (= ["page1"]
+         (map #(get-in % [:block/page :block/name])
+              (dsl-query "(page page1)"))))
+
+  (is (= []
+         (map #(get-in % [:block/page :block/name])
+              (dsl-query "(page nope)")))
+      "Correctly returns no results"))
+
+(deftest empty-queries
+  (testing "nil or blank strings should be ignored"
+    (are [x] (nil? (dsl-query x))
+      nil
+      ""
+      " "
+      "\"\"")))
+
+(deftest page-ref-and-boolean-queries
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- b1 [[page 1]] [[tag2]]
+- b2 [[page 2]] [[tag1]]
+  - b4 [[page 4]] [[tag4]]
+- b3"}])
+
+  (testing "page-ref queries"
+
+    (is (= ["b2"]
+           (map testable-content (dsl-query "[[page 2]]")))
+        "Page ref arg")
+
+    (is (= ["b2"]
+           (map testable-content (dsl-query "#tag1")))
+        "Tag arg")
+
+    (is (= []
+           (dsl-query "[[blarg]]"))
+        "Nonexistent page returns no results"))
+
+  (testing "basic boolean queries"
+    (is (= ["b2"]
+           (map testable-content
+                (dsl-query "(and [[tag1]] [[page 2]])")))
+        "AND query")
+
+    (is (= ["b1" "b2"]
+           (map testable-content
+                (dsl-query "(or [[tag2]] [[page 2]])")))
+        "OR query")
+
+    (comment
+      ;; FIXME: load-test-files doesn't save `b4` to the db when DB_GRAPH=1
+      (is (= ["b1" "b4"]
+             (map testable-content
+                  (dsl-query "(or [[tag2]] [[page 4]])")))
+          "OR query"))
+
+    (is (= ["b1"]
+           (map testable-content
+                (dsl-query "(or [[tag2]] [[page not exists]])")))
+        "OR query with nonexistent page should return meaningful results")
+
+    (is (= (if js/process.env.DB_GRAPH #{"b1" "bar" "b3"} #{"b1" "foo:: bar" "b3"})
+           (->> (dsl-query "(not [[page 2]])")
+                ;; Only filter to page1 to get meaningful results
+                (filter #(= "page1" (get-in % [:block/page :block/name])))
+                (map testable-content)
+                (set)))
+        "NOT query")))
+
+(deftest nested-page-ref-queries
+  (load-test-files (if js/process.env.DB_GRAPH
+                     [{:page {:block/title "page1"}
+                       :blocks [{:block/title "p1 [[Parent page]]"
+                                 :build/children [{:block/title "[[Child page]]"}]}
+                                {:block/title "p2 [[Parent page]]"
+                                 :build/children [{:block/title "Non linked content"}]}]}]
+                     [{:file/path "pages/page1.md"
+                       :file/content "foo:: bar
+- p1 [[Parent page]]
+  - [[Child page]]
+- p2 [[Parent page]]
+  - Non linked content"}]))
+  (is (= (set
+          ["Non linked content"
+           "p2"
+           "p1"])
+         (set
+          (map testable-content
+               (dsl-query "(and [[Parent page]] (not [[Child page]]))"))))))
+
+(deftest between-queries
+  (load-test-files [{:file/path "journals/2020_12_26.md"
+                     :file/content "foo::bar
+- DONE 26-b1
+created-at:: 1608968448113
+- LATER 26-b2-modified-later
+created-at:: 1608968448114
+- DONE 26-b3
+created-at:: 1608968448115
+- 26-b4
+created-at:: 1608968448116
+"}])
+
+  (let [task-filter (if js/process.env.DB_GRAPH "(task todo done)" "(task later done)")]
+    (are [x y] (= (count (dsl-query x)) y)
+      (str "(and " task-filter " (between [[Dec 26th, 2020]] tomorrow))")
+      3
+
+       ;; between with journal pages
+      (str "(and " task-filter " (between [[Dec 26th, 2020]] [[Dec 27th, 2020]]))")
+      3)
+
+    (when js/process.env.DB_GRAPH
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]]))"))))
+      (is (= 3 (count (dsl-query "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))")))))))
+
+(deftest custom-query-test
+  (load-test-files [{:file/path "pages/page1.md"
+                     :file/content "foo:: bar
+- NOW b1
+- TODO b2
+- LATER b3
+- b3"}])
+
+  (let [task-query (if js/process.env.DB_GRAPH
+                     '(task doing)
+                     '(task now))]
+    (is (= ["NOW b1"]
+           (map :block/title (custom-query {:query task-query}))))
+
+    (is (= ["NOW b1"]
+           (map :block/title (custom-query {:query (list 'and task-query "b")})))
+        "Query with rule that can't be derived from the form itself")))
+
+(def get-property-value #(get-in %1 [:block/properties %2]))
+
+(when-not js/process.env.DB_GRAPH
+  (deftest sort-by-queries
+    (load-test-files [{:file/path "journals/2020_02_25.md"
+                       :file/content "rating:: 10"}
+                      {:file/path "journals/2020_12_26.md"
+                       :file/content "rating:: 8
+- DONE 26-b1
+created-at:: 1608968448113
+fruit:: plum
+- LATER 26-b2-modified-later
+created-at:: 1608968448114
+fruit:: apple
+- DONE 26-b3 has no fruit to test sorting of absent property value
+created-at:: 1608968448115
+- 26-b4
+created-at:: 1608968448116
+"}])
+    (let [task-filter "(task later done)"]
+      (testing "sort-by user block property fruit"
+        (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit))"))
+                          (map #(get-property-value % :fruit)))]
+          (is (= ["plum" "apple" nil]
+                 result)
+              "sort-by correctly defaults to desc"))
+
+        (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit desc))"))
+                          (map #(get-property-value % :fruit)))]
+          (is (= ["plum" "apple" nil]
+                 result)
+              "sort-by desc"))
+
+        (let [result (->> (dsl-query (str "(and " task-filter " (sort-by fruit asc))"))
+                          (map #(get-property-value % :fruit)))]
+          (is (= [nil "apple" "plum"]
+                 result)
+              "sort-by asc")))
+
+      (testing "sort-by hidden, built-in block property created-at"
+        (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at desc))"))
+                          (map #(get-property-value % :created-at)))]
+          (is (= [1608968448115 1608968448114 1608968448113]
+                 result))
+          "sorted-by desc")
+
+        (let [result (->> (dsl-query (str "(and " task-filter " (sort-by created-at asc))"))
+                          (map #(get-property-value % :created-at)))]
+          (is (= [1608968448113 1608968448114 1608968448115]
+                 result)
+              "sorted-by asc")))
+
+      (testing "user page property rating"
+        (is (= [10 8]
+               (->> (dsl-query "(and (page-property rating) (sort-by rating))")
+                    (map #(get-property-value % :rating)))))))))
+
+(deftest simplify-query
+  (are [x y] (= (query-dsl/simplify-query x) y)
+    '(and [[foo]])
+    '[[foo]]
+
+    '(and (and [[foo]]))
+    '[[foo]]
+
+    '(and (or [[foo]]))
+    '[[foo]]
+
+    '(and (not [[foo]]))
+    '(not [[foo]])
+
+    '(and (or (and [[foo]])))
+    '[[foo]]
+
+    '(not (or [[foo]]))
+    '(not [[foo]])))
 
 (comment
   (require '[clojure.pprint :as pprint])
-  (config/start-test-db!)
-  (import-test-data!)
+  (test-helper/start-test-db!)
 
-  (dsl/query test-db "(all-page-tags)")
+  (query-dsl/query test-helper/test-db "(task done)")
 
-  ;; (or (priority a) (not (priority a)))
-  ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
+ ;; Useful for debugging
+  (prn
+   (datascript.core/q
+    '[:find (pull ?b [*])
+      :where
+      [?b :block/name]]
+    (frontend.db/get-db test-helper/test-db)))
+
+ ;; (or (priority a) (not (priority a)))
+ ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
   (pprint/pprint
    (d/q
-     '[:find (pull ?b [*])
-       :where
-       [?b :block/uuid]
-       (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-           (not [?b :block/priority #{"A"}]
-                [(contains? #{"A"} ?priority)]))]
-     (frontend.db/get-conn test-db))))
+    '[:find (pull ?b [*])
+      :where
+      [?b :block/uuid]
+      (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
+          (not [?b :block/priority #{"A"}]
+               [(contains? #{"A"} ?priority)]))]
+    (frontend.db/get-db test-helper/test-db))))
+
+(when-not js/process.env.DB_GRAPH
+  (deftest namespace-queries
+    (load-test-files [{:file/path "pages/ns1.page1.md"
+                       :file/content "foo"}
+                      {:file/path "pages/ns1.page2.md"
+                       :file/content "bar"}
+                      {:file/path "pages/ns2.page1.md"
+                       :file/content "baz"}])
+
+    (is (= #{"ns1/page1" "ns1/page2"}
+           (set (map :block/name (dsl-query "(namespace ns1)")))))
+
+    (is (= #{}
+           (set (map :block/name (dsl-query "(namespace blarg)"))))
+        "Correctly returns no results")))

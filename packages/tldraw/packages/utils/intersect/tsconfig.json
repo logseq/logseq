@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "exclude": ["node_modules", "dist", "docs"],
+  "compilerOptions": {
+    "outDir": "./dist/types"
+  },
+  "references": [{ "path": "../vec" }]
+}

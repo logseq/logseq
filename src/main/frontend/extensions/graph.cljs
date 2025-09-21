@@ -1,85 +1,65 @@
 (ns frontend.extensions.graph
-  (:require [rum.core :as rum]
-            [frontend.rum :as r]
-            [frontend.ui :as ui]
-            [shadow.lazy :as lazy]
-            [frontend.handler.route :as route-handler]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [goog.object :as gobj]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [promesa.core :as p]
-            [clojure.set :as set]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [frontend.extensions.graph.pixi :as pixi]
-            [frontend.util :as util :refer [profile]]
-            [cljs-bean.core :as bean]))
-
-(defn- highlight-node!
-  [^js graph node]
-  (.resetNodeStyle graph node
-                   (bean/->js {:color "#6366F1"
-                               :border {:width 2
-                                        :color "#6366F1"}})))
+            [frontend.handler.route :as route-handler]
+            [frontend.colors :as colors]
+            [frontend.db :as db]
+            [goog.object :as gobj]
+            [rum.core :as rum]))
 
 (defn- highlight-neighbours!
-  [^js graph node focus-nodes dark?]
+  [^js graph node focus-nodes _dark?]
   (.forEachNeighbor
    (.-graph graph) node
    (fn [node attributes]
      (when-not (contains? focus-nodes node)
        (let [attributes (bean/->clj attributes)
+             accent-color (or (colors/get-accent-color) "#6366F1")
              attributes (assoc attributes
-                               :color "#6366F1"
+                               :color accent-color
                                :border {:width 2
-                                        :color "#6366F1"})]
+                                        :color accent-color})]
          (.resetNodeStyle graph node (bean/->js attributes)))))))
 
 (defn- highlight-edges!
   [^js graph node dark?]
   (.forEachEdge
    (.-graph graph) node
-   (fn [edge attributes]
+   (fn [edge _attributes]
      (.resetEdgeStyle graph edge (bean/->js {:width 1
                                              :color (if dark? "#999" "#A5B4FC")})))))
 
 (defn on-click-handler [graph node event *focus-nodes *n-hops drag? dark?]
   ;; shift+click to select the page
   (if (or (gobj/get event "shiftKey") drag?)
-    (let [page-name (string/lower-case node)]
+    (do
       (when-not @*n-hops
-        ;; Don't trigger re-render
-        (swap! *focus-nodes
+        (swap! *focus-nodes ;; Don't trigger re-render
                (fn [v]
                  (vec (distinct (conj v node))))))
       ;; highlight current node
-      (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
-                                (bean/->clj))]
-        (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes"))
+      (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")
       (highlight-neighbours! graph node (set @*focus-nodes) dark?)
       (highlight-edges! graph node dark?))
     (when-not drag?
-      (let [page-name (string/lower-case node)]
-        (.unhoverNode ^js graph node)
-        (route-handler/redirect! {:to :page
-                                  :path-params {:name page-name}})))))
-
-(defn reset-graph!
-  [^js graph]
-  (.resetView graph))
+      (.unhoverNode ^js graph node)
+      (when-let [page (and (string? node)
+                           (some-> (js/parseInt node) db/entity))]
+        (route-handler/redirect-to-page! (:block/uuid page))))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
   {:did-update pixi/render!
+   :should-update (fn [old-state new-state]
+                    (not= (select-keys (first (:rum/args old-state))
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])
+                          (select-keys (first (:rum/args new-state))
+                                       [:nodes :links :dark? :link-dist :charge-strength :charge-range])))
    :will-unmount (fn [state]
-                   (when-let [graph (:graph state)]
-                     (.destroy graph))
                    (reset! pixi/*graph-instance nil)
                    state)}
-  [state opts]
-  [:div.graph {:style {:height "100vh"}
-               :ref (fn [value]
+  [state _opts]
+  [:div.graph {:ref (fn [value]
                       (let [ref (get state :ref)]
                         (when (and ref value)
                           (reset! ref value))))}])

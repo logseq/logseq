@@ -1,14 +1,18 @@
 (ns frontend.extensions.pdf.utils
-  (:require [promesa.core :as p]
+  (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
-            [frontend.util :as front-utils]
-            ["/frontend/extensions/pdf/utils" :as js-utils]
-            [frontend.db :as front-db]
-            [frontend.loader :refer [load]]))
+            [clojure.string :as string]
+            [frontend.util :as util]
+            [logseq.common.uuid :as common-uuid]
+            [promesa.core :as p]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
 (defonce DELTA_SCALE 1.05)
+
+(defn hls-file?
+  [filename]
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
 
 (defn get-bounding-rect
   [rects]
@@ -49,7 +53,7 @@
 (defn resolve-hls-layer!
   [^js viewer page]
   (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
-    (let [cnt (.-textLayerDiv text-layer)
+    (let [cnt (.-div text-layer)
           cls "extensions__pdf-hls-layer"
           doc js/document
           layer (.querySelector cnt (str "." cls))]
@@ -89,52 +93,35 @@
   [^js viewer]
   (when-let [^js doc (and viewer (.-pdfDocument viewer))]
     (p/create
-      (fn [resolve]
-        (p/catch
-          (p/then (.getMetadata doc)
-                  (fn [^js r]
-                    (js/console.debug "[metadata] " r)
-                    (when-let [^js info (and r (.-info r))]
-                      (resolve (bean/->clj info)))))
-          (fn [e]
-            (resolve nil)
-            (js/console.error e)))))))
+     (fn [resolve]
+       (p/catch
+        (p/then (.getMetadata doc)
+                (fn [^js r]
+                  (js/console.debug "[metadata] " r)
+                  (when-let [^js info (and r (.-info r))]
+                    (resolve (bean/->clj info)))))
+        (fn [e]
+          (resolve nil)
+          (js/console.error e)))))))
 
 (defn clear-all-selection
-  []
-  (.removeAllRanges (js/window.getSelection)))
+  ([] (clear-all-selection js/window))
+  ([^js win]
+   (some-> win (.getSelection) (.removeAllRanges))))
 
 (def adjust-viewer-size!
-  (front-utils/debounce
-    200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+  (util/debounce
+   (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))
+   200))
 
 (defn fix-nested-js
   [its]
   (when (sequential? its)
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
-(defn gen-id []
-  (str (.toString (js/Date.now) 36)
-       (.. (js/Math.random) (toString 36) (substr 2 4))))
-
-(defn gen-uuid []
-  (front-db/new-block-id))
-
-(defn js-load$
-  [url]
-  (p/create
-    (fn [resolve]
-      (load url resolve))))
-
-(def PDFJS_ROOT
-  (if (= js/location.protocol "file:")
-    "./js"
-    "./static/js"))
-
-(defn load-base-assets$
+(defn gen-uuid
   []
-  (p/let [_ (js-load$ (str PDFJS_ROOT "/pdfjs/pdf.js"))
-          _ (js-load$ (str PDFJS_ROOT "/pdfjs/pdf_viewer.js"))]))
+  (common-uuid/gen-uuid))
 
 (defn get-page-from-el
   [^js/HTMLElement el]
@@ -152,10 +139,65 @@
   (let [rge-rects (bean/->clj (.getClientRects r))
         ^js cnt-offset (.getBoundingClientRect page-cnt)]
 
-    (if (seq rge-rects)
-      (let [rects (for [rect rge-rects]
+    (when (seq rge-rects)
+      (let [rects (for [rect rge-rects
+                        :when (and rect (not (zero? (.-width rect))) (not (zero? (.-height rect))))]
                     {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
                      :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))
                      :width  (.-width rect)
                      :height (.-height rect)})]
         (optimize-client-reacts rects)))))
+
+(defn fix-selection-text-breakline
+  [text]
+
+  (when-not (string/blank? text)
+    (let [sp "|#|"]
+      (-> text
+          (string/replace #"[\r\n]+" sp)
+          (string/replace (str "-" sp) "")
+          (string/replace #"\|#\|([a-zA-Z_])" " $1")
+          (string/replace sp "")))))
+
+(defn fix-local-asset-pagename
+  [filename]
+  (if (and (string? filename) (not (string/blank? filename)))
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)
+          hls?         (hls-file? filename)
+          len          (count filename)]
+      (if (or local-asset? hls?)
+        (-> filename
+            (subs 0 (if local-asset? (- len 15) len))
+            (string/replace #"^hls__" "")
+            (string/replace #"__[-\d]+$" "")
+            (string/replace "_" " ")
+            (string/trimr))
+        filename))
+    filename))
+
+;; TODO: which viewer instance?
+(defn next-page
+  []
+  (try
+    (js-invoke js/window.lsActivePdfViewer "nextPage")
+    (catch :default _e nil)))
+
+(defn prev-page
+  []
+  (try
+    (js-invoke js/window.lsActivePdfViewer "previousPage")
+    (catch :default _e nil)))
+
+(defn open-finder
+  []
+  (try
+    (when-let [^js el (js/document.querySelector ".extensions__pdf-toolbar a[title=Search]")]
+      (.click el))
+    (catch js/Error _e nil)))
+
+(comment
+  (fix-selection-text-breakline "this is a\ntest paragraph")
+  (fix-selection-text-breakline "he is 1\n8 years old")
+  (fix-selection-text-breakline "这是一个\n\n段落")
+  (fix-selection-text-breakline "これ\n\nは、段落")
+  (fix-selection-text-breakline "this is a te-\nst paragraph"))

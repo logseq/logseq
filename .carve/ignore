@@ -1,0 +1,90 @@
+;; Used by shadow-cljs
+electron.core/main
+electron.core/start
+electron.core/stop
+;; Used by shadow-cljs
+frontend.core/stop
+;; For repl
+frontend.db.utils/q
+;; For debugging
+frontend.debug/defn
+frontend.debug/print
+;; Lazily loaded
+frontend.extensions.code/editor
+;; Lazily loaded
+frontend.extensions.age-encryption/keygen
+frontend.extensions.age-encryption/encrypt-with-x25519
+frontend.extensions.age-encryption/decrypt-with-x25519
+frontend.extensions.age-encryption/encrypt-with-user-passphrase
+frontend.extensions.age-encryption/decrypt-with-user-passphrase
+;; Lazily loaded
+frontend.extensions.excalidraw/draw
+;; Lazily loaded
+frontend.extensions.tldraw/tldraw-app
+frontend.extensions.tldraw/generate-preview
+;; Referenced in commented TODO
+frontend.extensions.pdf.utils/get-page-bounding
+;; For repl
+frontend.extensions.zotero.api/item
+;; For repl
+frontend.external.roam/reset-state!
+;; For repl
+logseq.graph-parser.mldoc/ast-export-markdown
+;; Protocol fn wrapper that could be used
+frontend.fs/readdir
+;; Referenced in TODO
+frontend.handler.metadata/update-properties!
+;; Referenced in comment
+frontend.image/get-orientation
+;; For debugging
+frontend.mixins/perf-measure-mixin
+;; Previously useful fn
+frontend.mobile.util/get-idevice-statusbar-height
+;; placeholder fn
+frontend.publishing/stop
+;; Future use
+frontend.storage/get-transit
+;; repl fn
+frontend.state/remove-watch-state
+;; Future use?
+frontend.state/get-visual-viewport-state
+;; Future use?
+frontend.ui/reset-ios-whole-page-offset!
+;; For debugging
+frontend.util/d
+;; Future use?
+frontend.util/safe-search-normalize
+frontend.components.external/import-cp
+frontend.components.repo/add-repo
+;; For debugging
+frontend.util/trace!
+;; Repl fn
+frontend.util.pool/terminate-pool!
+;; Repl fn
+frontend.handler.file-based.property.util/add-page-properties
+;; Test runners used by shadow
+frontend.test.node-test-runner/main
+frontend.test.frontend-node-test-runner/main
+;; Test runner for nbb
+logseq.graph-parser.nbb-test-runner/run-tests
+;; For debugging
+frontend.fs.sync/debug-print-sync-events-loop
+frontend.fs.sync/stop-debug-print-sync-events-loop
+;; Used in macro
+frontend.state/get-current-edit-block-and-position
+;; For debugging
+frontend.db.model/get-all-classes
+;; Initial loaded
+frontend.ui/_emoji-init-data
+;; placeholder var for defonce
+frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
+;; Used by shadow.cljs
+frontend.worker.db-worker/init
+;; Future use?
+frontend.worker.rtc.hash/hash-blocks
+;; Repl fn
+frontend.rum/use-atom-in
+;; missionary utils
+frontend.common.missionary/<!
+;; only used in deps/common
+frontend.common.missionary/background-task-running?

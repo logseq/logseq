@@ -1,0 +1,8 @@
+;; private
+logseq.outliner.core/*transaction-opts*
+;; API fn
+logseq.outliner.datascript/transact!
+;; API fn
+logseq.outliner.op/apply-ops!
+;; API fn
+logseq.outliner.op/register-op-handlers!

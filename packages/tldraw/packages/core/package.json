@@ -1,0 +1,63 @@
+{
+  "version": "2.0.0-alpha.1",
+  "name": "@tldraw/core",
+  "description": "A TypeScript library for creating spatial UIs.",
+  "author": "@steveruizok",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tldraw/tldraw.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "canvas",
+    "zoom",
+    "drawing",
+    "whiteboard"
+  ],
+  "files": [
+    "dist/**/*"
+  ],
+  "main": "./src/index.ts",
+  "scripts": {
+    "start:next": "yarn start",
+    "start:packages": "yarn start",
+    "start": "node scripts/dev & yarn types:dev",
+    "build:next": "yarn build",
+    "build:packages": "yarn build",
+    "build": "node scripts/build && yarn types:build",
+    "types:dev": "tsc -w --p tsconfig.build.json",
+    "types:build": "tsc -p tsconfig.build.json && tsconfig-replace-paths -p tsconfig.build.json",
+    "lint": "eslint src/ --ext .ts,.tsx",
+    "clean": "rm -rf dist",
+    "test": "jest",
+    "test:ci": "jest --ci --runInBand --updateSnapshot",
+    "test:watch": "jest --watchAll"
+  },
+  "dependencies": {
+    "@tldraw/intersect": "2.0.0-alpha.1",
+    "@tldraw/vec": "2.0.0-alpha.1",
+    "@use-gesture/react": "^10.2.22",
+    "fast-copy": "^3.0.0",
+    "fast-deep-equal": "^3.1.3",
+    "hotkeys-js": "^3.10.0",
+    "is-plain-object": "^5.0.0",
+    "mobx": "^6.7.0",
+    "mobx-react-lite": "^3.4.0",
+    "mousetrap": "^1.6.5",
+    "potpack": "^2.0.0",
+    "proxy-compare": "^2.3.0",
+    "rbush": "^3.0.1",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@types/is-plain-object": "^2.0.4",
+    "@types/mousetrap": "^1.6.11",
+    "@types/node": "^18.13.0",
+    "@types/rbush": "^3.0.0",
+    "@types/react": "^17.0.0",
+    "@types/react-dom": "^17.0.0",
+    "tsconfig-replace-paths": "^0.0.11"
+  },
+  "gitHead": "3ab5db27b9e83736fdae934474e80e90c854922c"
+}

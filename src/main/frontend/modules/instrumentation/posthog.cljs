@@ -1,22 +1,33 @@
 (ns frontend.modules.instrumentation.posthog
-  (:require [frontend.config :as cfg]
+  (:require ["posthog-js" :as posthog]
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]
+            [frontend.mobile.util :as mobile-util]
             [frontend.util :as util]
-            [frontend.version :refer [version]]
-            ["posthog-js" :as posthog]))
+            [frontend.version :refer [version]]))
 
-(def ^:const token "qUumrWobEk2dKiKt1b32CMEZy8fgNS94rb_Bq4WutPA")
+(goog-define POSTHOG-TOKEN "")
 (def ^:const masked "masked")
 
 (defn register []
   (posthog/register
    (clj->js
-    {:app_type (if (util/electron?) "electron" "web")
-     :app_env (if cfg/dev? "development" "production")
+    {:app_type (let [platform (mobile-util/platform)]
+                 (cond
+                   (util/electron?)
+                   "electron"
+
+                   platform
+                   platform
+
+                   :else
+                   "web"))
+     :app_env (if config/dev? "development" "production")
      :app_ver version
      :schema_ver 0
      ;; hack, did not find ways to hack data on-the-fly with posthog-js
-     :$ip masked
-     :$current_url masked})))
+     :$current_url masked
+     :$pathname masked})))
 
 (def config
   {:api_host "https://app.posthog.com"
@@ -28,7 +39,8 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (posthog/init token (clj->js config)))
+  (when (and (not config/dev?) (not-empty POSTHOG-TOKEN))
+    (posthog/init POSTHOG-TOKEN (clj->js config))))
 
 (defn opt-out [opt-out?]
   (if opt-out?
@@ -36,6 +48,14 @@
     (do
       (init)
       (posthog/opt_in_capturing))))
+
+(defn capture [id data]
+  (try
+    (posthog/capture (str id) (bean/->js data))
+    (catch :default e
+      (js/console.error e)
+      ;; opt out or network issues
+      nil)))
 
 (comment
   (posthog/debug))

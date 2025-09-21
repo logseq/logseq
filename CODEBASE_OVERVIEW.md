@@ -24,27 +24,47 @@ For other tasks like bundling static resources and building the desktop app, whi
 
 [React](https://reactjs.org/) is a library for building data-driven UI declaratively. Comparing to the imperative ways (such as DOM manipulation or using jQuery), it's simpler and easier to code correctly.
 
-[Rum](https://github.com/tonsky/rum) is a React wrapper in ClojureScript. More than just providing the familiar React APIs, Rum adds many Clojure flavors to React, especially on the state management part. As a result, if you have experience with React, read Rum's [README]((https://github.com/tonsky/rum) before diving into the code.
+[Rum](https://github.com/tonsky/rum) is a React wrapper in ClojureScript. More than just providing the familiar React APIs, Rum adds many Clojure flavors to React, especially on the state management part. As a result, if you have experience with React, read Rum's [README](https://github.com/tonsky/rum) before diving into the code.
 
 ### DataScript
 
 [DataScript](https://github.com/tonsky/datascript) is an in-memory database that implements the [Datalog](https://en.wikipedia.org/wiki/Datalog) logic programming language. Datalog is very different from and much more expressive than the more common SQL and NoSQL query languages. Many users have implemented interesting features on top of Logseq just by utilizing the rich query language. Get started with Datalog with this [tutorial](http://www.learndatalogtoday.org/)
 
-## Important Folders and Files
+## Important Directories and Files
 
-After cloning the [Logseq repository](https://github.com/logseq/logseq), there are some folders and files that deserve extra attention.
+This is overview of this repository's most important directories and files.
 
-- Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their Clojure counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
+- Config files are located at the root directory. `package.json` contains the JavaScript dependencies while `deps.edn` contains their ClojureScript counterparts. `shadow-cljs.edn` and `gulpfile.js` contain all the build scripts.
 
-- `/public` and `/resources` contain all the static assets
+- `resources/` and `public` contain all the static assets
 
-- `/src` is where most of the code locates.
+- `src/` is where most of the code is located.
 
-  - `/src/electron` and `/src/main/electron` contains code specific to the desktop app.
+  - `src/electron/` contains code specific to the Electron desktop app.
 
-  - `/src/test` contains all the test and `/src/dev-cljs` contains some development utilities.
+  - `src/test/` contains all the cljs tests.
 
-  - `/src/main/frontend` contains code that powers the Logseq editor. Folders and files inside are organized by features or functions. For example, `components` contains all the UI components and `handler` contains all the event-handling code. You can explore on your own interest.
+  - `src/resources/` is a directory and Clojure(Script) resource classpath and includes language translations.
+
+  - `src/main/frontend/` contains code that powers the Logseq editor. Directories and files inside are organized by features or functions. Some notable directories:
+    - `src/main/frontend/components/` contains all the UI components.
+    - `src/main/frontend/handler/` contains system component like code.
+    - `src/main/frontend/worker/` contains code for the separate worker asset.
+    - `src/main/frontend/common/` contains common code shared by the worker asset and the frontend.
+  - `src/main/logseq/` contains the api used by plugins.
+  - `src/main/mobile/` contains code for new mobile app.
+  - `src/dev-cljs/` contains some development utilities.
+
+- `deps/` contains ClojureScript dependencies or libraries used by the frontend.
+  - `deps/graph-parser/` is a library that parses a Logseq graph and saves it to a database.
+
+- `packages/` contains JavaScript dependencies used by the frontend
+  - `packages/ui/` - The frontend's component system based on shadcn
+  - `packags/tldraw/` - Custom fork of tldraw which powers whiteboards
+- `scripts` - Dev scripts
+- `clj-e2e/` - end to end clj frontend tests
+- `android/` -  Android app
+- `ios/` - iOS app
 
 ## Data Flow
 
@@ -68,4 +88,4 @@ After the change changes, React will dutifully refresh the screen.
 
 ## Architecture
 
-Logseq has undergone a heavy refactoring, results in a much more robust and clear architecture. Read [this article](https://logseq.github.io/#/page/The%20Refactoring%20Of%20Logseq) written by the main contributor to the refactoring for a detailed tour.
+Logseq has undergone a heavy refactoring, results in a much more robust and clear architecture. Read [this article](https://docs.logseq.com/#/page/The%20Refactoring%20Of%20Logseq) written by the main contributor to the refactoring for a detailed tour.

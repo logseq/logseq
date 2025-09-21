@@ -1,0 +1,225 @@
+{:paths ["scripts/src" "src/main" "src/resources"]
+ :deps
+ {metosin/malli
+  {:mvn/version "0.16.1"}
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
+  logseq/bb-tasks
+  #_{:local/root "../bb-tasks"}
+  {:git/url "https://github.com/logseq/bb-tasks"
+   :git/sha "70d3edeb287f5cec7192e642549a401f7d6d4263"}
+  logseq/graph-parser
+  {:local/root "deps/graph-parser"}
+  org.clj-commons/digest
+  {:mvn/version "1.4.100"}}
+ :pods
+ {clj-kondo/clj-kondo {:version "2024.09.27"}
+  org.babashka/fswatcher {:version "0.0.3"}
+  org.babashka/go-sqlite3 {:version "0.1.0"}}
+ :tasks
+ {dev:desktop-watch
+  logseq.tasks.dev.desktop/watch
+
+  dev:open-dev-electron-app
+  logseq.tasks.dev.desktop/open-dev-electron-app
+
+  -dev:electron-start
+  {:depends [dev:desktop-watch dev:open-dev-electron-app]}
+
+  dev:electron-start
+  {:doc "Start electron dev by watching assets and opening dev app"
+   ;; Parallel execution - https://book.babashka.org/#parallel
+   :task (run '-dev:electron-start {:parallel true})}
+
+  dev:app-watch
+  logseq.tasks.dev.mobile/app-watch
+
+  -dev:build-publishing-frontend
+  logseq.tasks.dev/build-publishing-frontend
+
+  dev:publishing-backend
+  logseq.tasks.dev/publishing-backend
+
+  -dev:publishing-release
+  {:depends [-dev:build-publishing-frontend]
+   :doc "Build release publishing spa app given graph and output dirs"
+   :task (run 'dev:publishing-backend)}
+
+  -dev:watch-publishing-frontend
+  logseq.tasks.dev/watch-publishing-frontend
+
+  -dev:watch-publishing-backend
+  logseq.tasks.dev/watch-publishing-backend
+
+  -dev:publishing-dev
+  {:depends [-dev:watch-publishing-frontend -dev:watch-publishing-backend]
+   :doc "Watch dev publishing spa app given graph and output dirs"}
+
+  dev:publishing
+  {:doc "Builds full publishing app given graph and output dirs. Append --dev to watch frontend"
+   :task (if ((set *command-line-args*) "--dev")
+           (run '-dev:publishing-dev {:parallel true})
+           (run '-dev:publishing-release))}
+
+  dev:validate-db
+  {:doc "Validate a DB graph's datascript schema"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/validate_db.cljs"
+                *command-line-args*)}
+
+  dev:db-query
+  {:doc "Query a DB graph's datascript db"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/query.cljs" *command-line-args*)}
+
+  dev:db-transact
+  {:doc "Transact against a DB graph's datascript db"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/outliner" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/transact.cljs" *command-line-args*)}
+
+  dev:db-create
+  {:doc "Create a DB graph given a sqlite.build EDN file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src:script script/create_graph.cljs" *command-line-args*)}
+
+  dev:db-export
+  {:doc "Export a DB graph to a sqlite.build EDN file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/export_graph.cljs" *command-line-args*)}
+
+  dev:db-diff
+  {:doc "Diffs two DB graphs"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/diff_graphs.cljs" *command-line-args*)}
+
+  dev:db-import
+  {:doc "Import a file graph to db graph"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/graph-parser" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq -cp src:../outliner/src script/db_import.cljs" *command-line-args*)}
+
+  dev:db-import-many
+  {:doc "Import multiple file graphs to db graphs"
+   :task logseq.tasks.dev/db-import-many}
+
+  dev:db-datoms
+  {:doc "Write db's datoms to a file"
+   :requires ([babashka.fs :as fs])
+   :task (apply shell {:dir "deps/db" :extra-env {"ORIGINAL_PWD" (fs/cwd)}}
+                "yarn -s nbb-logseq script/dump_datoms.cljs"
+                *command-line-args*)}
+
+  dev:diff-datoms
+  logseq.tasks.dev/diff-datoms
+
+  dev:npx-cap-run-ios
+  logseq.tasks.dev.mobile/npx-cap-run-ios
+
+  -dev:ios-app
+  {:depends [dev:app-watch dev:npx-cap-run-ios]}
+
+  dev:ios-app
+  {:doc "iOS development environment"
+   :task (run '-dev:ios-app {:parallel true})}
+
+  release:ios-app
+  logseq.tasks.dev.mobile/run-ios-release
+
+  dev:npx-cap-run-android
+  logseq.tasks.dev.mobile/npx-cap-run-android
+
+  -dev:android-app
+  {:depends [dev:app-watch dev:npx-cap-run-android]}
+
+  dev:android-app
+  {:doc "Android development environment"
+   :task (run '-dev:android-app {:parallel true})}
+
+  release:android-app
+  logseq.tasks.dev.mobile/run-android-release
+
+  dev:validate-local-storage
+  logseq.tasks.spec/validate-local-storage
+
+  dev:validate-plugins-edn
+  logseq.tasks.malli/validate-plugins-edn
+
+  dev:validate-repo-config-edn
+  logseq.tasks.malli/validate-repo-config-edn
+
+  dev:validate-global-config-edn
+  logseq.tasks.malli/validate-global-config-edn
+
+  dev:validate-ast
+  logseq.tasks.malli/validate-ast
+
+  dev:test
+  logseq.tasks.dev/test
+
+  dev:lint-and-test
+  logseq.tasks.dev/lint-and-test
+
+  dev:gen-malli-kondo-config
+  logseq.tasks.dev/gen-malli-kondo-config
+
+  lint:dev
+  logseq.tasks.dev.lint/dev
+
+  lint:kondo-git-changes
+  logseq.tasks.dev.lint/kondo-git-changes
+
+  lint:large-vars
+  logseq.bb-tasks.lint.large-vars/-main
+
+  lint:carve
+  logseq.bb-tasks.lint.carve/-main
+
+  lint:ns-docstrings
+  logseq.bb-tasks.lint.ns-docstrings/-main
+
+  lint:db-and-file-graphs-separate
+  logseq.tasks.dev.db-and-file-graphs/-main
+
+  lint:worker-and-frontend-separate
+  logseq.tasks.dev.lint/worker-and-frontend-separate
+
+  nbb:watch
+  logseq.bb-tasks.nbb.watch/watch
+
+  nbb:portal-watch
+  logseq.bb-tasks.nbb.watch/portal-watch
+
+  lang:list
+  logseq.tasks.lang/list-langs
+
+  lang:missing
+  logseq.tasks.lang/list-missing
+
+  lang:validate-translations
+  logseq.tasks.lang/validate-translations
+
+  file-sync:integration-tests
+  logseq.tasks.file-sync/integration-tests
+
+  ai:check-common-errors
+  logseq.tasks.common-errors/check-common-errors}
+
+ :tasks/config
+ {:large-vars
+  ;; TODO: Get to a smaller max-lines-count
+  {:max-lines-count 100
+   ;; TODO: Address vars tagged with cleanup-todo. These
+   ;; are left mostly because they are not high priority
+   ;; or not well understood
+   :metadata-exceptions #{:large-vars/cleanup-todo}}
+
+  :ns-docstrings
+  {:paths ["src/main"]
+   ;; Ignore namespaces that won't be helpful to document initially
+   ;; e.g. frontend.components.onboarding -> "Onboarding fns"
+   :ignore-regex "^(frontend.components|frontend.extensions|frontend.modules|frontend.mobile|logseq.sdk)"}}}

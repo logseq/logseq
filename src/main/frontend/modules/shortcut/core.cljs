@@ -1,38 +1,127 @@
 (ns frontend.modules.shortcut.core
-  (:require [clojure.string :as str]
-            [frontend.handler.config :as config]
+  (:require [clojure.string :as string]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.global-config :as global-config-handler]
             [frontend.handler.notification :as notification]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log]
-            [medley.core :as medley])
-  (:import [goog.events KeyCodes KeyHandler KeyNames]
+            [lambdaisland.glogi :as log])
+  (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
-(def *installed (atom {}))
+(defonce *installed-handlers (atom {}))
+(defonce *pending-inited? (atom false))
+(defonce *pending-shortcuts (atom []))
 
 (def global-keys #js
-  [KeyCodes/TAB
-   KeyCodes/ENTER
-   KeyCodes/BACKSPACE KeyCodes/DELETE
-   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+                  [KeyCodes/TAB
+                   KeyCodes/ENTER
+                   KeyCodes/BACKSPACE KeyCodes/DELETE
+                   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
 
-(defn install-shortcut!
+(declare register-shortcut!)
+
+(defn consume-pending-shortcuts!
+  []
+  (when (and @*pending-inited? (seq @*pending-shortcuts))
+    (doseq [[handler-id id shortcut] @*pending-shortcuts]
+      (register-shortcut! handler-id id shortcut))
+    (reset! *pending-shortcuts [])))
+
+(defn- get-handler-by-id
+  [handler-id]
+  (->> (vals @*installed-handlers)
+       (filter #(= (:group %) handler-id))
+       first
+       :handler))
+
+(defn- get-installed-ids-by-handler-id
+  [handler-id]
+  (some->> @*installed-handlers
+           (filter #(= (:group (second %)) handler-id))
+           (map first)
+           (remove nil?)
+           (vec)))
+
+(defn register-shortcut!
+  "Register a shortcut, notice the id need to be a namespaced keyword to avoid
+  conflicts.
+  Example:
+  (register-shortcut! :shortcut.handler/misc :foo/bar {:binding \"mod+shift+8\"
+     :fn (fn [_state _event]
+     (js/alert \"test shortcut\"))})"
+  ([handler-id id]
+   (register-shortcut! handler-id id nil))
+  ([handler-id id shortcut-map]
+   (if (and (keyword? handler-id) (not @*pending-inited?))
+     (swap! *pending-shortcuts conj [handler-id id shortcut-map])
+     (when-let [^js handler (if (or (string? handler-id) (keyword? handler-id))
+                              (let [handler-id (keyword handler-id)]
+                                (get-handler-by-id handler-id))
+
+                              ;; as Handler instance
+                              handler-id)]
+
+       (when shortcut-map
+         (shortcut-config/add-shortcut! handler-id id shortcut-map))
+
+       (when-not (false? (dh/shortcut-binding id))
+         (doseq [k (dh/shortcut-binding id)]
+           (try
+             (log/debug :shortcut/register-shortcut {:id id :binding k})
+             (.registerShortcut handler (util/keyname id) (shortcut-utils/undecorate-binding k))
+             (catch :default e
+               (log/error :shortcut/register-shortcut {:id      id
+                                                       :binding k
+                                                       :error   e})
+               (notification/show! (string/join " " [id k (.-message e)]) :error false)))))))))
+
+(defn unregister-shortcut!
+  "Unregister a shortcut.
+  Example:
+  (unregister-shortcut! :shortcut.handler/misc :foo/bar)"
+  [handler-id shortcut-id]
+  (when-let [handler (get-handler-by-id handler-id)]
+    (when-let [ks (dh/shortcut-binding shortcut-id)]
+      (doseq [k ks]
+        (.unregisterShortcut ^js handler (shortcut-utils/undecorate-binding k)))))
+  (when shortcut-id
+    (shortcut-config/remove-shortcut! handler-id shortcut-id)))
+
+(defn uninstall-shortcut-handler!
+  ([install-id] (uninstall-shortcut-handler! install-id false))
+  ([install-id refresh?]
+   (when-let [handler (-> (get @*installed-handlers install-id)
+                          :handler)]
+     (.dispose ^js handler)
+     (log/debug :shortcuts/uninstall-handler (-> @*installed-handlers (get install-id) :group (str (if refresh? "*" ""))))
+     (swap! *installed-handlers dissoc install-id))))
+
+(defn install-shortcut-handler!
   [handler-id {:keys [set-global-keys?
                       prevent-default?
-                      skip-installed?
                       state]
                :or   {set-global-keys? true
-                      prevent-default? false
-                      skip-installed? false}}]
-  (let [shortcut-map (dh/shortcut-map handler-id state)
-        handler      (new KeyboardShortcutHandler js/window)]
-     ;; set arrows enter, tab to global
+                      prevent-default? false}}]
+
+  ;; force uninstall existed handler
+  (some->>
+   (get-installed-ids-by-handler-id handler-id)
+   (map #(uninstall-shortcut-handler! % true))
+   (doall))
+
+  (let [shortcut-map (dh/shortcuts-map-by-handler-id handler-id state)
+        handler (new KeyboardShortcutHandler js/window)]
+    ;; set arrows enter, tab to global
     (when set-global-keys?
       (.setGlobalKeys handler global-keys))
 
@@ -40,155 +129,168 @@
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
-      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
-      (when-not (false? (dh/shortcut-binding id))
-        (doseq [k (dh/shortcut-binding id)]
-          (try
-            (log/debug :shortcut/register-shortcut {:id id :binding k})
-            (.registerShortcut handler (util/keyname id) k)
-            (catch js/Object e
-              (log/error :shortcut/register-shortcut {:id id
-                                                      :binding k
-                                                      :error e})
-              (notification/show! (str/join " " [id k (.-message e)]) :error false))))))
+      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (str (dh/shortcut-binding id))})
+      (register-shortcut! handler id))
 
     (let [f (fn [e]
-              (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
+              (let [id (keyword (.-identifier e))
+                    shortcut-map (dh/shortcuts-map-by-handler-id handler-id state) ;; required to get shortcut map dynamically
+                    dispatch-fn (get shortcut-map id)]
+                (state/set-state! :editor/latest-shortcut id)
                 ;; trigger fn
-                (dispatch-fn e)))
-          install-id (medley/random-uuid)
-          data       {install-id
-                      {:group      handler-id
-                       :dispatch-fn f
-                       :handler    handler}}]
+                (when dispatch-fn
+                  (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))
+          install-id (random-uuid)
+          data {install-id
+                {:group       handler-id
+                 :dispatch-fn f
+                 :handler     handler}}]
 
-      (events/listen handler EventType/SHORTCUT_TRIGGERED f)
+      (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (when-not skip-installed?
-        (swap! *installed merge data))
+      (log/debug :shortcuts/install-handler (str handler-id))
+      (swap! *installed-handlers merge data)
 
       install-id)))
 
 (defn- install-shortcuts!
-  []
-  (->> [:shortcut.handler/misc
-        :shortcut.handler/editor-global
-        :shortcut.handler/global-non-editing-only
-        :shortcut.handler/global-prevent-default]
-       (map #(install-shortcut! % {}))
+  [handler-ids]
+  (->> (or (seq handler-ids)
+           [:shortcut.handler/misc
+            :shortcut.handler/editor-global
+            :shortcut.handler/global-non-editing-only
+            :shortcut.handler/global-prevent-default
+            :shortcut.handler/block-editing-only])
+       (map #(install-shortcut-handler! % {}))
        doall))
 
-(defn- uninstall-shortcut! [install-id]
-  (when-let
-      [handler (-> (get @*installed install-id)
-                   :handler)]
-    (.dispose ^js handler)
-    (swap! *installed dissoc install-id)))
+(defn mixin
+  ([handler-id] (mixin handler-id true))
+  ([handler-id remount-reinstall?]
+   (cond->
+    {:did-mount
+     (fn [state]
+       (let [install-id (install-shortcut-handler! handler-id {:state state})]
+         (assoc state ::install-id install-id)))
 
+     :will-unmount
+     (fn [state]
+       (when-let [install-id (::install-id state)]
+         (uninstall-shortcut-handler! install-id))
+       state)}
 
-(defn- uninstall-shortcut-aux!
-  [state handler-id]
-  (some-> (get state :shortcut-key)
-          uninstall-shortcut!))
+     remount-reinstall?
+     (assoc
+      :will-remount
+      (fn [old-state new-state]
+        (util/profile "[shortcuts] reinstalled:"
+          (uninstall-shortcut-handler! (::install-id old-state))
+          (when-let [install-id (install-shortcut-handler! handler-id {:state new-state})]
+            (assoc new-state ::install-id install-id))))))))
 
-(defn- install-shortcut-aux!
-  [state handler-id]
-  (let [install-id (-> handler-id
-                       (install-shortcut! {:state state}))]
-    (assoc state :shortcut-key install-id)))
-
-(defn mixin [handler-id]
+(defn mixin*
+  "This is an optimized version compared to (mixin).
+   And the shortcuts will not be frequently loaded and unloaded.
+   As well as ensuring unnecessary updates of components."
+  [handler-id]
   {:did-mount
    (fn [state]
-     (install-shortcut-aux! state handler-id))
+     (let [*state (volatile! state)
+           install-id (install-shortcut-handler! handler-id {:state *state})]
+       (assoc state ::install-id install-id
+              ::*state *state)))
 
-   :did-remount (fn [old-state new-state]
-                  ;; uninstall
-                  (uninstall-shortcut-aux! old-state handler-id)
+   :will-remount
+   (fn [old-state new-state]
+     (when-let [*state (::*state old-state)]
+       (vreset! *state new-state))
+     new-state)
 
-                  ;; update new states
-                  (install-shortcut-aux! new-state handler-id))
    :will-unmount
    (fn [state]
-     (uninstall-shortcut-aux! state handler-id)
-     (dissoc state :shortcut-key))})
+     (when-let [install-id (::install-id state)]
+       (uninstall-shortcut-handler! install-id)
+       (some-> (::*state state) (vreset! nil)))
+     state)})
 
-(defn unlisten-all []
-  (doseq [{:keys [handler group]} (vals @*installed)
+(defn unlisten-all!
+  ([] (unlisten-all! false))
+  ([dispose?]
+   (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
+           :when (not= group :shortcut.handler/misc)]
+     (if dispose?
+       (.dispose ^js handler)
+       (events/unlisten handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))))
+
+(defn listen-all! []
+  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed-handlers)
           :when (not= group :shortcut.handler/misc)]
-    (.removeAllListeners handler)))
+    (if (.isDisposed ^js handler)
+      (install-shortcut-handler! group {})
+      (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn))))
 
-(defn listen-all []
-  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed)
-          :when (not= group :shortcut.handler/misc)]
-    (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
-
-(defn disable-all-shortcuts []
-  {:did-mount
+(def disable-all-shortcuts
+  {:will-mount
    (fn [state]
-     (unlisten-all)
+     (unlisten-all!)
      state)
 
    :will-unmount
    (fn [state]
-     (listen-all)
+     (listen-all!)
      state)})
 
 (defn refresh!
   "Always use this function to refresh shortcuts"
   []
-  (log/info :shortcut/refresh @*installed)
-  (doseq [id (keys @*installed)]
-    (uninstall-shortcut! id))
-  (install-shortcuts!))
+  (when-not (:ui/shortcut-handler-refreshing? @state/state)
+    (state/set-state! :ui/shortcut-handler-refreshing? true)
+
+    (let [ids (keys @*installed-handlers)
+          _handler-ids (set (map :group (vals @*installed-handlers)))]
+      (doseq [id ids] (uninstall-shortcut-handler! id))
+      ;; TODO: should re-install existed handlers
+      (install-shortcuts! nil))
+    (state/pub-event! [:shortcut-handler-refreshed])
+    (state/set-state! :ui/shortcut-handler-refreshing? false)))
 
 (defn- name-with-meta [e]
-  (let [ctrl    (.-ctrlKey e)
-        alt     (.-altKey e)
-        meta    (.-metaKey e)
-        shift   (.-shiftKey e)
+  (let [ctrl (.-ctrlKey e)
+        alt (.-altKey e)
+        meta (.-metaKey e)
+        shift (.-shiftKey e)
         keyname (get key-names (str (.-keyCode e)))]
     (cond->> keyname
-      ctrl  (str "ctrl+")
-      alt   (str "alt+")
-      meta  (str "meta+")
+      ctrl (str "ctrl+")
+      alt (str "alt+")
+      meta (str "meta+")
       shift (str "shift+"))))
 
-(defn- keyname [e]
+(defn keyname [e]
   (let [name (get key-names (str (.-keyCode e)))]
     (case name
       nil nil
       ("ctrl" "shift" "alt" "esc") nil
       (str " " (name-with-meta e)))))
 
-(defn record! []
-  {:did-mount
-   (fn [state]
-     (let [handler (KeyHandler. js/document)
-           keystroke (:rum/local state)]
+(defn persist-user-shortcut!
+  [id binding]
+  (let [global? true]
+    (letfn [(into-shortcuts [shortcuts]
+              (cond-> (or shortcuts {})
+                (nil? binding)
+                (dissoc id)
 
-       (doseq [id (keys @*installed)]
-         (uninstall-shortcut! id))
-
-       (events/listen handler "key"
-                      (fn [e]
-                        (.preventDefault e)
-                        (swap! keystroke #(str % (keyname e)))))
-
-       (assoc state ::key-record-handler handler)))
-
-   :will-unmount
-   (fn [{:rum/keys [args local] :as state}]
-     (let [k (first args)
-           keystroke (str/trim @local)]
-       (when-not (empty? keystroke)
-         (config/set-config! :shortcuts (merge
-                                         (:shortcuts (state/get-config))
-                                         {k keystroke}))))
-
-     (when-let [^js handler (::key-record-handler state)]
-       (.dispose handler))
-
-     (js/setTimeout #(refresh!) 500)
-
-     (dissoc state ::key-record-handler))})
+                (and global?
+                     (or (string? binding)
+                         (vector? binding)
+                         (boolean? binding)))
+                (assoc id binding)))]
+      ;; TODO: exclude current graph config shortcuts
+      (config-handler/set-config!
+       :shortcuts (into-shortcuts (:shortcuts (state/get-graph-config))))
+      (if (util/electron?)
+        (global-config-handler/set-global-config-kv!
+         :shortcuts (into-shortcuts (:shortcuts (state/get-global-config))))
+        ;; web browser platform
+        (storage/set :ls-shortcuts (into-shortcuts (storage/get :ls-shortcuts)))))))

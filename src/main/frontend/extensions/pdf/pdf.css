@@ -1,36 +1,73 @@
-@import "_viewer.css";
-
 :root {
-  --ph-highlight-color-blue: #55b8fe;
-  --ph-highlight-color-green: #46da48;
-  --ph-highlight-color-red: #fd709a;
-  --ph-highlight-color-purple: #ac8cf1;
-  --ph-highlight-color-yellow: #fcd713;
+  --ph-highlight-color-blue: var(--color-blue-300);
+  --ph-highlight-color-green: var(--color-green-300);
+  --ph-highlight-color-red: var(--color-red-300);
+  --ph-highlight-color-purple: var(--color-purple-300);
+  --ph-highlight-color-yellow: var(--color-yellow-300);
+
+  --ph-link-color: #106ba3;
 
   --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
 
   --ph-view-container-width: 42vw;
 }
 
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .extensions__pdf {
 
   &-container {
     display: flex;
+
+    *[data-color=yellow] {
+      background-color: var(--ph-highlight-color-yellow);
+      border-color: var(--ph-highlight-color-yellow);
+    }
+
+    *[data-color=blue] {
+      background-color: var(--ph-highlight-color-blue);
+      border-color: var(--ph-highlight-color-blue);
+    }
+
+    *[data-color=green] {
+      background-color: var(--ph-highlight-color-green);
+      border-color: var(--ph-highlight-color-green);
+    }
+
+    *[data-color=red] {
+      background-color: var(--ph-highlight-color-red);
+      border-color: var(--ph-highlight-color-red);
+    }
+
+    *[data-color=purple] {
+      background-color: var(--ph-highlight-color-purple);
+      border-color: var(--ph-highlight-color-purple);
+    }
   }
 
   &-loader {
     position: relative;
   }
 
-  &-toolbar {
+  &-header {
+    display: flex;
+    justify-content: flex-end;
     position: absolute;
     top: 0;
-    left: 0;
-    width: 100%;
-    height: 42px;
-    z-index: 5;
-    background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, rgba(255, 255, 255, 1) 100%);
+    right: 10px; /* Allows clicking on the scrollbar */
+    width: calc(100% - 10px);
     padding: 8px 20px;
+    z-index: 5;
+    -webkit-app-region: drag;
+  }
+
+  &-toolbar {
+    -webkit-app-region: no-drag;
 
     > .inner {
       display: flex;
@@ -39,20 +76,51 @@
 
       > .r {
         a.button {
-          user-select: none;
-          display: flex;
-          align-items: center;
-          margin-left: 8px;
-          margin-right: 8px;
-          padding: 4px 2px;
-          color: var(--ls-icon-color);
-          background-color: transparent;
-          transition: none;
+          @apply select-none flex items-center mx-2 py-1 px-0.5 bg-transparent
+          transition-none break-normal hover:opacity-80;
 
           &.is-active {
-            opacity: 1;
+            @apply opacity-100 rounded-none;
+
             border-bottom: 2px solid #969494;
-            border-radius: 0;
+          }
+
+          &:active {
+            @apply opacity-60;
+          }
+        }
+      }
+
+      .pager {
+        white-space: nowrap;
+
+        > .nu {
+          padding-right: 4px;
+
+          input {
+            user-select: inherit;
+            width: 35px;
+            text-align: right;
+            padding-right: 4px;
+            padding-left: 2px;
+            height: 18px;
+            border: none;
+            background: transparent;
+            font-size: 15px;
+
+            &.is-long {
+              font-size: 12px;
+            }
+          }
+        }
+
+        > .ct {
+          .button {
+            margin: 0;
+
+            &:last-child {
+              padding-right: 3px;
+            }
           }
         }
       }
@@ -61,11 +129,7 @@
 
   &-outline {
     position: absolute;
-    right: 30px;
-
-
-    &-wrap {
-    }
+    right: 15px;
 
     > section {
       white-space: pre-wrap;
@@ -125,11 +189,11 @@
           }
 
           &:hover {
-            color: #106ba3;
+            color: var(--ph-link-color);
           }
 
           &:active, &:focus {
-            background-color: #106ba3;
+            background-color: var(--ph-link-color);
             color: white;
 
             > i {
@@ -145,18 +209,71 @@
         padding-left: 12px;
       }
     }
+
+    &-tabs {
+      @apply flex justify-center py-2.5 space-x-1;
+
+      border-bottom: 1px solid #d9d9d9;
+
+      > .inner {
+        display: flex;
+        border: 1px solid #d5d5d5;
+        border-radius: 4px;
+      }
+
+      button {
+        font-size: 12px;
+        padding: 5px 6px;
+        line-height: 1;
+        border: none;
+        min-width: 90px;
+        border-radius: 3px;
+        color: black;
+
+        &:hover {
+          border: none;
+          opacity: .8;
+          color: black;
+          border-radius: 3px;
+        }
+
+        &:active {
+          opacity: 1;
+          background-color: #c5c5c5;
+        }
+
+        &.active {
+          background-color: #c5c5c5;
+        }
+      }
+    }
+
+    &-panels {
+      max-height: 80vh;
+      overflow-y: auto;
+      padding: 5px 0 5px 10px;
+    }
+
+    &-wrap.hls-popup-overlay {
+      right: -6px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
   }
 
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 206px;
-      width: 178px;
+      right: 375px;
+      width: 235px;
       padding: 15px 10px;
     }
 
     &-item {
       display: flex;
+      color: rgb(115, 115, 115);
 
       &.theme-picker {
         justify-content: center;
@@ -182,7 +299,7 @@
           }
 
           &.dark {
-            background-color: #0a4251;
+            background-color: var(--lx-pdf-container-dark-bg, #0a4251);
 
             svg {
               color: white;
@@ -190,13 +307,99 @@
           }
         }
       }
+
+      &.toggle-input {
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 0 9px;
+        padding-top: 12px;
+        margin-top: 13px;
+        opacity: 0.8;
+        border-top: 1px solid #ccc;
+
+        &.is-between {
+          padding-top: 0;
+          border-top: none;
+        }
+      }
+    }
+  }
+
+  &-finder {
+    &-wrap.hls-popup-overlay {
+      right: -6px;
+      left: unset;
+      bottom: unset;
+      height: auto;
+      width: auto;
+    }
+
+    &.hls-popup-box {
+      min-width: 360px;
+      width: auto;
+
+      > .input-inner {
+        @apply p-2 relative;
+
+        .input-wrap {
+          @apply mr-1.5 border border-gray-300;
+          border-radius: 4px;
+
+          &:active, &:focus-within {
+            border-color: transparent;
+          }
+        }
+
+        input {
+          @apply flex-1 bg-gray-200;
+
+          padding: 1px 5px;
+          border-radius: 4px;
+          color: black;
+          outline: none;
+          border: 2px solid transparent;
+
+          &:focus {
+            border: 2px solid rgba(16, 107, 163, 0.75);
+          }
+        }
+
+        .ui__button {
+          margin-top: unset;
+          padding: 4px;
+
+          .ti {
+            font-weight: bold;
+            color: #989898;
+          }
+
+          &.active .ti, &:hover .ti {
+            color: #1f1f1f !important;
+          }
+
+          &.icon-enter {
+            @apply absolute opacity-80;
+
+            right: -1px;
+            top: 2px;
+          }
+        }
+
+        > .ui__button {
+          margin-left: 8px;
+        }
+      }
+
+      > .result-inner {
+        @apply text-gray-800;
+      }
     }
   }
 
   &-viewer {
     position: absolute;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: auto;
     width: 100%;
     height: 100%;
 
@@ -204,29 +407,29 @@
     }
 
     > .pdfViewer {
-      overflow: hidden;
-
       &.disabled-text-selection {
         user-select: none;
         pointer-events: none;
       }
     }
+
+
   }
 
   &-resizer {
-    position: absolute;
-    width: 3px;
-    height: 88vh;
-    background-color: rgba(0, 0, 0, 0);
-    overflow: hidden;
-    z-index: 4;
-    top: 10vh;
-    cursor: col-resize;
-    right: 0;;
+    @apply absolute w-[3px] h-screen overflow-hidden;
+    @apply z-10 right-0 cursor-col-resize;
+
+    transition: background-color 300ms;
+    transition-delay: 300ms;
+
+    &.is-active, &:hover,
+    &:focus, &:active {
+      @apply bg-primary/90;
+    }
   }
 
   &-hls-text-region {
-    position: absolute;
     opacity: 1;
     z-index: 2;
   }
@@ -239,25 +442,16 @@
     background-color: #FCD713FF;
     mix-blend-mode: multiply;
     touch-action: none;
+    border-style: dashed;
+  }
 
-    &[data-color=yellow] {
-      background-color: var(--ph-highlight-color-yellow);
-    }
-
-    &[data-color=blue] {
-      background-color: var(--ph-highlight-color-blue);
-    }
-
-    &[data-color=green] {
-      background-color: var(--ph-highlight-color-green);
-    }
-
-    &[data-color=red] {
-      background-color: var(--ph-highlight-color-red);
-    }
-
-    &[data-color=purple] {
-      background-color: var(--ph-highlight-color-purple);
+  &-viewer.is-area-dashed {
+    .extensions__pdf {
+      &-hls-area-region {
+        background-color: transparent;
+        border-width: 3px;
+        opacity: 1 !important;
+      }
     }
   }
 
@@ -327,23 +521,23 @@
           }
 
           &[data-color=yellow] {
-            background-color: var(--ph-highlight-color-yellow);
+            background-color: var(--color-yellow-500);
           }
 
           &[data-color=blue] {
-            background-color: var(--ph-highlight-color-blue);
+            background-color: var(--color-blue-500);
           }
 
           &[data-color=green] {
-            background-color: var(--ph-highlight-color-green);
+            background-color: var(--color-green-500);
           }
 
           &[data-color=red] {
-            background-color: var(--ph-highlight-color-red);
+            background-color: var(--color-red-500);
           }
 
           &[data-color=purple] {
-            background-color: var(--ph-highlight-color-purple);
+            background-color: var(--color-purple-500);
           }
         }
       }
@@ -358,11 +552,97 @@
       mix-blend-mode: multiply;
     }
   }
+
+  &-highlights-list-item {
+    @apply active:opacity-100 mr-2;
+
+    user-select: none;
+    font-size: 12px;
+    padding-top: 8px;
+    padding-bottom: 2px;
+    padding-left: 6px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+
+    &:first-child {
+      margin-top: 5px;
+    }
+
+    > h6 {
+      @apply flex items-center justify-between pr-2 relative;
+
+      font-size: 10px;
+      line-height: 1em;
+      color: #696969;
+      -webkit-font-smoothing: antialiased;
+
+      small {
+        width: 8px;
+        height: 8px;
+        border-radius: 100%;
+        margin-right: 6px;
+        border-color: #cccccc !important;
+      }
+
+      button {
+        @apply absolute right-0 top-[-6px] hover:opacity-80 active:opacity-100 hidden;
+
+        padding-right: 8px;
+        padding-top: 4px;
+
+        .ti {
+          font-size: 14px;
+        }
+      }
+    }
+
+    > p {
+      color: #646464;
+      padding-top: 6px;
+      padding-bottom: 2px;
+      margin: 0;
+
+      &.text-wrap {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        line-height: 1.24em;
+      }
+
+      &.area-wrap {
+        display: flex;
+        align-items: center;
+        padding-right: 6px;
+      }
+
+      &:hover {
+        color: var(--ph-link-color);
+      }
+    }
+
+    &.active {
+      background-color: var(--ph-link-color);
+
+      > h6, > p {
+        color: white;
+
+        button {
+          @apply inline;
+        }
+      }
+    }
+
+    &:hover:not(.active) {
+      opacity: .9;
+    }
+  }
 }
 
 .hls-text-region-item {
   cursor: pointer;
   position: absolute;
+  z-index: 2;
   transition: background 0.3s;
 
   background-color: rgba(252, 219, 97, 0.7);
@@ -390,9 +670,11 @@
 }
 
 .hls-popup {
-  &-wrap {
+  &-overlay {
     position: absolute;
     top: 40px;
+    right: 0;
+    left: 0;
     width: 100%;
     height: 92vh;
     background-color: rgba(0, 0, 0, 0);
@@ -408,7 +690,7 @@
     border-radius: 4px;
     width: 320px;
     overflow-y: auto;
-    background-color: #e9e9e9;
+    background-color: #e3e7e8;
     outline: none;
     box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
 
@@ -428,7 +710,9 @@
   }
 }
 
-#pdf-layout-container {
+.extensions__pdf-container {
+  --lx-pdf-container-dark-bg: var(--lx-gray-03);
+
   background-color: transparent;
 
   .extensions__pdf-toolbar .buttons {
@@ -436,20 +720,23 @@
   }
 
   &[data-theme=light] {
-    background-color: #FFFFFF;
+    @apply bg-white;
   }
 
   &[data-theme=dark] {
-    background-color: #042f3c;
+    background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
 
     .pdfViewer {
-      -webkit-filter: invert(100%);
-      filter: invert(100%);
       background: transparent;
+
+      .page {
+        -webkit-filter: invert(100%);
+        filter: invert(100%);
+      }
     }
 
     .textLayer {
-      background-color: #023d4cf7;
+      background-color: var(--lx-pdf-container-dark-bg, var(--ls-primary-background-color, #042f3c));
       -webkit-filter: invert(100%);
       filter: invert(100%);
     }
@@ -472,35 +759,25 @@
     }
 
     .extensions__pdf-toolbar {
-      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
-
       .buttons {
-        background-color: #f6efdf;
+        @apply bg-[#f6efdf];
       }
     }
   }
 }
 
-.asset-ref {
-  &.is-pdf {
-    &:before {
-      content: "[[📚";
-      opacity: .7;
-      margin-right: 4px;
-    }
-
-    &:after {
-      content: "]]";
-      opacity: .7;
+html[data-theme=dark] {
+  .extensions__pdf-container[data-theme=warm] {
+    .extensions__pdf-toolbar {
+      .buttons {
+        @apply bg-background;
+      }
     }
   }
 }
 
 .block-ref {
   &-wrap {
-    &[data-type=annotation] {
-    }
-
     &[data-hl-type=area] {
       display: block;
 
@@ -518,11 +795,10 @@
 
 .block-content {
   &[data-type=annotation] {
-    a.prefix-link {
-      display: inline-flex;
-      align-items: center;
-      padding-right: 4px;
-      cursor: alias;
+    .prefix-link {
+      @apply inline-flex items-center pr-1 cursor-alias;
+
+      color: var(--ls-link-ref-text-color);
 
       &:before {
         content: "📌 ";
@@ -530,33 +806,74 @@
     }
 
     [data-hl-type=area] {
-      display: flex;
-      margin-bottom: 10px;
-      flex-direction: column;
-
-      a.prefix-link {
-        display: inline;
+      .prefix-link {
+        @apply block mt-[1px];
       }
 
       .hl-page {
-        display: inline-flex;
-        justify-content: space-between;
-        width: 85%;
+        @apply inline-flex justify-between w-[85%];
 
         > label {
-          flex: 1;
-          cursor: text;
+          @apply flex-1 cursor-text;
         }
       }
     }
 
     .hl-area {
-      display: block;
-      cursor: text;
+      @apply relative block cursor-text mt-1;
+
+      > .asset-container {
+        @apply mt-0 border rounded-md overflow-hidden;
+
+        > .asset-action-bar {
+          @apply top-1 right-1;
+        }
+      }
 
       img {
-        margin: 0;
-        box-shadow: none;
+        @apply cursor-alias;
+      }
+    }
+  }
+}
+
+.ls-hl-colored .block-content {
+  &[data-hl-color=green] {
+    .prefix-link {
+      &:before {
+        content: "🟢 ";
+      }
+    }
+  }
+
+  &[data-hl-color=purple] {
+    .prefix-link {
+      &:before {
+        content: "🟣 ";
+      }
+    }
+  }
+
+  &[data-hl-color=blue] {
+    .prefix-link {
+      &:before {
+        content: "🔵 ";
+      }
+    }
+  }
+
+  &[data-hl-color=yellow] {
+    .prefix-link {
+      &:before {
+        content: "🟡 ";
+      }
+    }
+  }
+
+  &[data-hl-color=red] {
+    .prefix-link {
+      &:before {
+        content: "🔴 ";
       }
     }
   }
@@ -585,7 +902,7 @@ body[data-page] {
     }
 
     &-viewer-cnt {
-      display: flex;
+      @apply flex overflow-x-hidden;
     }
 
     &-highlights {
@@ -612,12 +929,32 @@ body.is-pdf-active {
     padding-left: calc(var(--ph-view-container-width) + 15px);
   }
 
-  #sidebar-nav-wrapper {
+  #left-sidebar {
     border: none !important;
+    display: none;
   }
 
-  #head {
+  #head > .l {
     padding-left: 0;
+  }
+
+  #main-container.is-left-sidebar-open {
+    padding-left: unset;
+  }
+
+  #left-menu {
+    display: none;
+  }
+}
+
+html.is-system-window {
+  .extensions__pdf-container {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  .extensions__pdf-loader {
+    @apply w-full;
   }
 }
 
@@ -630,14 +967,53 @@ body.is-pdf-active {
 }
 
 .annotationLayer {
-  position: absolute;
-  top: 0;
-
-  z-index: 3;
+  .highlightAnnotation, .underlineAnnotation {
+    display: none;
+  }
 }
 
 .textLayer ::selection {
   background: rgb(185, 231, 255);
   mix-blend-mode: multiply;
   color: unset;
+}
+
+.textLayer .highlight {
+  background-color: rgb(206 255 162);
+  border: 1px solid transparent;
+  border-radius: 0;
+  padding: 0 2px;
+
+  &.selected {
+    background-color: rgb(206 255 162);
+    border: 2px dashed #ff3434;
+  }
+}
+
+.hl-flash {
+  animation-name: hl-flash;
+  animation-duration: 0.3s;
+  animation-timing-function: ease;
+  animation-iteration-count: 2;
+  animation-direction: alternate;
+  animation-play-state: running;
+}
+
+@keyframes hl-flash {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.pdfViewer .page.loadingIcon::after {
+  @apply bg-none;
+}
+
+.textLayer :is(span, br) {
+  &::selection {
+    @apply text-transparent;
+  }
 }

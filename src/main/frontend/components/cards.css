@@ -1,0 +1,10 @@
+@media (min-width: 640px) {
+    .ls-card {
+        min-height: 60vh;
+    }
+}
+
+#cards-modal {
+    height: 70vh;
+    max-height: 1024px;
+}

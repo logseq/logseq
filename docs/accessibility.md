@@ -1,0 +1,29 @@
+- Accessibility is a vague term, which is why it is usually misunderstood. It is not just about people with specific disabilities. You can read more about [what is accessibility](https://developer.mozilla.org/en-US/docs/Learn/Accessibility/What_is_accessibility#so_what_is_accessibility) and [diverse abilities and barriers](https://www.w3.org/WAI/people-use-web/abilities-barriers/).
+- ## Web Content Accessibility Guidelines
+	- [WCAG](https://www.w3.org/WAI/standards-guidelines/wcag/) (Web Content Accessibility Guidelines) is the international standard for web content accessibility, developed by [W3C](https://www.w3.org/). Logseq is a web application, so conforming with WCAG should be our first priority. In general, there is no simple way to determine if a website is accessible or not, but WCAG can help us make the tool usable by as many people as possible.
+- ## Levels of conformance
+	- There are three levels of conformance defined by WCAG
+		- Level **A** is the minimum level.
+		- Level **AA** includes all Level A and AA requirements.
+		- Level **AAA** includes all Level A, AA, and AAA requirements.
+	- Many organizations strive to meet Level AA. The reason behind this decision, is that in some cases AAA standard is too strict. That doesn't mean that triple-A issues should be disregarded. On the contrary, all of them should be handled if possible.
+	- We can also provide alternative options in order to conform with AAA standards. For instance, our default themes can aim for AA, but we can provide a high-contrast theme that aims for AAA. Providing [alternative versions](https://www.w3.org/WAI/GL/2007/05/alternate-versions.html) with different levels of conformance is permitted according to WCAG, if there is an accessible way to reach those alternatives.
+- ## Simple development guidelines
+	- Use semantically correct markup whenever possible. Every time you are about to decide which html tag you are going to use, choose the one that behaves the way you want it. For example, let's say you want to create an element that looks like plain text, but triggers an action on click. Usually, the best approach would be to create a `<button>` and make it look like a `<span>` using css. If you use a `span`, you will also have to override other html attributes like `tabindex` and `role` to make the element behave like a button. This is almost always a bad sign, and should be avoided. If you use the appropriate html element, the browser will be able to properly handle it.
+	- Do not skip headings. People who use screen readers and a keyboard to navigate through the app, use the headings structure to quickly jump to areas of interest. Skipping headings to visually conform with the design, makes this hard for them. If you want to create a heading that looks like an `<h4>` but is in terms of document structure an `<h2>`, use the latter and make it look like an `<h4>`.
+	- A more [in-depth guide about HTML and accessibility](https://developer.mozilla.org/en-US/docs/Learn/Accessibility/HTML).
+- ## Advanced concepts
+	- Focus management is extremely important for [keyboard navigation](https://developer.mozilla.org/en-US/docs/Web/Accessibility/Understanding_WCAG/Keyboard). Focusable elements can help people with motor disabilities navigate. [Focus Order](https://www.w3.org/TR/UNDERSTANDING-WCAG20/navigation-mechanisms-focus-order.html) plays an important role in this.
+- ## Automated testing
+	- There is a [huge list of tools](https://www.w3.org/WAI/ER/tools/) that can help us test our application. Most of them use [axe-core](https://github.com/dequelabs/axe-core) internally. There are [browser extensions](https://www.deque.com/axe/browser-extensions/) based on axe, a [VSCode Linter Plugin](https://marketplace.visualstudio.com/items?itemName=deque-systems.vscode-axe-linter) and also [multiple community projects](https://github.com/dequelabs/axe-core/blob/develop/doc/projects.md#community-projects).
+	- Basic accessibility testing could be integrated into our CI, by using the appropriate axe package (e.g. [@axe-core/playwright](https://github.com/dequelabs/axe-core-npm/blob/develop/packages/playwright/README.md))
+- ## Manual testing
+	- In theory, all of the cases described by WCAG should be testable. In practice, there are issues that can't be replicated by code. Also, manual accessibility testing would help us have a better understanding of the difficulties that certain people might encounter. Even if all the individual cases pass the tests, the overall navigation might be nonsensical.
+	- ### Manual accessibility testing musts
+		- Keyboard-only navigation
+		- Screen reader testing and compatibility
+		- Zooming up to 200%
+		- Manually testing contrast issues that can't be automated
+	- ### Screen readers
+		- Apple and Android mobile devices have build-in screen readers.
+		- For desktop, [NVDA](https://help.gnome.org/users/orca/stable/index.html.en) is the most popular choice. For linux, [Orca](https://help.gnome.org/users/orca/stable/index.html.en) is a good option.

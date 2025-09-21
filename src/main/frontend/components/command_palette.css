@@ -1,31 +1,127 @@
-.cp__command-palette {
+ .cp__select {
+  --palettle-input-height: 64px;
+  --palettle-container-height: 75vh;
+
   &-main {
-    margin: -1rem;
-
-    width: 80vw;
-
-    @screen sm {
-      width: 760px;
-    }
+    max-height: var(--palettle-container-height);
+    flex-direction: column;
+    width: fit-content;
 
     .menu-link {
-      background-color: transparent;
       transition: none;
       border: none;
+      background: none;
+
+      .type-icon {
+        color: var(--ls-search-icon-color);
+
+        &.highlight {
+          color: var(--ls-selection-text-color);
+          border-color: var(--ls-selection-background-color);
+
+          &:before {
+            opacity: 0.5;
+            background: var(--ls-selection-background-color);
+          }
+        }
+      }
+
+      &.chosen .type-icon,
+      &:hover .type-icon {
+        color: var(--ls-search-icon-hover-color);
+      }
+
+      &.chosen,
+      &.chosen p {
+        background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
+        color: var(--ls-secondary-text-color);
+      }
+
+      .dark &.chosen,
+      .dark &.chosen p {
+        background-color: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
+      }
+
+      &:hover p {
+        color: var(--ls-secondary-text-color);
+      }
     }
 
-    .chosen {
-      background-color: var(--ls-quaternary-background-color);
+    .command-results-wrap,
+    .item-results-wrap,
+    .search-results-wrap > div:first-child {
+      overflow-x: hidden;
+      overflow-y: auto;
+      max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
+    }
+
+    .cp__palette-input {
+      color: var(--ls-secondary-text-color);
+      border: none;
+
+      &:focus {
+        box-shadow: none;
+      }
+    }
+
+    .search-result {
+      @apply text-sm font-medium flex items-baseline;
+    }
+
+    .ui__icon {
+      font-size: 16px;
     }
   }
 
   &-input {
     padding: 16px;
-    font-size: 20px;
+    font-size: 16px;
     outline: none;
-    margin-bottom: 5px;
+    background-color: transparent;
   }
 
   &-results {
+    .tip code {
+      white-space: nowrap;
+    }
+  }
+}
+
+html.is-ios {
+  .ui__model {
+    &[label="ls-modal-search"] {
+      .panel-content {
+        padding-bottom: 0;
+        max-height: unset;
+      }
+    }
+
+    .ls-search {
+      @apply pb-0;
+    }
+  }
+
+  .cp__palette-main {
+    margin-bottom: 0;
+    min-height: var(--palettle-input-height);
+    --palettle-container-height: calc(98vh - 6rem - var(--ls-native-kb-height));
+  }
+}
+
+.cards-review .cp__select {
+  &-main {
+    margin: 0;
+    @screen lg {
+      width: 240px;
+    }
+  }
+
+  .input-wrap {
+    height: initial;
+  }
+
+  &-input {
+    padding: 16px;
+    font-size: 16px;
   }
 }

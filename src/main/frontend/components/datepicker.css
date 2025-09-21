@@ -1,0 +1,9 @@
+#time-repeater {
+ input.form-input, select.form-select {
+   @apply h-8 mt-0;
+ }
+
+ select.form-select {
+   @apply leading-none;
+ }
+}

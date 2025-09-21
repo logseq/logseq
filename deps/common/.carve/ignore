@@ -1,0 +1,9 @@
+;; API fn
+logseq.common.graph/get-files
+;; API fn
+logseq.common.graph/read-directories
+
+;; Profile utils
+logseq.common.profile/profile-fn!
+logseq.common.profile/*key->call-count
+logseq.common.profile/*key->time-sum

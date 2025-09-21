@@ -1,42 +1,36 @@
 (ns electron.configs
-  (:require
-    ["fs-extra" :as ^js fs]
-    ["path" :as ^js path]
-    ["electron" :refer [^js app] :as electron]
-    [cljs.reader :as reader]))
+  (:require ["electron" :refer [^js app] :as electron]
+            ["fs-extra" :as ^js fs]
+            ["path" :as ^js node-path]
+            [cljs.reader :as reader]
+            [electron.logger :as logger]))
 
+;; FIXME: move configs.edn to where it should be
+(defonce dot-root (.join node-path (.getPath app "home") ".logseq"))
 (defonce cfg-root (.getPath app "userData"))
-(defonce cfg-path (.join path cfg-root "configs.edn"))
+(defonce cfg-path (.join node-path cfg-root "configs.edn"))
 
 (defn- ensure-cfg
   []
   (try
-    (do
-      (.ensureFileSync fs cfg-path)
-      (let [body (.toString (.readFileSync fs cfg-path))]
-        (if (seq body) (reader/read-string body) {})))
-    (catch js/Error e
-      (js/console.error :cfg-error e)
-      {})))
+    (.ensureFileSync fs cfg-path)
+    (let [body (.toString (.readFileSync fs cfg-path))]
+      (if (seq body) (reader/read-string body) {}))
+    (catch :default e
+      (logger/error :cfg-error e))))
 
 (defn- write-cfg!
   [cfg]
   (try
-    (do (.writeFileSync fs cfg-path (pr-str cfg)) cfg)
-    (catch js/Error e
-      (js/console.error :cfg-error e))))
+    (.writeFileSync fs cfg-path (pr-str cfg)) cfg
+    (catch :default e
+      (logger/error :cfg-error e))))
 
 (defn set-item!
   [k v]
-  (let [cfg (ensure-cfg)
-        cfg (assoc cfg k v)]
-    (write-cfg! cfg)))
-
-(defn del-item!
-  [k]
-  (when-let [cfg (and k (ensure-cfg))]
-    (let [cfg (dissoc cfg k)]
-      (write-cfg! cfg))))
+  (when-let [cfg (ensure-cfg)]
+    (some->> (assoc cfg k v)
+             (write-cfg!))))
 
 (defn get-item
   [k]

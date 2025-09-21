@@ -1,0 +1,161 @@
+# This is the main Android apk build workflow for both nightly and beta releases.
+# This is also configured to run as a workflow_call.
+
+name: Build-Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      build-target:
+        description: 'Build Target (Release Type)'
+        type: choice
+        required: true
+        options:
+          - beta
+          - nightly
+          - non-release
+        default: "non-release"
+      git-ref:
+        description: "Build from Git Ref(master)"
+        required: true
+        default: "master"
+      enable-file-sync-production:
+        description: 'File sync production mode'
+        type: boolean
+        required: true
+        default: true
+  workflow_call:
+    inputs:
+      build-target:
+        type: string
+        required: true
+      enable-file-sync-production:
+        description: 'File sync production mode'
+        type: boolean
+    secrets:
+      ANDROID_KEYSTORE:
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        required: true
+      SENTRY_AUTH_TOKEN:
+        required: true
+
+env:
+  CLOJURE_VERSION: '1.11.1.1413'
+  NODE_VERSION: '22'
+  JAVA_VERSION: '21'
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache yarn cache directory
+        uses: actions/cache@v4
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Cache clojure deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
+
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(node ./scripts/get-pkg-version.js "${{ inputs.build-target || github.event.inputs.build-target }}")
+          echo "version=$pkgver" >> $GITHUB_OUTPUT
+
+      - name: Update Nightly APP Version
+        if: ${{ inputs.build-target == '' || inputs.build-target == 'nightly' || github.event.inputs.build-target == 'nightly' }}
+        run: |
+          sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
+          sed -i 's/versionName ".*"/versionName "${{ steps.ref.outputs.version }}"/g' android/app/build.gradle
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=${{ inputs.enable-file-sync-production || github.event.inputs.enable-file-sync-production || inputs.build-target == '' }}" >> $GITHUB_ENV
+
+      - name: Compile CLJS - app variant, use es6 instead of es-next
+        run: yarn install && yarn release-mobile
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+          LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
+
+      - name: Upload Sentry Sourcemaps (beta only)
+        # if: ${{ github.repository == 'logseq/logseq' && (inputs.build-target == 'beta' || github.event.inputs.build-target == 'beta') }}
+        run: |
+          curl -sL https://sentry.io/get-cli/ | bash
+          release_name="logseq-android@${{ steps.ref.outputs.version }}"
+          sentry-cli releases new "${release_name}"
+          sentry-cli releases files "${release_name}" upload-sourcemaps --ext map --ext js ./static/js --url-prefix '~/static/js'
+          sentry-cli releases finalize "${release_name}"
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: logseq
+          SENTRY_PROJECT: logseq
+
+      - name: Sync public to Android Project
+        run: npx cap sync android
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3.2.2
+
+      - name: Build Android
+        run: |
+          ./gradlew clean
+          ./gradlew zipApksForRelease
+        working-directory: android
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
+
+      - name: Sign Android APK
+        run: |
+          echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
+          $ANDROID_SDK_ROOT/build-tools/34.0.0/apksigner sign \
+            --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            --in app/build/outputs/apk/release/app-release-unsigned.apk \
+            --out app-signed.apk
+        working-directory: android
+
+      - name: Rename Apk
+        run: |
+          mkdir builds
+          mv android/app-signed.apk ./builds/Logseq-android-${{ steps.ref.outputs.version }}.apk
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: logseq-android-builds
+          path: builds

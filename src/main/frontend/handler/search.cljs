@@ -1,34 +1,106 @@
 (ns frontend.handler.search
-  (:require [goog.object :as gobj]
-            [frontend.state :as state]
+  "Provides util handler fns for search"
+  (:require [clojure.string :as string]
+            [dommy.core :as dom]
+            [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
+            [frontend.common.search-fuzzy :as fuzzy]
+            [frontend.config :as config]
             [frontend.db :as db]
-            [goog.dom :as gdom]
+            [frontend.handler.notification :as notification]
             [frontend.search :as search]
-            [frontend.search.db :as search-db]
-            [frontend.handler.notification :as notification-handler]
-            [promesa.core :as p]
-            [clojure.string :as string]))
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.util :as util]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.text :as text]
+            [missionary.core :as m]
+            [promesa.core :as p]))
+
+(defn sanity-search-content
+  "Convert a block to the display contents for searching"
+  [format content]
+  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
+  "The aggretation of search results"
+  ([q]
+   (search (state/get-current-repo) q))
   ([repo q]
-   (search repo q {:limit 20}))
+   (search repo q {:limit 10}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
-                 limit 20}
+                 limit 10}
             :as opts}]
-   (let [page-db-id (if (string? page-db-id)
-                      (:db/id (db/entity repo [:block/name (string/lower-case page-db-id)]))
-                      page-db-id)
-         opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
-     (p/let [blocks (search/block-search repo q opts)]
-      (let [result (merge
-                    {:blocks blocks
-                     :has-more? (= limit (count blocks))}
-                    (when-not page-db-id
-                      {:pages (search/page-search q)
-                       :files (search/file-search q)}))
-            search-key (if more? :search/more-result :search/result)]
-        (swap! state/state assoc search-key result))))))
+   (when-not (string/blank? q)
+     (let [page-db-id (if (string? page-db-id)
+                        (:db/id (db/get-page page-db-id))
+                        page-db-id)
+           opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
+       (p/let [blocks (search/block-search repo q opts)
+               files (search/file-search q)]
+         (let [result (merge
+                       {:blocks blocks
+                        :has-more? (= limit (count blocks))}
+                       (when-not page-db-id
+                         {:files files}))
+               search-key (if more? :search/more-result :search/result)]
+           (swap! state/state assoc search-key result)
+           result))))))
+
+(defn open-find-in-page!
+  []
+  (when (util/electron?)
+    (let [{:keys [active?]} (:ui/find-in-page @state/state)]
+      (when-not active? (state/set-state! [:ui/find-in-page :active?] true)))))
+
+(defn electron-find-in-page!
+  []
+  (when (util/electron?)
+    (let [{:keys [active? backward? match-case? q]} (:ui/find-in-page @state/state)
+          option (cond->
+                  {}
+
+                   (not active?)
+                   (assoc :findNext true)
+
+                   backward?
+                   (assoc :forward false)
+
+                   match-case?
+                   (assoc :matchCase true))]
+      (open-find-in-page!)
+      (when-not (string/blank? q)
+        (dom/set-style! (dom/by-id "search-in-page-input")
+                        :visibility "hidden")
+        (when (> (count q) 1)
+          (dom/set-html! (dom/by-id "search-in-page-placeholder")
+                         (util/format
+                          "<span><span>%s</span><span style=\"margin-left: -4px;\">%s</span></span>"
+                          (first q)
+                          (str " " (subs q 1)))))
+        (ipc/ipc "find-in-page" q option)))))
+
+(let [cancelable-debounce-search (util/cancelable-debounce electron-find-in-page! 500)]
+  (defonce debounced-search (first cancelable-debounce-search))
+  (defonce stop-debounced-search! (second cancelable-debounce-search)))
+
+(defn loop-find-in-page!
+  [backward?]
+  (if (and (get-in @state/state [:ui/find-in-page :active?])
+           (not (state/editing?)))
+    (do (state/set-state! [:ui/find-in-page :backward?] backward?)
+        (debounced-search))
+    ;; return false to skip prevent default event behavior (Enter key)
+    false))
+
+(defn electron-exit-find-in-page!
+  [& {:keys [clear-state?]
+      :or {clear-state? true}}]
+  (when (util/electron?)
+    (ipc/ipc "clear-find-in-page")
+    (when clear-state?
+      (state/set-state! :ui/find-in-page nil))))
 
 (defn clear-search!
   ([]
@@ -36,16 +108,82 @@
   ([clear-search-mode?]
    (let [m {:search/result nil
             :search/q ""}]
-     (swap! state/state merge m))
+     (swap! state/state merge m)
+     (when config/lsp-enabled? (state/reset-plugin-search-engines)))
    (when (and clear-search-mode? (not= (state/get-search-mode) :graph))
-     (state/set-search-mode! :global))
-   (when-let [input (gdom/getElement "search-field")]
-     (gobj/set input "value" ""))))
+     (state/set-search-mode! :global))))
 
 (defn rebuild-indices!
+  ([]
+   (rebuild-indices! false))
+  ([notice?]
+   (println "Starting to rebuild search indices!")
+   (when-let [repo (state/get-current-repo)]
+     (p/do!
+      (search/rebuild-indices!)
+      (when (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)
+        (c.m/run-task
+          ::rebuild-embeddings
+          (m/sp
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
+          :succ (constantly nil)))
+      (when notice?
+        (notification/show!
+         "Search indices rebuilt successfully!"
+         :success))))))
+
+(defn highlight-exact-query
+  [content q]
+  (if (or (string/blank? content) (string/blank? q))
+    content
+    (when (and content q)
+      (let [q-words (string/split q #" ")
+            lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))
+            lc-q (fuzzy/search-normalize q (state/enable-search-remove-accents?))]
+        (if (and (string/includes? lc-content lc-q)
+                 (not (util/safe-re-find #" " q)))
+          (let [i (string/index-of lc-content lc-q)
+                [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
+            [:div
+             (when-not (string/blank? before)
+               [:span before])
+             [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
+             (when-not (string/blank? after)
+               [:span after])])
+          (let [elements (loop [words q-words
+                                content content
+                                result []]
+                           (if (and (seq words) content)
+                             (let [word (first words)
+                                   lc-word (fuzzy/search-normalize word (state/enable-search-remove-accents?))
+                                   lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))]
+                               (if-let [i (string/index-of lc-content lc-word)]
+                                 (recur (rest words)
+                                        (subs content (+ i (count word)))
+                                        (vec
+                                         (concat result
+                                                 [[:span (subs content 0 i)]
+                                                  [:mark.p-0.rounded-none (subs content i (+ i (count word)))]])))
+                                 (recur nil
+                                        content
+                                        result)))
+                             (conj result [:span content])))]
+            [:p {:class "m-0"} elements]))))))
+
+(defn get-recents
   []
-  (println "Starting to rebuild search indices!")
-  (p/let [_ (search/rebuild-indices!)]
-    (notification-handler/show!
-     "Search indices rebuilt successfully!"
-     :success)))
+  (storage/get :recent-search-items))
+
+(defn add-recent!
+  [item]
+  (when-not (string/blank? item)
+    (let [recents (get-recents)]
+      (storage/set :recent-search-items
+                   (distinct (take 20 (cons item recents)))))))
+
+(defn clear-recents!
+  []
+  (storage/remove :recent-search-items))

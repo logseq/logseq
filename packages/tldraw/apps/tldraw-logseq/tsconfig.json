@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "exclude": ["node_modules", "dist", "docs", "tsup.config.ts"],
+  "compilerOptions": {
+    "outDir": "./dist/types",
+    "paths": {
+      "@tldraw/core": ["../../../core/src/*"],
+      "@tldraw/react": ["../../../react/src/*"],
+      "@tldraw/vec": ["../../../utils/vec/src/*"],
+      "@tldraw/intersect": ["../../../utils/intersect/src/*"]
+    }
+  },
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/react" },
+    { "path": "../../packages/utils/vec" },
+    { "path": "../../packages/utils/intersect" }
+  ]
+}

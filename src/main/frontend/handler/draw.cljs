@@ -1,20 +1,22 @@
 (ns frontend.handler.draw
+  "Provides util handler fns for drawing"
   (:refer-clojure :exclude [load-file])
-  (:require [frontend.util :as util :refer [profile]]
-            [frontend.fs :as fs]
-            [promesa.core :as p]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.handler.file :as file-handler]
+  (:require [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.config :as config]))
+            [frontend.db :as db]
+            [frontend.fs :as fs]
+            [frontend.handler.file-based.file :as file-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [logseq.common.config :as common-config]
+            [promesa.core :as p]))
 
 (defn create-draws-directory!
   [repo]
   (when repo
     (let [repo-dir (config/get-repo-dir repo)]
       (util/p-handle
-       (fs/mkdir! (str repo-dir (str "/" config/default-draw-directory)))
+       (fs/mkdir! (str repo-dir (str "/" common-config/default-draw-directory)))
        (fn [_result] nil)
        (fn [_error] nil)))))
 
@@ -27,12 +29,11 @@
         (->
          (p/do!
           (create-draws-directory! repo)
-          (fs/write-file! repo repo-dir path data nil)
+          (fs/write-plain-text-file! repo repo-dir path data nil)
           (db/transact! repo
                         [{:file/path path
-                          :block/name file
-                          :block/file {:file/path path}
-                          :block/journal? false}]))
+                          :block/name (util/page-name-sanity-lc file)
+                          :block/file {:file/path path}}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))
@@ -61,6 +62,6 @@
   [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
-                                     (str config/default-draw-directory current-file))]
+                                     (str common-config/default-draw-directory current-file))]
       (when-not exists?
         (save-excalidraw! current-file default-content)))))

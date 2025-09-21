@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+docs/
+.idea/*
+
+.DS_Store
+coverage
+*.log
+
+.vercel
+.next
+apps/www/public/workbox-*
+apps/www/public/worker-*
+apps/www/public/sw.js
+apps/www/public/sw.js.map
+.env

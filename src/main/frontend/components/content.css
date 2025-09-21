@@ -12,8 +12,18 @@
 }
 
 #custom-context-menu {
-  @apply rounded-md shadow-lg transition ease-out duration-100 transform
-  opacity-100 scale-100 absolute;
+  @apply absolute animate-in zoom-in-95;
 
   z-index: calc(var(--ls-z-index-level-1) + 1);
+  width: 270px;
+}
+
+.ls-context-menu-content {
+  .menu-links-wrapper {
+    @apply border-none shadow-none overflow-visible;
+  }
+
+  [role=separator] {
+    @apply opacity-80;
+  }
 }
