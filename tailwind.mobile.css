@@ -15,7 +15,7 @@
 @import "codemirror/theme/solarized.css";
 @import "resources/css/tabler-extension.css";
 @import "@tabler/icons-webfont/tabler-icons.min.css";
-@import "@xyhp915/simple-wave-record/dist/style.css";
+@import "@logseq/simple-wave-record/dist/style.css";
 @import "src/main/frontend/animations.css";
 @import "src/main/frontend/common.css";
 @import "src/main/frontend/ui.css";

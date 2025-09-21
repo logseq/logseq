@@ -1,7 +1,7 @@
 (ns mobile.components.recorder
   "Audio record"
   (:require ["@capacitor/device" :refer [Device]]
-            ["@xyhp915/simple-wave-record" :refer [BeatsObserver Recorder renderWaveform]]
+            ["@logseq/simple-wave-record" :refer [BeatsObserver Recorder renderWaveform]]
             [cljs-time.local :as tl]
             [clojure.string :as string]
             [frontend.date :as date]

@@ -822,6 +822,11 @@
   resolved "https://registry.yarnpkg.com/@logseq/react-tweet-embed/-/react-tweet-embed-1.3.1-1.tgz#119d22be8234de006fc35c3fa2a36f85634c5be6"
   integrity sha512-9O0oHs5depCvh6ZQvwtl1xb7B80YG5rUfY10uSUat5itOlcE3IWaYYpe6p/tcHErqHWnWgkXHitAB9M29FMbQg==
 
+"@logseq/simple-wave-record@^0.0.1":
+  version "0.0.1"
+  resolved "https://registry.yarnpkg.com/@logseq/simple-wave-record/-/simple-wave-record-0.0.1.tgz#ea071a8f33b35383cc85f01c14d81ed91d6c2dc3"
+  integrity sha512-7o+gHipaaMGXcckvZ7VbX2Au5F1TllHJ2iRd8azST3Y4X19yCPQoyXWK4IiEatMiC1abLdZZYwDqnUYtJpzC9w==
+
 "@mapbox/node-pre-gyp@^1.0.0":
   version "1.0.11"
   resolved "https://registry.yarnpkg.com/@mapbox/node-pre-gyp/-/node-pre-gyp-1.0.11.tgz#417db42b7f5323d79e93b34a6d7a2a12c0df43fa"
@@ -1671,11 +1676,6 @@
   version "4.2.2"
   resolved "https://registry.yarnpkg.com/@xtuc/long/-/long-4.2.2.tgz#d291c6a4e97989b5c61d9acf396ae4fe133a718d"
   integrity sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==
-
-"@xyhp915/simple-wave-record@^0.0.3":
-  version "0.0.3"
-  resolved "https://registry.yarnpkg.com/@xyhp915/simple-wave-record/-/simple-wave-record-0.0.3.tgz#0ee8ebadf3c24a634fd65f9513907d077235a2ce"
-  integrity sha512-C+lXOh8TWkO41IQEz+NwbQomAoS3XSBtf2aogvmclR1Ss9/BYKJyHQVKO8SEYWqsMNbL4C2logwD1xGrZvOqdg==
 
 JSONStream@^1.0.4:
   version "1.3.5"
