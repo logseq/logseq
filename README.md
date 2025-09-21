@@ -44,8 +44,28 @@ Please go to https://discuss.logseq.com/c/feature-requests/7.
 
 ## How can I use it?
 
-1. Download the desktop app at https://github.com/logseq/logseq/releases.
-2. Start writing and have fun!
+### Desktop App
+
+1. **Download the desktop app** at https://github.com/logseq/logseq/releases.
+
+2. **Linux users**: Use the automated installer script for the best experience:
+   ```bash
+   # Download and run the installer
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash
+   
+   # Or install a specific version
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- 0.10.14
+   
+   # For user-specific installation (no root required)
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- --user
+   ```
+
+3. **Manual installation**: 
+   - Download the appropriate package for your platform from the [releases page](https://github.com/logseq/logseq/releases)
+   - Extract and run the application
+   - For Linux, see the [installation documentation](https://logseq.github.io/docs/Installation) for detailed instructions
+
+4. Start writing and have fun!
 
 ## FAQ
 Please go to https://logseq.github.io/#/page/faq.
