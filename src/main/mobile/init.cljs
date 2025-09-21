@@ -3,6 +3,7 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
+            [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.flows :as mobile-flows]
             [frontend.mobile.intent :as intent]
@@ -91,8 +92,11 @@
                    state/app-ready-promise
                    (fn []
                      (when-let [url (.-url data)]
-                       (when-not (and (= @*last-shared-url url)
-                                      (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))
+                       (when (or
+                              (string/starts-with? url "https://logseq.com/mobile/")
+                              (string/starts-with? url "logseq://mobile/")
+                              (not (and (= @*last-shared-url url)
+                                        (<= (- (.getSeconds (js/Date.)) @*last-shared-seconds) 1))))
                          (reset! *last-shared-url url)
                          (reset! *last-shared-seconds (.getSeconds (js/Date.)))
                          (deeplink/deeplink url)))))))
