@@ -26,20 +26,41 @@ struct SimpleEntry: TimelineEntry {
 struct ShortcutsEntryView: View {
     var entry: Provider.Entry
 
+    // Format weekday name (e.g., "Monday")
+    private var weekday: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current   // ✅ respect user’s locale
+        formatter.dateFormat = "EEEE"       // full weekday name
+        return formatter.string(from: Date())
+    }
+
     var body: some View {
         Link(destination: URL(string: "logseq://mobile/go/quick-add")!) {
             VStack(alignment: .leading, spacing: 0) {
                 // Top heading
-                Text("Logseq")
-                    .font(.headline)
-                    .bold()
-                    .foregroundColor(Color(hex: "#002b36"))
+                Link(destination: URL(string: "logseq://mobile")!) {
+                    HStack(spacing: 8) {
+                        Text(weekday)
+                          .font(.subheadline)
+                          .bold()
+                          .foregroundColor(.white.opacity(0.5))
+
+
+                        Spacer()
+
+                        Image("LogseqLogo")
+                          .resizable()
+                          .scaledToFit()
+                          .frame(width: 20, height: 20)
+                    }
+                }
 
                 // Middle text
                 Text("I have an idea...")
-                    .font(.subheadline)
+                    .font(.headline)
                     .bold()
-                    .foregroundColor(.primary.opacity(0.8))
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.top, 8)
 
                 Spacer(minLength: 0)
 
@@ -49,9 +70,9 @@ struct ShortcutsEntryView: View {
                     Link(destination: URL(string: "logseq://mobile/go/audio")!) {
                         Image(systemName: "waveform")
                             .font(.body)
-                            .foregroundColor(Color(hex: "#002b36"))
+                            .foregroundColor(.white)
                             .frame(maxWidth: .infinity, minHeight: 36)
-                            .background(Color.gray.opacity(0.05))
+                            .background(Color.white.opacity(0.1))
                             .clipShape(Capsule())
                             .contentShape(Capsule())
                     }
@@ -59,12 +80,12 @@ struct ShortcutsEntryView: View {
                     // Right button (quick add)
                     Link(destination: URL(string: "logseq://mobile/go/quick-add")!) {
                         Image(systemName: "plus")
-                            .font(.body)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                            .background(Color(hex: "#002b36"))
-                            .clipShape(Capsule())
-                            .contentShape(Capsule())
+                          .font(.body)
+                          .foregroundColor(.white)
+                          .frame(maxWidth: .infinity, minHeight: 36)
+                          .background(Color.white.opacity(0.1))
+                          .clipShape(Capsule())
+                          .contentShape(Capsule())
                     }
                 }
             }
@@ -117,11 +138,13 @@ struct Shortcuts: Widget {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             if #available(iOS 17.0, *) {
                 ShortcutsEntryView(entry: entry)
-                    .containerBackground(.fill.tertiary, for: .widget)
+                  .containerBackground(Color(hex: "#002b36"), for: .widget)
             } else {
-                ShortcutsEntryView(entry: entry)
-                    .background()
-            }
+                ZStack {
+                    Color(hex: "#002b36")
+                    ShortcutsEntryView(entry: entry)
+                }
+           }
         }
         .configurationDisplayName("Logseq Shortcuts")
         .description("Quick actions for Logseq")
