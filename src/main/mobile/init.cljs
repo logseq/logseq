@@ -64,7 +64,10 @@
 (defn- app-state-change-handler
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
   [^js state]
-  (println :debug :app-state-change-handler state (js/Date.))
+  (println :debug :app-state-change-handler state (js/Date.)
+           :current-graph (state/get-current-repo)
+           :app-active? (.-isActive state)
+           :worker-client-id @state/*db-worker-client-id)
   (when (state/get-current-repo)
     (let [is-active? (.-isActive state)]
       (if (not is-active?)
@@ -74,6 +77,7 @@
           (->
            (p/timeout
             (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status (state/get-current-repo))]
+              (log/info ::check-worker-state {:available? available?})
               (when-not available?
                 (js/window.location.reload)))
             500)
