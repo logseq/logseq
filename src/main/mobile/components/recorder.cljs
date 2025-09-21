@@ -66,7 +66,7 @@
                                                            [file]
                                                            {:last-edit-block @*last-edit-block})
               asset-entity (first result)]
-        (when asset-entity
+        (when (and asset-entity (util/ios?))
           (p/let [buffer-data (.arrayBuffer blob)
                   unit8-data (js/Uint8Array. buffer-data)]
             (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)
@@ -96,7 +96,7 @@
              ^js beats (BeatsObserver.)
              ^js w1 (renderWaveform wave-l #js {:beatsObserver beats})
              ^js w2 (renderWaveform wave-r #js {})
-             ^js r (Recorder.create #js {:mimeType "audio/mp4"
+             ^js r (Recorder.create #js {:mimeType (if (util/ios?) "audio/mp4" "audio/wav")
                                          :mediaRecorderTimeslice 1000})
              stop (fn []
                     (some-> @*recorder (.destroy))
