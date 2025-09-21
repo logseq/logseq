@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db.async :as db-async]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.mobile.intent :as intent]
@@ -36,7 +37,7 @@
       (and (= hostname "mobile") (= pathname "/go/audio"))
       (state/pub-event! [:mobile/start-audio-record])
       (and (= hostname "mobile") (= pathname "/go/quick-add"))
-      (state/pub-event! [:dialog/mobile-quick-add])
+      (editor-handler/show-quick-add)
       (= hostname "graph")
       (let [graph-name (some-> pathname
                                (string/replace "/" "")
