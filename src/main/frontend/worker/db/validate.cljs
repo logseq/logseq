@@ -1,6 +1,7 @@
 (ns frontend.worker.db.validate
   "Validate db"
   (:require [datascript.core :as d]
+            [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]))
@@ -18,6 +19,12 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (= :block/path-refs (:db/ident entity))
+                           (concat [[:db/retractEntity (:db/id entity)]]
+                                   (try
+                                     (db-migrate/remove-block-path-refs-datoms db)
+                                     (catch :default _e
+                                       nil)))
                            (and (= dispatch-key :block) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
 
