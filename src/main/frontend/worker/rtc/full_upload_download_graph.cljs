@@ -158,6 +158,7 @@
                             (ldb/kv :logseq.kv/remote-schema-version schema-version)])
             (client-op/update-graph-uuid repo graph-uuid)
             (client-op/remove-local-tx repo)
+            (client-op/update-local-tx repo 1)
             (client-op/add-all-exists-asset-as-ops repo)
             (crypt/store-graph-keys-jwk repo aes-key-jwk)
             (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
