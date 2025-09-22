@@ -349,6 +349,8 @@
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
+                                 (when-not (instance? Cancelled e)
+                                   (log/info :rtc-loop-task-e-stack (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
                                    (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
