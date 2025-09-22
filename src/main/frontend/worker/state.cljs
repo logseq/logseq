@@ -6,6 +6,7 @@
 (defonce *main-thread (atom nil))
 (defonce *infer-worker (atom nil))
 (defonce *deleted-block-uuid->db-id (atom {}))
+(defonce *db-read-only? (atom false))
 
 (defn- <invoke-main-thread*
   [qkw direct-pass? args-list]
@@ -129,6 +130,10 @@
 (defn get-id-token
   []
   (:auth/id-token @*state))
+
+(defn mobile?
+  []
+  (:mobile? (get-context)))
 
 ;;; ========================== mobile log ======================================
 (defonce *log (atom []))

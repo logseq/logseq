@@ -353,19 +353,13 @@
                                     :block/name (util/page-name-sanity-lc (:block/title new-block)))
                              (dissoc :block/page)))
                      new-block)]
-    (->
-     (ui-outliner-tx/transact!
-      {:outliner-op :insert-blocks}
-      (save-current-block! {:current-block current-block})
-      (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
-                                                              :keep-uuid? keep-uuid?
-                                                              :ordered-list? ordered-list?
-                                                              :replace-empty-target? replace-empty-target?}))
-     (p/timeout 2000)
-     (p/catch (fn [error]
-                (js/console.error error)
-                (state/pub-event! [:capture-error {:error error
-                                                   :payload {:type :insert-block-timeout}}]))))))
+    (ui-outliner-tx/transact!
+     {:outliner-op :insert-blocks}
+     (save-current-block! {:current-block current-block})
+     (outliner-op/insert-blocks! [new-block'] current-block {:sibling? sibling?
+                                                             :keep-uuid? keep-uuid?
+                                                             :ordered-list? ordered-list?
+                                                             :replace-empty-target? replace-empty-target?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
