@@ -63,11 +63,9 @@
          (mobile-state/redirect-to-tab! "settings")
 
          :import
-         (js/setTimeout
-          #(shui/popup-show! nil (fn []
-                                   (imports/importer {}))
-                             {:id :import})
-          500)
+         (shui/popup-show! nil (fn []
+                                 (imports/importer {}))
+                           {:id :import})
 
          nil)))
 
