@@ -203,13 +203,6 @@ We want to express our sincere gratitude to our [Open Collective](https://openco
         <img src="https://contrib.rocks/image?repo=logseq/logseq&max=300&columns=14" width="600"/></a>
 </p>
 
-## 🫶 Backers
-
-<p align="center">
-    <a href="https://opencollective.com/logseq" alt="Backers on Open Collective">
-        <img src="https://opencollective.com/logseq/tiers/backers.svg?avatarHeight=24&width=600"/></a>
-</p>
-
 <!-- JetBrains Logo -->
 <p align="center">
     <a href="https://jetbrains.com" alt="JetBrains">
