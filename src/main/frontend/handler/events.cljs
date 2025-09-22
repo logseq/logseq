@@ -157,6 +157,7 @@
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
                  :node-test? util/node-test?
+                 :mobile? (util/mobile?)
                  :validate-db-options (:dev/validate-db-options (state/get-config))
                  :importing? (:graph/importing @state/state)
                  :date-formatter (state/get-date-formatter)
