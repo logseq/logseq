@@ -682,7 +682,7 @@
 
 (defn http-server-switcher-row []
   (row-with-button-action
-   {:left-label "HTTP APIs server"
+   {:left-label "HTTP API server"
     :action (http-server-enabled-switcher t)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
@@ -1207,6 +1207,9 @@
     (let [on-toggle (fn []
                       (let [new-val (not checked)]
                         (set-checked! new-val)
+                        ;; Enable HTTP server to simplify starting MCP
+                        (when (and new-val (not (storage/get ::storage-spec/http-server-enabled)))
+                          (storage/set ::storage-spec/http-server-enabled true))
                         (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
                             ;; Dont start server if it's not running
                             (p/then #(when (= "running" (state/sub [:electron/server :status]))

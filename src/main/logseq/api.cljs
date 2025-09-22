@@ -1092,7 +1092,7 @@
   (let [current-page? (or (and (nil? content) (nil? opts))
                           (and (nil? opts) (some->> content (instance? js/Object))))
         opts (if current-page? content opts)
-        mcp-options (bean/->clj (aget opts "mcp-options"))
+        mcp-options (some-> opts (aget "mcp-options") bean/->clj)
         content (if current-page? uuid-or-page-name content)
         uuid-or-page-name (if current-page?
                             (or (state/get-current-page) (date/today))
