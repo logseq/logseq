@@ -215,6 +215,8 @@
  :context-menu/template-exists-warning "Template already exists!"
  :settings-page/ai "AI"
  :settings-page/tab-ai "AI"
+ :settings-page/enable-mcp-server "Enable MCP Server"
+ :settings-page/enable-mcp-server-desc "Run MCP Server within HTTP API server to allow local AI applications to connect to current graph."
  :settings-page/git-tip "If you have Logseq Sync enabled, you can view a page's edit history directly. This section is for tech-savvy only."
  :settings-page/git-desc-1 "To view page's edit history, click the three horizontal dots in the top-right corner and select \"View page history\"."
  :settings-page/git-desc-2 "For professional users, Logseq also supports using "
