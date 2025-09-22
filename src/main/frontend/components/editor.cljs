@@ -203,7 +203,7 @@
                         (let [block' (if-let [id (:block/uuid block)]
                                        (if-let [e (db/entity [:block/uuid id])]
                                          (assoc e
-                                                :block/title (:block/title block)
+                                                :block/title (or (:block/title e) (:block/title block))
                                                 :alias (:alias block))
                                          block)
                                        block)]
@@ -271,20 +271,20 @@
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
-        db-tag? (and db? tag?)]
-    (let [pos (state/get-editor-last-pos)
-          input (gdom/getElement id)]
-      (when input
-        (let [current-pos (cursor/pos input)
-              edit-content (state/sub-edit-content)
-              q (or
-                 (editor-handler/get-selected-text)
-                 (when (= action :page-search-hashtag)
-                   (common-util/safe-subs edit-content pos current-pos))
-                 (when (> (count edit-content) current-pos)
-                   (common-util/safe-subs edit-content pos current-pos))
-                 "")]
-          (page-search-aux id format embed? db-tag? q current-pos input pos))))))
+        db-tag? (and db? tag?)
+        pos (state/get-editor-last-pos)
+        input (gdom/getElement id)]
+    (when input
+      (let [current-pos (cursor/pos input)
+            edit-content (state/sub-edit-content)
+            q (or
+               (editor-handler/get-selected-text)
+               (when (= action :page-search-hashtag)
+                 (common-util/safe-subs edit-content pos current-pos))
+               (when (> (count edit-content) current-pos)
+                 (common-util/safe-subs edit-content pos current-pos))
+               "")]
+        (page-search-aux id format embed? db-tag? q current-pos input pos)))))
 
 (defn- search-blocks!
   [state result]
