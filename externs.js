@@ -167,3 +167,7 @@ var openDirectoryOptions;
  * @param {function} cb
  */
 var openDirectory = function(options, cb) {};
+var StatusBar;
+StatusBar.setStyle = {}
+StatusBar.setBackgroundColor = {}
+StatusBar.setOverlaysWebView = {}
