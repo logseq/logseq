@@ -139,14 +139,26 @@
       (rebuild-db-from-datoms! conn sqlite-db)
       (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
 
+(defn- check-db-writable
+  [^js db]
+  (let [changes (.changes db)]
+    (when (worker-state/mobile?)
+      (log/info ::db-changes-count {:changes changes})
+      (when (< (.changes db) 1)
+        (log/error ::sqlite-upsert-addr-content-failed nil)
+        (reset! worker-state/*db-read-only? true)
+        (worker-util/post-message :reload-app nil)))))
+
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data]
   (assert (some? db) "sqlite db not exists")
-  (.transaction db (fn [tx]
-                     (doseq [item data]
-                       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                      :bind item})))))
+  (.transaction
+   db
+   (fn [tx]
+     (doseq [item data]
+       (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                      :bind item})))))
 
 (defn restore-data-from-addr
   "Update sqlite-cli/restore-data-from-addr when making changes"
@@ -179,7 +191,8 @@
                            :$content (sqlite-util/transit-write data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data)))
+        (upsert-addr-content! db data)
+        (check-db-writable db)))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
@@ -410,7 +423,8 @@
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (when-not (= repo (worker-state/get-current-repo)) ; graph switched
-    (reset! worker-state/*deleted-block-uuid->db-id {}))
+    (reset! worker-state/*deleted-block-uuid->db-id {})
+    (reset! worker-state/*db-read-only? false))
   (start-db! repo opts))
 
 (def-thread-api :thread-api/q
@@ -617,9 +631,15 @@
   [repo ops opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
+      (when (worker-state/mobile?)
+        (log/info ::apply-outliner-ops ops)
+        (log/info ::before-apply-outliner-ops ops
+                  ::tx-id (:max-tx @conn)))
       (worker-util/profile
        "apply outliner ops"
        (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts))
+      (when (worker-state/mobile?)
+        (log/info ::after-tx-id (:max-tx @conn)))
       (catch :default e
         (let [data (ex-data e)
               {:keys [type payload]} (when (map? data) data)]
@@ -767,13 +787,6 @@
 (def-thread-api :thread-api/vec-search-update-index-info
   [repo]
   (js/Promise. (embedding/task--update-index-info! repo)))
-
-(def-thread-api :thread-api/check-worker-status
-  [repo]
-  (when repo
-    (let [conn (worker-state/get-datascript-conn repo)]
-      (when @conn
-        {:available? (some? (d/entity @conn :logseq.class/Tag))}))))
 
 (def-thread-api :thread-api/mobile-logs
   []

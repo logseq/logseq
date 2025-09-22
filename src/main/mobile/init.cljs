@@ -73,17 +73,14 @@
       (if (not is-active?)
         (editor-handler/save-current-block!)
         ;; check whether db-worker is available
-        (when @state/*db-worker-client-id
-          (->
-           (p/timeout
-            (p/let [{:keys [available?]} (state/<invoke-db-worker :thread-api/check-worker-status (state/get-current-repo))]
-              (log/info ::check-worker-state {:available? available?})
-              (when-not available?
-                (js/window.location.reload)))
-            500)
-           (p/catch (fn [error]
-                      (js/console.error error)
-                      (js/window.location.reload))))))))
+        (when-let [client-id @state/*db-worker-client-id]
+          (when @state/*db-worker
+            (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                       :ifAvailable true}
+                                        (fn [lock]
+                                          (when lock
+                                            ;; lock acquired, meaning the worker has terminated
+                                            (js/window.location.reload)))))))))
   (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
 (defn- general-init
