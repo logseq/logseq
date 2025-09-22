@@ -1194,6 +1194,32 @@
                            (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
         "Invite")]]]))
 
+(rum/defc mcp-server-row
+  [t]
+  (let [[checked set-checked!] (hooks/use-state false)]
+
+    (hooks/use-effect!
+     (fn []
+       (let [initial (get-in @state/state [:electron/server :mcp-enabled?])]
+         (set-checked! initial)))
+     [])
+
+    (let [on-toggle (fn []
+                      (let [new-val (not checked)]
+                        (set-checked! new-val)
+                        (-> (ipc/ipc :server/set-config {:mcp-enabled? new-val})
+                            ;; Dont start server if it's not running
+                            (p/then #(when (= "running" (state/sub [:electron/server :status]))
+                                       (p/let [_ (p/delay 1000)]
+                                         (ipc/ipc :server/do :restart))))
+                            (p/catch #(notification/show! (str %) :error)))))]
+      (toggle "mcp-server"
+              (t :settings-page/enable-mcp-server)
+              checked
+              on-toggle
+              [:span.text-sm.opacity-50
+               (t :settings-page/enable-mcp-server-desc)]))))
+
 (rum/defc settings-ai
   []
   (let [[model-info set-model-info] (hooks/use-state nil)
@@ -1229,6 +1255,7 @@
          :succ (constantly nil)))
      [])
     [:div.panel-wrap
+     (mcp-server-row t)
      [:div.flex.flex-col.gap-2.mt-4
       [:div.font-medium.text-muted-foreground.text-sm "Semantic search:"]
 
