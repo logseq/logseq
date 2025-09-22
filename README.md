@@ -104,6 +104,19 @@ To start using Logseq, follow these simple steps:
 
 That's it! You can now enjoy the benefits of using Logseq to streamline your workflow, manage your projects, and stay on top of your goals. Have fun! 🎉
 
+**Linux users**: Use the automated installer script for the best experience:
+
+   ```bash
+   # Download and run the installer
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash
+   
+   # Or install a specific version
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- 0.10.14
+   
+   # For user-specific installation (no root required)
+   curl -fsSL https://raw.githubusercontent.com/logseq/logseq/master/scripts/install-linux.sh | bash -s -- --user
+   ```
+
 ## 📚 Learn more
 
 * Website: [logseq.com](https://logseq.com)
