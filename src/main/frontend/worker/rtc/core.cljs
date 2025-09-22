@@ -226,9 +226,11 @@
       (m/sp
         (try
           (log/info :rtc :loop-starting)
-          (started-dfv true)
           ;; init run to open a ws
           (m/? get-ws-create-task)
+          ;; NOTE: Set dfv after ws connection is established,
+          ;; ensuring the ws connection is already up when the cloud-icon turns green.
+          (started-dfv true)
           (update-remote-schema-version! conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task

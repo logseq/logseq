@@ -111,7 +111,8 @@
 (defn update-local-tx
   [repo t]
   {:pre [(some? t)]}
-  (when-let [conn (worker-state/get-client-ops-conn repo)]
+  (let [conn (worker-state/get-client-ops-conn repo)]
+    (assert (some? conn) repo)
     (let [tx-data
           (if-let [datom (first (d/datoms @conn :avet :local-tx))]
             [:db/add (:e datom) :local-tx t]
