@@ -396,7 +396,7 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn- remove-block-path-refs-datoms
+(defn remove-block-path-refs-datoms
   [db]
   (->> (d/datoms db :avet :block/path-refs)
        (map :e)
