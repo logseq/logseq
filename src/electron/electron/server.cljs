@@ -31,7 +31,7 @@
                   :port      (get-port)
                   :tokens    (cfgs/get-item :server/tokens)
                   :autostart (cfgs/get-item :server/autostart)
-                  :mcp-enabled? true}))
+                  :mcp-enabled? (cfgs/get-item :server/mcp-enabled?)}))
 
 (defn- set-status!
   ([status] (set-status! status nil))
@@ -141,7 +141,7 @@
     (logger/debug "[server] MCP routes initialized")
     (.post server "/mcp"
            #(cli-common-mcp-server/handle-post-request mcp-server {:port (get-port)
-                                                                           :host (get-host)} %1 %2))
+                                                                   :host (get-host)} %1 %2))
     (.get server "/mcp" cli-common-mcp-server/handle-get-request)
     (.delete server "/mcp" cli-common-mcp-server/handle-get-request)))
 
