@@ -49,7 +49,7 @@
               (m/? (ws-util/send&recv get-ws-create-task {:action "init-request"
                                                           :graph-uuid graph-uuid
                                                           :schema-version (str major-schema-version)
-                                                          :t-before (or t-before 1)
+                                                          :t-before t-before
                                                           :get-graph-skeleton get-graph-skeleton?}))]
           (if-let [remote-ex (:ex-data resp)]
             (do
@@ -456,7 +456,7 @@
               r (try
                   (let [message (cond-> {:action "apply-ops"
                                          :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                         :ops ops-for-remote :t-before (or local-tx 1)}
+                                         :ops ops-for-remote :t-before local-tx}
                                   (true? @*remote-profile?) (assoc :profile true))
                         r (m/? (ws-util/send&recv get-ws-create-task message))]
                     (r.throttle/add-rtc-api-call-record! message)
