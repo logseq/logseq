@@ -26,8 +26,6 @@
   (let [[current-tab set-tab!] (mobile-state/use-tab)]
     [:div.app-silk-tabs
      {:on-pointer-down (fn [^js e]
-                         (when (= current-tab "home")
-                           (util/scroll-to-top false))
                          (some-> (.-target e)
                                  ^js (.closest ".as-item")
                                  ^js (.-dataset)
@@ -35,7 +33,8 @@
      [:span.as-item
       {:class (when (= current-tab "home") "active")
        :data-tab "home"}
-      (shui/button {:variant :icon}
+      (shui/button {:variant :icon
+                    :on-pointer-down (fn [] (util/scroll-to-top false))}
                    (shui/tabler-icon "home" {:size 24}))
       [:small "Journals"]]
      [:span.as-item
