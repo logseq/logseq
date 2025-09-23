@@ -327,6 +327,7 @@
 (defn outliner-insert-block!
   [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
                                           replace-empty-target?]}]
+  (log/info ::outliner-insert-block new-block)
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
                                   (not (:ref-query-child? config)))
@@ -505,6 +506,7 @@
   ([state]
    (insert-new-block! state nil))
   ([_state block-value]
+   (log/info ::insert-new-block {})
    (->
     (when (not config/publishing?)
       (when-let [state (get-state)]
@@ -2464,6 +2466,7 @@
 
 (defn- keydown-new-block
   [state]
+  (log/info ::keydown {})
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
