@@ -4,6 +4,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
@@ -764,12 +765,13 @@
       (db-property-handler/set-block-property! (:db/id block) property-id value))))
 
 (defmethod handle-step :editor/set-property-on-block-property [[_ block-property-id property-id value]]
-  (when (config/db-based-graph? (state/get-current-repo))
-    (let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
-                          (db/entity [:block/uuid block-uuid]))
-          block-property-value (get updated-block block-property-id)]
-      (when block-property-value
-        (db-property-handler/set-block-property! (:db/id block-property-value) property-id value)))))
+  (let [repo (state/get-current-repo)]
+    (when (config/db-based-graph? repo)
+      (p/let [updated-block (when-let [block-uuid (:block/uuid (state/get-edit-block))]
+                              (db-async/<get-block repo block-uuid))
+              block-property-value (get updated-block block-property-id)]
+        (when block-property-value
+          (db-property-handler/set-block-property! (:db/id block-property-value) property-id value))))))
 
 (defmethod handle-step :editor/upsert-type-block [[_ type lang]]
   (when (config/db-based-graph? (state/get-current-repo))
@@ -931,11 +933,8 @@
 
 (defn handle-steps
   [vector' format]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (p/doseq [step vector']
-      (handle-step step format))
-    (doseq [step vector']
-      (handle-step step format))))
+  (p/doseq [step vector']
+    (handle-step step format)))
 
 (defn exec-plugin-simple-command!
   [pid {:keys [block-id] :as cmd} action]
