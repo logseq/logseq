@@ -39,19 +39,19 @@ struct ShortcutsEntryView: View {
             VStack(alignment: .leading, spacing: 0) {
                 // Top heading
                 Link(destination: URL(string: "logseq://mobile")!) {
-                    HStack(spacing: 8) {
+                    HStack(alignment: .top, spacing: 8) {
                         Text(weekday)
                           .font(.subheadline)
                           .bold()
                           .foregroundColor(.white.opacity(0.5))
-
+                          .padding(.top, 4)
 
                         Spacer()
 
                         Image("LogseqLogo")
                           .resizable()
                           .scaledToFit()
-                          .frame(width: 20, height: 20)
+                          .frame(width: 30, height: 30)
                     }
                 }
 
@@ -60,7 +60,6 @@ struct ShortcutsEntryView: View {
                     .font(.headline)
                     .bold()
                     .foregroundColor(.white.opacity(0.8))
-                    .padding(.top, 8)
 
                 Spacer(minLength: 0)
 
@@ -90,7 +89,7 @@ struct ShortcutsEntryView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(-3)
+            .padding(-8)
         }
     }
 }
