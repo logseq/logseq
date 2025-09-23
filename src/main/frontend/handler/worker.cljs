@@ -54,13 +54,6 @@
 (defmethod handle :export-current-db [_]
   (state/pub-event! [:db/export-sqlite]))
 
-(defmethod handle :reload-app [_]
-  (log/error ::db-read-only nil)
-  ;; (if (util/mobile?)
-  ;;   (js/window.location.reload)
-  ;;   (log/error ::db-read-only nil))
-  )
-
 (defmethod handle :record-worker-client-id [_ _worker data]
   (when-let [client-id (:client-id data)]
     (reset! state/*db-worker-client-id client-id)))
