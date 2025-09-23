@@ -412,8 +412,7 @@
 (def-thread-api :thread-api/create-or-open-db
   [repo opts]
   (when-not (= repo (worker-state/get-current-repo)) ; graph switched
-    (reset! worker-state/*deleted-block-uuid->db-id {})
-    (reset! worker-state/*db-read-only? false))
+    (reset! worker-state/*deleted-block-uuid->db-id {}))
   (start-db! repo opts))
 
 (def-thread-api :thread-api/q
