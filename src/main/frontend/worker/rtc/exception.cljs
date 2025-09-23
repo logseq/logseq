@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.exception
   "Exception list"
-  (:require [logseq.common.defkeywords :refer [defkeywords]]))
+  (:require [logseq.common.defkeywords :refer [defkeywords]])
+  (:import [missionary Cancelled]))
 
 (defkeywords
   :rtc.exception/ws-already-disconnected {:doc "Remote exception. current websocket conn is already disconnected and deleted by remote."}
@@ -52,7 +53,17 @@ the server will put it to s3 and return its presigned-url to clients."}
   (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
 
 (defn ->map
+  "TODO: deprecated
+  This function was used to map exceptions to a format suitable for posting messages to the UI thread.
+  However, ldb/write-transit-str now supports the ExceptionInfo type, making this function unnecessary."
   [e]
   (when-let [data (ex-data e)]
     {:ex-data data
      :ex-message (ex-message e)}))
+
+(defn e->ex-info
+  [e]
+  (cond
+    (instance? Cancelled e) (ex-info "missionary.Cancelled" {:message (.-message e)})
+    (instance? js/CloseEvent e) (ex-info "js/CloseEvent" {:type (.-type e)})
+    :else e))
