@@ -139,16 +139,6 @@
       (rebuild-db-from-datoms! conn sqlite-db)
       (worker-util/post-message :notification ["The graph has been successfully rebuilt." :success false]))))
 
-(defn- check-db-writable
-  [^js db]
-  (let [changes (.changes db)]
-    (when (worker-state/mobile?)
-      (log/info ::db-changes-count {:changes changes})
-      (when (< (.changes db) 1)
-        (log/error ::sqlite-upsert-addr-content-failed nil)
-        (reset! worker-state/*db-read-only? true)
-        (worker-util/post-message :reload-app nil)))))
-
 (defn upsert-addr-content!
   "Upsert addr+data-seq. Update sqlite-cli/upsert-addr-content! when making changes"
   [db data]
@@ -191,8 +181,7 @@
                            :$content (sqlite-util/transit-write data')
                            :$addresses addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! db data)
-        (check-db-writable db)))
+        (upsert-addr-content! db data)))
 
     (-restore [_ addr]
       (restore-data-from-addr db addr))))
