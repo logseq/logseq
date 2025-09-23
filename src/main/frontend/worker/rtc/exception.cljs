@@ -52,15 +52,6 @@ the server will put it to s3 and return its presigned-url to clients."}
 (def ex-unknown-server-error
   (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
 
-(defn ->map
-  "TODO: deprecated
-  This function was used to map exceptions to a format suitable for posting messages to the UI thread.
-  However, ldb/write-transit-str now supports the ExceptionInfo type, making this function unnecessary."
-  [e]
-  (when-let [data (ex-data e)]
-    {:ex-data data
-     :ex-message (ex-message e)}))
-
 (defn e->ex-info
   [e]
   (cond

@@ -527,7 +527,7 @@
           (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
     (m/sp
       (if (instance? ExceptionInfo r)
-        (r.ex/->map r)
+        r
         (let [major-schema-version (db-schema/major-version schema-version)
               {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
           (m/? (r.upload-download/new-task--upload-graph
@@ -545,7 +545,7 @@
           (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn :repo repo}))]
     (m/sp
       (if (instance? ExceptionInfo r)
-        (r.ex/->map r)
+        r
         (let [major-schema-version (db-schema/major-version schema-version)
               {:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
           (m/? (r.upload-download/new-task--branch-graph
