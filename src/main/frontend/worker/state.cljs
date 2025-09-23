@@ -131,9 +131,10 @@
   []
   (:auth/id-token @*state))
 
-(defn mobile?
-  []
-  (:mobile? (get-context)))
+(comment
+  (defn mobile?
+    []
+    (:mobile? (get-context))))
 
 ;;; ========================== mobile log ======================================
 (defonce *log (atom []))
