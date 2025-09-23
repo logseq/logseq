@@ -1,6 +1,7 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
   (:require [clojure.core.async :as async]
+            [clojure.core.async.impl.protocols :as async-protocols]
             [clojure.core.async.interop :refer [p->c]]
             [frontend.common.async-util :include-macros true :refer [<?]]
             [frontend.state :as state]
@@ -27,7 +28,12 @@
                      :request request-f
                      :response resp}]
     (swap! *unfinished-request-ids conj request-id)
-    (async/go (async/>! requests new-request))
+    (async/go
+      (let [result (async/>! requests new-request)]
+        (when (false? result)
+          (log/error ::failed-to-add-transact-request
+                     {:request-id request-id
+                      :requests-chan-closed? (async-protocols/closed? requests)}))))
     resp))
 
 (defn remove-request!
@@ -41,7 +47,7 @@
                       :payload {:type :worker-request-failed}}]))
 
 (defn listen-for-requests []
-  (prn "[debug] setup listen for worker request!")
+  (log/info ::transact-listen-to-requests {})
   (async/go-loop []
     (when-let [{:keys [id request response]} (async/<! requests)]
       (try

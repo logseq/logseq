@@ -18,6 +18,7 @@
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -48,6 +49,7 @@
     (when (nil? worker)
       (prn :<invoke-db-worker-error qkw)
       (throw (ex-info "db-worker has not been initialized" {})))
+    (log/info ::invoke-db-worker {:qkw qkw})
     (apply worker qkw direct-pass? args-list)))
 
 (defn <invoke-db-worker
