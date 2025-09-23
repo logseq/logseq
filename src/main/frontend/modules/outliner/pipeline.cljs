@@ -25,9 +25,8 @@
           (state/set-edit-content! new-title))))))
 
 (defn invoke-hooks
-  [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
+  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   ;; (prn :debug
-  ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
   (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta

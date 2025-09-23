@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.history
   (:require [frontend.db :as db]
-            [frontend.db.transact :as db-transact]
             [frontend.handler.editor :as editor]
             [frontend.handler.route :as route-handler]
             [frontend.persist-db.browser :as db-browser]
@@ -48,15 +47,14 @@
       (p/do!
        @*last-request
        (when-let [repo (state/get-current-repo)]
-         (when (db-transact/request-finished?)
-           (util/stop e)
-           (p/do!
-            (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
-            (editor/save-current-block!)
-            (state/clear-editor-action!)
-            (reset! *last-request (undo-redo/undo repo))
-            (p/let [result @*last-request]
-              (restore-cursor-and-state! result)))))))))
+         (util/stop e)
+         (p/do!
+          (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
+          (editor/save-current-block!)
+          (state/clear-editor-action!)
+          (reset! *last-request (undo-redo/undo repo))
+          (p/let [result @*last-request]
+            (restore-cursor-and-state! result))))))))
 (defonce undo! (debounce undo-aux! 20))
 
 (let [*last-request (atom nil)]
@@ -67,10 +65,9 @@
       (p/do!
        @*last-request
        (when-let [repo (state/get-current-repo)]
-         (when (db-transact/request-finished?)
-           (util/stop e)
-           (state/clear-editor-action!)
-           (reset! *last-request (undo-redo/redo repo))
-           (p/let [result @*last-request]
-             (restore-cursor-and-state! result))))))))
+         (util/stop e)
+         (state/clear-editor-action!)
+         (reset! *last-request (undo-redo/redo repo))
+         (p/let [result @*last-request]
+           (restore-cursor-and-state! result)))))))
 (defonce redo! (debounce redo-aux! 20))
