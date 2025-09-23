@@ -116,7 +116,8 @@
 
 (defn- fail-case-default-handler
   [key' e]
-  (when-not (instance? Cancelled e)
+  (when-not (or (instance? Cancelled e)
+                (= "missionary.Cancelled" (ex-message e)))
     (log/error :run-task-failed e :key key')))
 
 (defn run-task

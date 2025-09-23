@@ -9,13 +9,13 @@
             [datascript.core :as d]
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [logseq.common.path :as path]
             [malli.core :as ma]
-            [missionary.core :as m])
-  (:import [missionary Cancelled]))
+            [missionary.core :as m]))
 
 (defn- create-local-updates-check-flow
   "Return a flow that emits value if need to push local-updates"
@@ -297,12 +297,10 @@
            m/ap
            (m/reduce {} nil)
            m/?)
-          (catch Cancelled e
-            (add-log-fn :rtc.asset.log/cancelled {})
-            (throw e))
           (catch :default e
-            (add-log-fn :rtc.asset.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
-            (throw e)))))}))
+            (let [ex (r.ex/e->ex-info e)]
+              (add-log-fn :rtc.asset.log/cancelled {:e ex})
+              (throw ex))))))}))
 
 (comment
   (def x (atom 1))
