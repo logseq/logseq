@@ -26,8 +26,7 @@
           tx-report' (:tx-report result)]
       (when result
         (let [data (merge
-                    {:request-id (:request-id tx-meta)
-                     :repo repo
+                    {:repo repo
                      :tx-data (:tx-data tx-report')
                      :tx-meta tx-meta}
                     (dissoc result :tx-report))]
