@@ -43,25 +43,33 @@
 
 (defn send&recv
   "Return a task: throw exception if recv ex-data response.
+  This function will attempt to reconnect and retry once after the ws closed(js/CloseEvent).
   For huge apply-ops request(>100KB),
   - upload its request message to s3 first,
     then add `s3-key` key to request message map
   For huge apply-ops request(> 400 ops)
   - adjust its timeout to 20s"
   [get-ws-create-task message]
-  (m/sp
-    (let [ws (m/? get-ws-create-task)
-          opts (when (and (= "apply-ops" (:action message))
-                          (< 400 (count (:ops message))))
-                 {:timeout-ms 20000})
-          s3-key (when (= "apply-ops" (:action message))
-                   (m/? (put-apply-ops-message-on-s3-if-too-huge ws message)))
-          message* (if s3-key
-                     (-> message
-                         (assoc :s3-key s3-key)
-                         (dissoc :graph-uuid :ops :t-before))
-                     message)]
-      (handle-remote-ex (m/? (ws/send&recv ws message* opts))))))
+  (let [task--helper
+        (m/sp
+          (let [ws (m/? get-ws-create-task)
+                opts (when (and (= "apply-ops" (:action message))
+                                (< 400 (count (:ops message))))
+                       {:timeout-ms 20000})
+                s3-key (when (= "apply-ops" (:action message))
+                         (m/? (put-apply-ops-message-on-s3-if-too-huge ws message)))
+                message* (if s3-key
+                           (-> message
+                               (assoc :s3-key s3-key)
+                               (dissoc :graph-uuid :ops :t-before))
+                           message)]
+            (handle-remote-ex (m/? (ws/send&recv ws message* opts)))))]
+    (m/sp
+      (try
+        (m/? task--helper)
+        (catch js/CloseEvent _
+          ;; retry once
+          (m/? task--helper))))))
 
 (defn get-ws-url
   [token]
