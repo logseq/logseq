@@ -95,6 +95,7 @@
     (hooks/use-effect!
      (fn []
        (ui-handler/reset-custom-css!)
+       (ui-handler/set-file-graph-flag! (false? (config/db-based-graph? current-repo)))
        (pdf/reset-current-pdf!)
        (plugin-handler/hook-plugin-app :current-graph-changed {}))
      [current-repo])
