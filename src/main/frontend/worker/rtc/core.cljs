@@ -263,12 +263,10 @@
            (m/ap)
            (m/reduce {} nil)
            (m/?))
-          (catch Cancelled e
-            (add-log-fn :rtc.log/cancelled {})
-            (throw (r.ex/e->ex-info e)))
           (catch :default e
-            (add-log-fn :rtc.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
-            (throw (r.ex/e->ex-info e)))
+            (let [ex (r.ex/e->ex-info e)]
+              (add-log-fn :rtc.log/cancelled {:e ex})
+              (throw ex)))
           (finally
             (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))
@@ -351,7 +349,8 @@
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
-                                 (when-not (instance? Cancelled e)
+                                 (when-not (or (instance? Cancelled e)
+                                               (= "missionary.Cancelled" (ex-message e)))
                                    (log/info :rtc-loop-task-e-stack (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
@@ -398,7 +397,7 @@
               (log/error :rtc-start-failed ex)
 
               (log/error :BUG-unknown-error ex))
-            (r.ex/->map ex)))))))
+            ex))))))
 
 (defn rtc-stop
   []
