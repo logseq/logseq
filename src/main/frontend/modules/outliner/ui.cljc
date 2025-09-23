@@ -1,7 +1,6 @@
 (ns frontend.modules.outliner.ui
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state]
-                     [frontend.db.transact]
                      [frontend.db.conn]
                      [logseq.outliner.op]
                      [frontend.modules.outliner.op]
@@ -30,13 +29,9 @@
                                               (frontend.state/get-date-formatter)
                                               ~opts))
              (when (seq r#)
-               (let [request-id# (frontend.db.transact/get-next-request-id)
-                     request# #(frontend.state/<invoke-db-worker
-                                :thread-api/apply-outliner-ops
-                                (frontend.state/get-current-repo)
-                                r#
-                                (assoc ~opts
-                                       :request-id request-id#
-                                       :client-id (:client-id @frontend.state/state)))
-                     response# (frontend.db.transact/add-request! request-id# request#)]
-                 response#))))))))
+               (frontend.state/<invoke-db-worker
+                :thread-api/apply-outliner-ops
+                (frontend.state/get-current-repo)
+                r#
+                (assoc ~opts
+                       :client-id (:client-id @frontend.state/state))))))))))

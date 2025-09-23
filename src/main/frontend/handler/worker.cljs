@@ -6,7 +6,6 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
-            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))

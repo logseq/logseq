@@ -65,7 +65,6 @@
   "NOTE: don't add more logic in this listener, use mobile-flows instead"
   [^js state]
   (log/info :app-state-change-handler state
-            :current-graph (state/get-current-repo)
             :app-active? (.-isActive state)
             :worker-client-id @state/*db-worker-client-id)
   (when (state/get-current-repo)

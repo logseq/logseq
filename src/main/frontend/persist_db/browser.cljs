@@ -9,7 +9,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.transact :as db-transact]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.protocol :as protocol]
@@ -129,11 +128,10 @@
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (db-transact/transact transact!
-                                     (if (string? repo) repo (state/get-current-repo))
-                                     tx-data
-                                     (assoc tx-meta :client-id (:client-id @state/state)))))
-            (db-transact/listen-for-requests))
+               (transact!
+                (if (string? repo) repo (state/get-current-repo))
+                tx-data
+                (assoc tx-meta :client-id (:client-id @state/state))))))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)))))))

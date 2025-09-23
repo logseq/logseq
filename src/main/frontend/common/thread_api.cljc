@@ -2,8 +2,7 @@
   "Macro for defining thread apis, which is invokeable by other threads"
   #?(:cljs (:require-macros [frontend.common.thread-api]))
   #?(:cljs (:require [logseq.db :as ldb]
-                     [promesa.core :as p]
-                     [lambdaisland.glogi :as log])))
+                     [promesa.core :as p])))
 
 #?(:cljs
    (def *thread-apis (volatile! {})))
@@ -28,8 +27,6 @@
      "Return a promise whose value is transit-str."
      [qualified-kw-str direct-pass? args-transit-str-or-args-array]
      (let [qkw (keyword qualified-kw-str)]
-       (log/info ::remote-function qualified-kw-str
-                 :thread-api-exists? (fn? (@*thread-apis qkw)))
        (vswap! *profile update qkw inc)
        (if-let [f (@*thread-apis qkw)]
          (let [result (if (= qkw :thread-api/set-infer-worker-proxy)

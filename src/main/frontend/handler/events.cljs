@@ -16,7 +16,6 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.react :as react]
-            [frontend.db.transact :as db-transact]
             [frontend.extensions.fsrs :as fsrs]
             [frontend.fs :as fs]
             [frontend.fs.sync :as sync]
@@ -119,15 +118,10 @@
   (state/set-state! :db/async-queries {})
   (st/refresh!)
 
-  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))
-          request-finished? (db-transact/request-finished?)]
+  (p/let [writes-finished? (state/<invoke-db-worker :thread-api/file-writes-finished? (state/get-current-repo))]
     (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
       (do
-        (log/info :graph/switch (cond->
-                                 {:request-finished? request-finished?
-                                  :file-writes-finished? writes-finished?}
-                                  (false? request-finished?)
-                                  (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
+        (log/info :graph/switch {:file-writes-finished? writes-finished?})
         (notification/show!
          "Please wait seconds until all changes are saved for the current graph."
          :warning))
