@@ -13,6 +13,7 @@
     "electron:make": "electron-forge make",
     "electron:make-linux-arm64": "electron-forge make --platform=linux --arch=arm64",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
+    "electron:make-win-arm64": "electron-forge make --platform=win32 --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:all": "electron-rebuild -v 37.2.6 -f",
     "postinstall": "install-app-deps"
