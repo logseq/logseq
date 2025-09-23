@@ -109,7 +109,7 @@
     (p/do!
      (js/Promise. user-handler/task--ensure-id&access-token)
      (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)
-             ex-data* (:ex-data start-ex)
+             ex-data* (ex-data start-ex)
              _ (case (:type ex-data*)
                  (:rtc.exception/not-rtc-graph
                   :rtc.exception/not-found-db-conn)
