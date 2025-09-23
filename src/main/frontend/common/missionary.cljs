@@ -115,20 +115,20 @@
   (m/reduce {} nil (m/eduction (take 1) f)))
 
 (defn- fail-case-default-handler
-  [e]
+  [key' e]
   (when-not (instance? Cancelled e)
-    (log/error :run-task*-failed e)))
+    (log/error :run-task-failed e :key key')))
 
 (defn run-task
   "Return the canceler"
   [key' task & {:keys [succ fail]}]
-  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail fail-case-default-handler))]
+  (let [cancel (task (or succ #(log/info :key key' :succ %)) (or fail (partial fail-case-default-handler key')))]
     #(cancel)))
 
 (defn run-task*
   "Return the canceler"
   [task & {:keys [succ fail]}]
-  (let [cancel (task (or succ (constantly nil)) (or fail fail-case-default-handler))]
+  (let [cancel (task (or succ (constantly nil)) (or fail (partial fail-case-default-handler nil)))]
     #(cancel)))
 
 (comment

@@ -244,7 +244,7 @@
                       (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
                               repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
-                        (throw e))))
+                        (throw (r.ex/e->ex-info e)))))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
@@ -265,10 +265,10 @@
            (m/?))
           (catch Cancelled e
             (add-log-fn :rtc.log/cancelled {})
-            (throw e))
+            (throw (r.ex/e->ex-info e)))
           (catch :default e
             (add-log-fn :rtc.log/cancelled {:ex-message (ex-message e) :ex-data (ex-data e)})
-            (throw e))
+            (throw (r.ex/e->ex-info e)))
           (finally
             (started-dfv :final) ;; ensure started-dfv can recv a value(values except the first one will be disregarded)
             (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))))))}))

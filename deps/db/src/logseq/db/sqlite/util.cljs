@@ -38,7 +38,9 @@
                                     ExceptionInfo (transit/write-handler (constantly "error")
                                                                          (fn [e]
                                                                            {:message (ex-message e)
-                                                                            :data (ex-data e)})))
+                                                                            :data (ex-data e)}))
+                                    js/Error (transit/write-handler (constantly "js/Error")
+                                                                    (fn [e] {:message (ex-message e)})))
                              (merge write-handlers))
         writer (transit/writer :json {:handlers write-handlers*})]
     (fn write-transit-str* [o]
@@ -51,7 +53,8 @@
 (def read-transit-str
   (let [read-handlers* (->> (assoc dt/read-handlers
                                    "datascript/Entity" identity
-                                   "error" (fn [m] (ex-info (:message m) (:data m))))
+                                   "error" (fn [m] (ex-info (:message m) (:data m)))
+                                   "js/Error" (fn [m] (js/Error. (:message m))))
                             (merge read-handlers))
         reader (transit/reader :json {:handlers read-handlers*})]
     (fn read-transit-str* [s]
