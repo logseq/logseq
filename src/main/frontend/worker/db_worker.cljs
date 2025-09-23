@@ -629,12 +629,10 @@
 
 (def-thread-api :thread-api/apply-outliner-ops
   [repo ops opts]
+  (log/info ::apply-outliner-ops ops)
+  (log/info ::before-tx-id (:max-tx (worker-state/get-datascript-conn repo)))
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (try
-      (when (worker-state/mobile?)
-        (log/info ::apply-outliner-ops ops)
-        (log/info ::before-apply-outliner-ops ops
-                  ::tx-id (:max-tx @conn)))
       (worker-util/profile
        "apply outliner ops"
        (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts))
