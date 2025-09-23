@@ -62,8 +62,8 @@
   (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
           token (state/get-auth-id-token)
           start-ex (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)]
-    (when-let [ex-data* (:ex-data start-ex)]
-      (throw (ex-info (:ex-message start-ex) ex-data*)))))
+    (when (instance? ExceptionInfo start-ex)
+      (throw start-ex))))
 
 (defn notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
@@ -113,7 +113,7 @@
              _ (case (:type ex-data*)
                  (:rtc.exception/not-rtc-graph
                   :rtc.exception/not-found-db-conn)
-                 (notification/show! (:ex-message start-ex) :error)
+                 (notification/show! (ex-message start-ex) :error)
 
                  :rtc.exception/major-schema-version-mismatched
                  (case (:sub-type ex-data*)
@@ -124,7 +124,7 @@
                    ;; else
                    (do (log/info :start-ex start-ex)
                        (notification/show! [:div
-                                            [:div (:ex-message start-ex)]
+                                            [:div (ex-message start-ex)]
                                             [:div (-> ex-data*
                                                       (select-keys [:app :local :remote])
                                                       pp/pprint
