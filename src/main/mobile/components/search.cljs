@@ -73,7 +73,7 @@
 
     (hooks/use-effect!
      (fn []
-       (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 32)
+       (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 128)
        #())
      [])
 

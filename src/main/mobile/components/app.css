@@ -23,7 +23,7 @@ html.is-native-android {
   --silk-topbar-inner-height: 36px;
   --silk-topbar-inner-padding-bottom: 6px;
 
-  --silk-tabbar-bottom-paddding: 28px;
+  --silk-tabbar-bottom-paddding: 18px;
 
   .app-silk-index-container {
     padding-top: calc(var(--safe-area-inset-top) + var(--silk-topbar-inner-height) + 22px);
