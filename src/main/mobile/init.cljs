@@ -3,6 +3,7 @@
   (:require ["@capacitor/app" :refer [^js App]]
             ["@capacitor/keyboard" :refer [^js Keyboard]]
             ["@capacitor/network" :refer [^js Network]]
+            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             [clojure.string :as string]
             [frontend.handler.editor :as editor-handler]
             [frontend.mobile.flows :as mobile-flows]
@@ -23,14 +24,16 @@
 (def *last-shared-url (atom nil))
 (def *last-shared-seconds (atom 0))
 
-(defn- ios-init
+(defn- ios-init!
   "Initialize iOS-specified event listeners"
   []
   (mobile-util/check-ios-zoomed-display))
 
-(defn- android-init
+(defn- android-init!
   "Initialize Android-specified event listeners"
   []
+  (js/setTimeout
+   #(.setNavigationBarColor NavigationBar #js {:color "transparent"}) 128)
   (.addListener App "backButton"
                 (fn []
                   (when (false?
@@ -82,7 +85,7 @@
                                             (js/window.location.reload)))))))))
   (reset! mobile-flows/*mobile-app-state (.-isActive state)))
 
-(defn- general-init
+(defn- general-init!
   "Initialize event listeners used by both iOS and Android"
   []
   (.addListener App "appUrlOpen"
@@ -125,13 +128,13 @@
   (reset! mobile-flows/*network Network)
 
   (when (mobile-util/native-android?)
-    (android-init))
+    (android-init!))
 
   (when (mobile-util/native-ios?)
-    (ios-init))
+    (ios-init!))
 
   (when (mobile-util/native-platform?)
-    (general-init)))
+    (general-init!)))
 
 (defn keyboard-hide
   []
