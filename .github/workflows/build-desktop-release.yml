@@ -574,7 +574,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64 ]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -601,25 +601,13 @@ jobs:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact x64 (Signed)
+      - name: Download The Windows Artifact x64
         uses: actions/download-artifact@v4
         with:
-          name: logseq-win-x64-signed-builds
+          name: logseq-win64-builds
           path: ./
 
-      - name: Download The Windows Artifact x64 (Unsigned)
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win-x64-builds
-          path: ./
-
-      - name: Download The Windows Artifact arm64 (Signed)
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win-arm64-signed-builds
-          path: ./
-
-      - name: Download The Windows Artifact arm64 (Unsigned)
+      - name: Download The Windows Artifact arm64
         uses: actions/download-artifact@v4
         with:
           name: logseq-win-arm64-builds
@@ -666,7 +654,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows-x64, build-windows-arm64]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
