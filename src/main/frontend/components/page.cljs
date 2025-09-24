@@ -643,7 +643,7 @@
         *all-collapsed? (::all-collapsed? state)
         block-or-whiteboard? (or block? whiteboard?)
         home? (= :home (state/get-current-route))
-        show-tabs? (and db-based? (and (or class-page? (ldb/property? page)) (not tag-dialog?)))]
+        show-tabs? (and db-based? (or class-page? (ldb/property? page)) (not tag-dialog?))]
     (if page
       (when (or title block-or-whiteboard?)
         [:div.flex-1.page.relative.cp__page-inner-wrap
