@@ -17,7 +17,6 @@
             [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.property :as db-property]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
@@ -71,17 +70,19 @@
           (db-pu/readable-properties
            {:original-key? true :key-fn str})))
 
+(defn- entity->map
+  [e]
+  (assoc (into {} e) :db/id (:db/id e)))
+
 (defn into-properties
   ([block] (into-properties (state/get-current-repo) block))
   ([repo block]
    (if (some-> repo (config/db-based-graph?))
-     (let [props (some->> block
-                          (filter (fn [[k _]] (db-property/property? k)))
-                          (into {})
-                          (into-readable-db-properties))
-           block (update block :block/properties merge props)
-           block (apply dissoc (concat [block] (keys props)))]
-       block)
+     (let [e (db/entity (:db/id block))
+           props (-> (:block/properties e)
+                     sdk-utils/remove-hidden-properties)]
+       (-> (entity->map block)
+           (assoc :block/properties props)))
      block)))
 
 (defn parse-property-json-value-if-need
