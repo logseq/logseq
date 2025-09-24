@@ -52,6 +52,10 @@
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
 	},
 	{
+		"pkg": "@capgo/capacitor-navigation-bar",
+		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
+	},
+	{
 		"pkg": "send-intent",
 		"classpath": "de.mindlib.sendIntent.SendIntent"
 	},
