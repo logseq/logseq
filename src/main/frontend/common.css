@@ -142,10 +142,13 @@ body {
     margin: 0.25rem 0;
   }
 
-  img,
-  video {
+  img {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  video {
+    max-height: 557px;
   }
 
   ::selection {
