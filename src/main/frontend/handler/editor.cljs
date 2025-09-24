@@ -1557,7 +1557,7 @@
                    today-page (if (nil? today-page-e)
                                 (state/pub-event! [:page/create today-page-name])
                                 today-page-e)
-                   insert-to-current-block-page? (and (:block/uuid edit-block) (string/blank? (state/get-edit-content)) (not pdf-area?))
+                   insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
                    insert-opts' (if insert-to-current-block-page?
                                   (assoc insert-opts
                                          :block-uuid (:block/uuid edit-block)
