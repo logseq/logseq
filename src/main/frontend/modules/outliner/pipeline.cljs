@@ -4,15 +4,13 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
-            [frontend.db.transact :as db-transact]
             [frontend.fs :as fs]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [logseq.db :as ldb]))
 
 (defn- update-editing-block-title-if-changed!
   [tx-data]
