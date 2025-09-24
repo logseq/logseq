@@ -4,13 +4,15 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.react :as react]
+            [frontend.db.transact :as db-transact]
             [frontend.fs :as fs]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defn- update-editing-block-title-if-changed!
   [tx-data]
@@ -25,10 +27,12 @@
           (state/set-edit-content! new-title))))))
 
 (defn invoke-hooks
-  [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
+  [{:keys [request-id repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   ;; (prn :debug
+  ;;      :request-id request-id
   ;;      :tx-meta tx-meta
-  ;;      :tx-data tx-data)
+  ;;      ;; :tx-data tx-data
+  ;;      )
   (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
@@ -77,6 +81,9 @@
 
             (when-not (= (:client-id tx-meta) (:client-id @state/state))
               (update-editing-block-title-if-changed! tx-data))
+
+            (when-let [resp (db-transact/get-resp request-id)]
+              (p/resolve! resp true))
 
             (when (seq deleted-assets)
               (doseq [asset deleted-assets]
