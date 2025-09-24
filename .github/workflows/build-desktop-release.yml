@@ -572,51 +572,9 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
       SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
-  codesign-windows:
-    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
-    needs: [ build-windows-x64, build-windows-arm64 ]
-    runs-on: [self-hosted, macos, token]
-    steps:
-      - name: Remove old builds
-        run: rm -rf ./builds && mkdir ./builds
-
-      - name: Download Windows x64 Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win-x64-unsigned-builds
-          path: ./builds-x64
-
-      - name: Download Windows arm64 Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: logseq-win-arm64-unsigned-builds
-          path: ./builds-arm64
-
-      - name: Sign Windows Executable
-        run: |
-          ls -lah ./builds-x64
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds-x64/*.exe
-          ls -lah ./builds-arm64
-          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.sectigo.com ./builds-arm64/*.exe
-        env:
-          PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
-
-      - name: Upload Artifact x64 (Signed)
-        uses: actions/upload-artifact@v4
-        with:
-          name: logseq-win-x64-signed-builds
-          path: builds-x64
-
-      - name: Upload Artifact arm64 (Signed)
-        uses: actions/upload-artifact@v4
-        with:
-          name: logseq-win-arm64-signed-builds
-          path: builds-arm64
-
-
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -708,7 +666,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-22.04
     steps:
       - name: Download MacOS x64 Artifacts
