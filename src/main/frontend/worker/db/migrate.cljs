@@ -398,11 +398,12 @@
 
 (defn remove-block-path-refs-datoms
   [db]
-  (->> (d/datoms db :avet :block/path-refs)
-       (map :e)
-       (distinct)
-       (map (fn [id]
-              [:db/retract id :block/path-refs]))))
+  (when (d/entity db :block/path-refs)
+    (->> (d/datoms db :avet :block/path-refs)
+         (map :e)
+         (distinct)
+         (map (fn [id]
+                [:db/retract id :block/path-refs])))))
 
 (defn- remove-position-property-from-url-properties
   [db]
