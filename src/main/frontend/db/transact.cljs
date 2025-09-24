@@ -1,40 +1,51 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
-  (:require [promesa.core :as p]))
+  (:require [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]
+            [frontend.common.async-util :include-macros true :refer [<?]]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [logseq.outliner.op :as outliner-op]
+            [promesa.core :as p]))
 
-(defonce *request-id (atom 0))
-
-(defonce *db-transact-requests (atom {}))
-
-(defn get-next-request-id
-  []
-  (swap! *request-id inc))
-
-(defn get-resp
-  [request-id]
-  (get @*db-transact-requests request-id))
-
-(defn remove-request!
-  [request-id]
-  (swap! *db-transact-requests dissoc request-id))
-
-(defn add-request!
-  [request-id request-f]
-  (->
-   (let [ui-db-transacted-promise (p/deferred)]
-     (swap! *db-transact-requests assoc request-id ui-db-transacted-promise)
-     (p/let [reply (request-f)]
-       ui-db-transacted-promise
-       reply))
-   (p/finally
-     (fn []
-       (remove-request! request-id)))))
+(defn worker-call
+  [request-f]
+  (let [response (p/deferred)]
+    (async/go
+      (let [result (<? (p->c (request-f)))]
+        (if (:ex-data result)
+          (do
+            (log/error :worker-request-failed result)
+            (p/reject! response result))
+          (p/resolve! response result))))
+    response))
 
 (defn transact [worker-transact repo tx-data tx-meta]
-  (let [request-id (get-next-request-id)
-        tx-meta' (assoc tx-meta
-                        :request-id request-id
+  (let [tx-meta' (assoc tx-meta
                         ;; not from remote (rtc)
                         :local-tx? true)]
-    (add-request! request-id (fn async-request []
-                               (worker-transact repo tx-data tx-meta')))))
+    (prn :debug :transact :tx-meta tx-meta)
+    (worker-call (fn async-request []
+                   (worker-transact repo tx-data tx-meta')))))
+
+(defn apply-outliner-ops
+  [conn ops opts]
+  (when (seq ops)
+    (if util/node-test?
+      (outliner-op/apply-ops! (state/get-current-repo)
+                              conn
+                              ops
+                              (state/get-date-formatter)
+                              opts)
+      (let [opts' (assoc opts
+                         :client-id (:client-id @state/state)
+                         :local-tx? true)
+            request #(frontend.state/<invoke-db-worker
+                      :thread-api/apply-outliner-ops
+                      (frontend.state/get-current-repo)
+                      ops
+                      opts')]
+        (prn :debug :apply-outliner-ops :opts opts'
+             :ops ops)
+        (frontend.db.transact/worker-call request)))))
