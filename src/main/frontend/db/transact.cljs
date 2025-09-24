@@ -25,7 +25,6 @@
   (let [tx-meta' (assoc tx-meta
                         ;; not from remote (rtc)
                         :local-tx? true)]
-    (prn :debug :transact :tx-meta tx-meta)
     (worker-call (fn async-request []
                    (worker-transact repo tx-data tx-meta')))))
 
@@ -46,6 +45,4 @@
                       (frontend.state/get-current-repo)
                       ops
                       opts')]
-        (prn :debug :apply-outliner-ops :opts opts'
-             :ops ops)
         (frontend.db.transact/worker-call request)))))
