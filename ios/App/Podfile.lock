@@ -28,6 +28,8 @@ PODS:
     - Capacitor
   - CapacitorStatusBar (7.0.1):
     - Capacitor
+  - CapgoCapacitorNavigationBar (7.1.32):
+    - Capacitor
   - JcesarmobileSslSkip (0.4.0):
     - Capacitor
   - SendIntent (7.0.0):
@@ -49,6 +51,7 @@ DEPENDENCIES:
   - "CapacitorShare (from `../../node_modules/@capacitor/share`)"
   - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
   - "CapacitorStatusBar (from `../../node_modules/@capacitor/status-bar`)"
+  - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
 
@@ -83,6 +86,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/splash-screen"
   CapacitorStatusBar:
     :path: "../../node_modules/@capacitor/status-bar"
+  CapgoCapacitorNavigationBar:
+    :path: "../../node_modules/@capgo/capacitor-navigation-bar"
   JcesarmobileSslSkip:
     :path: "../../node_modules/@jcesarmobile/ssl-skip"
   SendIntent:
@@ -104,9 +109,10 @@ SPEC CHECKSUMS:
   CapacitorShare: 58d6c2da63b093e8693287b2d36db92435538435
   CapacitorSplashScreen: 19cd3573e57507e02d6f34597a8c421e00931487
   CapacitorStatusBar: 275cbf2f4dfc00388f519ef80c7ec22edda342c9
+  CapgoCapacitorNavigationBar: 028e6cc0f00357381c46edb7b0d7cd1cda73493b
   JcesarmobileSslSkip: b0f921e9d397a57f7983731209ca1ee244119c1f
   SendIntent: 1f4f65c7103eb423067c566682dfcda973b5fb29
 
-PODFILE CHECKSUM: cb9c70caa3eda97256a3dae9041478673def76cd
+PODFILE CHECKSUM: 00fbb7ba3788966b68cb8a5a6f2abc380d7b7b9a
 
 COCOAPODS: 1.16.2
