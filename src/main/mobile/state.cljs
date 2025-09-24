@@ -1,6 +1,7 @@
 (ns mobile.state
   "Mobile state"
-  (:require [frontend.rum :as r]))
+  (:require [frontend.rum :as r]
+            [frontend.state :as state]))
 
 (defonce *tab (atom "home"))
 (defn set-tab! [tab] (reset! *tab tab))
@@ -31,7 +32,9 @@
 (defonce *popup-data (atom nil))
 (defn set-popup!
   [data]
-  (reset! *popup-data data))
+  (reset! *popup-data data)
+  (when data
+    (state/pub-event! [:mobile/clear-edit])))
 
 (defn close-popup!
   []
