@@ -6,16 +6,14 @@
                      [logseq.common.util :as common-util]
                      [promesa.core :as p])))
 
-(comment
-  #?(:cljs
-     (defn throw-err
-       [v]
-       (if (instance? ExceptionInfo v) (throw v) v))))
+#?(:cljs
+   (defn throw-err
+     [v]
+     (if (instance? ExceptionInfo v) (throw v) v)))
 
-(comment
-  (defmacro <?
-    [port]
-    `(throw-err (cljs.core.async/<! ~port))))
+(defmacro <?
+  [port]
+  `(throw-err (cljs.core.async/<! ~port)))
 
 #?(:cljs
    (defn c->p
