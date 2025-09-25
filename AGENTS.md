@@ -17,6 +17,9 @@
 - Run single focused unit-test:
   - Add the `:focus` keyword to the test case: `(deftest ^:focus test-name ...)`
   - `bb dev:test -i focus`
+  
+## Code Guidance
+- Keep in mind: @prompts/review.md
 
 ## Review Checklist
 - Linters and unit-tests must pass
