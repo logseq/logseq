@@ -1,5 +1,5 @@
 (ns logseq.outliner.page
-  "Page-related fns"
+  "Page-related fns for DB graphs"
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
@@ -43,7 +43,7 @@
   [conn page-uuid & {:keys [persist-op? rename? error-handler]
                      :or {persist-op? true
                           error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
-  (assert (uuid? page-uuid) (str "frontend.worker.handler.page/delete! srong page-uuid: " (if page-uuid page-uuid "nil")))
+  (assert (uuid? page-uuid) (str ::delete! " wrong page-uuid: " (if page-uuid page-uuid "nil")))
   (when page-uuid
     (when-let [page (d/entity @conn [:block/uuid page-uuid])]
       (let [blocks (:block/_page page)
