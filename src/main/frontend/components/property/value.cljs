@@ -360,7 +360,7 @@
         initial-day value
         initial-month (when value
                         (let [d (tc/to-date-time value)]
-                          (js/Date. (t/last-day-of-the-month  (t/date-time (t/year d) (t/month d))))))
+                          (js/Date. (t/last-day-of-the-month (t/date-time (t/year d) (t/month d))))))
         select-handler!
         (fn [^js d]
           (when d
@@ -405,22 +405,22 @@
                                   :title "Overdue"))
        content])))
 
-(defn- human-date-label [date]
-  (let [given-date (date/start-of-day date)
-        now (local/local-now)
-        today (date/start-of-day now)
-        tomorrow (t/plus today (t/days 1))
-        yesterday (t/minus today (t/days 1))]
+(defn- start-of-local-day [^js d]
+  ;; clone the date and reset to local midnight
+  (doto (js/Date. d)
+    (.setHours 0 0 0 0)))
+
+(defn- human-date-label [utc-ms]
+  ;; utc-ms is stored deadline/scheduled time
+  (let [given-date (start-of-local-day (js/Date. utc-ms))
+        today      (start-of-local-day (js/Date.))
+        ms-in-day  (* 24 60 60 1000)
+        tomorrow   (js/Date. (+ (.getTime today) ms-in-day))
+        yesterday  (js/Date. (- (.getTime today) ms-in-day))]
     (cond
-      (and (t/before? given-date today) (not (t/before? given-date yesterday)))
-      "Yesterday"
-
-      (and (not (t/before? given-date today)) (t/before? given-date tomorrow))
-      "Today"
-
-      (and (not (t/before? given-date tomorrow)) (t/before? given-date (t/plus tomorrow (t/days 1))))
-      "Tomorrow"
-
+      (= (.getTime given-date) (.getTime yesterday)) "Yesterday"
+      (= (.getTime given-date) (.getTime today))     "Today"
+      (= (.getTime given-date) (.getTime tomorrow))  "Tomorrow"
       :else nil)))
 
 (rum/defc datetime-value
@@ -432,7 +432,7 @@
                        (rum/with-key
                          (page-cp {:disable-preview? true
                                    :show-non-exists-page? true
-                                   :label (human-date-label date)}
+                                   :label (human-date-label value)}
                                   {:block/name page-title})
                          page-title)))
                    (let [date (js/Date. value)
@@ -513,7 +513,7 @@
                             (rum/with-key
                               (page-cp {:disable-preview? true
                                         :meta-click? other-position?
-                                        :label (human-date-label (t/to-default-time-zone date))} value)
+                                        :label (human-date-label value)} value)
                               (:db/id value)))]
               (if (or repeated-task? (contains? #{:logseq.property/deadline :logseq.property/scheduled} (:db/id property)))
                 (overdue compare-value content)
