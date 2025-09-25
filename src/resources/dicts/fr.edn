@@ -1,4 +1,13 @@
-{:help/about "À propos de Logseq"
+{
+    :all-pages/failed-to-delete-pages "Ces pages ont leur contenu supprimé mais n'ont pu être suppimées : {1}. Regardes la console JavaScript pour plus de détails."
+    :all-pages/table-title (fn [total] (str total (if (= total 1) " page" " pages")))
+    :appearance "Apparence"
+    :asset/edit-block "Modifier le bloc"
+    :asset/ref-block "Bloc de référence de ressource"
+    :export-db-edn "Exporter le fichier EDN"
+    :export-sqlite-db "Exporter la base de données SQLite"
+    :export-zip "Exporter la base de données SQLite et les ressources"
+    :help/about "À propos de Logseq"
     :help/bug "Signaler une anomalie"
     :help/feature "Demander une fonctionnalité"
     :help/changelog "Journal des modifications"
@@ -11,15 +20,17 @@
     :help/shortcuts-triggers "Actions déclenchées"
     :help/shortcut "Raccourcis"
     :help/slash-autocomplete "Autocomplétion avec Slash"
-    :help/reference-autocomplete "Autocomplétion des références à une Page"
+    :help/reference-autocomplete "Autocomplétion des références à une page"
     :help/block-reference "Référence à un Bloc"
     :help/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
     :help/context-menu "Menu contextuel"
     :help/markdown-syntax "Syntaxe Markdown"
     :help/org-mode-syntax "Syntaxe Org mode"
     :bold "Gras"
+    :import-notes "Importer des notes existantes"
     :italics "Italique"
     :highlight "Surligner"
+    :new-tag "Nouvelle étiquette :"
     :strikethrough "Barré"
     :right-side-bar/help "Aide"
     :right-side-bar/switch-theme "Basculer sur le thème {1}"
@@ -106,14 +117,6 @@
     :linked-references/filter-excludes "Exclut : "
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
-    :linked-references/reference-count (fn [filtered-count total]
-                                           (if (= filtered-count nil)
-                                               (if (<= total 1)
-                                                   (str total " référence liée")
-                                                   (str total " références liées"))
-                                               (if (<= filtered-count 1)
-                                                   (str filtered-count " référence liée / " total)
-                                                   (str filtered-count " références liées / " total))))
     :linked-references/filter-search "Rechercher dans les pages liées"
     :page/add-to-favorites "Ajouter aux Favoris"
     :page/backlinks "Rétro-lien"
@@ -210,6 +213,11 @@
     :on-boarding/welcome-whiteboard-modal-title "Un nouveau cadre pour vos pensées."
     :settings-page/clear-cache-warning "Vider le cache supprimera les graphiques ouverts. Vous perdrez les modifications non enregistrées."
     :settings-page/disable-sentry-desc "Logseq ne collectera jamais votre base de données de graphes locale ni ne vendra vos données."
+    :command.auto-complete/meta-complete "Auto-complétion : Cmd + Entrer pour choisir un élément sélectionné"
+    :command.cards/again "Cartes : à nouveau"
+    :command.cards/easy "Cartes : facile"
+    :command.cards/good "Cartes : bon"
+    :command.cards/hard "Cartes : difficile"
     :command.editor/indent                  "Indenter un bloc vers la droite"
     :command.editor/outdent                 "Indenter un bloc vers la gauche"
     :command.editor/move-block-up           "Déplacer un bloc au-dessus"
@@ -305,8 +313,6 @@
     :command.search/re-index  "Reconstruire l'index de recherche"
     :command.sidebar/clear  "Vider intégralement la barre latérale droite"
     :command.sidebar/open-today-page  "Ouvrir la page du jour dans la barre latérale droite"
-    :command.ui/accent-color-reset "Réinitialiser la couleur d'accentuation"
-    :command.ui/accent-colors-picker "Choisir une couleur d'accentuation"
     :command.ui/goto-plugins  "Aller vers le panneau des extensions"
     :command.ui/install-plugins-from-file  "Installer les extensions depuis plugins.edn"
     :command.ui/select-theme-color  "Sélectionner les couleurs disponibles du thème"
@@ -494,10 +500,4 @@
     :settings-page/auto-chmod "Automatiquement changer les permissions du fichier"
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
-    :unlinked-references/reference-count  (fn [total]
-                                              (if (or (= total nil) (= total ""))
-                                                  "Références non liées"
-                                                  (if (<= total 1)
-                                                      (str total " référence non liée")
-                                                      (str total " références non liées"))))
 }
