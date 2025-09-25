@@ -46,41 +46,37 @@
 
 (defn get-node-icon
   [node-entity]
-  (let [first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
-    (or (get node-entity (pu/get-pid :logseq.property/icon))
-        (let [asset-type (:logseq.property.asset/type node-entity)]
-          (cond
-            (some? first-tag-icon)
-            first-tag-icon
-            (ldb/class? node-entity)
-            "hash"
-            (ldb/property? node-entity)
-            "letter-p"
-            (ldb/whiteboard? node-entity)
-            "writing"
-            (ldb/page? node-entity)
-            "file"
-            (= asset-type "pdf")
-            "book"
-            :else
-            "letter-n")))))
+  (or (get node-entity (pu/get-pid :logseq.property/icon))
+      (let [asset-type (:logseq.property.asset/type node-entity)
+            first-tag-icon (some :logseq.property/icon (sort-by :db/id (:block/tags node-entity)))]
+        (cond
+          (some? first-tag-icon)
+          first-tag-icon
+          (ldb/class? node-entity)
+          "hash"
+          (ldb/property? node-entity)
+          "letter-p"
+          (ldb/whiteboard? node-entity)
+          "writing"
+          (ldb/page? node-entity)
+          "file"
+          (= asset-type "pdf")
+          "book"
+          :else
+          "letter-n"))))
 
 (defn get-node-icon-cp
   [node-entity opts]
   (let [opts' (merge {:size 14} opts)
-        node-icon* (cond
-                     (:own-icon? opts)
-                     (get node-entity (pu/get-pid :logseq.property/icon))
-                     (:link? opts)
+        node-icon* (if (:link? opts)
                      "arrow-narrow-right"
-                     :else
                      (get-node-icon node-entity))
         node-icon (if (config/db-based-graph?)
                     node-icon*
                     (or (when-let [icon' (get-in node-entity [:block/properties :icon])]
                           [:span icon'])
                         node-icon*))]
-    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "file"} node-icon) (:not-text-or-page? opts)))
+    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))

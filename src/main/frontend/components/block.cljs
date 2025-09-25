@@ -776,8 +776,7 @@
        (let [own-icon (get page-entity (pu/get-pid :logseq.property/icon))
              emoji? (and (map? own-icon) (= (:type own-icon) :emoji))]
          (when-let [icon (icon-component/get-node-icon-cp page-entity {:color? true
-                                                                       :not-text-or-page? true
-                                                                       :own-icon? true})]
+                                                                       :not-text-or-page? true})]
            [:span {:class (str "icon-emoji-wrap " (when emoji? "as-emoji"))}
             icon])))
 
