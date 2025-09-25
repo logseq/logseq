@@ -19,7 +19,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.outliner.validate :as outliner-validate]))
 
-(defn db-refs->page
+(defn- db-refs->page
   "Replace [[page name]] with page name"
   [page-entity]
   (let [refs (:block/_refs page-entity)
@@ -129,7 +129,7 @@
                      (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))))
 
 ;; TODO: Revisit title cleanup as this was copied from file implementation
-(defn sanitize-title
+(defn ^:api sanitize-title
   [title]
   (let [title      (-> (string/trim title)
                        (text/page-ref-un-brackets!)
@@ -165,7 +165,7 @@
            :block/parent (or parent (:db/id library))
            :block/order (db-order/gen-key))))
 
-(defn- split-namespace-pages
+(defn- ^:large-vars/cleanup-todo split-namespace-pages
   [db page date-formatter create-class?]
   (let [{:block/keys [title] block-uuid :block/uuid} page]
     (->>
@@ -228,7 +228,7 @@
        [page])
      (remove nil?))))
 
-(defn create
+(defn- ^:large-vars/cleanup-todo create
   "Pure function without side effects"
   [db title*
    {uuid' :uuid
