@@ -48,7 +48,6 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
-            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -1178,24 +1177,31 @@
 ;; TODO: Use transit for internal APIs
 (defn ^:export list_tags
   []
-  (clj->js (cli-common-mcp-tools/list-tags (db/get-db))))
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-tags (state/get-current-repo))]
+    (clj->js resp)))
 
 (defn ^:export list_properties
   []
-  (clj->js (cli-common-mcp-tools/list-properties (db/get-db))))
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-properties (state/get-current-repo))]
+    (clj->js resp)))
+
+(defn ^:export list_pages
+  []
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-pages (state/get-current-repo))]
+    (clj->js resp)))
 
 (defn ^:export get_page_data
   "Like get_page_blocks_tree but for MCP tools"
   [page-title]
-  (if-let [tools (cli-common-mcp-tools/get-page-blocks (db/get-db) page-title)]
-    (->> tools
-         (map #(dissoc % :block.temp/has-children? :block.temp/load-status))
-         clj->js)
-    #js {:error (str "Page " (pr-str page-title) " not found")}))
-
-(defn ^:export list_pages
-  []
-  (clj->js (cli-common-mcp-tools/list-pages (db/get-db))))
+  (p/let [tools (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
+    (if tools
+      (->> tools
+           (map #(-> %
+                     sdk-utils/remove-hidden-properties
+                     ;; remove unused and untranslated attrs
+                     (dissoc :block/children :block/page)))
+           clj->js)
+      #js {:error (str "Page " (pr-str page-title) " not found")})))
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
