@@ -11,6 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.functions :as gfun]
+            [logseq.client.logging :as log]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -19,7 +20,7 @@
             [rum.core :as rum]))
 
 (defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
-(def audio-length-limit 10)     ; 10 minutes
+(def audio-length-limit 10) ; 10 minutes
 
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
@@ -40,7 +41,7 @@
        "zh"
        (string/replace value "-" "_")))
    (p/catch (fn [e]
-              (js/console.error e)
+              (log/error :get-locale-error e)
               "en_US"))))
 
 (defn- >ios-26
@@ -88,7 +89,7 @@
                                                                      :sibling? false
                                                                      :replace-empty-target? true
                                                                      :edit-block? false})))))
-                (p/catch #(js/console.error "Error(transcribeAudio2Text):" %)))))))))
+                (p/catch #(log/error :transcribe-audio-error %)))))))))
 
 (rum/defc record-button
   [*locale]
@@ -133,7 +134,7 @@
                                              (when-let [node (rum/deref *timer-ref)]
                                                (set! (. node -textContent) t)))
                                            (catch js/Error e
-                                             (js/console.warn "WARN: bad progress time:" e))))))
+                                             (log/warn :bad-progress-time e))))))
                                    33))
            (.on "record-beat" (fn [value]
                                 (let [value' (cond
