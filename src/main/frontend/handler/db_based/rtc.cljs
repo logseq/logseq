@@ -108,7 +108,7 @@
   (let [db (db/get-db repo)
         graph-uuid (ldb/get-graph-rtc-uuid db)]
     (if-not graph-uuid
-      (log/error :<rtc-start! ["graph-uuid not found" repo])
+      (log/info :skip-<rtc-start! ["graph-uuid not found" repo])
       (p/do!
         (js/Promise. user-handler/task--ensure-id&access-token)
         (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)

@@ -381,10 +381,10 @@
       (if-not (and repo
                    (sqlite-util/db-based-graph? repo)
                    conn token)
-        (log/error :new-task--rtc-start-failed
-                   {:repo repo
-                    :some?-conn (some? conn)
-                    :some?-token (some? token)})
+        (log/info :skip-new-task--rtc-start
+                  {:repo repo
+                   :some?-conn (some? conn)
+                   :some?-token (some? token)})
         (do
           (when stop-before-start? (rtc-stop))
           (let [ex (m/? (new-task--rtc-start* repo token))]
