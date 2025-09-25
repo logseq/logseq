@@ -1,7 +1,6 @@
 (ns frontend.components.property.value
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs-time.local :as local]
             [clojure.set :as set]
             [clojure.string :as string]
             [dommy.core :as d]
