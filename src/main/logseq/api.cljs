@@ -81,7 +81,7 @@
   (some-> (state/get-current-repo)
           (config/db-based-graph?)))
 
-(defn get-caller-plugin-id
+(defn ^:export get-caller-plugin-id
   [] (gobj/get js/window "$$callerPluginID"))
 
 ;; helpers
@@ -625,6 +625,7 @@
                          (some->> page (api-block/into-properties (state/get-current-repo))))]
       (bean/->js (sdk-utils/normalize-keyword-for-json page)))))
 
+;; FIXME: this doesn't work because the ui doesn't have all pages
 (defn ^:export get_all_pages
   []
   (let [db (conn/get-db (state/get-current-repo))]
@@ -640,26 +641,28 @@
 
 (defn ^:export create_page
   [name ^js properties ^js opts]
-  (let [properties (bean/->clj properties)
-        db-base? (config/db-based-graph? (state/get-current-repo))
-        {:keys [redirect format journal]} (bean/->clj opts)]
-    (p/let [page (<pull-block name)
-            new-page (when-not page
-                       (page-handler/<create!
-                        name
-                        (cond->
-                         {:redirect? (if (boolean? redirect) redirect true)
-                          :journal? journal
-                          :format format}
-                          (not db-base?)
-                          (assoc :properties properties))))
-            _ (when (and db-base? (seq properties))
-                (api-block/save-db-based-block-properties! new-page properties))]
-      (some-> (or page new-page)
-              :db/id
-              (db-utils/pull)
-              (sdk-utils/normalize-keyword-for-json)
-              (bean/->js)))))
+  (this-as
+   this
+   (let [properties (bean/->clj properties)
+         db-base? (config/db-based-graph? (state/get-current-repo))
+         {:keys [redirect format journal]} (bean/->clj opts)]
+     (p/let [page (<pull-block name)
+             new-page (when-not page
+                        (page-handler/<create!
+                         name
+                         (cond->
+                          {:redirect? (if (boolean? redirect) redirect true)
+                           :journal? journal
+                           :format format}
+                           (not db-base?)
+                           (assoc :properties properties))))
+             _ (when (and db-base? (seq properties))
+                 (api-block/save-db-based-block-properties! new-page properties {:plugin this}))]
+       (some-> (or page new-page)
+               :db/id
+               (db-utils/pull)
+               (sdk-utils/normalize-keyword-for-json)
+               (bean/->js))))))
 
 (defn ^:export create_journal_page
   [^js date]
@@ -761,7 +764,7 @@
                                                  (merge properties
                                                         (when custom-uuid {:id custom-uuid})))})
                        _ (when (and db-base? (seq properties))
-                           (api-block/save-db-based-block-properties! new-block properties this))]
+                           (api-block/save-db-based-block-properties! new-block properties {:plugin this}))]
                  (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
 (def ^:export insert_batch_block
@@ -794,17 +797,20 @@
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
-    (p/let [repo (state/get-current-repo)
-            db-base? (config/db-based-graph? repo)
-            block (<pull-block block-uuid)
-            opts (bean/->clj opts)]
-      (when block
-        (p/do!
-         (when (and db-base? (seq (:properties opts)))
-           (api-block/save-db-based-block-properties! block (:properties opts)))
-         (editor-handler/save-block! repo
-                                     (sdk-utils/uuid-or-throw-error block-uuid) content
-                                     (if db-base? (dissoc opts :properties) opts)))))))
+    (this-as
+     this
+     (p/let [repo (state/get-current-repo)
+             db-base? (config/db-based-graph? repo)
+             block (<pull-block block-uuid)
+             opts (bean/->clj opts)]
+       (when block
+         (p/do!
+          (when (and db-base? (seq (:properties opts)))
+            (api-block/save-db-based-block-properties! block (:properties opts)
+                                                       {:plugin this}))
+          (editor-handler/save-block! repo
+                                      (sdk-utils/uuid-or-throw-error block-uuid) content
+                                      (if db-base? (dissoc opts :properties) opts))))))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
@@ -877,11 +883,9 @@
 ;; properties (db only)
 (defn -get-property
   [^js plugin k]
-  (when-let [k' (and (string? k) (some-> k (api-block/sanitize-user-property-name) (keyword)))]
-    (let [prefix (api-block/resolve-property-prefix-for-db plugin)]
-      (p/let [k (if (qualified-keyword? k') k'
-                    (api-block/get-db-ident-for-user-property-name k prefix))
-              p (db-utils/pull k)] p))))
+  (when-let [k' (and (string? k) (api-block/sanitize-user-property-name k))]
+    (let [property-ident (api-block/get-db-ident-from-property-name k' plugin)]
+      (db-utils/pull property-ident))))
 
 (defn ^:export get_property
   [k]
@@ -902,29 +906,25 @@
   "
   [k ^js schema ^js opts]
   (this-as this
-           (when-let [k' (and (string? k) (keyword k))]
-             (let [prefix (api-block/resolve-property-prefix-for-db this)]
-               (p/let [opts (or (some-> opts (bean/->clj)) {})
-                       k (if (qualified-keyword? k') k'
-                             (api-block/get-db-ident-for-user-property-name k prefix))
-                       name (or (:name opts) (some-> k (name)))
-                       schema (or (some-> schema (bean/->clj)
-                                          (update-keys #(if (contains? #{:hide :public} %)
-                                                          (keyword (str (name %) "?")) %))) {})
-                       schema (cond-> schema
-                                (string? (:cardinality schema))
-                                (-> (assoc :db/cardinality (keyword (:cardinality schema)))
-                                    (dissoc :cardinality))
+           (when-not (string/blank? k)
+             (p/let [opts (or (some-> opts bean/->clj) {})
+                     property-ident (api-block/get-db-ident-from-property-name k this)
+                     _ (api-block/ensure-property-access-control property-ident k)
+                     schema (or (some-> schema (bean/->clj)
+                                        (update-keys #(if (contains? #{:hide :public} %)
+                                                        (keyword (str (name %) "?")) %))) {})
+                     schema (cond-> schema
+                              (string? (:cardinality schema))
+                              (-> (assoc :db/cardinality (keyword (:cardinality schema)))
+                                  (dissoc :cardinality))
 
-                                (string? (:type schema))
-                                (-> (assoc :logseq.property/type (keyword (:type schema)))
-                                    (dissoc :type)))
-                       p (db-property-handler/upsert-property! k schema
-                                                               (cond-> opts
-                                                                 name
-                                                                 (assoc :property-name name)))
-                       p (db-utils/pull (:db/id p))]
-                 (bean/->js (sdk-utils/normalize-keyword-for-json p)))))))
+                              (string? (:type schema))
+                              (-> (assoc :logseq.property/type (keyword (:type schema)))
+                                  (dissoc :type)))
+                     p (db-property-handler/upsert-property! property-ident schema
+                                                             (assoc opts :property-name name))
+                     p (db-utils/pull (:db/id p))]
+               (bean/->js (sdk-utils/normalize-keyword-for-json p))))))
 
 (defn ^:export remove_property
   [k]
@@ -937,18 +937,19 @@
 ;; block properties
 (defn ^:export upsert_block_property
   [block-uuid key ^js value]
-  (this-as this
-           (p/let [keyname (api-block/sanitize-user-property-name key)
-                   block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-                   repo (state/get-current-repo)
-                   block (db-async/<get-block repo block-uuid :children? false)
-                   db-base? (db-graph?)
-                   key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
-                   value (bean/->clj value)]
-             (when block
-               (if db-base?
-                 (api-block/save-db-based-block-properties! block {key' value} this)
-                 (property-handler/set-block-property! repo block-uuid key' value))))))
+  (this-as
+   this
+   (p/let [keyname (api-block/sanitize-user-property-name key)
+           block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
+           repo (state/get-current-repo)
+           block (db-async/<get-block repo block-uuid :children? false)
+           db-base? (db-graph?)
+           key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
+           value (bean/->clj value)]
+     (when block
+       (if db-base?
+         (api-block/save-db-based-block-properties! block {key' value} {:plugin this})
+         (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
   [block-uuid key]
@@ -960,7 +961,7 @@
                    key-ns? (and (keyword? key) (namespace key))
                    key (if key-ns? key (if (keyword? key) (name key) key))
                    key (if (and db? (not key-ns?))
-                         (api-block/get-db-ident-for-user-property-name
+                         (api-block/get-db-ident-from-property-name
                           key (api-block/resolve-property-prefix-for-db this))
                          key)]
              (property-handler/remove-block-property!
@@ -976,7 +977,7 @@
                (when (seq properties)
                  (let [key (api-block/sanitize-user-property-name key)
                        property-name (if (keyword? key) (name key) key)
-                       ident (api-block/get-db-ident-for-user-property-name
+                       ident (api-block/get-db-ident-from-property-name
                               property-name (api-block/resolve-property-prefix-for-db this))
                        property-value (or (get properties key)
                                           (get properties (keyword property-name))

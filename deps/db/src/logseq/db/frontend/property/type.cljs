@@ -14,7 +14,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity :class :page :property :string :raw-number})
+  #{:keyword :map :coll :any :entity :class :page :property :string :json :raw-number})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -173,6 +173,7 @@
    ;; ==============
 
    :string   string?
+   :json     string?
    :raw-number number?
    :entity   [:fn
               {:error/message "should be an Entity"}

@@ -18,6 +18,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]
             [malli.error :as me]
             [malli.util :as mu]))
@@ -317,13 +318,18 @@
       v
 
       (= property-type :page)
-      (if (or (string/blank? v) (not (string? v)))
-        (throw (ex-info "Value should be non-empty string" {:property-id property-id
-                                                            :property-type property-type
-                                                            :v v}))
+      (let [ex-data {:property-id property-id
+                     :property-type property-type
+                     :v v}]
+        (if (or (string/blank? v) (not (string? v)))
+          (throw (ex-info "Value should be non-empty string" ex-data))
+          (let [page (ldb/get-case-page @conn v)]
+            (if (ldb/page? page)
+              (:db/id page)
+              (let [[_ page-uuid] (outliner-page/create! conn v {})]
+                (when-not page-uuid
+                  (throw (ex-info "Failed to create page" ex-data))))))))
 
-        ;; TODO: create page
-        nil)
       :else
       ;; only value-ref-property types should call this
       (when-let [v' (if (and number-property? (string? v))
@@ -462,37 +468,44 @@
   attributes as properties"
   [conn block-eid property-id v]
   (throw-error-if-read-only-property property-id)
-  (if (nil? v)
-    (remove-block-property! conn block-eid property-id)
-    (let [block-eid (->eid block-eid)
-          _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
-          block (d/entity @conn block-eid)
-          db-attribute? (some? (db-schema/schema property-id))]
-      (when (= property-id :block/tags)
-        (outliner-validate/validate-tags-property @conn [block-eid] v))
-      (when (= property-id :logseq.property.class/extends)
-        (outliner-validate/validate-extends-property @conn v [block]))
-      (cond
-        db-attribute?
-        (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
-          (let [tx-data (cond->
-                         [{:db/id (:db/id block) property-id v}]
-                          (= property-id :logseq.property.class/extends)
-                          (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
-            (ldb/transact! conn tx-data
-                           {:outliner-op :save-block})))
-        :else
-        (let [property (d/entity @conn property-id)
-              _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-              property-type (get property :logseq.property/type :default)
-              ref? (db-property-type/all-ref-property-types property-type)
-              new-value (if ref?
-                          (convert-ref-property-value conn property-id v property-type)
-                          v)
-              existing-value (get block property-id)]
-          (throw-error-if-self-value block new-value ref?)
-          (when-not (= existing-value new-value)
-            (raw-set-block-property! conn block property property-type new-value)))))))
+  (let [block-eid (->eid block-eid)
+        _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
+        block (d/entity @conn block-eid)
+        db-attribute? (some? (db-schema/schema property-id))
+        property (d/entity @conn property-id)]
+    (when-not (and block property)
+      (throw (ex-info "Set block property failed: block or property doesn't exist"
+                      {:block-eid block-eid
+                       :property-id property-id
+                       :block block
+                       :property property})))
+    (if (nil? v)
+      (remove-block-property! conn block-eid property-id)
+      (do
+        (when (= property-id :block/tags)
+          (outliner-validate/validate-tags-property @conn [block-eid] v))
+        (when (= property-id :logseq.property.class/extends)
+          (outliner-validate/validate-extends-property @conn v [block]))
+        (cond
+          db-attribute?
+          (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+            (let [tx-data (cond->
+                           [{:db/id (:db/id block) property-id v}]
+                            (= property-id :logseq.property.class/extends)
+                            (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+              (ldb/transact! conn tx-data
+                             {:outliner-op :save-block})))
+          :else
+          (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+                property-type (get property :logseq.property/type :default)
+                ref? (db-property-type/all-ref-property-types property-type)
+                new-value (if ref?
+                            (convert-ref-property-value conn property-id v property-type)
+                            v)
+                existing-value (get block property-id)]
+            (throw-error-if-self-value block new-value ref?)
+            (when-not (= existing-value new-value)
+              (raw-set-block-property! conn block property property-type new-value))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
