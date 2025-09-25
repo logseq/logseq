@@ -6,3 +6,7 @@ logseq.outliner.datascript/transact!
 logseq.outliner.op/apply-ops!
 ;; API fn
 logseq.outliner.op/register-op-handlers!
+;; API fn
+logseq.outliner.page/delete!
+;; API fn
+logseq.outliner.page/create!
