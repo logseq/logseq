@@ -645,7 +645,7 @@
    this
    (let [properties (bean/->clj properties)
          db-base? (config/db-based-graph? (state/get-current-repo))
-         {:keys [redirect format journal]} (bean/->clj opts)]
+         {:keys [redirect format journal schema]} (bean/->clj opts)]
      (p/let [page (<pull-block name)
              new-page (when-not page
                         (page-handler/<create!
@@ -657,7 +657,8 @@
                            (not db-base?)
                            (assoc :properties properties))))
              _ (when (and db-base? (seq properties))
-                 (api-block/save-db-based-block-properties! new-page properties {:plugin this}))]
+                 (api-block/db-based-save-block-properties! new-page properties {:plugin this
+                                                                                 :schema schema}))]
        (some-> (or page new-page)
                :db/id
                (db-utils/pull)
@@ -722,7 +723,7 @@
                    block (<pull-block (str block-uuid-or-page-name))]
              (if (and block? (not block))
                (throw (js/Error. "Block not exists"))
-               (p/let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
+               (p/let [{:keys [before sibling focus customUUID properties autoOrderedList schema]} (bean/->clj opts)
                        [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
                                                 [nil (uuid block-uuid-or-page-name)]
                                                 [block-uuid-or-page-name nil])
@@ -764,9 +765,11 @@
                                                  (merge properties
                                                         (when custom-uuid {:id custom-uuid})))})
                        _ (when (and db-base? (seq properties))
-                           (api-block/save-db-based-block-properties! new-block properties {:plugin this}))]
+                           (api-block/db-based-save-block-properties! new-block properties {:plugin this
+                                                                                            :schema schema}))]
                  (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
+;; FIXME: support properties for db graphs
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
     (p/let [block (<ensure-page-loaded block-uuid)]
@@ -802,15 +805,16 @@
      (p/let [repo (state/get-current-repo)
              db-base? (config/db-based-graph? repo)
              block (<pull-block block-uuid)
-             opts (bean/->clj opts)]
+             opts' (bean/->clj opts)]
        (when block
          (p/do!
-          (when (and db-base? (seq (:properties opts)))
-            (api-block/save-db-based-block-properties! block (:properties opts)
-                                                       {:plugin this}))
+          (when (and db-base? (seq (:properties opts')))
+            (api-block/db-based-save-block-properties! block (:properties opts')
+                                                       {:plugin this
+                                                        :schema (:schema opts')}))
           (editor-handler/save-block! repo
                                       (sdk-utils/uuid-or-throw-error block-uuid) content
-                                      (if db-base? (dissoc opts :properties) opts))))))))
+                                      (if db-base? (dissoc opts' :properties) opts'))))))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
@@ -948,7 +952,7 @@
            value (bean/->clj value)]
      (when block
        (if db-base?
-         (api-block/save-db-based-block-properties! block {key' value} {:plugin this})
+         (api-block/db-based-save-block-properties! block {key' value} {:plugin this})
          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
