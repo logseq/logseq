@@ -608,3 +608,11 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     color: currentColor;
   }
 }
+
+.no-repos {
+  @apply pb-1;
+
+  .cp__repos-quick-actions {
+    @apply border-none;
+  }
+}
