@@ -1,5 +1,5 @@
 (ns frontend.modules.shortcut.utils
-  (:require [clojure.string :as str]
+  (:require [clojure.string :as string]
             [frontend.util :as util])
   (:import [goog.ui KeyboardShortcutHandler]))
 
@@ -11,8 +11,8 @@
       (js/console.warn "[shortcuts] parse key error: " e) binding)))
 
 (defn mod-key [binding]
-  (str/replace binding #"(?i)mod"
-               (if util/mac? "meta" "ctrl")))
+  (string/replace binding #"(?i)mod"
+                  (if util/mac? "meta" "ctrl")))
 
 (defn undecorate-binding
   [binding]
@@ -32,10 +32,10 @@
                     "↑"  "up"
                     "↓"  "down"}]
       (-> binding
-          (str/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
-          (str/replace #"\s+" " ")
+          (string/replace #"[;=-\[\]'\(\)\~\→\←\⇧]" #(get keynames %))
+          (string/replace #"\s+" " ")
           (mod-key)
-          (str/lower-case)))))
+          (string/lower-case)))))
 
 (defn decorate-namespace [k]
   (let [n (name k)
@@ -45,18 +45,18 @@
 (defn decorate-binding [binding]
   (when (or (string? binding)
             (sequential? binding))
-    (-> (if (string? binding) binding (str/join "+" binding))
-        (str/replace "mod" (if util/mac? "⌘" "ctrl"))
-        (str/replace "meta" (if util/mac? "⌘" "⊞ win"))
-        (str/replace "alt" (if util/mac? "opt" "alt"))
-        (str/replace "shift+/" "?")
-        (str/replace "left" "←")
-        (str/replace "right" "→")
-        (str/replace "up" "↑")
-        (str/replace "down" "↓")
-        (str/replace "shift" "⇧")
-        (str/replace "open-square-bracket" "[")
-        (str/replace "close-square-bracket" "]")
-        (str/replace "equals" "=")
-        (str/replace "semicolon" ";")
-        (str/lower-case))))
+    (-> (if (string? binding) binding (string/join "+" binding))
+        (string/replace "mod" (if util/mac? "⌘" "ctrl"))
+        (string/replace "meta" (if util/mac? "⌘" "⊞ win"))
+        (string/replace "alt" (if util/mac? "opt" "alt"))
+        (string/replace "shift+/" "?")
+        (string/replace "left" "←")
+        (string/replace "right" "→")
+        (string/replace "up" "↑")
+        (string/replace "down" "↓")
+        (string/replace "shift" "⇧")
+        (string/replace "open-square-bracket" "[")
+        (string/replace "close-square-bracket" "]")
+        (string/replace "equals" "=")
+        (string/replace "semicolon" ";")
+        (string/lower-case))))

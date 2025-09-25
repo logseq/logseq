@@ -3,4 +3,4 @@
  {logseq/db
   {:local/root "../db"}
   io.github.nextjournal/nbb-test-runner
-  {:git/sha "60ed57aa04bca8d604f5ba6b28848bd887109347"}}}
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}}}

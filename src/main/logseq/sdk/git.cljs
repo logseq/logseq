@@ -1,10 +1,10 @@
 (ns logseq.sdk.git
   (:require [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [frontend.state :as state]
-            [frontend.handler.shell :as shell]
             [frontend.config :as config]
-            [frontend.fs :as fs]))
+            [frontend.fs :as fs]
+            [frontend.handler.shell :as shell]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (defn ^:export exec_command
   [^js args]
@@ -18,11 +18,11 @@
             dir (config/get-repo-dir repo)
             _ (fs/create-if-not-exists repo dir file)
             content (fs/read-file dir file)]
-           content)))
+      content)))
 
 (defn ^:export save_ignore_file
   [content]
   (when-let [repo (and (string? content) (state/get-current-repo))]
     (p/let [file ".gitignore"
             dir (config/get-repo-dir repo)
-            _ (fs/write-file! repo dir file content {:skip-compare? true})])))
+            _ (fs/write-plain-text-file! repo dir file content {:skip-compare? true})])))

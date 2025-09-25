@@ -1,5 +1,9 @@
 [
 	{
+		"pkg": "@capacitor-community/safe-area",
+		"classpath": "com.getcapacitor.community.safearea.SafeAreaPlugin"
+	},
+	{
 		"pkg": "@capacitor/action-sheet",
 		"classpath": "com.capacitorjs.plugins.actionsheet.ActionSheetPlugin"
 	},
@@ -16,6 +20,10 @@
 		"classpath": "com.capacitorjs.plugins.clipboard.ClipboardPlugin"
 	},
 	{
+		"pkg": "@capacitor/device",
+		"classpath": "com.capacitorjs.plugins.device.DevicePlugin"
+	},
+	{
 		"pkg": "@capacitor/filesystem",
 		"classpath": "com.capacitorjs.plugins.filesystem.FilesystemPlugin"
 	},
@@ -26,6 +34,10 @@
 	{
 		"pkg": "@capacitor/keyboard",
 		"classpath": "com.capacitorjs.plugins.keyboard.KeyboardPlugin"
+	},
+	{
+		"pkg": "@capacitor/network",
+		"classpath": "com.capacitorjs.plugins.network.NetworkPlugin"
 	},
 	{
 		"pkg": "@capacitor/share",
@@ -40,23 +52,15 @@
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
 	},
 	{
-		"pkg": "@capawesome/capacitor-background-task",
-		"classpath": "io.capawesome.capacitorjs.plugins.backgroundtask.BackgroundTaskPlugin"
-	},
-	{
 		"pkg": "@capgo/capacitor-navigation-bar",
 		"classpath": "ee.forgr.capacitor_navigation_bar.NavigationBarPlugin"
 	},
 	{
-		"pkg": "@logseq/capacitor-file-sync",
-		"classpath": "com.logseq.app.filesync.FileSyncPlugin"
-	},
-	{
-		"pkg": "capacitor-voice-recorder",
-		"classpath": "com.tchvu3.capacitorvoicerecorder.VoiceRecorder"
-	},
-	{
 		"pkg": "send-intent",
 		"classpath": "de.mindlib.sendIntent.SendIntent"
+	},
+	{
+		"pkg": "@jcesarmobile/ssl-skip",
+		"classpath": "com.jcesarmobile.sslskip.SslSkipPlugin"
 	}
 ]

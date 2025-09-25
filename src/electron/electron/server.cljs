@@ -1,17 +1,17 @@
 (ns electron.server
-  (:require ["fastify" :as Fastify]
-            ["@fastify/cors" :as FastifyCORS]
+  (:require ["@fastify/cors" :as FastifyCORS]
             ["electron" :refer [ipcMain]]
+            ["fastify" :as Fastify]
             ["fs-extra" :as fs-extra]
             ["path" :as node-path]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [electron.utils :as utils]
             [camel-snake-kebab.core :as csk]
-            [electron.logger :as logger]
+            [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [electron.configs :as cfgs]
-            [electron.window :as window]))
+            [electron.logger :as logger]
+            [electron.utils :as utils]
+            [electron.window :as window]
+            [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
@@ -63,12 +63,10 @@
   [s]
   (when-not (string/blank? s)
     (if (type-proxy-api? s)
-      (let [s'   (string/split s ".")
-            tag  (second s')
-            tag' (when (and (not (string/blank? tag))
-                            (contains? #{"ui" "git" "assets"} (string/lower-case tag)))
-                   (str tag "_"))]
-        (csk/->snake_case (str tag' (last s'))))
+      (let [s' (string/split (string/trim s) ".")
+            ns (some-> (second s') str (string/lower-case))
+            method (some-> (last s') str)]
+        (csk/->snake_case (str ns "@" method)))
       (string/trim s))))
 
 (defn- validate-auth-token
@@ -108,7 +106,12 @@
   (if-let [^js body (.-body req)]
     (if-let [method (resolve-real-api-method (.-method body))]
       (-> (invoke-logseq-api! method (.-args body))
-          (p/then #(.send rep %))
+          (p/then #(do
+                     ;; Responses with an :error key are unexpected failures from electron.listener
+                     (when-let [msg (aget % "error")]
+                       (.code rep 500)
+                       (js/console.error "Unexpected API error:" msg))
+                     (.send rep %)))
           (p/catch #(.send rep %)))
       (-> rep
           (.code 400)

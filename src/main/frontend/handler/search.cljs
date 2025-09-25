@@ -1,16 +1,21 @@
 (ns frontend.handler.search
   "Provides util handler fns for search"
   (:require [clojure.string :as string]
+            [dommy.core :as dom]
+            [electron.ipc :as ipc]
+            [frontend.common.missionary :as c.m]
+            [frontend.common.search-fuzzy :as fuzzy]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.storage :as storage]
             [frontend.util :as util]
-            [promesa.core :as p]
+            [logseq.db :as ldb]
             [logseq.graph-parser.text :as text]
-            [electron.ipc :as ipc]
-            [dommy.core :as dom]))
+            [missionary.core :as m]
+            [promesa.core :as p]))
 
 (defn sanity-search-content
   "Convert a block to the display contents for searching"
@@ -29,18 +34,16 @@
             :as opts}]
    (when-not (string/blank? q)
      (let [page-db-id (if (string? page-db-id)
-                        (:db/id (db/entity repo [:block/name (util/page-name-sanity-lc page-db-id)]))
+                        (:db/id (db/get-page page-db-id))
                         page-db-id)
            opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
        (p/let [blocks (search/block-search repo q opts)
-               pages-content (search/page-content-search repo q opts)]
+               files (search/file-search q)]
          (let [result (merge
                        {:blocks blocks
                         :has-more? (= limit (count blocks))}
                        (when-not page-db-id
-                         {:pages-content pages-content
-                          :pages (search/page-search q)
-                          :files (search/file-search q)}))
+                         {:files files}))
                search-key (if more? :search/more-result :search/result)]
            (swap! state/state assoc search-key result)
            result))))))
@@ -84,10 +87,12 @@
 
 (defn loop-find-in-page!
   [backward?]
-  (when (and (get-in @state/state [:ui/find-in-page :active?])
-             (not (state/editing?)))
-    (state/set-state! [:ui/find-in-page :backward?] backward?)
-    (debounced-search)))
+  (if (and (get-in @state/state [:ui/find-in-page :active?])
+           (not (state/editing?)))
+    (do (state/set-state! [:ui/find-in-page :backward?] backward?)
+        (debounced-search))
+    ;; return false to skip prevent default event behavior (Enter key)
+    false))
 
 (defn electron-exit-find-in-page!
   [& {:keys [clear-state?]
@@ -113,11 +118,22 @@
    (rebuild-indices! false))
   ([notice?]
    (println "Starting to rebuild search indices!")
-   (p/let [_ (search/rebuild-indices!)]
-     (when notice?
-       (notification/show!
-        "Search indices rebuilt successfully!"
-        :success)))))
+   (when-let [repo (state/get-current-repo)]
+     (p/do!
+      (search/rebuild-indices!)
+      (when (ldb/get-key-value (db/get-db) :logseq.kv/graph-text-embedding-model-name)
+        (c.m/run-task
+          ::rebuild-embeddings
+          (m/sp
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-cancel-indexing repo))
+            (c.m/<?
+             (state/<invoke-db-worker :thread-api/vec-search-embedding-graph repo {:reset-embedding? true})))
+          :succ (constantly nil)))
+      (when notice?
+        (notification/show!
+         "Search indices rebuilt successfully!"
+         :success))))))
 
 (defn highlight-exact-query
   [content q]
@@ -125,8 +141,8 @@
     content
     (when (and content q)
       (let [q-words (string/split q #" ")
-            lc-content (util/search-normalize content (state/enable-search-remove-accents?))
-            lc-q (util/search-normalize q (state/enable-search-remove-accents?))]
+            lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))
+            lc-q (fuzzy/search-normalize q (state/enable-search-remove-accents?))]
         (if (and (string/includes? lc-content lc-q)
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
@@ -142,8 +158,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (util/search-normalize word (state/enable-search-remove-accents?))
-                                   lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
+                                   lc-word (fuzzy/search-normalize word (state/enable-search-remove-accents?))
+                                   lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))
@@ -156,3 +172,18 @@
                                         result)))
                              (conj result [:span content])))]
             [:p {:class "m-0"} elements]))))))
+
+(defn get-recents
+  []
+  (storage/get :recent-search-items))
+
+(defn add-recent!
+  [item]
+  (when-not (string/blank? item)
+    (let [recents (get-recents)]
+      (storage/set :recent-search-items
+                   (distinct (take 20 (cons item recents)))))))
+
+(defn clear-recents!
+  []
+  (storage/remove :recent-search-items))

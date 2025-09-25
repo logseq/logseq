@@ -39,6 +39,34 @@ Open a dev environment (Browser dev app on ``localhost:3000`` or Desktop dev app
 
 ``cmd + shift + p`` -> ``Calva: Load/Evaluate Current File and its Requires/Dependencies``
 
+#### Connect to the web-worker context
+
+##### Emacs + Cider
+When connecting to a CLJ nrepl (NOTE: if you are already in a CLJS nrepl, use `:cljs/quit` to go back to CLJ nrepl),
+you may run `(shadow.user/worker-repl)`, or  use `(shadow/nrepl-select :app {:runtime-id <id-num>})` to connect to a web-worker context.
+
+> [!TIP]
+> you can find the `<id-num>` in http://localhost:9630/runtimes
+
+##### Intellij Idea/Cursive-ide
+The setup is almost same as Calva except it requires switching REPL from CLJ to CLJS manually.
+
+1. Start nrepl with ```yarn watch```, wait until it prints ``shadow-cljs - nREPL server started on port 8701``
+2. Create a new remote REPL run configuration:
+    - Connection type: nREPL
+    - Context module: logseq
+    - :radio_button: Use port from file with localhost
+    - :radio_button: Use standard port file
+3. Start the remote REPL, now you are in CLJ REPL instead of target CLJS REPL
+4. In the REPL, execute ```(shadow.cljs.devtools.api/repl :app)```
+5. Verify you are in CLJS REPL by executing ```(js/alert "hello world")```, it should show an alert dialog in the browser window
+
+> [!WARNING]
+> You need open the browser dev app (http://localhost:3001) before executing step 5, otherwise it will throw an error:
+>
+> ```No available JS runtime. See https://shadow-cljs.github.io/docs/UsersGuide.html#repl-troubleshooting=> nil```
+
+
 ### Production Build
 
 ```bash
@@ -74,7 +102,7 @@ Alternatively, run `bb dev:electron-start` to do this step with one command. To
 download bb, see https://github.com/babashka/babashka#installation.
 
 3. (Optional) Update dependencies if `resources/package.json` has changed since
-the last time you used dev Logseq.
+   the last time you used dev Logseq.
 
 ```bash
 # pull new changes

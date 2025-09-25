@@ -1,10 +1,10 @@
 (ns frontend.modules.instrumentation.posthog
-  (:require [frontend.config :as config]
-            [frontend.util :as util]
+  (:require ["posthog-js" :as posthog]
+            [cljs-bean.core :as bean]
+            [frontend.config :as config]
             [frontend.mobile.util :as mobile-util]
-            [frontend.version :refer [version]]
-            ["posthog-js" :as posthog]
-            [cljs-bean.core :as bean]))
+            [frontend.util :as util]
+            [frontend.version :refer [version]]))
 
 (goog-define POSTHOG-TOKEN "")
 (def ^:const masked "masked")

@@ -1,38 +1,23 @@
 .cp__header {
-  @apply shadow z-10;
+  @apply shadow z-10 flex items-center justify-between sticky top-0 left-0 right-0 leading-none whitespace-nowrap;
+
   -webkit-app-region: drag;
 
   padding-top: calc(var(--ls-headbar-inner-top-padding));
   margin-top: var(--ls-win32-title-bar-height);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex: 0 0 auto;
-  position: sticky;
-  top: 0;
-  left: 0;
-  right: 0;
-  line-height: 1;
-  white-space: nowrap;
 
   > .l {
-    @apply pl-2;
+    @apply pl-2 h-full min-w-[var(--ls-left-sidebar-width)];
 
-    min-width: var(--ls-left-sidebar-width);
-    height: 100%;
-    align-items: center;
-    transition: padding-left .2s;
+    > div {
+      @apply items-center;
+    }
   }
 
   > .r {
-    align-items: center;
-    flex: 1;
-    justify-content: flex-end;
-    padding-right: 6px;
+    @apply flex flex-1 items-center justify-end pr-1.5;
   }
-
-  /* To prevent header glitch on Safari */
 
   > .l, > .r {
     -webkit-transform: translate3d(0, 0, 0);
@@ -40,18 +25,15 @@
   }
 
   .button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    @apply flex items-center justify-center;
 
     .ti, .tie {
-      font-size: 20px;
+      @apply text-[20px];
     }
   }
 
   .ui-items-container .button {
-    width: auto;
-    padding: 0 8px;
+    @apply w-auto py-0 px-1.5;
   }
 
   svg.warning {
@@ -172,17 +154,12 @@
   transform: scale(0.9);
 }
 
-#repo-name {
-  @apply inline-flex items-center whitespace-nowrap;
-  max-width: 16ch;
-}
-
 .button {
   @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
 
   &:hover {
     @screen md {
-      background: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
+      background: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
     }
   }
 }
@@ -270,12 +247,6 @@ html.is-native-ipad {
     }
   }
 
-  .left-sidebar-inner  {
-    > .wrap {
-      padding-top: 20px;
-    }
-  }
-
   .cp__right-sidebar {
     &-settings {
       margin-top: -4px;
@@ -283,18 +254,6 @@ html.is-native-ipad {
 
     &-topbar {
       padding-top: 37px;
-    }
-
-    &-inner {
-      .resizer {
-        top: 30vh;
-        width: 12px;
-        height: 40vh;
-      }
-
-      .resizer:hover {
-        background-color: var(--ls-guideline-color, #ddd);
-      }
     }
   }
 }
@@ -342,4 +301,44 @@ html.is-zoomed-native-ios {
 .drag-region {
   user-select: none;
   -webkit-app-region: drag;
+}
+
+.recent-slider {
+  user-select: initial;
+  -webkit-app-region: no-drag
+}
+
+/* TODO: remote for prod */
+.theme-container-inner:not(.ls-left-sidebar-open) {
+  .cp__header > .l {
+    min-width: auto;
+  }
+}
+
+
+.cp__header {
+    > .r > div:not(.ui__dropdown-trigger) a, button {
+        @apply opacity-70 text-[inherit];
+
+        &:hover {
+            @apply opacity-100;
+        }
+    }
+}
+
+.cp__header {
+    .ls-block-breadcrumb {
+        @apply text-sm pl-4;
+    }
+    .breadcrumb {
+        @apply flex items-center;
+    }
+
+    .breadcrumb a {
+        @apply !opacity-75 hover:!opacity-100;
+        span {
+            @apply whitespace-nowrap text-ellipsis inline-block overflow-x-hidden align-middle;
+            max-width: 34ch;
+        }
+    }
 }

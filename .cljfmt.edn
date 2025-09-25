@@ -1,0 +1,5 @@
+{:extra-indents {missionary.core/sp [[:block 0]]
+                 missionary.core/ap [[:block 0]]
+                 frontend.util/profile [[:inner 0]]
+                 frontend.common.missionary/run-task [[:inner 0]]}
+ :sort-ns-references? true}

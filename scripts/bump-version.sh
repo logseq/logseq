@@ -58,7 +58,7 @@ $SED -i 's/defonce version ".*"/defonce version "'${NEW_VERSION}'"/g' src/main/f
 $SED -i 's/"version": ".*"/"version": "'${NEW_VERSION}'"/g' resources/package.json
 $SED -i 's/versionName ".*"/versionName "'${NEW_VERSION}'"/g' android/app/build.gradle
 $SED -i 's/versionCode .*/versionCode '${NEW_VERSION_CODE}'/g' android/app/build.gradle
-$SED -i 's/buildVersion: .*/buildVersion: '${NEW_VERSION_CODE}',/g' resources/forge.config.js
+$SED -i 's/buildVersion: .*/buildVersion: "'${NEW_VERSION_CODE}'",/g' resources/forge.config.js
 $SED -i 's/MARKETING_VERSION = .*;/MARKETING_VERSION = '${NEW_VERSION}';/g' ios/App/App.xcodeproj/project.pbxproj
 
 git --no-pager diff -U0

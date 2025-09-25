@@ -26,8 +26,8 @@
          (str '(and [[foo]] [[bar]]))))
   (is (= (str (query-builder/->dsl [:and [:page-ref "foo"] [:or [:page-ref "bar"] [:property :key :value]]]))
          (str '(and [[foo]] (or [[bar]] (property :key :value))))))
-  (is (= (str (query-builder/->dsl [:and [:priority "A"] [:task "NOW"]]))
-         (str '(and (priority A) (task NOW))))))
+  (is (= (str (query-builder/->dsl [:and [:priority "A"] [:task "In Review"]]))
+         (str '(and (priority A) (task "In Review"))))))
 
 (deftest from-dsl
   (is (= (query-builder/from-dsl '(and [[foo]] [[bar]]))

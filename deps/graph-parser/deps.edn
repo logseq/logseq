@@ -1,15 +1,17 @@
 {:paths ["src"]
  :deps
- ;; External deps should be kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
+ ;; These nbb-logseq deps are kept in sync with https://github.com/logseq/nbb-logseq/blob/main/bb.edn
  {com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  ;; local deps
+  funcool/promesa             {:mvn/version "11.0.678"}
+  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
+
+  ;; Any other deps should be added here and to nbb.edn
+  borkdude/rewrite-edn {:mvn/version "0.4.9"}
   logseq/db                   {:local/root "../db"}
   logseq/common               {:local/root "../common"}
-  ;; stubbed in nbb
-  com.lambdaisland/glogi      {:mvn/version "1.1.144"}
-  ;; built in to nbb
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}}
+  ;; stubbed via logseq.common.log
+  com.lambdaisland/glogi      {:mvn/version "1.1.144"}}
 
  :aliases
  ;; This runs tests with nodejs. Would be nice to run this with in a browser env
@@ -17,8 +19,9 @@
  ;; with karma, shadow-cljs.edn and headless mode on CI
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
-                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
+                       org.clojure/clojurescript {:mvn/version "1.11.132"}
+                       logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
 
-  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
+  :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}
               :main-opts    ["-m" "clj-kondo.main"]}}}

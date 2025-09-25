@@ -4,14 +4,8 @@
 
   &-main {
     max-height: var(--palettle-container-height);
-    margin: -2rem;
-    overflow: hidden;
-    display: flex;
     flex-direction: column;
-
-    @screen lg {
-      width: var(--ls-main-content-max-width);
-    }
+    width: fit-content;
 
     .menu-link {
       transition: none;
@@ -61,10 +55,6 @@
       max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
     }
 
-    .input-wrap {
-      height: var(--palettle-input-height);
-    }
-
     .cp__palette-input {
       color: var(--ls-secondary-text-color);
       border: none;
@@ -85,8 +75,9 @@
 
   &-input {
     padding: 16px;
-    font-size: 20px;
+    font-size: 16px;
     outline: none;
+    background-color: transparent;
   }
 
   &-results {

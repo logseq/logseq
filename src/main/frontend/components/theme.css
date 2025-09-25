@@ -36,6 +36,22 @@
   }
 }
 
+html.is-file-graph {
+  #main-content-container {
+    @apply pt-2;
+  }
+
+  .page-inner {
+    @apply sm:gap-2;
+  }
+
+  .sidebar-item {
+    .ls-page-blocks {
+      @apply pt-4;
+    }
+  }
+}
+
 .hide-scrollbar {
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none !important; /* Firefox */
@@ -124,9 +140,11 @@ main.ls-fold-button-on-right {
   .ls-block {
     .block-control {
       @apply absolute -right-3 pr-2 pt-1 top-0 z-[1]
-      opacity-20 active:opacity-100;
+      opacity-50 active:opacity-100;
+      margin-top: 3px;
 
       .rotating-arrow.collapsed svg {
+        margin-left: -2px;
         transform: rotate(180deg);
       }
     }
@@ -151,6 +169,18 @@ main.ls-fold-button-on-right {
   }
 }
 
-main.theme-inner {
-  --left-sidebar-bg-color: var(--lx-gray-02, hsl(var(--secondary, var(--rx-gray-03-hsl))));
+#root-container.theme-container {
+  @apply outline-none;
+}
+
+main.theme-container-inner {
+  --left-sidebar-bg-color: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--secondary, var(--rx-gray-03-hsl)))));
+}
+
+html[data-font='serif'] .ls-block, .ls-font-serif {
+  font-family: Lyon-Text, Georgia, ui-serif, serif;
+}
+
+html[data-font='mono'] .ls-block, .ls-font-mono {
+  font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
 }

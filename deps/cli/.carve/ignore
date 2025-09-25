@@ -1,0 +1,8 @@
+;; Lazy loaded
+logseq.cli.commands.export-edn/export
+logseq.cli.commands.graph/show-graph
+logseq.cli.commands.graph/list-graphs
+logseq.cli.commands.query/query
+logseq.cli.commands.search/search
+logseq.cli.commands.export/export
+logseq.cli.commands.append/append

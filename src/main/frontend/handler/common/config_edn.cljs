@@ -1,12 +1,13 @@
 (ns frontend.handler.common.config-edn
   "Common fns related to config.edn - global and repo"
-  (:require [malli.error :as me]
-            [malli.core :as m]
+  (:require [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.edn :as edn]
-            [lambdaisland.glogi :as log]
             [frontend.handler.notification :as notification]
             [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
+            [malli.core :as m]
+            [malli.error :as me]
             [reitit.frontend.easy :as rfe]))
 
 (defn- humanize-more
@@ -36,7 +37,7 @@ nested keys or positional errors e.g. tuples"
   ([title body]
    (config-notification-show! title body :error))
   ([title body status]
-   (config-notification-show! title body status true))
+   (config-notification-show! title body status false))
   ([title body status clear?]
    (notification/show!
     [:.mb-2
@@ -76,7 +77,7 @@ nested keys or positional errors e.g. tuples"
       (do
         (config-notification-show! [:<> "Failed to read file " (file-link path)]
                                    "Make sure your config is wrapped in {}. Also make sure that the characters '( { [' have their corresponding closing character ') } ]'.")
-                false)
+        false)
       ;; Custom error message is better than malli's "invalid type" error
       (not (map? parsed-body))
       (do
@@ -88,11 +89,17 @@ nested keys or positional errors e.g. tuples"
 
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
-  [path content]
+  [path content {:keys [db-graph?]}]
   (let [body (try (edn/read-string content)
-               (catch :default _ ::failed-to-detect))
-        warnings {:editor/command-trigger
-                  "is no longer supported. Please use '/' and report bugs on it."}]
+                  (catch :default _ ::failed-to-detect))
+        warnings (cond->
+                  {:editor/command-trigger
+                   "is no longer supported. Please use '/' and report bugs on it."
+                   :arweave/gateway
+                   "is no longer supported."}
+                   db-graph?
+                   (merge
+                    common-config/file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

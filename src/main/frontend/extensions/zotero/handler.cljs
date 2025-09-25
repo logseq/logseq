@@ -1,16 +1,19 @@
 (ns frontend.extensions.zotero.handler
   (:require [cljs.core.async :refer [<! go]]
-            [clojure.string :as str]
+            [cljs.core.async.interop :refer [p->c]]
+            [clojure.string :as string]
+            [frontend.db :as db]
             [frontend.extensions.zotero.api :as zotero-api]
             [frontend.extensions.zotero.extractor :as extractor]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.handler.notification :as notification]
-            [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.db :as db]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [frontend.state :as state]
+            [frontend.util.ref :as ref]
+            [promesa.core :as p]))
 
+;; TODO: test
 (defn add [page-name type item]
   (go
     (let [key         (:key item)
@@ -28,38 +31,39 @@
         (let [items    (<! (api-fn key))
               md-items (->> items
                             (map extractor/extract)
-                            (remove str/blank?))]
+                            (remove string/blank?))]
           (when (not-empty md-items)
-            (when-let [id (:block/uuid
-                           (editor-handler/api-insert-new-block!
-                            first-block {:page page-name}))]
-              (doseq [md-item md-items]
-                (editor-handler/api-insert-new-block!
-                 md-item
-                 {:block-uuid id
-                  :sibling?   false
-                  :before?    false})))))))))
+            (p->c
+             (p/let [result (editor-handler/api-insert-new-block! first-block {:page page-name})]
+               (when-let [id (:block/uuid result)]
+                 (p/loop [items md-items]
+                   (when-let [md-item (first items)]
+                     (p/let [_ (editor-handler/api-insert-new-block!
+                                md-item
+                                {:block-uuid id
+                                 :sibling?   false
+                                 :before?    false})]
+                       (p/recur (rest items))))))))))))))
 
 (defn handle-command-zotero
   [id page-name]
   (state/clear-editor-action!)
-  (editor-handler/insert-command! id (page-ref/->page-ref page-name) nil {}))
+  (editor-handler/insert-command! id (ref/->page-ref page-name) nil {}))
 
 (defn- create-abstract-note!
   [page-name abstract-note]
-  (when-not (str/blank? abstract-note)
-    (let [block (editor-handler/api-insert-new-block!
-                 "[[Abstract]]" {:page page-name})]
+  (when-not (string/blank? abstract-note)
+    (p/let [block (editor-handler/api-insert-new-block!
+                   "[[Abstract]]" {:page page-name})]
       (editor-handler/api-insert-new-block!
        abstract-note {:block-uuid (:block/uuid block)
                       :sibling? false}))))
 
 (defn- create-page [page-name properties]
-  (page-handler/create!
+  (page-handler/<create!
    page-name
    {:redirect? false
     :format :markdown
-    :create-first-block? false
     :properties properties}))
 
 (defn create-zotero-page
@@ -69,30 +73,33 @@
           :or {insert-command? true notification? true}}]
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
-       (when-not (str/blank? page-name)
-         (if (db/page-exists? (str/lower-case page-name))
-           (if (setting/setting :overwrite-mode?)
-             (page-handler/delete!
-              page-name
-              (fn [] (create-page page-name properties)))
-             (editor-handler/api-insert-new-block!
-              ""
-              {:page       page-name
-               :properties properties}))
-           (create-page page-name properties))
+       (p->c
+        (p/do!
+         (when-not (string/blank? page-name)
+           (if (db/page-exists? (string/lower-case page-name) "page")
+             ;; FIXME: Overwrite if it has a zotero tag (which means created by Zotero)
+             (if (setting/setting :overwrite-mode?)
+               (page-handler/<delete!
+                page-name
+                (fn [] (create-page page-name properties)))
+               (editor-handler/api-insert-new-block!
+                ""
+                {:page       page-name
+                 :properties properties}))
+             (create-page page-name properties))
 
-         (create-abstract-note! page-name abstract-note)
+           (create-abstract-note! page-name abstract-note)
 
-         (<! (add page-name :attachments item))
+           (add page-name :attachments item)
 
-         (<! (add page-name :notes item))
+           (add page-name :notes item)
 
-         (when insert-command?
-           (handle-command-zotero block-dom-id page-name)
-           (editor-handler/save-current-block!))
+           (when insert-command?
+             (handle-command-zotero block-dom-id page-name)
+             (editor-handler/save-current-block!))
 
-         (when notification?
-           (notification/show! (str "Successfully added zotero item to page " page-name) :success)))))))
+           (when notification?
+             (notification/show! (str "Successfully added zotero item to page " page-name) :success)))))))))
 
 (defn add-all [progress]
   (go
