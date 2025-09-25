@@ -217,6 +217,7 @@
              logseq.outliner.core outliner-core
              logseq.outliner.datascript-report ds-report
              logseq.outliner.op outliner-op
+             logseq.outliner.page outliner-page
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.validate outliner-validate
              logseq.shui.popup.core shui-popup

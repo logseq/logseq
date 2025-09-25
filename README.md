@@ -128,7 +128,7 @@ That's it! You can now enjoy the benefits of using Logseq to streamline your wor
   * FAQ forum section: [Logseq Forum: FAQ](https://discuss.logseq.com/c/faq/6)
 * [Awesome Logseq](https://github.com/logseq/awesome-logseq) - Awesome Logseq extensions and resources created by the community <3
 * Twitter: [@Logseq](https://twitter.com/logseq)
-* Discord: [discord.gg/logseq](https://discord.gg/logseq)
+* Discord: [https://discord.com/invite/KpN4eHY](https://discord.com/invite/KpN4eHY)
   * [中文 Discord](https://discord.gg/xYqcrXWymg)
 
 ## 🫶 Support Logseq Development
