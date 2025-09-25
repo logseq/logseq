@@ -3,13 +3,13 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [datascript.core :as d]
-            [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]))
 
 ;; TODO: allow users to add command or configure it through #Command (which parent should be #Code)
@@ -172,7 +172,7 @@
                                             {:page-uuid (:block/uuid (d/entity db journal-day))}
                                             (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
                                                   title (date-time-util/format (t/to-default-time-zone (tc/to-date-time next-time-long)) formatter)]
-                                              (worker-db-page/create db title {})))
+                                              (outliner-page/create db title {})))
               value (if date? [:block/uuid page-uuid] next-time-long)]
           (concat
            tx-data

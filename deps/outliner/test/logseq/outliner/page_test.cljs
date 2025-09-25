@@ -1,16 +1,16 @@
-(ns frontend.worker.handler.page.db-based.page-test
+(ns logseq.outliner.page-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
-            [frontend.worker.handler.page.db-based.page :as worker-db-page]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.db :as db-db]
-            [logseq.db.test.helper :as db-test]))
+            [logseq.db.test.helper :as db-test]
+            [logseq.outliner.page :as outliner-page]))
 
 (deftest create-class
   (let [conn (db-test/create-conn)
-        _ (worker-db-page/create! conn "movie" {:class? true})
-        _ (worker-db-page/create! conn "Movie" {:class? true})
+        _ (outliner-page/create! conn "movie" {:class? true})
+        _ (outliner-page/create! conn "Movie" {:class? true})
         movie-class (ldb/get-case-page @conn "movie")
         Movie-class (ldb/get-case-page @conn "Movie")]
 
@@ -25,13 +25,13 @@
                :pages-and-blocks [{:page {:block/title "page1"}}]})]
 
     (testing "Basic valid workflows"
-      (let [[_ child-uuid] (worker-db-page/create! conn "foo/bar/baz" {:split-namespace? true})
+      (let [[_ child-uuid] (outliner-page/create! conn "foo/bar/baz" {:split-namespace? true})
             child-page (d/entity @conn [:block/uuid child-uuid])
             ;; Create a 2nd child page using existing parent pages
-            [_ child-uuid2] (worker-db-page/create! conn "foo/bar/baz2" {:split-namespace? true})
+            [_ child-uuid2] (outliner-page/create! conn "foo/bar/baz2" {:split-namespace? true})
             child-page2 (d/entity @conn [:block/uuid child-uuid2])
             ;; Create a child page for a class
-            [_ child-uuid3] (worker-db-page/create! conn "c1/c2" {:split-namespace? true :class? true})
+            [_ child-uuid3] (outliner-page/create! conn "c1/c2" {:split-namespace? true :class? true})
             child-page3 (d/entity @conn [:block/uuid child-uuid3])
             library (ldb/get-built-in-page @conn common-config/library-page-name)
             bar (ldb/get-page @conn "bar")]
@@ -48,7 +48,7 @@
         (is (= #{"Root Tag" "c1"} (set (map :block/title (ldb/get-classes-parents [child-page3]))))
             "Child class with new parent has correct parents")
 
-        (worker-db-page/create! conn "foo/class1/baz3" {:split-namespace? true})
+        (outliner-page/create! conn "foo/class1/baz3" {:split-namespace? true})
         (is (= #{"Tag" "Page"}
                (set (d/q '[:find [?tag-title ...]
                            :where
@@ -58,8 +58,8 @@
             "Using an existing class page in a multi-parent namespace doesn't allow a page to have a class parent and instead creates a new page")))
 
     (testing "Child pages with same name and different parents"
-      (let [_ (worker-db-page/create! conn "vim/keys" {:split-namespace? true})
-            _ (worker-db-page/create! conn "emacs/keys" {:split-namespace? true})]
+      (let [_ (outliner-page/create! conn "vim/keys" {:split-namespace? true})
+            _ (outliner-page/create! conn "emacs/keys" {:split-namespace? true})]
         (is (= #{"vim" "emacs"}
                (->> (d/q '[:find [(pull ?b [{:block/parent [:block/title]}]) ...] :where [?b :block/title "keys"]] @conn)
                     (map #(get-in % [:block/parent :block/title]))
@@ -70,34 +70,34 @@
       (is (thrown-with-msg?
            js/Error
            #"Cannot create"
-           (worker-db-page/create! conn "class1/page" {:split-namespace? true}))
+           (outliner-page/create! conn "class1/page" {:split-namespace? true}))
           "Page can't have a class parent")
       (is (thrown-with-msg?
            js/Error
            #"Cannot create"
-           (worker-db-page/create! conn "property1/page" {:split-namespace? true}))
+           (outliner-page/create! conn "property1/page" {:split-namespace? true}))
           "Page can't have a property parent")
       (is (thrown-with-msg?
            js/Error
            #"Cannot create"
-           (worker-db-page/create! conn "property1/class" {:split-namespace? true :class? true}))
+           (outliner-page/create! conn "property1/class" {:split-namespace? true :class? true}))
           "Class can't have a property parent"))))
 
 (deftest create-page
   (let [conn (db-test/create-conn)
-        [_ page-uuid] (worker-db-page/create! conn "fooz" {})]
+        [_ page-uuid] (outliner-page/create! conn "fooz" {})]
     (is (= "fooz" (:block/title (d/entity @conn [:block/uuid page-uuid])))
         "Page created correctly")
 
     (is (thrown-with-msg?
          js/Error
          #"can't include \"/"
-         (worker-db-page/create! conn "foo/bar" {}))
+         (outliner-page/create! conn "foo/bar" {}))
         "Page can't have '/'n title")))
 
 (deftest create-journal
   (let [conn (db-test/create-conn)
-        [_ page-uuid] (worker-db-page/create! conn "Dec 16th, 2024" {})]
+        [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})]
 
     (is (= "Dec 16th, 2024" (:block/title (d/entity @conn [:block/uuid page-uuid])))
         "Journal created correctly")

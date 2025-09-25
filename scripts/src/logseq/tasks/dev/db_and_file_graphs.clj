@@ -44,8 +44,7 @@
   "DB graph paths with :block/name"
   ["deps/db/src/logseq/db/frontend"
    "deps/db/src/logseq/db/sqlite"
-   "deps/outliner/src/logseq/outliner/property.cljs"
-   "src/main/frontend/worker/handler/page/db_based"])
+   "deps/outliner/src/logseq/outliner/property.cljs"])
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"

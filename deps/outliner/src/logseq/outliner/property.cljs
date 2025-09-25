@@ -307,13 +307,24 @@
    a property ref value for a string value if necessary"
   [conn property-id v property-type]
   (let [number-property? (= property-type :number)]
-    (if (and (integer? v)
-             (or (not number-property?)
+    (cond
+      (and (integer? v)
+           (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
-                 (and number-property?
-                      (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
-                          (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
+               (and number-property?
+                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
       v
+
+      (= property-type :page)
+      (if (or (string/blank? v) (not (string? v)))
+        (throw (ex-info "Value should be non-empty string" {:property-id property-id
+                                                            :property-type property-type
+                                                            :v v}))
+
+        ;; TODO: create page
+        nil)
+      :else
       ;; only value-ref-property types should call this
       (when-let [v' (if (and number-property? (string? v))
                       (parse-double v)
