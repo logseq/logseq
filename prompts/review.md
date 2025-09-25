@@ -13,6 +13,7 @@ You're Clojure(script) expert, you're responsible to check those common errors:
 - `util/web-platform?` is a not a function.
 
 - It is recommended to use `lambdaisland.glogi` for printing logs.
+  - Require `[lambdaisland.glogi :as log]` if needed.
   - Replace `js/console.error` with `log/error`.
   - Replace `js/console.warn` with `log/warn`.
   - Replace `js/console.log` with `log/info`.
