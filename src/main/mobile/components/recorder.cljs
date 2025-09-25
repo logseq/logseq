@@ -43,6 +43,15 @@
               (js/console.error e)
               "en_US"))))
 
+(defn- >ios-26
+  []
+  (p/let [^js info (.getInfo ^js Device)
+          os (.-operatingSystem info)
+          vstr (.-osVersion info)
+          ;; vstr is like "26.0.1"
+          major (js/parseInt (first (.split vstr ".")) 10)]
+    (and (= os "ios") (>= major 26))))
+
 (defn save-asset-audio!
   [blob locale]
   (let [ext (some-> blob
@@ -166,11 +175,14 @@
   []
   (let [[locale set-locale!] (hooks/use-state nil)
         [system-locale set-system-locale!] (hooks/use-state nil)
-        [*locale] (hooks/use-state (atom nil))]
+        [*locale] (hooks/use-state (atom nil))
+        [transcribe-supported? set-transcribe-supported!] (hooks/use-state false)]
 
     (hooks/use-effect!
      (fn []
-       (p/let [locale (get-locale)]
+       (p/let [locale (get-locale)
+               transcribe-supported? >ios-26]
+         (set-transcribe-supported! transcribe-supported?)
          (set-locale! locale)
          (set-system-locale! locale)
          (reset! *locale locale)))
@@ -179,21 +191,21 @@
     [:div.app-audio-recorder
      [:div.flex.flex-row.justify-between.items-center.font-medium
       [:div.opacity-70 (date/get-date-time-string (tl/local-now) {:formatter-str "yyyy-MM-dd"})]
-      (if (and (util/ios?) locale
-               (not (string/starts-with? system-locale "en_")))
-        (let [en? (string/starts-with? locale "en_")]
-          (shui/button
-           {:variant (if en? :default :outline)
-            :class (str "rounded-full " (if en? "opacity-100" "opacity-70"))
-            :on-click (fn []
-                        (reset! *locale "en_US")
-                        (set-locale! "en_US"))}
-           "EN transcribe"))
+      (when transcribe-supported?
+        (if (and locale (not (string/starts-with? system-locale "en_")))
+          (let [en? (string/starts-with? locale "en_")]
+            (shui/button
+             {:variant (if en? :default :outline)
+              :class (str "rounded-full " (if en? "opacity-100" "opacity-70"))
+              :on-click (fn []
+                          (reset! *locale "en_US")
+                          (set-locale! "en_US"))}
+             "EN transcribe"))
         ;; hack: same height with en transcribe button
-        (shui/button
-         {:variant :outline
-          :class "rounded-full opacity-0"}
-         "EN transcribe"))]
+          (shui/button
+           {:variant :outline
+            :class "rounded-full opacity-0"}
+           "EN transcribe")))]
 
      [:div#wave-container.app-wave-container
       [:div.app-wave-needle]
