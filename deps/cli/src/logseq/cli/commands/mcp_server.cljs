@@ -11,8 +11,8 @@
             [promesa.core :as p]))
 
 (defn- local-get-page [conn args]
-  (if-let [blocks (cli-common-mcp-tools/get-page-blocks @conn (aget args "pageName"))]
-    (cli-common-mcp-server/mcp-success-response blocks)
+  (if-let [resp (cli-common-mcp-tools/get-page-data @conn (aget args "pageName"))]
+    (cli-common-mcp-server/mcp-success-response resp)
     (cli-common-mcp-server/mcp-error-response (str "Error: Page " (pr-str (aget args "pageName")) " not found"))))
 
 (defn- local-list-pages [conn _args]

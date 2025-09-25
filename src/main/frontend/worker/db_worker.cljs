@@ -786,7 +786,7 @@
 (def-thread-api :thread-api/api-get-page-data
   [repo page-title]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/get-page-blocks @conn page-title)))
+    (cli-common-mcp-tools/get-page-data @conn page-title)))
 
 (def-thread-api :thread-api/api-list-properties
   [repo]
