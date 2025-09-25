@@ -774,6 +774,11 @@
   []
   @worker-state/*log)
 
+(def-thread-api :thread-api/get-rtc-graph-uuid
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (ldb/get-graph-rtc-uuid @conn)))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
