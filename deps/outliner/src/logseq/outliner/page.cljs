@@ -231,10 +231,10 @@
 (defn create
   "Pure function without side effects"
   [db title*
-   {:keys [tags properties uuid persist-op? whiteboard?
+   {uuid' :uuid
+    :keys [tags properties persist-op? whiteboard?
            class? today-journal? split-namespace?]
     :or   {properties               nil
-           uuid                     nil
            persist-op?              true}
     :as options}]
   (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
@@ -271,12 +271,12 @@
              :title (:block/title existing-page)})))
       (let [page           (gp-block/page-name->map title db true date-formatter
                                                     {:class? class?
-                                                     :page-uuid (when (uuid? uuid) uuid)
+                                                     :page-uuid (when (uuid? uuid') uuid')
                                                      :skip-existing-page-check? true})
-            [page parents] (if (and (text/namespace-page? title) split-namespace?)
-                             (let [pages (split-namespace-pages db page date-formatter class?)]
-                               [(last pages) (butlast pages)])
-                             [page nil])]
+            [page parents'] (if (and (text/namespace-page? title) split-namespace?)
+                              (let [pages (split-namespace-pages db page date-formatter class?)]
+                                [(last pages) (butlast pages)])
+                              [page nil])]
         (when (and page (or (nil? (:db/ident page))
                             ;; New page creation must not override built-in entities
                             (not (db-malli-schema/internal-ident? (:db/ident page)))))
@@ -284,14 +284,14 @@
           (when-not (or (contains? types :logseq.class/Journal)
                         (contains? (set (:block/tags page)) :logseq.class/Journal))
             (outliner-validate/validate-page-title-characters (str (:block/title page)) {:node page})
-            (doseq [parent parents]
+            (doseq [parent parents']
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
                 page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
                 txs      (concat
                           ;; transact doesn't support entities
-                          (remove de/entity? parents)
+                          (remove de/entity? parents')
                           page-txs)
                 tx-meta (cond-> {:persist-op? persist-op?
                                  :outliner-op :create-page}
