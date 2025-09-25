@@ -190,7 +190,8 @@ export interface BlockEntity {
   format: 'markdown' | 'org'
   parent: IEntityID
   title: string
-  content?: string // @deprecated. Use :title instead!
+  fullTitle: string // replace block reference uuid with title text
+  content?: string // @deprecated. use :title instead!
   page: IEntityID // owner page
   createdAt: number
   updatedAt: number
