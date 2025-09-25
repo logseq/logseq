@@ -37,6 +37,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [lambdaisland.glogi.console :as glogi-console]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
@@ -482,18 +483,18 @@
 (def-thread-api :thread-api/block-refs-check
   [repo id {:keys [unlinked?]}]
   (m/sp
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (let [db @conn
-            block (d/entity db id)]
-        (if unlinked?
-          (let [title (string/lower-case (:block/title block))
-                result (m/? (search-blocks repo title {:limit 100}))]
-            (boolean (some (fn [b]
-                             (let [block (d/entity db (:db/id b))]
-                               (and (not= id (:db/id block))
-                                    (not ((set (map :db/id (:block/refs block))) id))
-                                    (string/includes? (string/lower-case (:block/title block)) title)))) result)))
-          (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (let [db @conn
+           block (d/entity db id)]
+       (if unlinked?
+         (let [title (string/lower-case (:block/title block))
+               result (m/? (search-blocks repo title {:limit 100}))]
+           (boolean (some (fn [b]
+                            (let [block (d/entity db (:db/id b))]
+                              (and (not= id (:db/id block))
+                                   (not ((set (map :db/id (:block/refs block))) id))
+                                   (string/includes? (string/lower-case (:block/title block)) title)))) result)))
+         (some? (first (common-initial-data/get-block-refs db (:db/id block)))))))))
 
 (def-thread-api :thread-api/get-block-parents
   [repo id depth]
@@ -782,6 +783,26 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/get-graph-rtc-uuid @conn)))
 
+(def-thread-api :thread-api/api-get-page-data
+  [repo page-title]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/get-page-blocks @conn page-title)))
+
+(def-thread-api :thread-api/api-list-properties
+  [repo]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-properties @conn)))
+
+(def-thread-api :thread-api/api-list-tags
+  [repo]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-tags @conn)))
+
+(def-thread-api :thread-api/api-list-pages
+  [repo]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/list-pages @conn)))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
@@ -835,14 +856,14 @@
   [repo start-opts]
   (js/Promise.
    (m/sp
-     (c.m/<? (init-sqlite-module!))
-     (when-not (:import-type start-opts)
-       (c.m/<? (start-db! repo start-opts))
-       (assert (some? (worker-state/get-datascript-conn repo))))
+    (c.m/<? (init-sqlite-module!))
+    (when-not (:import-type start-opts)
+      (c.m/<? (start-db! repo start-opts))
+      (assert (some? (worker-state/get-datascript-conn repo))))
      ;; Don't wait for rtc started because the app will be slow to be ready
      ;; for users.
-     (when @worker-state/*rtc-ws-url
-       (rtc.core/new-task--rtc-start true)))))
+    (when @worker-state/*rtc-ws-url
+      (rtc.core/new-task--rtc-start true)))))
 
 (def broadcast-data-types
   (set (map
