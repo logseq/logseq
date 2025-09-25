@@ -1193,14 +1193,9 @@
 (defn ^:export get_page_data
   "Like get_page_blocks_tree but for MCP tools"
   [page-title]
-  (p/let [tools (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
-    (if tools
-      (->> tools
-           (map #(-> %
-                     sdk-utils/remove-hidden-properties
-                     ;; remove unused and untranslated attrs
-                     (dissoc :block/children :block/page)))
-           clj->js)
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
+    (if resp
+      (clj->js resp)
       #js {:error (str "Page " (pr-str page-title) " not found")})))
 
 ;; ui
