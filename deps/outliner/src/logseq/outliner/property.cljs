@@ -323,12 +323,13 @@
                      :v v}]
         (if (or (string/blank? v) (not (string? v)))
           (throw (ex-info "Value should be non-empty string" ex-data))
-          (let [page (ldb/get-case-page @conn v)]
+          (let [page (ldb/get-page @conn v)]
             (if (ldb/page? page)
               (:db/id page)
               (let [[_ page-uuid] (outliner-page/create! conn v {})]
-                (when-not page-uuid
-                  (throw (ex-info "Failed to create page" ex-data))))))))
+                (if-not page-uuid
+                  (throw (ex-info "Failed to create page" ex-data))
+                  (:db/id (d/entity @conn [:block/uuid page-uuid]))))))))
 
       :else
       ;; only value-ref-property types should call this

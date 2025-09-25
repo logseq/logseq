@@ -13,6 +13,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.sdk.utils :as sdk-utils]))
@@ -44,7 +45,7 @@
     (if (qualified-keyword? property-name')
       property-name'
       ;; plugin property
-      (let [plugin-ns (resolve-property-prefix-for-db plugin)]
+      (let [plugin-ns "plugin.property._api"]
         (keyword plugin-ns (db-ident/normalize-ident-name-part property-name))))))
 
 (defn plugin-property-key?
@@ -94,6 +95,21 @@
                     {:property property-name
                      :property-ident property-ident}))))
 
+(defn- convert-json-and-string
+  [property-type value]
+  (cond
+    (and (= :json property-type) (not (string? value)))
+    (js/JSON.stringify (bean/->js value))
+
+    (and (= :string property-type) (not (string? value)))
+    (str value)
+
+    :else
+    value))
+
+;; TODO:
+;; 1. infer type when property doesn't exists yet
+;; 2. infer cardinality
 (defn- set-block-properties!
   [block-id properties]
   (ui-outliner-tx/transact!
@@ -102,26 +118,58 @@
      (when-not (qualified-keyword? property-ident)
        (throw (ex-info "Invalid property id" {:property-id property-id
                                               :property-ident property-ident})))
-     (let [property (db/entity property-ident)]
+     (let [property (db/entity property-ident)
+           property-type (or (:logseq.property/type property)
+                             (some-> (:type schema) keyword))
+           cardinality (or (:db/cardinality property)
+                           (if (= "many" (:cardinality schema))
+                             :db.cardinality/many
+                             :db.cardinality/one))
+           error-data {:property-id property-id
+                       :property-ident property-ident
+                       :schema schema
+                       :value value}
+           schema' {:logseq.property/type property-type
+                    :db/cardinality cardinality}
+           many? (= cardinality :db.cardinality/many)
+           value' (if (and many? (not (coll? value)))
+                    (when value [value])
+                    value)]
+
        (when (and property schema)
          (throw (ex-info "Use `upsert_property` to modify existing property's schema"
-                         {:property-id property-id
-                          :property-ident property-ident
-                          :schema schema})))
+                         error-data)))
+
+       (when-not property-type
+         (throw (ex-info (str "Missing `type` in schema for property: " property-id)
+                         error-data)))
+
+       (when (and (not many?) (coll? value))
+         (throw (ex-info (util/format "Property %s has cardinality `one` but passed multiple values" property-id)
+                         error-data)))
+
        (when-not property
          (ensure-property-access-control property-ident property-id)
-         (outliner-op/upsert-property! property-ident schema {:property-name property-id}))
-       (outliner-op/set-block-property! block-id property-id value)))))
+         (outliner-op/upsert-property! property-ident schema' {:property-name property-id}))
 
-;; TODO:
-;; how to support :json and :page?
-(defn save-db-based-block-properties!
+       (when (and property (or many? (nil? value'))) ; delete property from this block
+         (outliner-op/remove-block-property! block-id property-ident))
+
+       (let [set-property! (fn [value]
+                             (outliner-op/set-block-property! block-id property-ident
+                                                              (convert-json-and-string property-type value)))
+             values (if (coll? value') value' [value'])]
+         (doseq [value values]
+           (set-property! value)))))))
+
+(defn db-based-save-block-properties!
   ([block properties & {:keys [plugin schema]}]
    (when-let [block-id (and (seq properties) (:db/id block))]
      (let [properties (->> properties
                            (map (fn [[k v]]
-                                  (let [ident (get-db-ident-from-property-name k plugin)]
-                                    [k ident v (get schema k)]))))]
+                                  (let [ident (get-db-ident-from-property-name k plugin)
+                                        property-schema (get schema k)]
+                                    [k ident v property-schema]))))]
        (set-block-properties! block-id properties)))))
 
 (defn <sync-children-blocks!
