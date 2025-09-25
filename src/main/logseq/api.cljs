@@ -760,7 +760,7 @@
                                    :properties (when (not db-base?)
                                                  (merge properties
                                                         (when custom-uuid {:id custom-uuid})))})
-                       _ (when (and db-base? (some? properties))
+                       _ (when (and db-base? (seq properties))
                            (api-block/save-db-based-block-properties! new-block properties this))]
                  (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))))
 
@@ -800,7 +800,7 @@
             opts (bean/->clj opts)]
       (when block
         (p/do!
-         (when (and db-base? (some? (:properties opts)))
+         (when (and db-base? (seq (:properties opts)))
            (api-block/save-db-based-block-properties! block (:properties opts)))
          (editor-handler/save-block! repo
                                      (sdk-utils/uuid-or-throw-error block-uuid) content
@@ -947,8 +947,7 @@
                    value (bean/->clj value)]
              (when block
                (if db-base?
-                 (p/do!
-                  (api-block/save-db-based-block-properties! block {key' value} this))
+                 (api-block/save-db-based-block-properties! block {key' value} this)
                  (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
