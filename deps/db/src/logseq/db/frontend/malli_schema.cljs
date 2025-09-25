@@ -346,7 +346,7 @@
    (concat
     [:map
      [:db/ident plugin-property-ident]
-     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
+     [:logseq.property/type (apply vector :enum (concat db-property-type/user-built-in-property-types [:json :string :page]))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
