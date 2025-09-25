@@ -1,16 +1,25 @@
 (ns frontend.db.transact
   "Provides async transact for use with ldb/transact!"
-  (:require [frontend.state :as state]
+  (:require [clojure.core.async :as async]
+            [clojure.core.async.interop :refer [p->c]]
+            [frontend.common.async-util :include-macros true :refer [<?]]
+            [frontend.state :as state]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]))
 
 (defn worker-call
   [request-f]
-  (p/let [result (request-f)]
-    ;; yields to ensure ui db to be updated before resolved
-    (p/delay 0)
-    result))
+  (let [response (p/deferred)]
+    (async/go
+      (let [result (<? (p->c (request-f)))]
+        (if (:ex-data result)
+          (do
+            (log/error :worker-request-failed result)
+            (p/reject! response result))
+          (p/resolve! response result))))
+    response))
 
 (defn transact [worker-transact repo tx-data tx-meta]
   (let [tx-meta' (assoc tx-meta

@@ -11,7 +11,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.functions :as gfun]
-            [logseq.client.logging :as log]
+            [lambdaisland.glogi :as log]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [mobile.init :as init]
@@ -20,7 +20,9 @@
             [rum.core :as rum]))
 
 (defonce audio-file-format "yyyy-MM-dd HH:mm:ss")
-(def audio-length-limit 10) ; 10 minutes
+
+(def audio-length-limit 10)     ; 10 minutes
+(defonce *transcribe? (atom false))
 
 (def *last-edit-block (atom nil))
 (defn set-last-edit-block! [block] (reset! *last-edit-block block))
@@ -32,18 +34,6 @@
     (str (.padStart (str minutes) 2 "0") ":"
          (.padStart (str seconds) 2 "0"))))
 
-(defn- get-locale
-  []
-  (->
-   (p/let [^js lang (.getLanguageTag ^js Device)
-           value (.-value lang)]
-     (if (= value "en_CN")
-       "zh"
-       (string/replace value "-" "_")))
-   (p/catch (fn [e]
-              (log/error :get-locale-error e)
-              "en_US"))))
-
 (defn- >ios-26
   []
   (p/let [^js info (.getInfo ^js Device)
@@ -54,7 +44,7 @@
     (and (= os "ios") (>= major 26))))
 
 (defn save-asset-audio!
-  [blob locale]
+  [blob transcribe?]
   (let [ext (some-> blob
                     (.-type)
                     (string/split ";")
@@ -76,11 +66,12 @@
                                                            [file]
                                                            {:last-edit-block @*last-edit-block})
               asset-entity (first result)]
-        (when (and asset-entity (util/ios?))
+        (when (nil? asset-entity)
+          (log/error ::empty-asset-entity {}))
+        (when (and asset-entity transcribe?)
           (p/let [buffer-data (.arrayBuffer blob)
                   unit8-data (js/Uint8Array. buffer-data)]
-            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)
-                                                                 :locale locale})
+            (-> (.transcribeAudio2Text mobile-util/ui-local #js {:audioData (js/Array.from unit8-data)})
                 (p/then (fn [^js r]
                           (let [content (.-transcription r)]
                             (when-not (string/blank? content)
@@ -92,14 +83,16 @@
                 (p/catch #(log/error :transcribe-audio-error %)))))))))
 
 (rum/defc record-button
-  [*locale]
+  []
   (let [*timer-ref (hooks/use-ref nil)
-        *save? (hooks/use-ref nil)
         [*recorder _] (hooks/use-state (atom nil))
-        [locale set-locale!] (hooks/use-state nil)]
+        [*save? _] (hooks/use-state (atom nil))]
 
     (hooks/use-effect!
      (fn []
+       (when-not @*transcribe?
+         (p/let [transcribe? (>ios-26)]
+           (reset! *transcribe? transcribe?)))
        (let [^js node (js/document.getElementById "wave-container")
              ^js wave-l (.querySelector node ".wave-left")
              ^js wave-r (.querySelector node ".wave-right")
@@ -121,8 +114,8 @@
                                  (.start w1)
                                  (.start w2)))
            (.on "record-end" (fn [^js blob]
-                               (when (true? (rum/deref *save?))
-                                 (save-asset-audio! blob @*locale))
+                               (when @*save?
+                                 (save-asset-audio! blob @*transcribe?))
                                (mobile-state/close-popup!)))
            (.on "record-progress" (gfun/throttle
                                    (fn [time]
@@ -160,60 +153,22 @@
        (shui/button {:variant :outline
                      :class "record-ctrl-btn rounded-full recording"
                      :on-click (fn []
-                                 (rum/set-ref! *save? true)
+                                 (reset! *save? true)
                                  (.stopRecording ^js @*recorder))}
-                    (shui/tabler-icon "player-stop" {:size 22}))]]
-
-     (when locale
-       (when-not (string/starts-with? locale "en_")
-         (shui/button {:variant :outline
-                       :on-click (fn []
-                                   (reset! *locale "en_US")
-                                   (set-locale! "en_US"))}
-                      "English transcribe")))]))
+                    (shui/tabler-icon "player-stop" {:size 22}))]]]))
 
 (rum/defc audio-recorder-aux < rum/static
   []
-  (let [[locale set-locale!] (hooks/use-state nil)
-        [system-locale set-system-locale!] (hooks/use-state nil)
-        [*locale] (hooks/use-state (atom nil))
-        [transcribe-supported? set-transcribe-supported!] (hooks/use-state false)]
+  [:div.app-audio-recorder
+   [:div.flex.flex-row.justify-between.items-center.font-medium
+    [:div.opacity-70 (date/get-date-time-string (tl/local-now) {:formatter-str "yyyy-MM-dd"})]]
 
-    (hooks/use-effect!
-     (fn []
-       (p/let [locale (get-locale)
-               transcribe-supported? >ios-26]
-         (set-transcribe-supported! transcribe-supported?)
-         (set-locale! locale)
-         (set-system-locale! locale)
-         (reset! *locale locale)))
-     [])
+   [:div#wave-container.app-wave-container
+    [:div.app-wave-needle]
+    [:div.wave-left]
+    [:div.wave-right.mirror]]
 
-    [:div.app-audio-recorder
-     [:div.flex.flex-row.justify-between.items-center.font-medium
-      [:div.opacity-70 (date/get-date-time-string (tl/local-now) {:formatter-str "yyyy-MM-dd"})]
-      (when transcribe-supported?
-        (if (and locale (not (string/starts-with? system-locale "en_")))
-          (let [en? (string/starts-with? locale "en_")]
-            (shui/button
-             {:variant (if en? :default :outline)
-              :class (str "rounded-full " (if en? "opacity-100" "opacity-70"))
-              :on-click (fn []
-                          (reset! *locale "en_US")
-                          (set-locale! "en_US"))}
-             "EN transcribe"))
-        ;; hack: same height with en transcribe button
-          (shui/button
-           {:variant :outline
-            :class "rounded-full opacity-0"}
-           "EN transcribe")))]
-
-     [:div#wave-container.app-wave-container
-      [:div.app-wave-needle]
-      [:div.wave-left]
-      [:div.wave-right.mirror]]
-
-     (record-button *locale)]))
+   (record-button)])
 
 (defn- show-recorder
   []
