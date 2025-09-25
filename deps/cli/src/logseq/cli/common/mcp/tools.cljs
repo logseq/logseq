@@ -45,14 +45,33 @@
                 (:logseq.property/description e)
                 (update :logseq.property/description db-property/property-value-content))))))
 
-(defn get-page-blocks
-  "Get page blocks for GetPage tool"
-  [db page-name-or-uuid]
-  (when-let [page-id (:db/id (ldb/get-page db page-name-or-uuid))]
-    (let [blocks (ldb/get-page-blocks db page-id)]
+(defn- get-page-blocks
+  [db page-id]
+  (let [blocks (ldb/get-page-blocks db page-id)]
       ;; Use repo stub since this is a DB only tool
-      (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
-           (map #(update % :block/uuid str))))))
+    (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
+         (map #(update % :block/uuid str)))))
+
+(defn ^:api remove-hidden-properties
+  "Given an entity map, remove properties that shouldn't be returned in api calls"
+  [m]
+  (->> (remove (fn [[k _v]]
+                 (or (= "block.temp" (namespace k))
+                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at} k))) m)
+       (into {})))
+
+(defn get-page-data
+  "Get page data for GetPage tool including the page's entity and its blocks"
+  [db page-name-or-uuid]
+  (when-let [page (ldb/get-page db page-name-or-uuid)]
+    {:entity (-> (remove-hidden-properties page)
+                 (dissoc :block/tags :block/refs)
+                 (update :block/uuid str))
+     :blocks (map #(-> %
+                       remove-hidden-properties
+                       ;; remove unused and untranslated attrs
+                       (dissoc :block/children :block/page))
+                  (get-page-blocks db (:db/id page)))}))
 
 (defn list-pages
   "Main fn for ListPages tool"
