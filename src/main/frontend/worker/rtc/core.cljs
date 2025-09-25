@@ -378,23 +378,28 @@
     (let [repo (worker-state/get-current-repo)
           token (worker-state/get-id-token)
           conn (worker-state/get-datascript-conn repo)]
-      (when (and repo
-                 (sqlite-util/db-based-graph? repo)
-                 token conn)
-        (when stop-before-start? (rtc-stop))
-        (let [ex (m/? (new-task--rtc-start* repo token))]
-          (when-let [ex-data* (ex-data ex)]
-            (case (:type ex-data*)
-              (:rtc.exception/not-rtc-graph
-               :rtc.exception/major-schema-version-mismatched
-               :rtc.exception/lock-failed)
-              (log/info :rtc-start-failed ex)
+      (if-not (and repo
+                   (sqlite-util/db-based-graph? repo)
+                   conn token)
+        (log/error :new-task--rtc-start-failed
+                   {:repo repo
+                    :some?-conn (some? conn)
+                    :some?-token (some? token)})
+        (do
+          (when stop-before-start? (rtc-stop))
+          (let [ex (m/? (new-task--rtc-start* repo token))]
+            (when-let [ex-data* (ex-data ex)]
+              (case (:type ex-data*)
+                (:rtc.exception/not-rtc-graph
+                 :rtc.exception/major-schema-version-mismatched
+                 :rtc.exception/lock-failed)
+                (log/info :rtc-start-failed ex)
 
-              :rtc.exception/not-found-db-conn
-              (log/error :rtc-start-failed ex)
+                :rtc.exception/not-found-db-conn
+                (log/error :rtc-start-failed ex)
 
-              (log/error :BUG-unknown-error ex))
-            ex))))))
+                (log/error :BUG-unknown-error ex))
+              ex)))))))
 
 (defn rtc-stop
   []
