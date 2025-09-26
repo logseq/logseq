@@ -1542,33 +1542,40 @@
                    file-path   (str block-id "." ext)
                    file-rpath  (str asset-dir-rpath "/" file-path)
                    dir repo-dir
-                   asset (db/entity :logseq.class/Asset)
-                   properties {:logseq.property.asset/type ext
-                               :logseq.property.asset/size (.-size file)
-                               :logseq.property.asset/checksum checksum
-                               :block/tags (:db/id asset)}
-                   insert-opts {:custom-uuid block-id
-                                :edit-block? false
-                                :properties properties}
-                   _ (db-based-save-asset! repo dir file file-rpath)
-                   edit-block (or (state/get-edit-block) last-edit-block)
-                   today-page-name (date/today)
-                   today-page-e (db-model/get-journal-page today-page-name)
-                   today-page (if (nil? today-page-e)
-                                (state/pub-event! [:page/create today-page-name])
-                                today-page-e)
-                   insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
-                   insert-opts' (if insert-to-current-block-page?
-                                  (assoc insert-opts
-                                         :block-uuid (:block/uuid edit-block)
-                                         :replace-empty-target? true
-                                         :sibling? true)
-                                  (assoc insert-opts :page (:block/uuid today-page)))
-                   new-block (api-insert-new-block! file-name-without-ext insert-opts')]
-             (when insert-to-current-block-page?
-               (state/clear-edit!))
-             (or new-block
-                 (throw (ex-info "Can't save asset" {:files files}))))))))))
+                   asset (db/entity :logseq.class/Asset)]
+
+             (if (> (.-size file) (* 100 1024 1024)) ; 100m
+               (do
+                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+                                     :error
+                                     false)
+                 (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
+               (p/let [properties {:logseq.property.asset/type ext
+                                   :logseq.property.asset/size (.-size file)
+                                   :logseq.property.asset/checksum checksum
+                                   :block/tags (:db/id asset)}
+                       insert-opts {:custom-uuid block-id
+                                    :edit-block? false
+                                    :properties properties}
+                       _ (db-based-save-asset! repo dir file file-rpath)
+                       edit-block (or (state/get-edit-block) last-edit-block)
+                       today-page-name (date/today)
+                       today-page-e (db-model/get-journal-page today-page-name)
+                       today-page (if (nil? today-page-e)
+                                    (state/pub-event! [:page/create today-page-name])
+                                    today-page-e)
+                       insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
+                       insert-opts' (if insert-to-current-block-page?
+                                      (assoc insert-opts
+                                             :block-uuid (:block/uuid edit-block)
+                                             :replace-empty-target? true
+                                             :sibling? true)
+                                      (assoc insert-opts :page (:block/uuid today-page)))
+                       new-block (api-insert-new-block! file-name-without-ext insert-opts')]
+                 (when insert-to-current-block-page?
+                   (state/clear-edit!))
+                 (or new-block
+                     (throw (ex-info "Can't save asset" {:files files}))))))))))))
 
 (def insert-command! editor-common-handler/insert-command!)
 
