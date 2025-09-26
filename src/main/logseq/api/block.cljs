@@ -7,16 +7,17 @@
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.db :as ldb]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.sdk.utils :as sdk-utils]))
+
+(def plugin-property-prefix "plugin.property.")
 
 (defn sanitize-user-property-name
   [k]
@@ -29,12 +30,18 @@
             (string/lower-case))))
     k))
 
+(defn get-sanitized-plugin-id
+  [^js plugin]
+  (when (some-> js/window.LSPlugin (.-PluginLocal))
+    (some->> plugin (.-id) sanitize-user-property-name)))
+
 (defn resolve-property-prefix-for-db
   [^js plugin]
-  (->> (when (some-> js/window.LSPlugin (.-PluginLocal))
-         (or (some->> plugin (.-id) (sanitize-user-property-name) (str "."))
-             "._api"))
-       (str "plugin.property")))
+  (let [plugin-id (get-sanitized-plugin-id plugin)]
+    (when-not plugin-id
+      (throw (ex-info "Can't get current plugin-id"
+                      {:plugin plugin})))
+    (str plugin-property-prefix plugin-id)))
 
 (defn get-db-ident-from-property-name
   "Finds a property :db/ident for a given property name"
@@ -45,13 +52,13 @@
     (if (qualified-keyword? property-name')
       property-name'
       ;; plugin property
-      (let [plugin-ns "plugin.property._api"]
+      (let [plugin-ns (resolve-property-prefix-for-db plugin)]
         (keyword plugin-ns (db-ident/normalize-ident-name-part property-name))))))
 
 (defn plugin-property-key?
   [ident]
   (and (qualified-keyword? ident)
-       (string/starts-with? (namespace ident) "plugin.property.")))
+       (string/starts-with? (namespace ident) plugin-property-prefix)))
 
 (defn into-readable-db-properties
   [properties]
@@ -86,11 +93,11 @@
           property-value))
       property-value)))
 
-(defn ensure-property-access-control
+(defn ensure-property-upsert-control
   "Plugin should only upsert its own properties"
-  [property-ident property-name]
-  (when-not (plugin-property-key? property-ident)
-    ;; FIXME: ensure a plugin doesn't upsert other plugin's properties
+  [plugin property-ident property-name]
+  (when-not (= (resolve-property-prefix-for-db plugin)
+               (namespace property-ident))
     (throw (ex-info "Plugins can only upsert its own properties"
                     {:property property-name
                      :property-ident property-ident}))))
@@ -107,11 +114,16 @@
     :else
     value))
 
-;; TODO:
-;; 1. infer type when property doesn't exists yet
-;; 2. infer cardinality
+(defn- infer-property-type
+  [value]
+  (cond
+    (boolean? value) :checkbox
+    (or (db-property-type/url? value)
+        (and (coll? value) (every? db-property-type/url? value))) :url
+    :else nil))
+
 (defn- set-block-properties!
-  [block-id properties]
+  [plugin block-id properties]
   (ui-outliner-tx/transact!
    {:outliner-op :set-block-properties}
    (doseq [[property-id property-ident value schema] properties]
@@ -120,9 +132,13 @@
                                               :property-ident property-ident})))
      (let [property (db/entity property-ident)
            property-type (or (:logseq.property/type property)
-                             (some-> (:type schema) keyword))
+                             (some-> (:type schema) keyword)
+                             (and (nil? property)
+                                  (infer-property-type value)))
            cardinality (or (:db/cardinality property)
-                           (if (= "many" (:cardinality schema))
+                           (if (and (or (= "many" (:cardinality schema))
+                                        (coll? value))
+                                    (not= (:cardinality schema) "one"))
                              :db.cardinality/many
                              :db.cardinality/one))
            error-data {:property-id property-id
@@ -149,7 +165,7 @@
                          error-data)))
 
        (when-not property
-         (ensure-property-access-control property-ident property-id)
+         (ensure-property-upsert-control plugin property-ident property-id)
          (outliner-op/upsert-property! property-ident schema' {:property-name property-id}))
 
        (when (and property (or many? (nil? value'))) ; delete property from this block
@@ -170,7 +186,7 @@
                                   (let [ident (get-db-ident-from-property-name k plugin)
                                         property-schema (get schema k)]
                                     [k ident v property-schema]))))]
-       (set-block-properties! block-id properties)))))
+       (set-block-properties! plugin block-id properties)))))
 
 (defn <sync-children-blocks!
   [block]

@@ -913,7 +913,7 @@
            (when-not (string/blank? k)
              (p/let [opts (or (some-> opts bean/->clj) {})
                      property-ident (api-block/get-db-ident-from-property-name k this)
-                     _ (api-block/ensure-property-access-control property-ident k)
+                     _ (api-block/ensure-property-upsert-control this property-ident k)
                      schema (or (some-> schema (bean/->clj)
                                         (update-keys #(if (contains? #{:hide :public} %)
                                                         (keyword (str (name %) "?")) %))) {})
