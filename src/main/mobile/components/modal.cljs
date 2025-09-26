@@ -101,11 +101,13 @@
 
 (rum/defc block-cp
   [block]
-  [:div.app-silk-scroll-content-inner
-   ;; block page content
-   [:div.block-modal-page-content
-    (mobile-ui/classic-app-container-wrap
-     (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]])
+  [:<>
+   (mobile-ui/keep-keyboard-virtual-input "in-modal")
+   [:div.app-silk-scroll-content-inner
+    ;; block page content
+    [:div.block-modal-page-content
+     (mobile-ui/classic-app-container-wrap
+      (page/page-cp (db/entity [:block/uuid (:block/uuid block)])))]]])
 
 (rum/defc block-sheet-topbar
   [block {:keys [favorited? set-favorited!]}]

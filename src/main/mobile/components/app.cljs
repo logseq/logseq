@@ -27,12 +27,6 @@
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
-(rum/defc keep-keyboard-open
-  []
-  [:input.absolute.top-4.left-0.w-1.h-1.opacity-0
-   {:id "app-keep-keyboard-open-input"
-    :auto-capitalize "off"
-    :auto-correct "false"}])
 
 (defn- sidebar-not-allowed-to-open?
   []
@@ -221,7 +215,7 @@
       ;; bottom tabs
       (ui-silk/app-silk-tabs)
 
-      (keep-keyboard-open)
+      (ui-component/keep-keyboard-virtual-input)
       (ui-component/install-notifications)
       (ui-component/install-modals)
 
