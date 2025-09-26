@@ -12,6 +12,10 @@
 - `deps/`: Internal dependencies/modules
 - `clj-e2e/`: End to end test code
 
+## Common used cljs keywords
+- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
+- Search for `defkeywords` to find all the definitions.
+
 ## Testing Commands
 - Run linters and unit-tests: `bb dev:lint-and-test`
 - Run single focused unit-test:
