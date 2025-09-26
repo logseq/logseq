@@ -12,16 +12,20 @@
 - `deps/`: Internal dependencies/modules
 - `clj-e2e/`: End to end test code
 
-## Common used cljs keywords
-- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
-- Search for `defkeywords` to find all the definitions.
-
 ## Testing Commands
 - Run linters and unit-tests: `bb dev:lint-and-test`
 - Run single focused unit-test:
   - Add the `:focus` keyword to the test case: `(deftest ^:focus test-name ...)`
   - `bb dev:test -i focus`
-  
+- Run e2e basic tests:
+  - `bb dev:e2e-basic-test`
+- Run e2e rtc extra tests:
+  - `bb dev:e2e-rtc-extra-test`
+
+## Common used cljs keywords
+- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
+- Search for `defkeywords` to find all the definitions.
+
 ## Code Guidance
 - Keep in mind: @prompts/review.md
 
