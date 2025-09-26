@@ -21,3 +21,5 @@ You're Clojure(script) expert, you're responsible to check those common errors:
   
 - After adding a new property in `logseq.db.frontend.property/built-in-properties`, you need to add a corresponding migration in `frontend.worker.db.migrate/schema-version->updates`.
   - e.g. `["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]`
+
+- If common keywords are added or modified, make corresponding changes in their definitions.
