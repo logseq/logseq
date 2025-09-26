@@ -55,7 +55,7 @@
 
 (defn- roam-import-handler
   [e]
-  (let [file (first (array-seq (.-files (.-target e))))
+  (let [file      (first (array-seq (.-files (.-target e))))
         file-name (gobj/get file "name")]
     (if (string/ends-with? file-name ".json")
       (do
@@ -75,7 +75,7 @@
 
 (defn- lsq-import-handler
   [e & {:keys [sqlite? debug-transit? graph-name db-edn?]}]
-  (let [file (first (array-seq (.-files (.-target e))))
+  (let [file      (first (array-seq (.-files (.-target e))))
         file-name (some-> (gobj/get file "name")
                           (string/lower-case))
         edn? (string/ends-with? file-name ".edn")
@@ -155,7 +155,7 @@
 
 (defn- opml-import-handler
   [e]
-  (let [file (first (array-seq (.-files (.-target e))))
+  (let [file      (first (array-seq (.-files (.-target e))))
         file-name (gobj/get file "name")]
     (if (string/ends-with? file-name ".opml")
       (do
@@ -358,25 +358,23 @@
                          {:size (.-size (:file-object file))
                           :checksum checksum
                           :type (db-asset/asset-path->type (:path file))
-                          :path (:path file)})
+                          :path (:path file)
+                          ;; Save array to avoid reading asset twice
+                          ::byte-array byte-array})
                   byte-array)))))
 
-(defn- copy-asset [repo repo-dir asset-m path->file-object]
-  (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)
-        file-obj (get path->file-object (:path asset-m))]
-    (if-not file-obj
-      (do (log/error :copy-asset-error {:msg "file-obj not found" :asset-m asset-m})
-          (p/rejected (js/Error. "file-obj not found")))
-      (-> (.arrayBuffer file-obj)
-          (p/then (fn [content]
-                    (p/do!
-                     (fs/mkdir-if-not-exists assets-dir)
-                     (if (:block/uuid asset-m)
-                       (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})
-                       (when-not (:pdf-annotation? asset-m)
-                         (println "Copied asset" (pr-str (node-path/basename (:path asset-m)))
-                                  "by its name since it was unused.")
-                         (fs/write-plain-text-file! repo assets-dir (node-path/basename (:path asset-m)) content {:skip-transact? true}))))))))))
+(defn- copy-asset [repo repo-dir asset-m]
+  (-> (::byte-array asset-m)
+      (p/then (fn [content]
+                (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
+                  (p/do!
+                   (fs/mkdir-if-not-exists assets-dir)
+                   (if (:block/uuid asset-m)
+                     (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})
+                     (when-not (:pdf-annotation? asset-m)
+                       (println "Copied asset" (pr-str (node-path/basename (:path asset-m)))
+                                "by its name since it was unused.")
+                       (fs/write-plain-text-file! repo assets-dir (node-path/basename (:path asset-m)) content {:skip-transact? true})))))))))
 
 (defn- import-file-graph
   [*files
@@ -388,15 +386,13 @@
           _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          path->file-object (reduce (fn [acc file] (assoc acc (:path file) (:file-object file))) {} *files)
           options {:user-options
                    (merge
                     (dissoc user-options :graph-name)
-                    {:tag-classes (some-> tag-classes string/trim not-empty (string/split #",\s*") set)
-                     :property-classes (some-> property-classes string/trim not-empty (string/split #",\s*") set)
-                     :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
+                    {:tag-classes (some-> tag-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-classes (some-> property-classes string/trim not-empty  (string/split #",\s*") set)
+                     :property-parent-classes (some-> property-parent-classes string/trim not-empty  (string/split #",\s*") set)})
                    ;; common options
-                   :path->file-object path->file-object
                    :notify-user show-notification
                    :set-ui-state state/set-state!
                    :<read-file (fn <read-file [file] (.text (:file-object file)))
@@ -409,7 +405,7 @@
                                         (db-editor-handler/save-file! path content))
                    ;; asset file options
                    :<read-asset read-asset
-                   :<copy-asset #(copy-asset repo (config/get-repo-dir repo) % path->file-object)
+                   :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                    :export-file (fn export-file [conn m opts]
