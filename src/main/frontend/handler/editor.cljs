@@ -1544,10 +1544,10 @@
                    dir repo-dir
                    asset (db/entity :logseq.class/Asset)]
 
-             (if (> (.-size file) (* 100 1024 1024)) ; 100m
+             (if (assets-handler/exceed-limit-size? file)
                (do
                  (notification/show! [:div "Asset size shouldn't be larger than 100M"]
-                                     :error
+                                     :warning
                                      false)
                  (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
                (p/let [properties {:logseq.property.asset/type ext

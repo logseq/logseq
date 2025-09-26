@@ -1120,8 +1120,7 @@
 
 (defn- build-new-asset [asset-data]
   (merge (sqlite-util/block-with-timestamps
-          {:block/uuid (d/squuid)
-           :block/order (db-order/gen-key)
+          {:block/order (db-order/gen-key)
            :block/page :logseq.class/Asset
            :block/parent :logseq.class/Asset})
          {:block/tags [:logseq.class/Asset]
@@ -1129,16 +1128,25 @@
           :logseq.property.asset/checksum (:checksum asset-data)
           :logseq.property.asset/size (:size asset-data)}))
 
+(defn- get-asset-block-id
+  [assets path]
+  (or (get-in @assets [path :block/uuid])
+      (get-in @assets [path :asset-id])))
+
 (defn- build-annotation-images
   "Builds tx for annotation images and provides a map for mapping image asset names
    to their new uuids"
   [parent-asset-path assets]
   (let [image-dir (string/replace-first parent-asset-path #"(?i)\.pdf$" "")
         image-paths (filter #(= image-dir (node-path/dirname %)) (keys @assets))
-        txs (mapv #(let [new-asset (merge (build-new-asset (get @assets %))
-                                          {:block/title "pdf area highlight"})]
-                     (swap! assets assoc-in [% :block/uuid] (:block/uuid new-asset))
-                     new-asset)
+        txs (keep #(let [asset-id (get-asset-block-id assets %)]
+                     (if-not asset-id
+                       (js/console.error (str "No asset-id for " %))
+                       (let [new-asset (merge (build-new-asset (get @assets %))
+                                              {:block/title "pdf area highlight"
+                                               :block/uuid asset-id})]
+                         (swap! assets assoc-in [% :block/uuid] asset-id)
+                         new-asset)))
                   image-paths)]
     {:txs txs
      :image-asset-name-to-uuids
@@ -1163,8 +1171,6 @@
         asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
-      ;; Mark edn asset so it isn't treated like a normal asset later
-      (swap! assets assoc-in [asset-edn-path :pdf-annotation?] true)
       (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images parent-asset-path assets)]
         (concat txs
                 (build-pdf-annotations-tx* asset-edn-map (get @pdf-annotation-pages asset-md-name) parent-asset image-asset-name-to-uuids opts))))))
@@ -1178,10 +1184,17 @@
            (fn [asset-link]
              (let [asset-name (-> asset-link second :url second asset-path->name)]
                (if-let [asset-data (and asset-name (get @assets asset-name))]
-                 (if (:block/uuid asset-data)
+                 (cond
+                   (:block/uuid asset-data)
                    {:asset-name-uuid [asset-name (:block/uuid asset-data)]}
+
+                   (nil? (get-asset-block-id assets asset-name))
+                   (js/console.error (str "No asset-id for " asset-name))
+
+                   :else
                    (let [new-asset (merge (build-new-asset asset-data)
-                                          {:block/title (db-asset/asset-name->title (node-path/basename asset-name))}
+                                          {:block/title (db-asset/asset-name->title (node-path/basename asset-name))
+                                           :block/uuid (get-asset-block-id assets asset-name)}
                                           (when-let [metadata (not-empty (common-util/safe-read-map-string (:metadata (second asset-link))))]
                                             {:logseq.property.asset/resize-metadata metadata}))
                          pdf-annotations-tx (when (= "pdf" (path/file-ext asset-name))
@@ -1949,49 +1962,36 @@
                                :level :error
                                :ex-data {:error e}})))))
 
-(defn- read-asset-files
-  "Reads files under assets/"
-  [*asset-files <read-asset-file {:keys [notify-user set-ui-state assets]
-                                  :or {set-ui-state (constantly nil)}}]
-  (assert <read-asset-file "read-asset-file fn required")
+(defn- read-and-copy-asset-files
+  "Reads and copies files under assets/"
+  [*asset-files <read-and-copy-asset-file {:keys [notify-user set-ui-state assets]
+                                           :or {set-ui-state (constantly nil)}}]
+  (assert <read-and-copy-asset-file "read-and-copy-asset-file fn required")
   (let [asset-files (mapv #(assoc %1 :idx %2)
                           ;; Sort files to ensure reproducible import behavior
                           (sort-by :path *asset-files)
                           (range 0 (count *asset-files)))
-        read-asset (fn read-asset [{:keys [path] :as file}]
-                     (-> (p/let [byte-array (<read-asset-file file assets)]
-                           (when (= "edn" (path/file-ext (:path file)))
-                             (swap! assets assoc-in
-                                    [(asset-path->name path) :edn-content]
-                                    (common-util/safe-read-map-string (utf8/decode byte-array)))))
-                         (p/catch
-                          (fn [error]
-                            (notify-user {:msg (str "Import failed to read " (pr-str path) " with error:\n" (.-message error))
-                                          :level :error
-                                          :ex-data {:path path :error error}})))))]
+        read-and-copy-asset (fn read-and-copy-asset [{:keys [path] :as file}]
+                              (-> (<read-and-copy-asset-file
+                                   file assets
+                                   (fn [buffer]
+                                     (let [edn? (= "edn" (path/file-ext path))
+                                           edn-content (when edn? (common-util/safe-read-map-string (utf8/decode buffer)))
+                                           pdf-annotation? (some #{:highlights} (keys edn-content))
+                                           with-edn-content (fn [m]
+                                                              (cond-> m
+                                                                edn?
+                                                                (assoc :edn-content edn-content)))]
+                                       {:with-edn-content with-edn-content
+                                        :pdf-annotation? pdf-annotation?})))
+                                  (p/catch
+                                   (fn [error]
+                                     (notify-user {:msg (str "Import failed to read and copy " (pr-str path) " with error:\n" (.-message error))
+                                                   :level :error
+                                                   :ex-data {:path path :error error}})))))]
     (when (seq asset-files)
-      (set-ui-state [:graph/importing-state :current-page] "Read asset files")
-      (<safe-async-loop read-asset asset-files notify-user))))
-
-(defn- copy-asset-files
-  "Copy files under assets/"
-  [asset-maps* <copy-asset-file {:keys [notify-user set-ui-state]
-                                 :or {set-ui-state (constantly nil)}}]
-  (assert <copy-asset-file "copy-asset-file fn required")
-  (let [asset-maps (mapv #(assoc %1 :idx %2)
-                          ;; Sort files to ensure reproducible import behavior
-                         (sort-by :path asset-maps*)
-                         (range 0 (count asset-maps*)))
-        copy-asset (fn copy-asset [{:keys [path] :as asset-m}]
-                     (p/catch
-                      (<copy-asset-file asset-m)
-                      (fn [error]
-                        (notify-user {:msg (str "Import failed to copy " (pr-str path) " with error:\n" (.-message error))
-                                      :level :error
-                                      :ex-data {:path path :error error}}))))]
-    (when (seq asset-maps)
-      (set-ui-state [:graph/importing-state :current-page] "Copy asset files")
-      (<safe-async-loop copy-asset asset-maps notify-user))))
+      (set-ui-state [:graph/importing-state :current-page] "Read and copy asset files")
+      (<safe-async-loop read-and-copy-asset asset-files notify-user))))
 
 (defn- insert-favorites
   "Inserts favorited pages as uuids into a new favorite page"
@@ -2071,11 +2071,10 @@
    * :user-options - map of user specific options. See add-file-to-db-graph for more
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
-   * :<copy-asset - fn which copies asset file
-   * :<read-asset - fn which reads asset file
+   * :<read-and-copy-asset - fn which reads and copies asset file
 
    Note: See export-doc-files for additional options that are only for it"
-  [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset <read-asset rpath-key log-fn]
+  [repo-or-conn conn config-file *files {:keys [<read-file <read-and-copy-asset rpath-key log-fn]
                                          :or {rpath-key :path log-fn println}
                                          :as options}]
   (reset! gp-block/*export-to-db-graph? true)
@@ -2099,13 +2098,11 @@
                              (-> (select-keys options [:notify-user :<save-logseq-file])
                                  (set/rename-keys {:<save-logseq-file :<save-file})))
         ;; Assets are read first as doc-files need data from them to make Asset blocks.
-        ;; Assets are copied after doc-files as they need block/uuid's from them to name assets
-        (read-asset-files asset-files <read-asset (merge (select-keys options [:notify-user :set-ui-state])
-                                                         {:assets (get-in doc-options [:import-state :assets])}))
+        (read-and-copy-asset-files asset-files
+                                   <read-and-copy-asset
+                                   (merge (select-keys options [:notify-user :set-ui-state])
+                                          {:assets (get-in doc-options [:import-state :assets])}))
         (export-doc-files conn doc-files <read-file doc-options)
-        (copy-asset-files (vals @(get-in doc-options [:import-state :assets]))
-                          <copy-asset
-                          (select-keys options [:notify-user :set-ui-state]))
         (export-favorites-from-config-edn conn repo-or-conn config {})
         (export-class-properties conn repo-or-conn)
         (move-top-parent-pages-to-library conn repo-or-conn)
