@@ -42,7 +42,7 @@
               (m/ap
                 (let [m (m/?> (m/relieve state-flow))]
                   (when (and (contains? m :git/current-repo)
-                             (:git/current-repo m nil))
+                             (nil? (:git/current-repo m)))
                     (log/error :sync-app-state
                                [m (select-keys @state/state
                                                [:git/current-repo
