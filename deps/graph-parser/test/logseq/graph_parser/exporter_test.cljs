@@ -101,8 +101,9 @@
           asset-id (d/squuid)
           asset-name (gp-exporter/asset-path->name (:path file))
           asset-type (db-asset/asset-path->type (:path file))
-          {:keys [with-edn-content _pdf-annotation?]} (buffer-handler buffer)]
-    (swap! *asset-ids conj asset-id)
+          {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
+    (when-not pdf-annotation?
+      (swap! *asset-ids conj asset-id))
     (swap! assets assoc asset-name
            (with-edn-content
              {:size (.-length buffer)
