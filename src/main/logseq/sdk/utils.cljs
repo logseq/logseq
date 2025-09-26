@@ -50,7 +50,6 @@
             (de/entity? a) (:db/id a)
             (uuid? a) (str a)
 
-            ;; @FIXME compatible layer for classic APIs
             (and (map? a) (:block/uuid a) (:block/title a))
             (-> a
                 (assoc :block/content (:block/title a)
