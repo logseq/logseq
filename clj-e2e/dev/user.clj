@@ -76,7 +76,8 @@
 
 (defn run-rtc-extra-test2
   [& _args]
-  (run-tests 'logseq.e2e.rtc-extra-test))
+  (run-tests 'logseq.e2e.rtc-extra-test)
+  (System/exit 0))
 
 (defn run-editor-basic-test
   []
@@ -89,7 +90,7 @@
        (swap! *futures assoc :tag-basic-test)))
 
 (defn run-all-basic-test
-  []
+  [& _]
   (run-tests 'logseq.e2e.editor-basic-test
              'logseq.e2e.commands-basic-test
              'logseq.e2e.multi-tabs-basic-test
@@ -98,7 +99,8 @@
              'logseq.e2e.plugins-basic-test
              'logseq.e2e.reference-basic-test
              'logseq.e2e.property-basic-test
-             'logseq.e2e.tag-basic-test))
+             'logseq.e2e.tag-basic-test)
+  (System/exit 0))
 
 (defn start
   []
