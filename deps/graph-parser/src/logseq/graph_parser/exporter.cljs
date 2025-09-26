@@ -1967,7 +1967,9 @@
   [*asset-files <read-and-copy-asset-file {:keys [notify-user set-ui-state assets rpath-key]
                                            :or {set-ui-state (constantly nil)}}]
   (assert <read-and-copy-asset-file "read-and-copy-asset-file fn required")
-  (let [asset-files (let [assets (common-util/distinct-by rpath-key *asset-files)]
+  (let [asset-files (let [assets (if (keyword? rpath-key)
+                                   (common-util/distinct-by rpath-key *asset-files)
+                                   *asset-files)]
                       (mapv #(assoc %1 :idx %2)
                             ;; Sort files to ensure reproducible import behavior
                             (sort-by :path assets)
@@ -2115,6 +2117,7 @@
                 (reset! gp-block/*export-to-db-graph? false)))
    (p/catch (fn [e]
               (reset! gp-block/*export-to-db-graph? false)
+              (js/console.error e)
               ((:notify-user options)
                {:msg (str "Import has unexpected error:\n" (.-message e))
                 :level :error
