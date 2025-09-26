@@ -1479,12 +1479,19 @@ Arg *stop: atom, reset to true to stop the loop"
        (some-> target (.querySelector ".CodeMirror") (.-CodeMirror)))))
 
 #?(:cljs
+   (defn get-keep-keyboard-input-el
+     ([] (get-keep-keyboard-input-el ""))
+     ([t]
+      (js/document.getElementById (str "keep-keyboard-open-input" t)))))
+
+#?(:cljs
    (defn mobile-keep-keyboard-open
      ([]
       (mobile-keep-keyboard-open true))
      ([schedule?]
       (when (mobile?)
-        (let [f #(when-let [node (gdom/getElement "app-keep-keyboard-open-input")]
+        (let [f #(when-let [node (or (get-keep-keyboard-input-el "in-modal")
+                                  (get-keep-keyboard-input-el))]
                    (.focus node))]
           (if schedule? (schedule f) (f)))))))
 
