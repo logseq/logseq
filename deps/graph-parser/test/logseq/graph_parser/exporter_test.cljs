@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require ["fs" :as fs]
             ["path" :as node-path]
-            [cljs.test :refer [testing is are deftest]]
+            [cljs.test :refer [are deftest is testing]]
             [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -94,16 +94,23 @@
    ;; TODO: Add actual default
    :default-config {}})
 
-;; Copied from db-import
-(defn- <read-asset-file [file assets]
+;; tweaked from db-import
+(defn- <read-and-copy-asset [file assets buffer-handler *asset-ids]
   (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)]
-    (swap! assets assoc
-           (gp-exporter/asset-path->name (:path file))
-           {:size (.-length buffer)
-            :checksum checksum
-            :type (db-asset/asset-path->type (:path file))
-            :path (:path file)})
+          checksum (db-asset/<get-file-array-buffer-checksum buffer)
+          asset-id (d/squuid)
+          asset-name (gp-exporter/asset-path->name (:path file))
+          asset-type (db-asset/asset-path->type (:path file))
+          {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
+    (when-not pdf-annotation?
+      (swap! *asset-ids conj asset-id))
+    (swap! assets assoc asset-name
+           (with-edn-content
+             {:size (.-length buffer)
+              :type asset-type
+              :path (:path file)
+              :checksum checksum
+              :asset-id asset-id}))
     buffer))
 
 ;; Copied from db-import script and tweaked for an in-memory import
@@ -118,13 +125,8 @@
         options' (merge default-export-options
                         {:user-options (merge {:convert-all-tags? false} (dissoc options :assets :verbose))
                         ;; asset file options
-                         :<read-asset <read-asset-file
-                         :<copy-asset (fn copy-asset [m]
-                                        (if (:block/uuid m)
-                                          (swap! assets conj m)
-                                          (when-not (:pdf-annotation? m)
-                                            (println "[INFO]" "Asset" (pr-str (node-path/basename (:path m)))
-                                                     "does not have a :block/uuid"))))}
+                         :<read-and-copy-asset (fn [file *assets buffer-handler]
+                                                 (<read-and-copy-asset file *assets buffer-handler assets))}
                         (select-keys options [:verbose]))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
