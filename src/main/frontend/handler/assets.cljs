@@ -16,6 +16,11 @@
             [promesa.core :as p])
   (:import [missionary Cancelled]))
 
+(defn exceed-limit-size?
+  "Asset size no more than 100M"
+  [^js file]
+  (> (.-size file) (* 100 1024 1024)))
+
 (defn alias-enabled?
   []
   (and (util/electron?)
