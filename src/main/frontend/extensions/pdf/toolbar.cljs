@@ -26,7 +26,7 @@
 
 (declare make-docinfo-in-modal)
 
-(def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
+(def *area-dashed? (atom ((fnil identity false) (storage/get "ls-pdf-area-is-dashed"))))
 (def *area-mode? (atom false))
 (def *highlight-mode? (atom false))
 #_:clj-kondo/ignore
@@ -489,7 +489,15 @@
         [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))
         group-id          (.-$groupIdentity viewer)
         in-system-window? (.-$inSystemWindow viewer)
-        doc               (pdf-windows/resolve-own-document viewer)]
+        doc               (pdf-windows/resolve-own-document viewer)
+        dispatch-extra-state!
+        (fn []
+          (js/setTimeout
+           (fn []
+             (let [scale (.-currentScaleValue viewer)]
+               (.dispatch (.-eventBus viewer) (name :ls-update-extra-state)
+                          #js {:page current-page-num :scale scale})))
+           100))]
 
     ;; themes hooks
     (hooks/use-effect!
@@ -504,8 +512,7 @@
     (hooks/use-effect!
      (fn []
        (when viewer
-         (.dispatch (.-eventBus viewer) (name :ls-update-extra-state)
-                    #js {:page current-page-num})))
+         (dispatch-extra-state!)))
      [viewer current-page-num])
 
     ;; pager hooks
@@ -556,13 +563,24 @@
         ;; zoom
         [:a.button
          {:title    "Zoom out"
-          :on-click (partial pdf-utils/zoom-out-viewer viewer)}
+          :on-click (fn []
+                      (pdf-utils/zoom-out-viewer viewer)
+                      (dispatch-extra-state!))}
          (svg/zoom-out 18)]
 
         [:a.button
          {:title    "Zoom in"
-          :on-click (partial pdf-utils/zoom-in-viewer viewer)}
+          :on-click (fn []
+                      (pdf-utils/zoom-in-viewer viewer)
+                      (dispatch-extra-state!))}
          (svg/zoom-in 18)]
+
+        [:a.button
+         {:title    "Auto fit"
+          :on-click (fn []
+                      (pdf-utils/reset-viewer-auto! viewer)
+                      (dispatch-extra-state!))}
+         (svg/auto-fit 18)]
 
         [:a.button
          {:title    "Outline"
