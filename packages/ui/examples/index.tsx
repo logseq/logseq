@@ -5,19 +5,27 @@ import * as ReactDOM from 'react-dom'
 
 // @ts-ignore
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../@/components/ui/card'
+import { LoginForm } from '../src/amplify/ui'
 
 // bootstrap
 setupGlobals()
 
 function App() {
   return (
-    <main className={'p-8'}>
-      <h1 className={'text-red-500 mb-8'}>
+    <main className={'pt-72 flex flex-col justify-center items-center gap-4'}>
+      <h1 className={'text-green-900 mb-8 font-bold text-4xl'}>
         Hello, Logseq UI :)
       </h1>
-      <Button asChild>
-        <a href={'https://google.com'} target={'_blank'}>go to google.com</a>
-      </Button>
+
+      <Card className={'sm:w-80'}>
+        <CardHeader>
+          <CardTitle>Login</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <LoginForm/>
+        </CardContent>
+      </Card>
     </main>
   )
 }
