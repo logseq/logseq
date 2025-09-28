@@ -921,8 +921,8 @@
 
 (defn- debounce-set-last-visit-scale!
   [asset last-visit-scale]
-  (when (and (string? last-visit-scale)
-             (not (string/blank? last-visit-scale)))
+  (when (or (number? last-visit-scale)
+            (string? last-visit-scale))
     (debounced-set-storage! (str "pdf-last-visit-scale/" (:db/id asset)) (or last-visit-scale "auto"))))
 
 (defn- get-last-visit-scale
