@@ -635,29 +635,29 @@
              (partial pdf-utils/adjust-viewer-size! viewer)
              fn-wheel
              (fn [^js/WheelEvent e]
-               (let [bus (.-eventBus viewer)
-                     container (.-container viewer)
-                     rect (.getBoundingClientRect container)
-                     ;; relative position between container and mouse point
-                     mouse-x (- (.-clientX e) (.-left rect))
-                     mouse-y (- (.-clientY e) (.-top rect))
-                     scroll-left (.-scrollLeft container)
-                     scroll-top (.-scrollTop container)
-                     ;; relative position between pdf and mouse point
-                     x-ratio (/ (+ scroll-left mouse-x) (.-scrollWidth container))
-                     y-ratio (/ (+ scroll-top  mouse-y) (.-scrollHeight container))
-                     current-scale (.-currentScale viewer)
-                     scale-factor 1.05    ;; scale sensitivity
-                     new-scale (if (< (.-deltaY e) 0)
-                                 (* current-scale scale-factor) ;; scale up
-                                 (/ current-scale scale-factor))] ;; scale down
+               (when (or (.-ctrlKey e) (.-metaKey e))
+                 (let [bus (.-eventBus viewer)
+                       container (.-container viewer)
+                       rect (.getBoundingClientRect container)
+                       ;; relative position between container and mouse point
+                       mouse-x (- (.-clientX e) (.-left rect))
+                       mouse-y (- (.-clientY e) (.-top rect))
+                       scroll-left (.-scrollLeft container)
+                       scroll-top (.-scrollTop container)
+                       ;; relative position between pdf and mouse point
+                       x-ratio (/ (+ scroll-left mouse-x) (.-scrollWidth container))
+                       y-ratio (/ (+ scroll-top mouse-y) (.-scrollHeight container))
+                       current-scale (.-currentScale viewer)
+                       scale-factor 1.05                    ;; scale sensitivity
+                       new-scale (if (< (.-deltaY e) 0)
+                                   (* current-scale scale-factor) ;; scale up
+                                   (/ current-scale scale-factor))] ;; scale down
 
-                 (when (or (.-ctrlKey e) (.-metaKey e))
                    (.preventDefault e)
                    ;; dispatch to scale changing event
                    (.dispatch bus "scaleChanging"
                               #js {:source "wheel"
-                                   :scale  new-scale})
+                                   :scale new-scale})
                    (js/requestAnimationFrame
                     (fn []
                       (set! (.-scrollLeft container)
