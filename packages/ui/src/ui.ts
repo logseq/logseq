@@ -93,10 +93,12 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import * as uniqolor from 'uniqolor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { setLocale, setTranslate } from './i18n'
 
 declare global {
   var LSUI: any
   var LSUtils: any
+  var LSI18N: any
 }
 
 const shadui = {
@@ -198,6 +200,11 @@ function setupGlobals() {
   window.LSUtils = {
     isDev: process.env.NODE_ENV === 'development',
     uniqolor,
+  }
+
+  window.LSI18N = {
+    setTranslate,
+    setLocale,
   }
 }
 
