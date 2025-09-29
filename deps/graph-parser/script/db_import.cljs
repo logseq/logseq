@@ -61,7 +61,7 @@
           asset-name (gp-exporter/asset-path->name (:path file))
           asset-type (db-asset/asset-path->type (:path file))]
     (if (exceed-limit-size? buffer)
-      (js/console.error (str "Asset size shouldn't be larger than 100M, path: " (:path file)))
+      (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
       (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
         (fsp/mkdir parent-dir #js {:recursive true})

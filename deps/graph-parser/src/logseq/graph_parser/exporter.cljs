@@ -1130,22 +1130,22 @@
 
 (defn- get-asset-block-id
   [assets path]
-  (or (get-in @assets [path :block/uuid])
-      (get-in @assets [path :asset-id])))
+  (get-in @assets [path :asset-id]))
 
 (defn- build-annotation-images
   "Builds tx for annotation images and provides a map for mapping image asset names
    to their new uuids"
-  [parent-asset-path assets]
+  [parent-asset-path assets {:keys [notify-user]}]
   (let [image-dir (string/replace-first parent-asset-path #"(?i)\.pdf$" "")
         image-paths (filter #(= image-dir (node-path/dirname %)) (keys @assets))
         txs (keep #(let [asset-id (get-asset-block-id assets %)]
                      (if-not asset-id
-                       (js/console.error (str "No asset-id for " %))
+                       (notify-user {:msg (str "Skipped creating asset " (pr-str %) " because it has no asset id")
+                                     :level :error})
                        (let [new-asset (merge (build-new-asset (get @assets %))
                                               {:block/title "pdf area highlight"
                                                :block/uuid asset-id})]
-                         (swap! assets assoc-in [% :block/uuid] asset-id)
+                         (swap! assets assoc-in [% :asset-created?] true)
                          new-asset)))
                   image-paths)]
     {:txs txs
@@ -1171,13 +1171,13 @@
         asset-md-name (str "hls__" (safe-sanitize-file-name
                                     (node-path/basename (string/replace-first parent-asset-path #"(?i)\.pdf$" ".md"))))]
     (when-let [asset-edn-map (get @assets asset-edn-path)]
-      (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images parent-asset-path assets)]
+      (let [{:keys [txs image-asset-name-to-uuids]} (build-annotation-images parent-asset-path assets opts)]
         (concat txs
                 (build-pdf-annotations-tx* asset-edn-map (get @pdf-annotation-pages asset-md-name) parent-asset image-asset-name-to-uuids opts))))))
 
 (defn- handle-assets-in-block
   "If a block contains assets, creates them as #Asset nodes in the Asset page and references them in the block."
-  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} opts]
+  [block {:keys [asset-links]} {:keys [assets ignored-assets pdf-annotation-pages]} {:keys [notify-user] :as opts}]
   (if (seq asset-links)
     (let [asset-maps
           (keep
@@ -1185,11 +1185,13 @@
              (let [asset-name (-> asset-link second :url second asset-path->name)]
                (if-let [asset-data (and asset-name (get @assets asset-name))]
                  (cond
-                   (:block/uuid asset-data)
-                   {:asset-name-uuid [asset-name (:block/uuid asset-data)]}
-
                    (not (get-asset-block-id assets asset-name))
-                   (js/console.error (str "No asset-id for " asset-name))
+                   (notify-user {:msg (str "Skipped creating asset " (pr-str asset-name) " because it has no asset id")
+                                 :level :error})
+
+                   ;; If asset tx is already built, no need to do it again
+                   (:asset-created? asset-data)
+                   {:asset-name-uuid [asset-name (:asset-id asset-data)]}
 
                    :else
                    (let [new-asset (merge (build-new-asset asset-data)
@@ -1203,7 +1205,7 @@
                                           (when pdf-annotations-tx pdf-annotations-tx))]
                     ;;  (prn :asset-added! (node-path/basename asset-name))
                     ;;  (cljs.pprint/pprint asset-link)
-                     (swap! assets assoc-in [asset-name :block/uuid] (:block/uuid new-asset))
+                     (swap! assets assoc-in [asset-name :asset-created?] true)
                      {:asset-name-uuid [asset-name (:block/uuid new-asset)]
                       :asset-tx asset-tx}))
                  (do
@@ -1266,7 +1268,7 @@
         {block-after-built-in-props :block deadline-properties-tx :properties-tx}
         (update-block-deadline-and-scheduled block page-names-to-uuids options)
         {block-after-assets :block :keys [asset-blocks-tx]}
-        (handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn]))
+        (handle-assets-in-block block-after-built-in-props walked-ast-blocks import-state (select-keys options [:log-fn :notify-user]))
         ;; :block/page should be [:block/page NAME]
         journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
         prepared-block (cond-> block-after-assets
@@ -1980,6 +1982,8 @@
                                    (fn [buffer]
                                      (let [edn? (= "edn" (path/file-ext path))
                                            edn-content (when edn? (common-util/safe-read-map-string (utf8/decode buffer)))
+                                           ;; Have to assume edn file with :highlights is annotation or
+                                           ;; this import step becomes coupled to build-pdf-annotations-tx
                                            pdf-annotation? (some #{:highlights} (keys edn-content))
                                            with-edn-content (fn [m]
                                                               (cond-> m
