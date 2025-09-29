@@ -21,7 +21,7 @@ jobs:
     steps:
       - name: '🧹 Mark & close stale issues'
         id: stale_issues
-        uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
+        uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           days-before-issue-stale: 180
@@ -50,7 +50,7 @@ jobs:
 
       - name: '🧹 Close stale awaiting response issues'
         id: awaiting_issues
-        uses: actions/stale@6f05e4244c9a0b2ed3401882b05d701dd0a7289b  # v7
+        uses: actions/stale@v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           days-before-issue-stale: 40
