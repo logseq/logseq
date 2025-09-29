@@ -2,7 +2,7 @@ export type TranslateFn = (
   locale: string,
   key: string,
   ...args: any
-) => void
+) => string
 
 let _locale: string = 'en'
 let _translate: TranslateFn = (
@@ -10,7 +10,7 @@ let _translate: TranslateFn = (
   key: string,
   ...args: any
 ) => {
-  return args[0] || 'Missing translation '
+  return args[0] || key
 }
 
 export function setTranslate(t: TranslateFn) {
