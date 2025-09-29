@@ -37,7 +37,10 @@
 
 (defn resolve-property-prefix-for-db
   [^js plugin]
-  (let [plugin-id (get-sanitized-plugin-id plugin)]
+  (let [plugin-id (get-sanitized-plugin-id plugin)
+        ;; TODO: remove this
+        ;; plugin-id "test"
+        ]
     (when-not plugin-id
       (throw (ex-info "Can't get current plugin-id"
                       {:plugin plugin})))
@@ -120,7 +123,7 @@
     (boolean? value) :checkbox
     (or (db-property-type/url? value)
         (and (coll? value) (every? db-property-type/url? value))) :url
-    :else nil))
+    :else :default))
 
 (defn- set-block-properties!
   [plugin block-id properties]
