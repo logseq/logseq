@@ -24,7 +24,7 @@ function InputRow(
       <Input type={localType} {...rest as any} />
 
       {isPassword && (
-        <a className={'absolute px-2 right-1 top-6 bottom-1 flex items-center opacity-50 hover:opacity-80 select-none'}
+        <a className={'absolute px-2 right-1 top-6 py-3  flex items-center opacity-50 hover:opacity-80 select-none'}
            onClick={() => {
              setShowPassword(!showPassword)
              setLocalType(showPassword ? 'password' : 'text')
