@@ -352,7 +352,14 @@
 (defn- read-and-copy-asset [repo repo-dir file assets buffer-handler]
   (let [^js file-object (:file-object file)]
     (if (assets-handler/exceed-limit-size? file-object)
-      (js/console.error (str "Asset size shouldn't be larger than 100M, path: " (:path file)))
+      (do
+        (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
+        ;; This asset will also be included in the ignored-assets count. Better to be explicit about ignoring
+        ;; these so users are aware of this
+        (notification/show!
+         (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max.")
+         :info
+         false))
       (p/let [buffer (.arrayBuffer file-object)
               bytes-array (js/Uint8Array. buffer)
               checksum (db-asset/<get-file-array-buffer-checksum buffer)
