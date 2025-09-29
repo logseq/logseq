@@ -902,7 +902,7 @@
 
 (defn ^:export upsert_property
   "schema:
-    {:type :default | :number | :date | :datetime | :checkbox | :url | :node
+    {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :json | :string
      :cardinality :many | :one
      :hide? true
      :view-context :page
@@ -940,10 +940,11 @@
 
 ;; block properties
 (defn ^:export upsert_block_property
-  [block-uuid key ^js value]
+  [block-uuid key ^js value ^js options]
   (this-as
    this
    (p/let [keyname (api-block/sanitize-user-property-name key)
+           opts (bean/->clj options)
            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
            repo (state/get-current-repo)
            block (db-async/<get-block repo block-uuid :children? false)
@@ -952,7 +953,10 @@
            value (bean/->clj value)]
      (when block
        (if db-base?
-         (api-block/db-based-save-block-properties! block {key' value} {:plugin this})
+         (let [opts' {:plugin this
+                      :schema (when-let [schema (:schema opts)]
+                                {key schema})}]
+           (api-block/db-based-save-block-properties! block {key' value} opts'))
          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn ^:export remove_block_property
