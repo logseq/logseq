@@ -19,6 +19,8 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (and (:block/tx-id entity) (nil? (:block/title entity)))
+                           [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
                            (concat [[:db/retractEntity (:db/id entity)]]
                                    (try
@@ -101,6 +103,10 @@
   (let [db @conn
         {:keys [errors datom-count entities]} (db-validate/validate-db! db)
         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
+
+    (doseq [id invalid-entity-ids]
+      (prn :debug :id id :entity (into {} (d/entity db id))))
+
     (if errors
       (do
         (fix-invalid-blocks! conn errors)

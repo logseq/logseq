@@ -5,27 +5,18 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
-            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.property :as property-handler]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.db :as ldb]
             [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.sdk.utils :as sdk-utils]
-            [promesa.core :as p]))
-
-(defn convert?to-built-in-property-name
-  [property-name]
-  (if (and (not (qualified-keyword? property-name))
-           (contains? #{:background-color} property-name))
-    (keyword :logseq.property property-name)
-    property-name))
+            [logseq.sdk.utils :as sdk-utils]))
 
 (defn sanitize-user-property-name
   [k]
@@ -45,24 +36,22 @@
              "._api"))
        (str "plugin.property")))
 
-;; FIXME: This ns should not be creating idents. This allows for ident conflicts
-;; and assumes that names directly map to idents which is incorrect and breaks for multiple
-;; cases e.g. a property that has been renamed or sanitized. Instead it should
-;; find a property's ident by looking up the property in the db by its title
-(defn get-db-ident-for-user-property-name
+(defn get-db-ident-from-property-name
   "Finds a property :db/ident for a given property name"
-  ([property-name] (get-db-ident-for-user-property-name property-name "user.property"))
-  ([property-name prefix]
-   (let [property-name' (if (string? property-name)
-                          (keyword property-name) property-name)
-         property-name' (convert?to-built-in-property-name property-name')]
-     (if (qualified-keyword? property-name') property-name'
-         (db-ident/create-db-ident-from-name prefix (name property-name) false)))))
+  [property-name plugin]
+  (let [property-name' (if (string? property-name)
+                         (keyword property-name)
+                         property-name)]
+    (if (qualified-keyword? property-name')
+      property-name'
+      ;; plugin property
+      (let [plugin-ns "plugin.property._api"]
+        (keyword plugin-ns (db-ident/normalize-ident-name-part property-name))))))
 
 (defn plugin-property-key?
   [ident]
-  (some-> ident (str)
-          (string/starts-with? ":plugin.property.")))
+  (and (qualified-keyword? ident)
+       (string/starts-with? (namespace ident) "plugin.property.")))
 
 (defn into-readable-db-properties
   [properties]
@@ -97,87 +86,91 @@
           property-value))
       property-value)))
 
-(defn infer-property-value-type-to-save!
-  [ident value]
-  (let [as-json? (coll? value)
-        value-handle
-        (fn [type multi?]
-          (let [as-json? (or (= type :string) as-json?)]
-            (if multi?
-              (-> (for [v value]
-                    (when-let [page (some-> v (str) (string/trim))]
-                      (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
-                        (if (nil? id)
-                          (-> (page-handler/<create! page {:redirect? false})
-                              (p/then #(:db/id %)))
-                          id))))
-                  (p/all)
-                  (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs true])))
-              (let [value (if as-json? (js/JSON.stringify (bean/->js value)) value)]
-                [ident value nil false]))))
-        ent (db-utils/entity ident)]
-    (if (not ent)
-      (let [type (cond
-                   (boolean? value) :checkbox
-                   (number? value) :number
-                   (coll? value) :string
-                   :else :default)
-            schema {:logseq.property/type type
-                    :db/cardinality :one}]
-        (p/chain
-         (db-property-handler/upsert-property! ident schema {})
-         (fn [] (value-handle type false))))
-      (let [value-multi? (vector? value)
-            ident (:db/ident ent)
-            ent-type (:logseq.property/type ent)
-            ent-type-str? (= ent-type :string)
-            ent-multi? (= (:db/cardinality ent) :db.cardinality/many)
-            cardinality-want-illegal-changed? (and (not value-multi?) ent-multi?)]
-        (when cardinality-want-illegal-changed?
-          (throw (js/Error. "Multiple property type can not be changed.")))
-        (p/chain
-         (db-property-handler/upsert-property! ident
-                                               {:logseq.property/type ent-type
-                                                :db/cardinality (if (and (not ent-type-str?) value-multi?) :many :one)}
-                                               {})
-         #(value-handle ent-type ent-multi?))))))
+(defn ensure-property-access-control
+  "Plugin should only upsert its own properties"
+  [property-ident property-name]
+  (when-not (plugin-property-key? property-ident)
+    ;; FIXME: ensure a plugin doesn't upsert other plugin's properties
+    (throw (ex-info "Plugins can only upsert its own properties"
+                    {:property property-name
+                     :property-ident property-ident}))))
 
-(defn save-db-based-block-properties!
-  ([block properties] (save-db-based-block-properties! block properties nil))
-  ([block properties ^js plugin]
+(defn- convert-json-and-string
+  [property-type value]
+  (cond
+    (and (= :json property-type) (not (string? value)))
+    (js/JSON.stringify (bean/->js value))
+
+    (and (= :string property-type) (not (string? value)))
+    (str value)
+
+    :else
+    value))
+
+;; TODO:
+;; 1. infer type when property doesn't exists yet
+;; 2. infer cardinality
+(defn- set-block-properties!
+  [block-id properties]
+  (ui-outliner-tx/transact!
+   {:outliner-op :set-block-properties}
+   (doseq [[property-id property-ident value schema] properties]
+     (when-not (qualified-keyword? property-ident)
+       (throw (ex-info "Invalid property id" {:property-id property-id
+                                              :property-ident property-ident})))
+     (let [property (db/entity property-ident)
+           property-type (or (:logseq.property/type property)
+                             (some-> (:type schema) keyword))
+           cardinality (or (:db/cardinality property)
+                           (if (= "many" (:cardinality schema))
+                             :db.cardinality/many
+                             :db.cardinality/one))
+           error-data {:property-id property-id
+                       :property-ident property-ident
+                       :schema schema
+                       :value value}
+           schema' {:logseq.property/type property-type
+                    :db/cardinality cardinality}
+           many? (= cardinality :db.cardinality/many)
+           value' (if (and many? (not (coll? value)))
+                    (when value [value])
+                    value)]
+
+       (when (and property schema)
+         (throw (ex-info "Use `upsert_property` to modify existing property's schema"
+                         error-data)))
+
+       (when-not property-type
+         (throw (ex-info (str "Missing `type` in schema for property: " property-id)
+                         error-data)))
+
+       (when (and (not many?) (coll? value))
+         (throw (ex-info (util/format "Property %s has cardinality `one` but passed multiple values" property-id)
+                         error-data)))
+
+       (when-not property
+         (ensure-property-access-control property-ident property-id)
+         (outliner-op/upsert-property! property-ident schema' {:property-name property-id}))
+
+       (when (and property (or many? (nil? value'))) ; delete property from this block
+         (outliner-op/remove-block-property! block-id property-ident))
+
+       (let [set-property! (fn [value]
+                             (outliner-op/set-block-property! block-id property-ident
+                                                              (convert-json-and-string property-type value)))
+             values (if (coll? value') value' [value'])]
+         (doseq [value values]
+           (set-property! value)))))))
+
+(defn db-based-save-block-properties!
+  ([block properties & {:keys [plugin schema]}]
    (when-let [block-id (and (seq properties) (:db/id block))]
-     (let [properties (update-keys properties
-                                   (fn [k]
-                                     (let [prefix (resolve-property-prefix-for-db plugin)]
-                                       (get-db-ident-for-user-property-name k prefix))))
-           *properties-page-refs (volatile! {})]
-       (-> (for [ident (keys properties)]
-             (p/let [ret (infer-property-value-type-to-save! ident (get properties ident))]
-               ret))
-           (p/all)
-           (p/chain
-            (fn [props]
-              (->> props
-                   (reduce (fn [a [k v vs multi?]]
-                             (if multi?
-                               (do (vswap! *properties-page-refs assoc k vs) a)
-                               (assoc a k v))) {})
-                   (db-property-handler/set-block-properties! block-id)))
-           ;; handle page refs
-            (fn []
-              (when (seq @*properties-page-refs)
-                (doseq [[ident refs] @*properties-page-refs]
-                  (-> (property-handler/remove-block-property! (state/get-current-repo) block-id ident)
-                      (p/then
-                       (fn []
-                         (if (seq refs)
-                           (ui-outliner-tx/transact!
-                            {:outliner-op :set-block-properties}
-                            (doseq [eid refs]
-                              (when (number? eid)
-                                (property-handler/set-block-property!
-                                 (state/get-current-repo) block-id ident eid))))
-                           (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder))))))))))))))
+     (let [properties (->> properties
+                           (map (fn [[k v]]
+                                  (let [ident (get-db-ident-from-property-name k plugin)
+                                        property-schema (get schema k)]
+                                    [k ident v property-schema]))))]
+       (set-block-properties! block-id properties)))))
 
 (defn <sync-children-blocks!
   [block]
