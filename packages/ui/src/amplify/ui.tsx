@@ -5,20 +5,34 @@ import { translate as t } from '../i18n'
 import { cn } from '@/lib/utils'
 import { FormHTMLAttributes, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircleIcon } from 'lucide-react'
+import { AlertCircleIcon, LucideEye, LucideEyeClosed } from 'lucide-react'
 import { useAuthFormState } from './core'
 
 function InputRow(
   props: InputProps & { label: string }
 ) {
   const { errors } = useAuthFormState()
-  const { label, ...reset } = props
+  const { label, type, ...rest } = props
+  const isPassword = type === 'password'
   const error = props.name && errors?.[props.name]
+  const [localType, setLocalType] = useState<string>(type || 'text')
+  const [showPassword, setShowPassword] = useState<boolean>(false)
 
   return (
-    <div className={'w-full flex flex-col gap-2 pb-1'}>
+    <div className={'relative w-full flex flex-col gap-2 pb-1'}>
       <Label htmlFor={props.id}>{label}</Label>
-      <Input {...reset as any} />
+      <Input type={localType} {...rest as any} />
+
+      {isPassword && (
+        <a className={'absolute px-2 right-1 top-6 bottom-1 flex items-center opacity-50 hover:opacity-80 select-none'}
+           onClick={() => {
+             setShowPassword(!showPassword)
+             setLocalType(showPassword ? 'password' : 'text')
+           }}
+        >
+          {showPassword ? <LucideEye size={14}/> : <LucideEyeClosed size={14}/>}
+        </a>
+      )}
 
       {error &&
         <div className={'pt-1'}>
