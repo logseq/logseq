@@ -1,12 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { Input, InputProps } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { translate as t } from '../i18n'
 import { cn } from '@/lib/utils'
 import { FormHTMLAttributes, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, LucideEye, LucideEyeClosed } from 'lucide-react'
-import { useAuthFormState } from './core'
+import { t, useAuthFormState } from './core'
 
 function InputRow(
   props: InputProps & { label: string }
@@ -78,23 +77,23 @@ export function LoginForm() {
       <InputRow id="password" type="password" name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
-        <Button type="submit" className={'w-full'}>{t('submit')}</Button>
+        <Button type="submit" className={'w-full'}>{t('Sign in')}</Button>
         <p className={'pt-4 text-center'}>
 
           <span className={'text-sm'}>
-            <span className={'opacity-50'}>Don't have an account? </span>
+            <span className={'opacity-50'}>{t('Don\'t have an account?')} </span>
             <a
               onClick={() => setCurrentTab('signup')}
               className={'underline opacity-50 hover:opacity-80'}
-            >Sign up</a>
+            >{t('Sign up')}</a>
             <br/>
-            <span className={'opacity-50'}>or &nbsp;</span>
+            <span className={'opacity-50'}>{t('or')} &nbsp;</span>
           </span>
 
           <a onClick={() => {
             setCurrentTab('reset')
           }} className={'text-sm opacity-50 hover:opacity-80 underline'}>
-            Forgot your password?
+            {t('Forgot your password?')}
           </a>
         </p>
       </div>
@@ -127,7 +126,7 @@ export function SignupForm() {
                   label={t('Confirm Password')}/>
         <div className={'-mt-1'}>
           <span className={'text-sm opacity-50'}>
-            {t('By signing up, you agree to our ')}
+            {t('By signing up, you agree to our')}&nbsp;
             <a href="https://logseq.com/terms"
                target={'_blank'}
                className={'underline hover:opacity-100'}>{t('Terms of Service')}</a>
@@ -141,10 +140,10 @@ export function SignupForm() {
           <Button type="submit" className={'w-full'}>{t('Create account')}</Button>
         </div>
 
-        <p className={'pt-2 text-center'}>
+        <p className={'pt-1 text-center'}>
           <a onClick={() => setCurrentTab('login')}
              className={'text-sm opacity-50 hover:opacity-80 underline'}>
-            Back to login
+            {t('Back to login')}
           </a>
         </p>
       </FormGroup>
@@ -179,7 +178,7 @@ export function ResetPasswordForm() {
                     placeholder={t('New Password')}
                     label={t('New Password')}/>
 
-          <InputRow label={'Confirm Password'}
+          <InputRow label={t('Confirm Password')}
                     id="confirm_password" type="password" name="confirm_password" required={true}
                     placeholder={t('Confirm Password')}/>
 
@@ -191,7 +190,7 @@ export function ResetPasswordForm() {
 
             <p className={'pt-4 text-center'}>
               <a onClick={() => setIsSentCode(false)}
-                 className={'text-sm opacity-50 hover:opacity-80 hover:underline'}>
+                 className={'text-sm opacity-50 hover:opacity-80 underline'}>
                 {t('Resend code')}
               </a>
             </p>
@@ -209,10 +208,10 @@ export function ResetPasswordForm() {
                     variant={'secondary'}
             >{t('Send code')}</Button>
 
-            <p className={'pt-4 text-center'}>
+            <p className={'pt-3 text-center'}>
               <a onClick={() => setCurrentTab('login')}
                  className={'text-sm opacity-50 hover:opacity-80 underline'}>
-                Back to login
+                {t('Back to login')}
               </a>
             </p>
           </div>

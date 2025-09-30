@@ -2,6 +2,7 @@ import '../src/index.css'
 import { setupGlobals } from '../src/ui'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
+import { init } from '../src/amplify/core'
 
 // @ts-ignore
 import { Button } from '@/components/ui/button'
@@ -11,6 +12,7 @@ import { AuthFormRootContext } from '../src/amplify/core'
 
 // bootstrap
 setupGlobals()
+init()
 
 function App() {
   const [errors, setErrors] = React.useState<string | null>(null)
