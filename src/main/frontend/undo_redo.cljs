@@ -253,6 +253,7 @@
 
 (defn- undo-redo-aux
   [repo undo?]
+  (prn :undo-op (not-empty ((if undo? pop-undo-op pop-redo-op) repo)))
   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo))]
     (let [conn (db/get-db repo false)]
       (cond
@@ -331,6 +332,10 @@
 (defn gen-undo-ops!
   [repo {:keys [tx-data tx-meta db-after db-before]}]
   (let [{:keys [outliner-op]} tx-meta]
+    #_(prn :gen-undo
+         (= (:client-id tx-meta) (:client-id @state/state))
+         outliner-op
+         tx-meta)
     (when (and
            (= (:client-id tx-meta) (:client-id @state/state))
            outliner-op
@@ -356,6 +361,7 @@
                        :retracted-ids retracted-ids}]]
                     (remove nil?)
                     vec)]
+        ;; (prn :gen-undo op)
         (push-undo-op repo op)))))
 
 (defn listen-db-changes!

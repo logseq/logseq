@@ -6,7 +6,9 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [logseq.outliner.transaction :as outliner-tx]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [logseq.db.sqlite.export :as sqlite-export]
+            [promesa.core :as p]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -94,6 +96,11 @@
      [:op :keyword]
      [:args [:tuple ::property-id ::values]]]]
 
+   [:batch-import-edn
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::import-edn ::option]]]]
+
    ;; transact
    [:transact
     [:catn
@@ -128,6 +135,7 @@
                        ::value :any
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
+                       ::import-edn map?
                        ::blocks [:sequential ::block]
                        ::ids [:sequential ::id]
                        ::uuid uuid?
@@ -143,6 +151,21 @@
 (defn register-op-handlers!
   [handlers]
   (reset! *op-handlers handlers))
+
+(defn- import-edn-data
+  [conn export-map import-options]
+  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs} (sqlite-export/build-import export-map @conn import-options)]
+    (cljs.pprint/pprint _txs)
+    (let [tx-meta {::sqlite-export/imported-data? true
+                   :import-db? true}]
+      (ldb/transact! conn init-tx tx-meta)
+      ;; TODO: Add other ldb/transact!
+      #_(p/do
+          (ldb/transact! conn init-tx tx-meta)
+          (when (seq block-props-tx)
+            (ldb/transact! conn block-props-tx tx-meta))
+          (when (seq misc-tx)
+            (ldb/transact! conn misc-tx tx-meta))))))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
@@ -232,6 +255,9 @@
 
          :add-existing-values-to-closed-values
          (apply outliner-property/add-existing-values-to-closed-values! conn args)
+
+         :batch-import-edn
+         (apply import-edn-data conn args)
 
          :transact
          (apply ldb/transact! conn args)
