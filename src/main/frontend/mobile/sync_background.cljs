@@ -65,9 +65,22 @@
   []
   (start-sync!))
 
+(defn- install-global-trigger!
+  []
+  (when (and (exists? js/window)
+             (nil? (.-logseqMobile ^js js/window)))
+    (set! (.-logseqMobile ^js js/window) #js {}))
+  (when-let [mobile (.-logseqMobile ^js js/window)]
+    (when (nil? (.-backgroundSync mobile))
+      (set! (.-backgroundSync mobile) #js {}))
+    (aset mobile "backgroundSync" "trigger"
+          (fn []
+            (trigger!)))))
+
 (defn init!
   []
   (when (and (util/mobile?) (not (util/web-platform?)))
+    (install-global-trigger!)
     (when-let [running? (storage/get background-sync-key)]
       (reset! *background-task-running? (boolean running?)))
     (c.m/run-background-task
