@@ -118,6 +118,11 @@
   (op-transact!
    [:add-existing-values-to-closed-values [property-id values]]))
 
+(defn batch-import-edn!
+  [import-edn options]
+  (op-transact!
+   [:batch-import-edn [import-edn options]]))
+
 (defn transact!
   [tx-data tx-meta]
   (op-transact!
