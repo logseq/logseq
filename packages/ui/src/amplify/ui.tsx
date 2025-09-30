@@ -6,6 +6,7 @@ import { FormHTMLAttributes, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, LucideEye, LucideEyeClosed } from 'lucide-react'
 import { t, useAuthFormState } from './core'
+import * as Auth from 'aws-amplify/auth'
 
 function InputRow(
   props: InputProps & { label: string }
@@ -60,24 +61,33 @@ function FormGroup(props: FormHTMLAttributes<any>) {
 
 export function LoginForm() {
   const { setErrors, setCurrentTab } = useAuthFormState()
+  const [loading, setLoading] = useState<boolean>(false)
 
   return (
-    <FormGroup onSubmit={(e) => {
+    <FormGroup onSubmit={async (e) => {
       e.preventDefault()
 
       // get submit form input data
       const formData = new FormData(e.target as HTMLFormElement)
       const data = Object.fromEntries(formData.entries())
-      console.log(data)
 
-      // TODO: error
-      setErrors({ password: 'Invalid email or password' })
+      // sign in logic here
+      try {
+        setLoading(true)
+        await new Promise(resolve => { setTimeout(resolve, 500) })
+        const ret = await Auth.signIn({ username: data.email as string, password: data.password as string })
+        console.log(ret)
+      } catch (e) {
+        setErrors({ password: (e as Error).message })
+      } finally {
+        setLoading(false)
+      }
     }}>
       <InputRow id="email" type="email" name="email" label={t('Email')}/>
       <InputRow id="password" type="password" name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
-        <Button type="submit" className={'w-full'}>{t('Sign in')}</Button>
+        <Button type="submit" disabled={loading} className={'w-full'}>{t('Sign in')}</Button>
         <p className={'pt-4 text-center'}>
 
           <span className={'text-sm'}>
@@ -102,17 +112,39 @@ export function LoginForm() {
 }
 
 export function SignupForm() {
-  const { setCurrentTab } = useAuthFormState()
+  const { setCurrentTab, setErrors } = useAuthFormState()
+  const [loading, setLoading] = useState<boolean>(false)
 
   return (
     <>
-      <FormGroup onSubmit={(e) => {
+      <FormGroup onSubmit={async (e) => {
         e.preventDefault()
 
         // get submit form input data
         const formData = new FormData(e.target as HTMLFormElement)
         const data = Object.fromEntries(formData.entries())
         console.log(data)
+
+        try {
+          setLoading(true)
+          await new Promise(resolve => { setTimeout(resolve, 500) })
+
+          const ret = await Auth.signUp({
+            username: data.username as string,
+            password: data.password as string,
+            options: {
+              userAttributes: {
+                email: data.email as string,
+              }
+            }
+          })
+
+          console.log(ret)
+        } catch (e) {
+          setErrors({ email: (e as Error).message })
+        } finally {
+          setLoading(false)
+        }
       }}>
         <InputRow id="email" type="email" name="email" autoFocus={true} required={true} label={t('Email')}/>
         <InputRow id="username" type="text" name="username" required={true} label={t('Username')}/>
@@ -137,7 +169,7 @@ export function SignupForm() {
           </span>
         </div>
         <div className={'w-full'}>
-          <Button type="submit" className={'w-full'}>{t('Create account')}</Button>
+          <Button type="submit" disabled={loading} className={'w-full'}>{t('Create account')}</Button>
         </div>
 
         <p className={'pt-1 text-center'}>
