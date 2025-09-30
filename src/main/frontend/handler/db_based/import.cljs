@@ -15,7 +15,9 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.modules.outliner.op :as outliner-op]))
 
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
@@ -113,28 +115,34 @@
                   (notification/show! "No block found" :warning)))]
     (if (= ::invalid-import export-map)
       (notification/show! "The submitted EDN data is invalid! Please fix and try again." :warning)
-      (let [{:keys [init-tx block-props-tx misc-tx error] :as txs}
-            (safe-build-edn-import export-map (when block {:current-block block}))]
-        (pprint/pprint txs)
-        (if error
-          (notification/show! error :error)
+      (p/do!
+       ;; TODO: Error handling?
+       (ui-outliner-tx/transact!
+        {:outliner-op :batch-import-edn}
+        (outliner-op/batch-import-edn! export-map (when block {:current-block block})))
+       (shui/dialog-close-all!))
+      #_(let [{:keys [init-tx block-props-tx misc-tx error] :as txs}
+              (safe-build-edn-import export-map (when block {:current-block block}))]
+          (pprint/pprint txs)
+          (if error
+            (notification/show! error :error)
           ;; TODO: When not import-block, use metadata that supports undo
-          (let [tx-meta (if import-block? {:outliner-op :save-block} {::sqlite-export/imported-data? true})
-                repo (state/get-current-repo)]
-            (-> (p/do
-                  (db/transact! repo init-tx tx-meta)
-                  (when (seq block-props-tx)
-                    (db/transact! repo block-props-tx tx-meta))
-                  (when (seq misc-tx)
-                    (db/transact! repo misc-tx tx-meta))
-                  (when-not import-block?
-                    (ui-handler/re-render-root!)
-                    (notification/show! "Import successful!" :success)))
-                (p/catch (fn [e]
-                           (js/console.error "Import EDN error: " e)
-                           (notification/show! "An unexpected error occurred during import. See the javascript console for details." :error))))))
+            (let [tx-meta (if import-block? {:outliner-op :save-block} {::sqlite-export/imported-data? true})
+                  repo (state/get-current-repo)]
+              (-> (p/do
+                    (db/transact! repo init-tx tx-meta)
+                    (when (seq block-props-tx)
+                      (db/transact! repo block-props-tx tx-meta))
+                    (when (seq misc-tx)
+                      (db/transact! repo misc-tx tx-meta))
+                    (when-not import-block?
+                      (ui-handler/re-render-root!)
+                      (notification/show! "Import successful!" :success)))
+                  (p/catch (fn [e]
+                             (js/console.error "Import EDN error: " e)
+                             (notification/show! "An unexpected error occurred during import. See the javascript console for details." :error))))))
         ;; Also close cmd-k
-        (shui/dialog-close-all!)))))
+          (shui/dialog-close-all!)))))
 
 (defn ^:export import-edn-data-dialog
   "Displays dialog which allows users to paste and import sqlite.build EDN Data"
