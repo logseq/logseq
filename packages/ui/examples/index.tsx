@@ -2,12 +2,12 @@ import '../src/index.css'
 import { setupGlobals } from '../src/ui'
 import * as React from 'react'
 import * as ReactDOM from 'react-dom'
-import { init } from '../src/amplify/core'
+import { init, t } from '../src/amplify/core'
 
 // @ts-ignore
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../@/components/ui/card'
-import { LoginForm, ResetPasswordForm, SignupForm } from '../src/amplify/ui'
+import { LoginForm, ResetPasswordForm, SignupForm, ConfirmWithCodeForm } from '../src/amplify/ui'
 import { AuthFormRootContext } from '../src/amplify/core'
 
 // bootstrap
@@ -16,7 +16,7 @@ init()
 
 function App() {
   const [errors, setErrors] = React.useState<string | null>(null)
-  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup'>('login')
+  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup' | 'confirm-code' | any>('confirm-code')
   const onSessionCallback = React.useCallback((session: any) => {
     console.log('==>>session:', session)
   }, [])
@@ -26,8 +26,11 @@ function App() {
   }, [currentTab])
 
   let content = null
+  // support passing object with type field
+  let _currentTab = currentTab?.type ? currentTab.type : currentTab
+  let _currentTabProps = currentTab?.props || {}
 
-  switch (currentTab) {
+  switch (_currentTab) {
     case 'login':
       content = <LoginForm/>
       break
@@ -36,6 +39,9 @@ function App() {
       break
     case 'signup':
       content = <SignupForm/>
+      break
+    case 'confirm-code':
+      content = <ConfirmWithCodeForm {..._currentTabProps}/>
       break
   }
 
@@ -47,7 +53,7 @@ function App() {
       }}>
         <Card className={'sm:w-96'}>
           <CardHeader>
-            <CardTitle className={'capitalize'}>{currentTab}</CardTitle>
+            <CardTitle className={'capitalize'}>{t(currentTab)?.replace('-', ' ')}</CardTitle>
           </CardHeader>
           <CardContent>
             {content}

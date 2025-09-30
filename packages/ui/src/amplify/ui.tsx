@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { FormHTMLAttributes, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircleIcon, LucideEye, LucideEyeClosed } from 'lucide-react'
+import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed } from 'lucide-react'
 import { t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,7 +37,7 @@ function InputRow(
   const [showPassword, setShowPassword] = useState<boolean>(false)
 
   return (
-    <div className={'relative w-full flex flex-col gap-2 pb-1'}>
+    <div className={'relative w-full flex flex-col gap-3 pb-1'}>
       <Label htmlFor={props.id}>{label}</Label>
       <Input type={localType} {...rest as any} />
 
@@ -117,6 +117,7 @@ export function LoginForm() {
 
   return (
     <FormGroup onSubmit={async (e) => {
+      setErrors(null)
       e.preventDefault()
 
       // get submit form input data
@@ -132,7 +133,7 @@ export function LoginForm() {
         if (!nextStep) throw new Error(JSON.stringify(ret))
         loadSession()
       } catch (e) {
-        setErrors({ password: { message: (e as Error).message, title: 'Bad Response.' } })
+        setErrors({ password: { message: (e as Error).message, title: t('Bad Response.') } })
         console.error(e)
       } finally {
         setLoading(false)
@@ -142,7 +143,10 @@ export function LoginForm() {
       <InputRow id="password" type="password" name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
-        <Button type="submit" disabled={loading} className={'w-full'}>{t('Sign in')}</Button>
+        <Button type="submit" disabled={loading} className={'w-full'}>
+          {loading && <Loader2Icon className="animate-spin mr-1" size={16}/>}
+          {t('Sign in')}
+        </Button>
         <p className={'pt-4 text-center'}>
 
           <span className={'text-sm'}>
@@ -173,12 +177,32 @@ export function SignupForm() {
   return (
     <>
       <FormGroup onSubmit={async (e) => {
+        setErrors(null)
         e.preventDefault()
 
         // get submit form input data
         const formData = new FormData(e.target as HTMLFormElement)
-        const data = Object.fromEntries(formData.entries())
-        console.log(data)
+        const data = Object.fromEntries(formData.entries()) as any
+
+        if (data.password.length < 8) {
+          setErrors({
+            password: {
+              message: t('Password must be at least 8 characters.'),
+              title: t('Invalid Password')
+            }
+          })
+          return
+        }
+
+        if (data.password !== data.confirm_password) {
+          setErrors({
+            confirm_password: {
+              message: t('Passwords do not match.'),
+              title: t('Invalid Password')
+            }
+          })
+          return
+        }
 
         try {
           setLoading(true)
@@ -195,8 +219,14 @@ export function SignupForm() {
           })
 
           console.log(ret)
-        } catch (e) {
-          setErrors({ email: (e as Error).message })
+        } catch (e: any) {
+          console.error(e)
+          const error = { title: t('Bad Response.'), message: (e as Error).message }
+          let k = 'confirm_password'
+          if (e.name === 'UsernameExistsException') {
+            k = 'username'
+          }
+          setErrors({ [k]: error })
         } finally {
           setLoading(false)
         }
@@ -224,7 +254,10 @@ export function SignupForm() {
           </span>
         </div>
         <div className={'w-full'}>
-          <Button type="submit" disabled={loading} className={'w-full'}>{t('Create account')}</Button>
+          <Button type="submit" disabled={loading} className={'w-full'}>
+            {loading && <Loader2Icon className="animate-spin mr-1" size={16}/>}
+            {t('Create account')}
+          </Button>
         </div>
 
         <p className={'pt-1 text-center'}>
@@ -304,6 +337,47 @@ export function ResetPasswordForm() {
           </div>
         </>
       )}
+    </FormGroup>
+  )
+}
+
+export function ConfirmWithCodeForm() {
+  const { setCurrentTab } = useAuthFormState()
+
+  return (
+    <FormGroup
+      autoComplete={'off'}
+      onSubmit={(e) => {
+        e.preventDefault()
+
+        // get submit form input data
+        const formData = new FormData(e.target as HTMLFormElement)
+        const data = Object.fromEntries(formData.entries())
+        console.log(data)
+      }}>
+
+      <p className={'pb-2 opacity-60'}>
+        {t('CODE_ON_THE_WAY_TIP')}
+      </p>
+
+      <InputRow id="code" type="number" name="code" required={true}
+                placeholder={'123456'}
+                autoComplete={'off'}
+                autoFocus={true}
+                label={t('Enter the code sent to your email')}/>
+
+      <div className={'w-full'}>
+        <Button type="submit"
+                className={'w-full'}
+        >{t('Confirm')}</Button>
+
+        <p className={'pt-4 text-center'}>
+          <a onClick={() => setCurrentTab('login')}
+             className={'text-sm opacity-50 hover:opacity-80 underline'}>
+            {t('Back to login')}
+          </a>
+        </p>
+      </div>
     </FormGroup>
   )
 }

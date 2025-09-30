@@ -1,9 +1,14 @@
 export default {
+  'en': {
+    'CODE_ON_THE_WAY_TIP': 'Your code is on the way. To log in, enter the code we sent you. It may take a minute to arrive.',
+  },
   'zh-CN': {
+    'CODE_ON_THE_WAY_TIP': '验证码已发送。请输入我们发送给您的验证码以登录。可能需要一分钟才能收到。',
     'Sign in to your account': '登录到您的账户',
     'Email': '电子邮箱',
     'Password': '密码',
     'Sign in': '登录',
+    'Confirm': '确认',
     'Don\'t have an account?': '还没有账户？',
     'Sign up': '注册',
     'or': '或 ',
@@ -24,10 +29,12 @@ export default {
     'Enter your email': '请输入您的电子邮箱'
   },
   'zh-Han': {
+    'CODE_ON_THE_WAY_TIP': '驗證碼已發送。請輸入我們發送給您的驗證碼以登入。可能需要一分鐘才能收到。',
     'Sign in to your account': '登入到您的帳戶',
     'Email': '電子郵箱',
     'Password': '密碼',
     'Sign in': '登入',
+    'Confirm': '確認',
     'Don\'t have an account?': '還沒有帳戶？',
     'Sign up': '註冊',
     'or': '或 ',
@@ -48,10 +55,12 @@ export default {
     'Enter your email': '請輸入您的電子郵箱'
   },
   'ja': {
+    'CODE_ON_THE_WAY_TIP': 'コードが送信されました。ログインするには、送信したコードを入力してください。届くまでに1分ほどかかる場合があります。',
     'Sign in to your account': 'アカウントにサインイン',
     'Email': 'メール',
     'Password': 'パスワード',
     'Sign in': 'サインイン',
+    'Confirm': '確認',
     'Don\'t have an account?': 'アカウントをお持ちでないですか？',
     'Sign up': 'サインアップ',
     'or': 'または ',
