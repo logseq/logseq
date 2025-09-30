@@ -17,6 +17,9 @@ init()
 function App() {
   const [errors, setErrors] = React.useState<string | null>(null)
   const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup'>('login')
+  const onSessionCallback = React.useCallback((session: any) => {
+    console.log('==>>session:', session)
+  }, [])
 
   React.useEffect(() => {
     setErrors(null)
@@ -38,7 +41,10 @@ function App() {
 
   return (
     <main className={'h-screen flex flex-col justify-center items-center gap-4'}>
-      <AuthFormRootContext.Provider value={{ errors, setErrors, setCurrentTab }}>
+      <AuthFormRootContext.Provider value={{
+        errors, setErrors, setCurrentTab,
+        onSessionCallback
+      }}>
         <Card className={'sm:w-96'}>
           <CardHeader>
             <CardTitle className={'capitalize'}>{currentTab}</CardTitle>

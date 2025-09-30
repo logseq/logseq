@@ -2,11 +2,29 @@ import { Button } from '@/components/ui/button'
 import { Input, InputProps } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
-import { FormHTMLAttributes, useState } from 'react'
+import { FormHTMLAttributes, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, LucideEye, LucideEyeClosed } from 'lucide-react'
 import { t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
+import { Skeleton } from '@/components/ui/skeleton'
+
+function ErrorTip({ error }: { error: string | { title?: string, message: string | any } }) {
+  if (!error) return null
+  if (typeof error === 'string') {
+    error = { message: error }
+  }
+
+  return (
+    <Alert variant="destructive">
+      <AlertCircleIcon size={18}/>
+      {error.title && <AlertTitle>{error.title}</AlertTitle>}
+      <AlertDescription>
+        <p>{typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}</p>
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 function InputRow(
   props: InputProps & { label: string }
@@ -36,13 +54,7 @@ function InputRow(
 
       {error &&
         <div className={'pt-1'}>
-          <Alert variant="destructive">
-            <AlertCircleIcon size={20}/>
-            <AlertTitle>Input Error.</AlertTitle>
-            <AlertDescription>
-              <p>{JSON.stringify(error)}</p>
-            </AlertDescription>
-          </Alert>
+          <ErrorTip error={error}/>
         </div>
       }
     </div>
@@ -60,8 +72,48 @@ function FormGroup(props: FormHTMLAttributes<any>) {
 }
 
 export function LoginForm() {
-  const { setErrors, setCurrentTab } = useAuthFormState()
+  const { setErrors, setCurrentTab, onSessionCallback } = useAuthFormState()
   const [loading, setLoading] = useState<boolean>(false)
+  const [sessionUser, setSessionUser] = useState<any>(null)
+  const loadSession = async () => {
+    try {
+      const ret = await Auth.fetchAuthSession()
+      console.log(ret)
+      if (!ret?.userSub) throw new Error('no session')
+      const user = await Auth.getCurrentUser()
+      onSessionCallback?.({ ...ret, user })
+      setSessionUser(user)
+    } catch (e) {
+      console.warn('no current session:', e)
+      setSessionUser(false)
+    }
+  }
+
+  useEffect(() => {
+    // check current auth session
+    loadSession()
+  }, [])
+
+  if (sessionUser === null) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-4 w-[250px]"/>
+        <Skeleton className="h-4 w-[200px]"/>
+      </div>)
+  }
+
+  if (sessionUser?.username) {
+    return (
+      <div className={'w-full text-center'}>
+        <p className={'mb-4'}>{t('You are already logged in as')} <strong>{sessionUser.username}</strong></p>
+        <Button variant={'secondary'} className={'w-full'} onClick={async () => {
+          await Auth.signOut()
+          setSessionUser(false)
+          setErrors(null)
+        }}>{t('Sign out')}</Button>
+      </div>
+    )
+  }
 
   return (
     <FormGroup onSubmit={async (e) => {
@@ -76,9 +128,12 @@ export function LoginForm() {
         setLoading(true)
         await new Promise(resolve => { setTimeout(resolve, 500) })
         const ret = await Auth.signIn({ username: data.email as string, password: data.password as string })
-        console.log(ret)
+        const nextStep = ret?.nextStep
+        if (!nextStep) throw new Error(JSON.stringify(ret))
+        loadSession()
       } catch (e) {
-        setErrors({ password: (e as Error).message })
+        setErrors({ password: { message: (e as Error).message, title: 'Bad Response.' } })
+        console.error(e)
       } finally {
         setLoading(false)
       }
