@@ -127,11 +127,26 @@ export function LoginForm() {
       // sign in logic here
       try {
         setLoading(true)
-        await new Promise(resolve => { setTimeout(resolve, 500) })
-        const ret = await Auth.signIn({ username: data.email as string, password: data.password as string })
-        const nextStep = ret?.nextStep
+        const username = (data.email as string)?.trim()
+        const ret = await Auth.signIn({ username, password: data.password as string })
+        const nextStep = ret?.nextStep?.signInStep
         if (!nextStep) throw new Error(JSON.stringify(ret))
-        loadSession()
+        switch (nextStep) {
+          case 'CONFIRM_SIGN_UP':
+          case 'CONFIRM_SIGN_IN_WITH_EMAIL_CODE':
+          case 'CONFIRM_SIGN_IN_WITH_TOTP_CODE':
+            setCurrentTab({ type: 'confirm-code', props: { user: { ...ret, username }, nextStep } })
+            return
+          case 'RESET_PASSWORD':
+            setCurrentTab({ type: 'reset', props: { user: { ...ret, username }, nextStep } })
+            return
+          case 'DONE':
+            // signed in
+            loadSession()
+            return
+          default:
+            throw new Error('Unsupported sign-in step: ' + nextStep)
+        }
       } catch (e) {
         setErrors({ password: { message: (e as Error).message, title: t('Bad Response.') } })
         console.error(e)
@@ -139,7 +154,7 @@ export function LoginForm() {
         setLoading(false)
       }
     }}>
-      <InputRow id="email" type="email" name="email" label={t('Email')}/>
+      <InputRow id="email" type="text" name="email" label={t('Email')}/>
       <InputRow id="password" type="password" name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
@@ -341,25 +356,79 @@ export function ResetPasswordForm() {
   )
 }
 
-export function ConfirmWithCodeForm() {
-  const { setCurrentTab } = useAuthFormState()
+export function ConfirmWithCodeForm(
+  props: { user: any, nextStep: any }
+) {
+  const { setCurrentTab, setErrors } = useAuthFormState()
+  const [loading, setLoading] = useState<boolean>(false)
+  const isFromSignIn = props.user?.hasOwnProperty('isSignedIn')
 
   return (
     <FormGroup
       autoComplete={'off'}
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault()
 
         // get submit form input data
         const formData = new FormData(e.target as HTMLFormElement)
         const data = Object.fromEntries(formData.entries())
-        console.log(data)
+
+        try {
+          setLoading(true)
+          if (props.nextStep === 'CONFIRM_SIGN_UP') {
+            const ret = await Auth.confirmSignUp({
+              username: props.user?.username,
+              confirmationCode: data.code as string,
+            })
+
+            console.log('===>>', ret)
+          } else {
+            const ret = await Auth.confirmSignIn({
+              challengeResponse: data.code as string,
+            })
+
+            console.log('===>>', ret)
+          }
+        } catch (e) {
+          setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+          console.error(e)
+        } finally {
+          setLoading(false)
+        }
       }}>
 
       <p className={'pb-2 opacity-60'}>
-        {t('CODE_ON_THE_WAY_TIP')}
+        {isFromSignIn && t('CODE_ON_THE_WAY_TIP')}
       </p>
+      <pre>
+        {JSON.stringify(props.user, null, 2)}
+        {JSON.stringify(props.nextStep, null, 2)}
+      </pre>
 
+      <span className={'w-full flex justify-end relative h-0 z-10'}>
+        <a className={'text-sm opacity-50 hover:opacity-80 active:opacity-50 select-none underline absolute -bottom-8'}
+           onClick={async (e) => {
+             e.stopPropagation()
+             // resend code
+             try {
+               setLoading(true)
+               if (props.nextStep === 'CONFIRM_SIGN_UP') {
+                 const ret = await Auth.resendSignUpCode({
+                   username: props.user?.username
+                 })
+
+                 console.log('===>>', ret)
+               } else {
+                 // await Auth.resendSignInCode(props.user)
+               }
+             } catch (e) {
+               setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+               console.error(e)
+             } finally {
+               setLoading(false)
+             }
+           }}>{t('Resend code')}</a>
+      </span>
       <InputRow id="code" type="number" name="code" required={true}
                 placeholder={'123456'}
                 autoComplete={'off'}
@@ -369,7 +438,11 @@ export function ConfirmWithCodeForm() {
       <div className={'w-full'}>
         <Button type="submit"
                 className={'w-full'}
-        >{t('Confirm')}</Button>
+                disabled={loading}
+        >
+          {loading && <Loader2Icon className="animate-spin mr-1" size={16}/>}
+          {t('Confirm')}
+        </Button>
 
         <p className={'pt-4 text-center'}>
           <a onClick={() => setCurrentTab('login')}
