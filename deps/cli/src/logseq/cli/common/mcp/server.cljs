@@ -131,7 +131,11 @@
   [call-api-fn args]
   (call-api-fn "logseq.app.search" [(aget args "searchTerm") #js {:enable-snippet? false}]))
 
-(def api-tools
+(defn api-upsert-nodes
+  [call-api-fn args]
+  (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations")] {:write-tool? true}))
+
+(def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
   {:listPages
    {:fn api-list-pages
@@ -142,21 +146,65 @@
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks"
                  :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
-   :addToPage
-   {:fn api-add-to-page
-    :config #js {:title "Add to Page"
-                 :description "Add a block to a page"
-                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))
-                                   :content (-> (z/string) (.describe "Block content"))
-                                   :force (-> (z/boolean)
-                                              (z/optional)
-                                              (.describe "Force given page to be created"))}}}
-   :updateBlock
-   {:fn api-update-block
-    :config #js {:title "Update Block"
-                 :description "Update block with new content"
-                 :inputSchema #js {:blockUUID (z/string)
-                                   :content (-> (z/string) (.describe "Block content"))}}}
+  ;;  :addToPage
+  ;;  {:fn api-add-to-page
+  ;;   :config #js {:title "Add to Page"
+  ;;                :description "Add a block to a page"
+  ;;                :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))
+  ;;                                  :content (-> (z/string) (.describe "Block content"))
+  ;;                                  :force (-> (z/boolean)
+  ;;                                             (z/optional)
+  ;;                                             (.describe "Force given page to be created"))}}}
+  ;;  :updateBlock
+  ;;  {:fn api-update-block
+  ;;   :config #js {:title "Update Block"
+  ;;                :description "Update block with new content"
+  ;;                :inputSchema #js {:blockUUID (z/string)
+  ;;                                  :content (-> (z/string) (.describe "Block content"))}}}
+   :upsertNodes
+   {:fn api-upsert-nodes
+    :config
+    #js {:title "Upsert Nodes"
+         :description
+         "Takes an object with field :operations, which is a vector of operations.
+          Each operation creates or updates a page, block, tag or property. Each operation is a map
+          that must have :operation, :entityType and :data keys. More about keys in an operation map:
+            * :operation  - Either :add or :update
+            * :entityType - What type of node, e.g. :block, :page, :tag or :property
+            * :id - For :update, this _must_ be a string uuid. For :add, use a temporary unique string if the new page is referenced by later operations e.g. add blocks
+            * :data - A map of fields to set or update. This map can have the following keys:
+              * :title - A page/tag/property's name or a block's content
+              * :page-id - A page's string uuid. Required when entityType is :block.
+              * :property-type - A property's type
+              * :property-cardinality - A property's cardinality. Must be :one or :many
+              * :property-classes - A property's list of allowed tags
+              * :class-extends - Parent of a tag
+              * :class-properties - A tag's list of properties
+
+         Example input:
+         {:operations
+          [{:operation :add
+            :entityType :block
+            :id nil
+            :data {:page-id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
+                   :title \"New block text\"}}
+           {:operation :update
+            :entity :page
+            :id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
+            :data {:title \"Revised page title\"}}]}
+
+         This input will add a new block to page with id '119268a6-704f-4e9e-8c34-36dfc6133729' and update the title of a page with uuid '119268a6-704f-4e9e-8c34-36dfc6133729'.
+
+         Some additional advice for building operations:
+         * When building a block update operation, use the 'page' key of the searchBlocks tool to fill in the value of :page-id under :data"
+         :inputSchema
+         #js {:operations
+              (z/array
+               (z/object
+                #js {:operation   (z/enum #js ["add" "update"])
+                     :entityType  (z/enum #js ["block" "page" "tag" "property"])
+                     :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
+                     :data        (-> (z/object #js {}) (.passthrough))}))}}}
    :searchBlocks
    {:fn api-search-blocks
     :config #js {:title "Search Blocks"

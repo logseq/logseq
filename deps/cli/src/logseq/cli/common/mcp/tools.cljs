@@ -1,10 +1,13 @@
 (ns logseq.cli.common.mcp.tools
   "MCP tool related fns shared between CLI and frontend"
   (:require [datascript.core :as d]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
-            [logseq.outliner.tree :as otree]))
+            [logseq.db.sqlite.export :as sqlite-export]
+            [logseq.outliner.tree :as otree]
+            [promesa.core :as p]))
 
 (defn list-properties
   "Main fn for ListProperties tool"
@@ -84,3 +87,57 @@
                  ;; exceeding max payload size
                  (select-keys [:block/uuid :block/title :block/created-at :block/updated-at])
                  (update :block/uuid str)))))
+
+(defn- import-edn-data
+  [conn export-map]
+  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
+        (sqlite-export/build-import export-map @conn {})]
+    ;; (cljs.pprint/pprint _txs)
+    (when error
+      (throw (ex-info (str "Error while building import data: " error) {})))
+    (let [tx-meta {::sqlite-export/imported-data? true
+                   :import-db? true}]
+      (p/do!
+       (ldb/transact! conn init-tx tx-meta)
+       (when (seq block-props-tx)
+         (ldb/transact! conn block-props-tx tx-meta))
+       (when (seq misc-tx)
+         (ldb/transact! conn misc-tx tx-meta))))))
+
+(defn upsert-nodes
+  [conn operations]
+  (prn :cli-ops operations)
+  ;; TODO: Validate operations
+  (let [blocks-by-page
+        (group-by #(get-in % [:data :page-id])
+                  (filter #(= "block" (:entityType %)) operations))
+        new-pages (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))) operations)
+        pages-and-blocks
+        (into (mapv (fn [op]
+                      (cond-> {:page {:block/title (get-in op [:data :title])}}
+                        (some-> (:id op) (get blocks-by-page))
+                        (assoc :blocks
+                               (mapv #(hash-map :block/title (get-in % [:data :title]))
+                                     (get blocks-by-page (:id op))))))
+                    new-pages)
+              ;; existing pages
+              (map (fn [[page-id ops]]
+                     (if (some-> page-id common-util/uuid-string?)
+                       {:page {:block/uuid (uuid page-id)}
+                        :blocks (mapv (fn [op]
+                                        (if (= "add" (:operation op))
+                                          {:block/title (get-in op [:data :title])}
+                                          (do
+                                            (when-not (some-> (:id op) common-util/uuid-string?)
+                                              (throw (ex-info (str "Existing block " (pr-str (:id op)) " has a non-uuid id") {})))
+                                            {:block/uuid (uuid (:id op))
+                                             :block/title (get-in op [:data :title])})))
+                                      ops)}
+                       (throw (ex-info (str "Existing page " (pr-str page-id) " has a non-uuid id") {}))))
+                   (apply dissoc blocks-by-page (map :id new-pages))))
+        import-edn
+        (cond-> {}
+          (seq pages-and-blocks)
+          (assoc :pages-and-blocks pages-and-blocks))]
+    (prn :import-edn import-edn)
+    (import-edn-data conn import-edn)))

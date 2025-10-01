@@ -60,7 +60,8 @@
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -1197,6 +1198,11 @@
     (if resp
       (clj->js resp)
       #js {:error (str "Page " (pr-str page-title) " not found")})))
+
+(defn ^:export upsert_nodes
+  "Given a list of MCP operations, batch upserts resulting EDN data"
+  [operations]
+  (cli-common-mcp-tools/upsert-nodes (conn/get-db false) (js->clj operations :keywordize-keys true)))
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
