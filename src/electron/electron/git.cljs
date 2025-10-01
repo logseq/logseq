@@ -26,7 +26,11 @@
 (defn run-git!
   [graph-path commands]
   (when (and graph-path (fs/existsSync graph-path))
-    (p/let [result (.exec GitProcess commands graph-path)]
+    (p/let [git-path (state/get-git-path)
+            options (if (and git-path (not (string/blank? git-path)))
+                      #js {:env #js {"LOCAL_GIT_DIRECTORY" git-path}}
+                      #js {})
+            result (.exec GitProcess commands graph-path options)]
       (if (zero? (gobj/get result "exitCode"))
         (let [result (gobj/get result "stdout")]
           (p/resolved result))
@@ -38,7 +42,11 @@
 (defn run-git2!
   [graph-path commands]
   (when (and graph-path (fs/existsSync graph-path))
-    (p/let [^js result (.exec GitProcess commands graph-path)]
+    (p/let [git-path (state/get-git-path)
+            options (if (and git-path (not (string/blank? git-path)))
+                      #js {:env #js {"LOCAL_GIT_DIRECTORY" git-path}}
+                      #js {})
+            ^js result (.exec GitProcess commands graph-path options)]
       result)))
 
 (defn git-dir-exists?
