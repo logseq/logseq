@@ -4,24 +4,33 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { FormHTMLAttributes, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed } from 'lucide-react'
+import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed, LucideX, LucideXCircle } from 'lucide-react'
 import { t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
 import { Skeleton } from '@/components/ui/skeleton'
 
-function ErrorTip({ error }: { error: string | { title?: string, message: string | any } }) {
+function ErrorTip({ error, removeError }: {
+  error: string | { variant?: 'warning' | 'destructive', title?: string, message: string | any },
+  removeError?: () => void
+}) {
   if (!error) return null
   if (typeof error === 'string') {
     error = { message: error }
   }
 
   return (
-    <Alert variant="destructive">
+    <Alert variant={error.variant || 'destructive'} className={'relative'}>
       <AlertCircleIcon size={18}/>
       {error.title && <AlertTitle>{error.title}</AlertTitle>}
       <AlertDescription>
-        <p>{typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}</p>
+        <p>
+          {typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}
+        </p>
       </AlertDescription>
+      <a className={'close absolute right-0 top-0 opacity-50 hover:opacity-80 p-2'}
+         onClick={() => removeError?.()}>
+        <LucideX size={16}/>
+      </a>
     </Alert>
   )
 }
@@ -29,12 +38,19 @@ function ErrorTip({ error }: { error: string | { title?: string, message: string
 function InputRow(
   props: InputProps & { label: string }
 ) {
-  const { errors } = useAuthFormState()
+  const { errors, setErrors } = useAuthFormState()
   const { label, type, ...rest } = props
   const isPassword = type === 'password'
   const error = props.name && errors?.[props.name]
   const [localType, setLocalType] = useState<string>(type || 'text')
   const [showPassword, setShowPassword] = useState<boolean>(false)
+  const removeError = () => {
+    if (props.name && errors?.[props.name]) {
+      const newErrors = { ...errors }
+      delete newErrors[props.name]
+      setErrors(newErrors)
+    }
+  }
 
   return (
     <div className={'relative w-full flex flex-col gap-3 pb-1'}>
@@ -54,7 +70,7 @@ function InputRow(
 
       {error &&
         <div className={'pt-1'}>
-          <ErrorTip error={error}/>
+          <ErrorTip error={error} removeError={removeError}/>
         </div>
       }
     </div>
@@ -429,7 +445,7 @@ export function ConfirmWithCodeForm(
              }
            }}>{t('Resend code')}</a>
       </span>
-      <InputRow id="code" type="number" name="code" required={true}
+      <InputRow id="code" type="text" name="code" required={true}
                 placeholder={'123456'}
                 autoComplete={'off'}
                 autoFocus={true}
