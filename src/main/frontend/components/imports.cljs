@@ -1,9 +1,9 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require ["path" :as node-path]
-            [cljs-time.core :as t]
+  (:require [cljs-time.core :as t]
             [cljs.pprint :as pprint]
             [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -11,6 +11,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.import :as db-import-handler]
             [frontend.handler.file-based.import :as file-import-handler]
@@ -348,33 +349,35 @@
         (log/error :import-error ex-data)))
     (notification/show! msg :warning false)))
 
-(defn- read-asset [file assets]
-  (-> (.arrayBuffer (:file-object file))
-      (p/then (fn [buffer]
-                (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
-                        byte-array (js/Uint8Array. buffer)]
-                  (swap! assets assoc
-                         (gp-exporter/asset-path->name (:path file))
-                         {:size (.-size (:file-object file))
-                          :checksum checksum
-                          :type (db-asset/asset-path->type (:path file))
-                          :path (:path file)
-                          ;; Save array to avoid reading asset twice
-                          ::byte-array byte-array})
-                  byte-array)))))
-
-(defn- copy-asset [repo repo-dir asset-m]
-  (-> (::byte-array asset-m)
-      (p/then (fn [content]
-                (let [assets-dir (path/path-join repo-dir common-config/local-assets-dir)]
-                  (p/do!
-                   (fs/mkdir-if-not-exists assets-dir)
-                   (if (:block/uuid asset-m)
-                     (fs/write-plain-text-file! repo assets-dir (str (:block/uuid asset-m) "." (:type asset-m)) content {:skip-transact? true})
-                     (when-not (:pdf-annotation? asset-m)
-                       (println "Copied asset" (pr-str (node-path/basename (:path asset-m)))
-                                "by its name since it was unused.")
-                       (fs/write-plain-text-file! repo assets-dir (node-path/basename (:path asset-m)) content {:skip-transact? true})))))))))
+(defn- read-and-copy-asset [repo repo-dir file assets buffer-handler]
+  (let [^js file-object (:file-object file)]
+    (if (assets-handler/exceed-limit-size? file-object)
+      (do
+        (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
+        ;; This asset will also be included in the ignored-assets count. Better to be explicit about ignoring
+        ;; these so users are aware of this
+        (notification/show!
+         (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max.")
+         :info
+         false))
+      (p/let [buffer (.arrayBuffer file-object)
+              bytes-array (js/Uint8Array. buffer)
+              checksum (db-asset/<get-file-array-buffer-checksum buffer)
+              asset-id (d/squuid)
+              asset-name (gp-exporter/asset-path->name (:path file))
+              assets-dir (path/path-join repo-dir common-config/local-assets-dir)
+              asset-type (db-asset/asset-path->type (:path file))
+              {:keys [with-edn-content pdf-annotation?]} (buffer-handler bytes-array)]
+        (swap! assets assoc asset-name
+               (with-edn-content
+                 {:size (.-size file-object)
+                  :type asset-type
+                  :path (:path file)
+                  :checksum checksum
+                  :asset-id asset-id}))
+        (fs/mkdir-if-not-exists assets-dir)
+        (when-not pdf-annotation?
+          (fs/write-plain-text-file! repo assets-dir (str asset-id "." asset-type) bytes-array {:skip-transact? true}))))))
 
 (defn- import-file-graph
   [*files
@@ -404,8 +407,7 @@
                    :<save-logseq-file (fn save-logseq-file [_ path content]
                                         (db-editor-handler/save-file! path content))
                    ;; asset file options
-                   :<read-asset read-asset
-                   :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
+                   :<read-and-copy-asset #(read-and-copy-asset repo (config/get-repo-dir repo) %1 %2 %3)
                    ;; doc file options
                    ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
                    :export-file (fn export-file [conn m opts]
