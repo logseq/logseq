@@ -49,40 +49,40 @@
     ;; Create test data: pages with references between them
     (db/transact! test-helper/test-db
                   [{:db/id 20000
-                    :block/uuid #uuid "page-ideas-uuid-1234-567890abcdef"
+                    :block/uuid #uuid "12345678-1234-5678-9abc-def012345678"
                     :block/name "ideas"
                     :block/title "Ideas"
                     :block/type "page"}
 
                    {:db/id 20001
-                    :block/uuid #uuid "page-3dprint-uuid-1234-567890abcdef"
+                    :block/uuid #uuid "87654321-4321-8765-abcd-ef0123456789"
                     :block/name "3d printing"
                     :block/title "3D Printing"
                     :block/type "page"}
 
                    {:db/id 20002
-                    :block/uuid #uuid "page-printer-uuid-1234-567890abcdef"
+                    :block/uuid #uuid "abcdef01-2345-6789-abcd-ef0123456780"
                     :block/name "printer farm"
                     :block/title "Printer Farm"
                     :block/type "page"}
 
                    ;; Block on "ideas" page that references "3d printing"
                    {:db/id 20100
-                    :block/uuid #uuid "block-ideas-ref3d-1234-567890abcdef"
+                    :block/uuid #uuid "11111111-1111-1111-1111-111111111111"
                     :block/page 20000
                     :block/title "[[3D Printing]] project for the future"
                     :block/refs #{20001}}  ; References 3d printing page
 
                    ;; Block on "ideas" page that references "printer farm"
                    {:db/id 20101
-                    :block/uuid #uuid "block-ideas-refprinter-567890abcdef"
+                    :block/uuid #uuid "22222222-2222-2222-2222-222222222222"
                     :block/page 20000
                     :block/title "Starting a [[Printer Farm]] business"
                     :block/refs #{20002}}  ; References printer farm page
 
                    ;; Block on different page that also references "3d printing"
                    {:db/id 20102
-                    :block/uuid #uuid "block-other-ref3d-1234-567890abcdef"
+                    :block/uuid #uuid "33333333-3333-3333-3333-333333333333"
                     :block/page 20002      ; On printer farm page
                     :block/title "Need [[3D Printing]] equipment"
                     :block/refs #{20001}}]) ; References 3d printing page
@@ -95,9 +95,9 @@
 
           ;; Check that the references contain the expected UUIDs
           (let [ref-uuids (set (map :uuid refs))]
-            (is (contains? ref-uuids "block-ideas-ref3d-1234-567890abcdef")
+            (is (contains? ref-uuids "11111111-1111-1111-1111-111111111111")
                 "Should include reference from ideas page")
-            (is (contains? ref-uuids "block-other-ref3d-1234-567890abcdef")
+            (is (contains? ref-uuids "33333333-3333-3333-3333-333333333333")
                 "Should include reference from printer farm page"))
 
           ;; Check that content includes the references
@@ -106,7 +106,7 @@
                 "References should contain the page title")))))
 
     (testing "get_page_linked_references works with page UUID"
-      (p/let [result (api/get_page_linked_references "page-3dprint-uuid-1234-567890abcdef")]
+      (p/let [result (api/get_page_linked_references "87654321-4321-8765-abcd-ef0123456789")]
         (let [refs (js->clj result :keywordize-keys true)]
           ;; Should find same 2 blocks when querying by UUID
           (is (= 2 (count refs)) "Should find same references when querying by UUID"))))
