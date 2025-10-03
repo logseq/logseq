@@ -249,7 +249,23 @@ export function SignupForm() {
             }
           })
 
-          console.log(ret)
+          if (ret.isSignUpComplete) {
+            // TODO: auto sign in
+            console.log(ret)
+            setCurrentTab('login')
+            return
+          } else {
+            if (ret.nextStep?.signUpStep === 'CONFIRM_SIGN_UP') {
+              setCurrentTab({
+                type: 'confirm-code',
+                props: {
+                  user: { ...ret, username: data.username },
+                  nextStep: 'CONFIRM_SIGN_UP'
+                }
+              })
+            }
+            return
+          }
         } catch (e: any) {
           console.error(e)
           const error = { title: t('Bad Response.'), message: (e as Error).message }
@@ -378,6 +394,26 @@ export function ConfirmWithCodeForm(
   const { setCurrentTab, setErrors } = useAuthFormState()
   const [loading, setLoading] = useState<boolean>(false)
   const isFromSignIn = props.user?.hasOwnProperty('isSignedIn')
+  const signUpCodeDeliveryDetails = props.user?.nextStep?.codeDeliveryDetails
+  const [countDownNum, setCountDownNum] = useState<number>(0)
+  const startCountDown = () => {
+    setCountDownNum(60)
+    const interval = setInterval(() => {
+      setCountDownNum((num) => {
+        if (num <= 1) {
+          clearInterval(interval)
+          return 0
+        }
+        return num - 1
+      })
+    }, 1000)
+  }
+
+  useEffect(() => {
+    return () => {
+      setCountDownNum(0)
+    }
+  }, [])
 
   return (
     <FormGroup
@@ -414,36 +450,47 @@ export function ConfirmWithCodeForm(
       }}>
 
       <p className={'pb-2 opacity-60'}>
-        {isFromSignIn && t('CODE_ON_THE_WAY_TIP')}
+        {isFromSignIn ? t('CODE_ON_THE_WAY_TIP') : (
+          signUpCodeDeliveryDetails &&
+          <span>{t('We have sent a numeric verification code to your email address at')}&nbsp;<code>
+            {signUpCodeDeliveryDetails.destination}.
+          </code></span>
+        )}
       </p>
-      <pre>
-        {JSON.stringify(props.user, null, 2)}
-        {JSON.stringify(props.nextStep, null, 2)}
-      </pre>
+
+      {/*<pre>*/}
+      {/*  {JSON.stringify(props.user, null, 2)}*/}
+      {/*  {JSON.stringify(props.nextStep, null, 2)}*/}
+      {/*</pre>*/}
 
       <span className={'w-full flex justify-end relative h-0 z-10'}>
-        <a className={'text-sm opacity-50 hover:opacity-80 active:opacity-50 select-none underline absolute -bottom-8'}
-           onClick={async (e) => {
-             e.stopPropagation()
-             // resend code
-             try {
-               setLoading(true)
-               if (props.nextStep === 'CONFIRM_SIGN_UP') {
-                 const ret = await Auth.resendSignUpCode({
-                   username: props.user?.username
-                 })
+        {countDownNum > 0 ? (
+          <span className={'text-sm opacity-50 select-none absolute -bottom-8'}>
+            {countDownNum}s
+          </span>
+        ) : <a
+          className={'text-sm opacity-50 hover:opacity-80 active:opacity-50 select-none underline absolute -bottom-8'}
+          onClick={async (e) => {
+            e.stopPropagation()
+            // resend code
+            try {
+              startCountDown()
+              if (props.nextStep === 'CONFIRM_SIGN_UP') {
+                const ret = await Auth.resendSignUpCode({
+                  username: props.user?.username
+                })
 
-                 console.log('===>>', ret)
-               } else {
-                 // await Auth.resendSignInCode(props.user)
-               }
-             } catch (e) {
-               setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
-               console.error(e)
-             } finally {
-               setLoading(false)
-             }
-           }}>{t('Resend code')}</a>
+                console.log('===>>', ret)
+              } else {
+                // await Auth.resendSignInCode(props.user)
+              }
+            } catch (e) {
+              setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
+              setCountDownNum(0)
+              console.error(e)
+            } finally {}
+          }}>{t('Resend code')}</a>
+        }
       </span>
       <InputRow id="code" type="text" name="code" required={true}
                 placeholder={'123456'}
