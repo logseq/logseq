@@ -1,6 +1,7 @@
 (ns logseq.api-test
   (:require [cljs-bean.core :as bean]
             [cljs.test :refer [use-fixtures deftest is testing]]
+            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
@@ -101,7 +102,7 @@
 
           ;; Check that content includes the references
           (let [ref-titles (set (map :title refs))]
-            (is (some #(clojure.string/includes? % "3D Printing") ref-titles)
+            (is (some #(string/includes? % "3D Printing") ref-titles)
                 "References should contain the page title")))))
 
     (testing "get_page_linked_references works with page UUID"
