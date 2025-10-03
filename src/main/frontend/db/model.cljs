@@ -376,18 +376,19 @@ independent of format as format specific heading characters are stripped"
   ([repo page-id]
    (when (and repo page-id)
      (when-let [db (conn/get-db repo)]
-       (let [pages (page-alias-set repo page-id)
-             aliases (set/difference pages #{page-id})]
-         (->>
-          (d/q
-           '[:find [(pull ?block ?block-attrs) ...]
-             :in $ [?ref-page ...] ?block-attrs
-             :where
-             [?r :block/name ?ref-page]
-             [?block :block/refs ?r]]
-           db
-           pages
-           (butlast file-model/file-graph-block-attrs))
+       (let [entity (d/entity db page-id)
+             pages (page-alias-set repo page-id)
+             aliases (set/difference pages #{page-id})
+             ;; Use same approach as UI: reverse reference lookup
+             all-ref-blocks (->> pages
+                                 (mapcat (fn [id]
+                                           (when-let [page-entity (d/entity db id)]
+                                             (:block/_refs page-entity))))
+                                 (filter some?)
+                                 ;; Pull the required attributes
+                                 (map (fn [block]
+                                        (d/pull db (butlast file-model/file-graph-block-attrs) (:db/id block)))))]
+         (->> all-ref-blocks
           (remove (fn [block] (= page-id (:db/id (:block/page block)))))
           db-utils/group-by-page
           (map (fn [[k blocks]]
