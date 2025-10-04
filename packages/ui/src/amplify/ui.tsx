@@ -80,11 +80,35 @@ function InputRow(
 function FormGroup(props: FormHTMLAttributes<any>) {
   const { className, children, ...reset } = props
   return (
-    <form className={cn('flex flex-col justify-center items-center gap-4 w-full', className)}
+    <form className={cn('relative flex flex-col justify-center items-center gap-4 w-full', className)}
           {...reset}>
       {children}
     </form>
   )
+}
+
+function useCountDown() {
+  const [countDownNum, setCountDownNum] = useState<number>(0)
+  const startCountDown = () => {
+    setCountDownNum(60)
+    const interval = setInterval(() => {
+      setCountDownNum((num) => {
+        if (num <= 1) {
+          clearInterval(interval)
+          return 0
+        }
+        return num - 1
+      })
+    }, 1000)
+  }
+
+  useEffect(() => {
+    return () => {
+      setCountDownNum(0)
+    }
+  }, [])
+
+  return { countDownNum, startCountDown, setCountDownNum }
 }
 
 export function LoginForm() {
@@ -237,8 +261,6 @@ export function SignupForm() {
 
         try {
           setLoading(true)
-          await new Promise(resolve => { setTimeout(resolve, 500) })
-
           const ret = await Auth.signUp({
             username: data.username as string,
             password: data.password as string,
@@ -251,7 +273,14 @@ export function SignupForm() {
 
           if (ret.isSignUpComplete) {
             // TODO: auto sign in
-            console.log(ret)
+            if (ret.nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
+              const { nextStep } = await Auth.autoSignIn()
+              if (nextStep.signInStep === 'DONE') {
+                // signed in
+                setCurrentTab('login')
+              }
+            }
+
             setCurrentTab('login')
             return
           } else {
@@ -320,27 +349,106 @@ export function SignupForm() {
 
 export function ResetPasswordForm() {
   const [isSentCode, setIsSentCode] = useState<boolean>(false)
-  const { setCurrentTab } = useAuthFormState()
+  const [sentUsername, setSentUsername] = useState<string>('')
+  const { setCurrentTab, setErrors } = useAuthFormState()
+  const { countDownNum, startCountDown } = useCountDown()
+  const [loading, setLoading] = useState<boolean>(false)
+
+  useEffect(() => {
+    setErrors({})
+  }, [isSentCode])
 
   return (
     <FormGroup
       autoComplete={'off'}
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
+        setErrors(null)
         e.preventDefault()
 
         // get submit form input data
         const formData = new FormData(e.target as HTMLFormElement)
         const data = Object.fromEntries(formData.entries())
-        console.log(data)
 
-        setIsSentCode(true)
+        if (!isSentCode) {
+          try {
+            setLoading(true)
+
+            const username = (data.email as string)?.trim()
+            // send reset code
+            const ret = await Auth.resetPassword({ username })
+            console.debug('[Auth] reset pw code sent: ', ret)
+            setSentUsername(username)
+            startCountDown()
+            setIsSentCode(true)
+          } catch (error) {
+            console.error('Error sending reset code:', error)
+            setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+          } finally {
+            setLoading(false)
+          }
+        } else {
+          // confirm reset password
+          if ((data.password as string)?.length < 8) {
+            setErrors({
+              password: {
+                message: t('Password must be at least 8 characters.'),
+                title: t('Invalid Password')
+              }
+            })
+            return
+          } else if (data.password !== data.confirm_password) {
+            setErrors({
+              confirm_password: {
+                message: t('Passwords do not match.'),
+                title: t('Invalid Password')
+              }
+            })
+            return
+          } else {
+            try {
+              setLoading(true)
+              const ret = await Auth.confirmResetPassword({
+                username: sentUsername,
+                newPassword: data.password as string,
+                confirmationCode: data.code as string
+              })
+
+              console.debug('[Auth] confirm reset pw: ', ret)
+              setCurrentTab('login')
+            } catch (error) {
+              console.error('Error confirming reset password:', error)
+              setErrors({ 'confirm_password': { message: (error as Error).message, title: t('Bad Response.') } })
+            } finally {
+              setLoading(false)
+            }
+          }
+        }
       }}>
       {isSentCode ? (
         <>
+          <div className={'w-full opacity-60 flex justify-end relative h-0 z-[2]'}>
+            {countDownNum > 0 ? (
+              <span className={'text-sm opacity-50 select-none absolute top-3 right-0'}>
+                {countDownNum}s
+              </span>
+            ) : (<a onClick={async () => {
+              startCountDown()
+              try {
+                const ret = await Auth.resetPassword({ username: sentUsername })
+                console.debug('[Auth] reset pw code re-sent: ', ret)
+              } catch (error) {
+                console.error('Error resending reset code:', error)
+                setErrors({ email: { message: (error as Error).message, title: t('Bad Response.') } })
+              } finally {}
+            }} className={'text-sm opacity-70 hover:opacity-90 underline absolute top-3 right-0 select-none'}>
+              {t('Resend code')}
+            </a>)}
+          </div>
           <InputRow id="code" type="text" name="code" required={true}
                     placeholder={'123456'}
                     autoComplete={'off'}
                     label={t('Enter the code sent to your email')}/>
+
           <InputRow id="password" type="password" name="password" required={true}
                     placeholder={t('New Password')}
                     label={t('New Password')}/>
@@ -352,13 +460,16 @@ export function ResetPasswordForm() {
           <div className={'w-full'}>
             <Button type="submit"
                     className={'w-full'}
-                    variant={'secondary'}
-            >{t('Reset password')}</Button>
+                    disabled={loading}
+            >
+              {loading && <Loader2Icon className="animate-spin mr-1" size={16}/>}
+              {t('Reset password')}
+            </Button>
 
             <p className={'pt-4 text-center'}>
-              <a onClick={() => setIsSentCode(false)}
+              <a onClick={() => setCurrentTab('login')}
                  className={'text-sm opacity-50 hover:opacity-80 underline'}>
-                {t('Resend code')}
+                {t('Back to login')}
               </a>
             </p>
           </div>
@@ -372,8 +483,11 @@ export function ResetPasswordForm() {
           <div className={'w-full'}>
             <Button type="submit"
                     className={'w-full'}
-                    variant={'secondary'}
-            >{t('Send code')}</Button>
+                    disabled={loading}
+            >
+              {loading && <Loader2Icon className="animate-spin mr-1" size={16}/>}
+              {t('Send code')}
+            </Button>
 
             <p className={'pt-3 text-center'}>
               <a onClick={() => setCurrentTab('login')}
@@ -395,30 +509,13 @@ export function ConfirmWithCodeForm(
   const [loading, setLoading] = useState<boolean>(false)
   const isFromSignIn = props.user?.hasOwnProperty('isSignedIn')
   const signUpCodeDeliveryDetails = props.user?.nextStep?.codeDeliveryDetails
-  const [countDownNum, setCountDownNum] = useState<number>(0)
-  const startCountDown = () => {
-    setCountDownNum(60)
-    const interval = setInterval(() => {
-      setCountDownNum((num) => {
-        if (num <= 1) {
-          clearInterval(interval)
-          return 0
-        }
-        return num - 1
-      })
-    }, 1000)
-  }
-
-  useEffect(() => {
-    return () => {
-      setCountDownNum(0)
-    }
-  }, [])
+  const { countDownNum, startCountDown, setCountDownNum } = useCountDown()
 
   return (
     <FormGroup
       autoComplete={'off'}
       onSubmit={async (e) => {
+        setErrors(null)
         e.preventDefault()
 
         // get submit form input data
@@ -433,13 +530,22 @@ export function ConfirmWithCodeForm(
               confirmationCode: data.code as string,
             })
 
-            console.log('===>>', ret)
+            if (ret.nextStep?.signUpStep === 'COMPLETE_AUTO_SIGN_IN') {
+              const { nextStep } = await Auth.autoSignIn()
+              if (nextStep.signInStep === 'DONE') {
+                // signed in
+                setCurrentTab('login')
+                return
+              }
+            }
+
+            setCurrentTab('login')
           } else {
             const ret = await Auth.confirmSignIn({
               challengeResponse: data.code as string,
             })
 
-            console.log('===>>', ret)
+            console.log('===>> confirmSignIn: ', ret)
           }
         } catch (e) {
           setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })

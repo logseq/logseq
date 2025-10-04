@@ -15,7 +15,7 @@ init()
 
 function App() {
   const [errors, setErrors] = React.useState<string | null>(null)
-  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup' | 'confirm-code' | any>('confirm-code')
+  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup' | 'confirm-code' | any>('login')
   const onSessionCallback = React.useCallback((session: any) => {
     console.log('==>>session callback:', session)
   }, [])
