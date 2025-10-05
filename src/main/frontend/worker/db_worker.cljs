@@ -83,8 +83,8 @@
   (when-not @*sqlite
     (p/let [href (.. js/location -href)
             publishing? (string/includes? href "publishing=true")
-            sqlite (sqlite3InitModule (clj->js {:print js/console.log
-                                                :printErr js/console.error}))]
+            sqlite (sqlite3InitModule (clj->js {:print #(log/info :init-sqlite-module! %)
+                                                :printErr #(log/error :init-sqlite-module! %)}))]
       (reset! *publishing? publishing?)
       (reset! *sqlite sqlite)
       nil)))
