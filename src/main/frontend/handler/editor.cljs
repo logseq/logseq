@@ -2064,12 +2064,11 @@
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
                                               exclude-properties))
-                    :block/format format)
-             (not db-based?)
-             (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                    :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                          (concat
                                                           (when-not keep-uuid? [:id])
-                                                          exclude-properties)))))))
+                                                          exclude-properties))
+                    :block/format format)))))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2179,10 +2178,13 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
   (let [repo (state/get-current-repo)
-        page-id (:db/id (:block/page target-block))
+        page-id (or (:db/id (:block/page target-block))
+                    (when (ldb/page? target-block)
+                      (:db/id target-block)))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
         blocks (gp-block/with-parent-and-order page-id blocks)]
+
     (ui-outliner-tx/transact!
      {:outliner-op :paste-blocks}
      (paste-blocks blocks (merge opts {:ops-only? true})))))
