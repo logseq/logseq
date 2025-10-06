@@ -771,15 +771,15 @@
 
 ;; FIXME: support properties for db graphs
 (def ^:export insert_batch_block
-  (fn [block-uuid ^js batch-blocks ^js opts]
+  (fn [block-uuid ^js batch-blocks-js ^js opts]
     (p/let [block (<ensure-page-loaded block-uuid)]
       (when block
-        (when-let [bb (bean/->clj batch-blocks)]
-          (let [bb (if-not (vector? bb) (vector bb) bb)
+        (when-let [blocks (bean/->clj batch-blocks-js)]
+          (let [blocks' (if-not (vector? blocks) (vector blocks) blocks)
                 {:keys [sibling keepUUID before]} (bean/->clj opts)
                 keep-uuid? (or keepUUID false)
                 _ (when keep-uuid? (doseq
-                                    [block (outliner-core/tree-vec-flatten bb :children)]
+                                    [block (outliner-core/tree-vec-flatten blocks' :children)]
                                      (let [uuid (:id (:properties block))]
                                        (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
                                          (throw (js/Error.
@@ -787,7 +787,7 @@
                 block (if before
                         (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)]
             (some-> (editor-handler/insert-block-tree-after-target
-                     (:db/id block) sibling bb (get block :block/format :markdown) keep-uuid?)
+                     (:db/id block) sibling blocks' (get block :block/format :markdown) keep-uuid?)
                     (p/then (fn [results]
                               (some-> results :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
 
