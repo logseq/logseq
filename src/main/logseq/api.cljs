@@ -785,9 +785,10 @@
                                          (throw (js/Error.
                                                  (util/format "Custom block UUID already exists (%s)." uuid)))))))
                 block (if before
-                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)]
+                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
+                sibling? (if (ldb/page? block) false sibling)]
             (some-> (editor-handler/insert-block-tree-after-target
-                     (:db/id block) sibling blocks' (get block :block/format :markdown) keep-uuid?)
+                     (:db/id block) sibling? blocks' (get block :block/format :markdown) keep-uuid?)
                     (p/then (fn [results]
                               (some-> results :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
 
