@@ -39,9 +39,9 @@
   [^js plugin]
   (let [plugin-id (get-sanitized-plugin-id plugin)
         ;; TODO: remove this
-        ;; plugin-id "test"
-        ]
+        plugin-id "test"]
     (when-not plugin-id
+      (js/console.error "Can't get current plugin-id")
       (throw (ex-info "Can't get current plugin-id"
                       {:plugin plugin})))
     (str plugin-property-prefix plugin-id)))
@@ -50,13 +50,15 @@
   "Finds a property :db/ident for a given property name"
   [property-name plugin]
   (let [property-name' (if (string? property-name)
-                         (keyword property-name)
-                         property-name)]
+                         property-name
+                         (name property-name))]
     (if (qualified-keyword? property-name')
       property-name'
       ;; plugin property
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
-        (keyword plugin-ns (db-ident/normalize-ident-name-part property-name))))))
+        (keyword plugin-ns (db-ident/normalize-ident-name-part (if (keyword? property-name)
+                                                                 (name property-name)
+                                                                 property-name)))))))
 
 (defn plugin-property-key?
   [ident]
@@ -182,14 +184,14 @@
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  ([block properties & {:keys [plugin schema]}]
-   (when-let [block-id (and (seq properties) (:db/id block))]
-     (let [properties (->> properties
-                           (map (fn [[k v]]
-                                  (let [ident (get-db-ident-from-property-name k plugin)
-                                        property-schema (get schema k)]
-                                    [k ident v property-schema]))))]
-       (set-block-properties! plugin block-id properties)))))
+  [block properties & {:keys [plugin schema]}]
+  (when-let [block-id (and (seq properties) (:db/id block))]
+    (let [properties (->> properties
+                          (map (fn [[k v]]
+                                 (let [ident (get-db-ident-from-property-name k plugin)
+                                       property-schema (get schema k)]
+                                   [k ident v property-schema]))))]
+      (set-block-properties! plugin block-id properties))))
 
 (defn <sync-children-blocks!
   [block]
