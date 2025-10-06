@@ -133,6 +133,7 @@
    {:outliner-op :set-block-properties}
    (doseq [[property-id property-ident value schema] properties]
      (when-not (qualified-keyword? property-ident)
+       (js/console.error (str "Invalid property id: " property-id))
        (throw (ex-info "Invalid property id" {:property-id property-id
                                               :property-ident property-ident})))
      (let [property (db/entity property-ident)
