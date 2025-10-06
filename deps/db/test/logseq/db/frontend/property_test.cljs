@@ -1,5 +1,5 @@
 (ns logseq.db.frontend.property-test
-  (:require [cljs.test :refer [deftest is testing are]]
+  (:require [cljs.test :refer [deftest is testing]]
             [logseq.db.frontend.property :as db-property]))
 
 (deftest sort-properties
