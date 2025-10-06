@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
@@ -772,25 +773,50 @@
 ;; FIXME: support properties for db graphs
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks-js ^js opts]
-    (p/let [block (<ensure-page-loaded block-uuid)]
-      (when block
-        (when-let [blocks (bean/->clj batch-blocks-js)]
-          (let [blocks' (if-not (vector? blocks) (vector blocks) blocks)
-                {:keys [sibling keepUUID before]} (bean/->clj opts)
-                keep-uuid? (or keepUUID false)
-                _ (when keep-uuid? (doseq
-                                    [block (outliner-core/tree-vec-flatten blocks' :children)]
-                                     (let [uuid (:id (:properties block))]
-                                       (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
-                                         (throw (js/Error.
-                                                 (util/format "Custom block UUID already exists (%s)." uuid)))))))
-                block (if before
-                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
-                sibling? (if (ldb/page? block) false sibling)]
-            (some-> (editor-handler/insert-block-tree-after-target
-                     (:db/id block) sibling? blocks' (get block :block/format :markdown) keep-uuid?)
-                    (p/then (fn [results]
-                              (some-> results :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
+    (this-as
+     this
+     (p/let [block (<ensure-page-loaded block-uuid)]
+       (when block
+         (when-let [blocks (bean/->clj batch-blocks-js)]
+           (let [db-based? (config/db-based-graph?)
+                 blocks' (cond->> (if-not (vector? blocks) (vector blocks) blocks)
+                           db-based?
+                           (walk/prewalk
+                            (fn [f]
+                              (if (and (map? f) (:content f) (nil? (:uuid f)))
+                                (assoc f :uuid (d/squuid))
+                                f))))
+                 {:keys [sibling keepUUID before schema]} (bean/->clj opts)
+                 keep-uuid? (if db-based? true (or keepUUID false))
+                 _ (when keep-uuid? (doseq
+                                     [block (outliner-core/tree-vec-flatten blocks' :children)]
+                                      (let [uuid (:id (:properties block))]
+                                        (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
+                                          (throw (js/Error.
+                                                  (util/format "Custom block UUID already exists (%s)." uuid)))))))
+                 block (if before
+                         (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
+                 sibling? (if (ldb/page? block) false sibling)
+                 uuid->properties (when db-based?
+                                    (let [blocks (outliner-core/tree-vec-flatten blocks' :children)]
+                                      (when (some (fn [b] (seq (:properties b))) blocks)
+                                        (zipmap (map :uuid blocks)
+                                                (map :properties blocks)))))]
+             (p/let [result (editor-handler/insert-block-tree-after-target
+                             (:db/id block) sibling? blocks' (get block :block/format :markdown) keep-uuid?)
+                     blocks (:blocks result)]
+               (when (seq blocks)
+                 (p/doseq [block blocks]
+                   (let [id (:block/uuid block)
+                         b (db/entity [:block/uuid id])
+                         properties (when uuid->properties (uuid->properties id))]
+                     (when (seq properties)
+                       (api-block/db-based-save-block-properties! b properties {:plugin this
+                                                                                :schema schema})))))
+               (let [blocks' (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
+                 (-> blocks'
+                     sdk-utils/normalize-keyword-for-json
+                     bean/->js))))))))))
 
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
