@@ -40,11 +40,13 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -699,6 +701,12 @@
   [repo view-id option]
   (let [db @(worker-state/get-datascript-conn repo)]
     (db-view/get-view-data db view-id option)))
+
+(def-thread-api :thread-api/get-class-objects
+  [repo class-id]
+  (let [db @(worker-state/get-datascript-conn repo)]
+    (->> (db-class/get-class-objects db class-id)
+         (map common-entity-util/entity->map))))
 
 (def-thread-api :thread-api/get-property-values
   [repo {:keys [property-ident] :as option}]

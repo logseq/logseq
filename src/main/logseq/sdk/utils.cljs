@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.content :as db-content]))
 
 (defn- keep-json-keyword?
@@ -13,12 +14,6 @@
   (some->> (namespace k)
            (contains? #{"block" "db" "file"})
            (not)))
-
-(defn- entity->map
-  "Convert a db Entity to a map"
-  [e]
-  (assert (de/entity? e))
-  (assoc (into {} e) :db/id (:db/id e)))
 
 (defn remove-hidden-properties
   [m]
@@ -32,9 +27,9 @@
   ([input camel-case?]
    (when input
      (let [input (cond
-                   (de/entity? input) (entity->map input)
+                   (de/entity? input) (common-entity-util/entity->map input)
                    (sequential? input) (map #(if (de/entity? %)
-                                               (entity->map %)
+                                               (common-entity-util/entity->map %)
                                                %) input)
                    :else input)]
        (walk/prewalk
