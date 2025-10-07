@@ -467,31 +467,6 @@
    (set)
    (set/union #{page-id})))
 
-(defn get-block-refs
-  [db id]
-  (let [entity (d/entity db id)
-        db-based? (db-based-graph? db)
-        alias (->> (get-block-alias db id)
-                   (cons id)
-                   distinct)
-        ref-ids (->> (mapcat (fn [id]
-                               (cond->> (:block/_refs (d/entity db id))
-                                 db-based?
-                                 (remove (fn [ref]
-                                           ;; remove refs that have the block as either tag or property
-                                           (or (and
-                                                (class? entity)
-                                                (d/datom db :eavt (:db/id ref) :block/tags (:db/id entity)))
-                                               (and
-                                                (property? entity)
-                                                (d/datom db :eavt (:db/id ref) (:db/ident entity))))))
-                                 true
-                                 (map :db/id)))
-                             alias)
-                     distinct)]
-    (when (seq ref-ids)
-      (d/pull-many db '[*] ref-ids))))
-
 (def get-block-refs-count common-initial-data/get-block-refs-count)
 
 (defn hidden-or-internal-tag?
