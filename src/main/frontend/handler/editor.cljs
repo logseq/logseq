@@ -556,7 +556,9 @@
                  (state/set-state! :editor/async-unsaved-chars nil))))))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties
+  [content {:keys [page block-uuid
+                   sibling? before? start? end?
+                   properties
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
             :or {sibling? false
                  before? false
@@ -598,6 +600,7 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (merge new-block other-attrs)
+              block' (db/entity (:db/id block))
               [target-block sibling?] (cond
                                         before?
                                         (let [left-or-parent (or (ldb/get-left-sibling block)
@@ -607,13 +610,21 @@
                                           [left-or-parent sibling?])
 
                                         sibling?
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
+
+                                        start?
+                                        [block' false]
+
+                                        end?
+                                        (if last-block
+                                          [block' false]
+                                          [last-block true])
 
                                         last-block
                                         [last-block true]
 
                                         block
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
 
                                         ;; FIXME: assert
                                         :else
