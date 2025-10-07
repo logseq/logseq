@@ -1,14 +1,12 @@
 (ns frontend.db.model
   "Core db functions."
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.graph-view :as graph-view]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db.conn :as conn]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
