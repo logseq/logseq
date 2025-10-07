@@ -1,5 +1,5 @@
-(ns logseq.db.api
-  "DB version API"
+(ns logseq.api.db
+  "DB version related fns"
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.walk :as walk]
@@ -18,6 +18,7 @@
             [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
+
 
 (defn- result->js
   [result]

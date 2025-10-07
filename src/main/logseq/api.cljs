@@ -2,7 +2,6 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
@@ -20,7 +19,6 @@
             [frontend.fs :as fs]
             [frontend.handler.code :as code-handler]
             [frontend.handler.command-palette :as palette-handler]
-            [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -49,10 +47,10 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
+            [logseq.api.db :as db-api]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.api :as db-api]
             [logseq.db.common.property-util :as db-property-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.assets :as sdk-assets]
@@ -1209,7 +1207,7 @@
   [req-id]
   (ipc/ipc :httpRequestAbort req-id))
 
-;; templates
+;; file-based templates
 (defn ^:export get_template
   [name]
   (p/let [block (when name (db-async/<get-template-by-name name))]
