@@ -710,7 +710,7 @@
                    block (<get-block (str block-uuid-or-page-name))]
              (if (and block? (not block))
                (throw (js/Error. "Block not exists"))
-               (p/let [{:keys [before sibling focus customUUID properties autoOrderedList schema]} (bean/->clj opts)
+               (p/let [{:keys [before start end sibling focus customUUID properties autoOrderedList schema]} (bean/->clj opts)
                        [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
                                                 [nil (uuid block-uuid-or-page-name)]
                                                 [block-uuid-or-page-name nil])
@@ -742,6 +742,8 @@
                        opts' {:block-uuid block-uuid'
                               :sibling? sibling?
                               :before? before?
+                              :start? start
+                              :end? end
                               :edit-block? edit-block?
                               :page page-name
                               :custom-uuid custom-uuid
@@ -1048,27 +1050,26 @@
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
-  (p/let [block           (<get-block uuid-or-page-name)
+  (p/let [uuid-or-page-name (or
+                             uuid-or-page-name
+                             (state/get-current-page)
+                             (date/today))
+          block           (<get-block uuid-or-page-name)
           new-page        (when (and (not block) (not (util/uuid-string? uuid-or-page-name))) ; page not exists
                             (page-handler/<create! uuid-or-page-name
                                                    {:redirect?           false
                                                     :format              (state/get-preferred-format)}))]
-    (let [block (or block new-page)]
-      (when-not block
-        (throw (ex-info (str "There's no page/block for: " uuid-or-page-name) {})))
-      (let [opts (bean/->clj opts)
-            opts' (assoc opts :before false :sibling false)]
-        (insert_block (str (:block/uuid block)) content (bean/->js opts'))))))
+    (let [block (or block new-page)
+          opts (bean/->clj opts)
+          opts' (assoc opts :before false :sibling false :start true)]
+      (insert_block (str (:block/uuid block)) content (bean/->js opts')))))
 
 (defn ^:export append_block_in_page
   [uuid-or-page-name content ^js opts]
-  (let [current-page? (or (and (nil? content) (nil? opts))
-                          (and (nil? opts) (some->> content (instance? js/Object))))
-        opts (if current-page? content opts)
-        content (if current-page? uuid-or-page-name content)
-        uuid-or-page-name (if current-page?
-                            (or (state/get-current-page) (date/today))
-                            uuid-or-page-name)]
+  (let [uuid-or-page-name (or
+                           uuid-or-page-name
+                           (state/get-current-page)
+                           (date/today))]
     (p/let [_ (<ensure-page-loaded uuid-or-page-name)
             page? (not (util/uuid-string? uuid-or-page-name))
             page (db-model/get-page uuid-or-page-name)
@@ -1076,10 +1077,16 @@
             new-page (when page-not-exist?
                        (page-handler/<create! uuid-or-page-name
                                               {:redirect? false
-                                               :format (state/get-preferred-format)}))]
-      (when-let [block (or page new-page)]
-        (let [target (str (:block/uuid block))]
-          (insert_block target content opts))))))
+                                               :format (state/get-preferred-format)}))
+            block (or page new-page)]
+      (let [children (:block/_parent block)
+            [target sibling?] (if (seq children)
+                                [(last (ldb/sort-by-order children)) true]
+                                [block false])
+            target-id (str (:block/uuid target))
+            opts (-> (bean/->clj opts)
+                     (assoc :sibling sibling?))]
+        (insert_block target-id content opts)))))
 
 ;; plugins
 (defn ^:export validate_external_plugins [urls]
