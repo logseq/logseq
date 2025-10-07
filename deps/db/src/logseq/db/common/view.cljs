@@ -318,11 +318,7 @@
       (get-entities-for-all-pages db sorting property-ident {:db-based? db-based?})
 
       :class-objects
-      (let [class-id view-for-id
-            class-children (db-class/get-structured-children db class-id)
-            class-ids (distinct (conj class-children class-id))
-            datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)]
-        (keep (fn [d] (non-hidden-e (:e d))) datoms))
+      (db-class/get-class-objects db view-for-id)
 
       :property-objects
       (->>

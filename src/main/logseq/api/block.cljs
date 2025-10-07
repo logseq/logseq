@@ -2,7 +2,6 @@
   "Block related apis"
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -68,10 +67,6 @@
   (some-> properties
           (db-pu/readable-properties
            {:original-key? true :key-fn str})))
-
-(defn- entity->map
-  [e]
-  (assoc (into {} e) :db/id (:db/id e)))
 
 (defn parse-property-json-value-if-need
   [ident property-value]
