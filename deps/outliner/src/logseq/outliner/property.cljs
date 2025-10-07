@@ -324,7 +324,7 @@
         (if (or (string/blank? v) (not (string? v)))
           (throw (ex-info "Value should be non-empty string" ex-data))
           (let [page (ldb/get-page @conn v)]
-            (if (ldb/page? page)
+            (if (entity-util/page? page)
               (:db/id page)
               (let [[_ page-uuid] (outliner-page/create! conn v {})]
                 (if-not page-uuid

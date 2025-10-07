@@ -37,9 +37,7 @@
 
 (defn resolve-property-prefix-for-db
   [^js plugin]
-  (let [plugin-id (get-sanitized-plugin-id plugin)
-        ;; TODO: remove this
-        plugin-id "test"]
+  (let [plugin-id (get-sanitized-plugin-id plugin)]
     (when-not plugin-id
       (js/console.error "Can't get current plugin-id")
       (throw (ex-info "Can't get current plugin-id"
