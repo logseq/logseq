@@ -1,4 +1,5 @@
-(ns ^:no-doc logseq.api
+(ns logseq.api
+  "Logseq API for plugins usage"
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [clojure.string :as string]
@@ -1041,15 +1042,11 @@
 (defn ^:export get_page_linked_references
   [page-name-or-uuid]
   (p/let [repo (state/get-current-repo)
-          block (db-async/<get-block repo page-name-or-uuid :children? false)
-          ;; load refs to db
-          _ (when-let [id (:db/id block)] (db-async/<get-block-refs repo id))
-          page? (nil? (:block/page block))
-          ref-blocks (if page?
-                       (db-model/get-page-referenced-blocks-full (:db/id block))
-                       (db-model/get-block-referenced-blocks (:db/id block)))
-          ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
-    (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))
+          block (db-async/<get-block repo page-name-or-uuid :children? false)]
+    (when-let [id (:db/id block)]
+      (p/let [result (db-async/<get-block-refs repo id)
+              ref-blocks (db-utils/group-by-page result)]
+        (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))))
 
 (defn ^:export get_pages_from_namespace
   [ns]
