@@ -11,13 +11,14 @@ import android.webkit.WebView;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.Bridge;
 
 import java.util.Timer;
 import java.util.TimerTask;
 
 import ee.forgr.capacitor_navigation_bar.NavigationBarPlugin;
 
-public class MainActivity extends BridgeActivity {
+public class MainActivity extends BridgeActivity implements MobileSyncService.MobileSyncBridgeHolder {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(FolderPicker.class);
@@ -42,6 +43,9 @@ public class MainActivity extends BridgeActivity {
                 });
             }
         }, 5000);
+
+        MobileSyncService.registerBridge(this);
+        MobileSyncService.schedule(this);
     }
 
     public void initNavigationBarBgColor() {
@@ -51,6 +55,11 @@ public class MainActivity extends BridgeActivity {
 
         PluginCall call = new PluginCall(null, null, null, "t", data);
         navigationBarPlugin.setNavigationBarColor(call);
+    }
+
+    @Override
+    public Bridge getBridge() {
+        return super.getBridge();
     }
 
     @Override
