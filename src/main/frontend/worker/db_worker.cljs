@@ -42,6 +42,7 @@
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.common.order :as db-order]
+            [logseq.db.common.reference :as db-reference]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.view :as db-view]
             [logseq.db.frontend.schema :as db-schema]
@@ -461,7 +462,9 @@
 (def-thread-api :thread-api/get-block-refs
   [repo id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (ldb/get-block-refs @conn id)))
+    (->> (db-reference/get-linked-references @conn id)
+         :ref-blocks
+         (map (fn [b] (assoc (into {} b) :db/id (:db/id b)))))))
 
 (def-thread-api :thread-api/get-block-refs-count
   [repo id]
