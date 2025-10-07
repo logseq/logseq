@@ -95,3 +95,8 @@
               :schema (when schema
                         {key schema})}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
+
+;; TODO:
+;; get all tags
+;; get all properties
+;; get tag objects
