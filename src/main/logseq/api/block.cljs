@@ -73,17 +73,6 @@
   [e]
   (assoc (into {} e) :db/id (:db/id e)))
 
-(defn into-properties
-  ([block] (into-properties (state/get-current-repo) block))
-  ([repo block]
-   (if (some-> repo (config/db-based-graph?))
-     (let [e (db/entity (:db/id block))
-           props (-> (:block/properties e)
-                     sdk-utils/remove-hidden-properties)]
-       (-> (entity->map block)
-           (assoc :block/properties props)))
-     block)))
-
 (defn parse-property-json-value-if-need
   [ident property-value]
   (when-let [prop (and (string? property-value)
@@ -217,6 +206,5 @@
                       ;; attached shallow children
                       (assoc block :block/children
                              (map #(list :uuid (:block/uuid %))
-                                  (db/get-block-immediate-children repo uuid))))
-              block (into-properties repo block)]
+                                  (db/get-block-immediate-children repo uuid))))]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
