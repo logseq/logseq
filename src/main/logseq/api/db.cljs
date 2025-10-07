@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -96,7 +97,24 @@
                         {key schema})}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
 
-;; TODO:
-;; get all tags
-;; get all properties
-;; get tag objects
+(defn get-all-tags
+  []
+  (-> (db-model/get-all-classes (state/get-current-repo)
+                                {:except-root-class? true})
+      result->js))
+
+(defn get-all-properties
+  []
+  (-> (ldb/get-all-properties (db/get-db))
+      result->js))
+
+(defn get-tag-objects
+  [class-uuid]
+  (let [id (sdk-utils/uuid-or-throw-error class-uuid)
+        class (db/entity [:block/uuid id])]
+    (if-not class
+      (throw (ex-info (str "Tag not exists with id: " class-uuid) {}))
+      (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
+                                              (state/get-current-repo)
+                                              (:db/id class))]
+        (result->js result)))))
