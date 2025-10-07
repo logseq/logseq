@@ -11,7 +11,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
-            [frontend.db.file-based.model :as file-model]
             [frontend.db.model :as db-model]
             [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
@@ -49,10 +48,10 @@
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
             [logseq.api.db :as db-api]
+            [logseq.api.file :as file-api]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
-            [logseq.db.common.property-util :as db-property-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
@@ -168,14 +167,6 @@
              (remove nil?)
              (sdk-utils/normalize-keyword-for-json)
              (bean/->js))))
-
-(def ^:export get_current_graph_templates
-  (fn []
-    (when-let [repo (state/get-current-repo)]
-      (p/let [templates (db-async/<get-all-templates repo)]
-        (some-> templates
-                (sdk-utils/normalize-keyword-for-json)
-                (bean/->js))))))
 
 (def ^:export get_current_graph
   (fn []
@@ -689,12 +680,12 @@
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
           (editor-handler/edit-block! block pos {:container-id :unknown-container}))))))
 
-;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
-;; instead, the db worker should provide those calls
 (defn- <ensure-page-loaded
   [block-uuid-or-page-name]
   (p/let [repo (state/get-current-repo)
-          block (db-async/<get-block repo (str block-uuid-or-page-name) {})
+          block (db-async/<get-block repo (str block-uuid-or-page-name)
+                                     {:children? true
+                                      :include-collapsed-children? true})
           _ (when-let [page-id (:db/id (:block/page block))]
               (when-let [page-uuid (:block/uuid (db/entity page-id))]
                 (db-async/<get-block repo page-uuid)))]
@@ -874,8 +865,9 @@
               flag (if (= "toggle" flag)
                      (not (util/collapsed? block))
                      (boolean flag))]
-          (if flag (editor-handler/collapse-block! block-uuid)
-              (editor-handler/expand-block! block-uuid))
+          (if flag
+            (editor-handler/collapse-block! block-uuid)
+            (editor-handler/expand-block! block-uuid))
           nil)))))
 
 ;; properties (db only)
@@ -1036,18 +1028,6 @@
               ref-blocks (db-utils/group-by-page result)]
         (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))))
 
-(defn ^:export get_pages_from_namespace
-  [ns]
-  (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (file-model/get-namespace-pages repo ns)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
-
-(defn ^:export get_pages_tree_from_namespace
-  [ns]
-  (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (file-model/get-namespace-hierarchy repo ns)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
-
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
   (p/let [uuid-or-page-name (or
@@ -1191,46 +1171,6 @@
   [req-id]
   (ipc/ipc :httpRequestAbort req-id))
 
-;; file-based templates
-(defn ^:export get_template
-  [name]
-  (p/let [block (when name (db-async/<get-template-by-name name))]
-    (some-> block
-            (sdk-utils/normalize-keyword-for-json)
-            (bean/->js))))
-
-(defn ^:export insert_template
-  [target-uuid template-name]
-  (p/let [exists? (page-handler/<template-exists? template-name)]
-    (when exists?
-      (when-let [target (db-model/get-block-by-uuid target-uuid)]
-        (editor-handler/insert-template! nil template-name {:target target}) nil))))
-
-(defn ^:export exist_template
-  [name]
-  (page-handler/<template-exists? name))
-
-(defn ^:export create_template
-  [target-uuid template-name ^js opts]
-  (when (and template-name (db-model/get-block-by-uuid target-uuid))
-    (p/let [{:keys [overwrite]} (bean/->clj opts)
-            block (db-async/<get-template-by-name template-name)
-            repo (state/get-current-repo)]
-      (if (or (not block) (true? overwrite))
-        (do (when-let [old-target block]
-              (let [k (db-property-util/get-pid repo :logseq.property/template)]
-                (property-handler/remove-block-property! repo (:block/uuid old-target) k)))
-            (property-handler/set-block-property! repo target-uuid :logseq.property/template template-name))
-        (throw (js/Error. "Template already exists!"))))))
-
-(defn ^:export remove_template
-  [name]
-  (p/let [block (when name (db-async/<get-template-by-name name))]
-    (when block
-      (let [repo (state/get-current-repo)
-            k (db-property-util/get-pid repo :logseq.property/template)]
-        (property-handler/remove-block-property! repo (:block/uuid block) k)))))
-
 ;; search
 (defn ^:export search
   [q' & [opts]]
@@ -1248,4 +1188,13 @@
   []
   true)
 
-(def ^:export set_blocks_id #(editor-handler/set-blocks-id! (map uuid %)))
+;; file based graph APIs
+(def ^:export get_current_graph_templates file-api/get_current_graph_templates)
+(def ^:export get_template file-api/get_template)
+(def ^:export insert_template file-api/insert_template)
+(def ^:export exist_template file-api/exist_template)
+(def ^:export create_template file-api/create_template)
+(def ^:export remove_template file-api/remove_template)
+(def ^:export get_pages_from_namespace file-api/get_pages_from_namespace)
+(def ^:export get_pages_tree_from_namespace file-api/get_pages_tree_from_namespace)
+(def ^:export set_blocks_id file-api/set_blocks_id)
