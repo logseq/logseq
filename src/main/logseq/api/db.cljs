@@ -19,8 +19,7 @@
             [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
-
-(defn- result->js
+(defn result->js
   [result]
   (-> result
       sdk-utils/normalize-keyword-for-json
