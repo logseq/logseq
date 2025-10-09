@@ -46,6 +46,8 @@
 (defn get-db-ident-from-property-name
   "Finds a property :db/ident for a given property name"
   [property-name plugin]
+  (when-not (string? property-name)
+    (throw (ex-info "property-name should be a string" {:property-name property-name})))
   (let [property-key (keyword property-name)]
     (if (qualified-keyword? property-key)
       property-key
