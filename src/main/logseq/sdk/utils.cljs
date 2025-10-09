@@ -79,6 +79,12 @@
         (reduce {} (gobj/getKeys obj)))
     obj))
 
+(defn result->js
+  [result]
+  (-> result
+      normalize-keyword-for-json
+      bean/->js))
+
 (def ^:export to-clj bean/->clj)
 (def ^:export jsx-to-clj jsx->clj)
 (def ^:export to-js bean/->js)
