@@ -11,6 +11,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.modules.layout.core]
             [frontend.state :as state]
+            [frontend.util :as util]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
@@ -109,11 +110,14 @@
       result->js))
 
 (defn get-tag-objects
-  [class-uuid]
-  (let [id (sdk-utils/uuid-or-throw-error class-uuid)
-        class (db/entity [:block/uuid id])]
+  [class-uuid-or-ident]
+  (let [eid (if (util/uuid-string? class-uuid-or-ident)
+              (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident)]
+                [:block/uuid id])
+              (keyword (api-block/sanitize-user-property-name class-uuid-or-ident)))
+        class (db/entity eid)]
     (if-not class
-      (throw (ex-info (str "Tag not exists with id: " class-uuid) {}))
+      (throw (ex-info (str "Tag not exists with id: " eid) {}))
       (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
                                               (state/get-current-repo)
                                               (:db/id class))]
