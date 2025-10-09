@@ -1,4 +1,4 @@
-(ns logseq.api.file
+(ns logseq.api.file-based
   "File version related fns"
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
