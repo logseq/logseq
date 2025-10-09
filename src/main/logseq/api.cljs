@@ -1187,8 +1187,8 @@
      (db-api/remove-property property))))
 
 (def ^:export get_all_tags db-api/get-all-tags)
-(def ^:export get-all-properties db-api/get-all-properties)
-(def ^:export get-tag-objects db-api/get-tag-objects)
+(def ^:export get_all_properties db-api/get-all-properties)
+(def ^:export get_tag_objects db-api/get-tag-objects)
 
 ;; file based graph APIs
 (def ^:export get_current_graph_templates file-api/get_current_graph_templates)
