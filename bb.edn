@@ -164,6 +164,12 @@
   dev:lint-and-test
   logseq.tasks.dev/lint-and-test
 
+  dev:e2e-basic-test
+  logseq.tasks.dev/e2e-basic-test
+
+  dev:e2e-rtc-extra-test
+  logseq.tasks.dev/e2e-rtc-extra-test
+
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 

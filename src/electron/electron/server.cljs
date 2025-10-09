@@ -108,7 +108,7 @@
       (-> (invoke-logseq-api! method (.-args body))
           (p/then #(do
                      ;; Responses with an :error key are unexpected failures from electron.listener
-                     (when-let [msg (aget % "error")]
+                     (when-let [msg (and % (aget % "error"))]
                        (.code rep 500)
                        (js/console.error "Unexpected API error:" msg))
                      (.send rep %)))
@@ -151,7 +151,7 @@
                                                  (string/replace-first "${HOST}" HOST)
                                                  (string/replace-first "${PORT}" PORT))]
                                     (doto rep (.type "text/html")
-                                              (.send html))))))
+                                          (.send html))))))
               ;; listen port
               _     (.listen s (bean/->js (select-keys @*state [:host :port])))]
         (reset! *server s)
