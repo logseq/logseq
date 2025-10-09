@@ -1063,13 +1063,12 @@
   [block-uuid key ^js value ^js options]
   (this-as
    this
-   (p/let [keyname (api-block/sanitize-user-property-name key)
+   (p/let [key' (api-block/sanitize-user-property-name key)
            opts (bean/->clj options)
            block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
            repo (state/get-current-repo)
            block (<get-block block-uuid {:children? false})
            db-based? (db-graph?)
-           key' (-> (if (keyword? keyname) (name keyname) keyname) (util/trim-safe))
            value (bean/->clj value)]
      (when block
        (if db-based?
@@ -1083,8 +1082,7 @@
                    block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
                    _block (<get-block block-uuid {:children? false})
                    db-based? (db-graph?)
-                   key-ns? (and (keyword? key) (namespace key))
-                   key (if key-ns? key (if (keyword? key) (name key) key))
+                   key-ns? (namespace (keyword key))
                    key (if (and db-based? (not key-ns?))
                          (api-block/get-db-ident-from-property-name
                           key (api-block/resolve-property-prefix-for-db this))
@@ -1100,11 +1098,10 @@
                    _block (<get-block block-uuid {:children? false})]
              (when-let [properties (some-> block-uuid (db-model/get-block-by-uuid) (:block/properties))]
                (when (seq properties)
-                 (let [key (api-block/sanitize-user-property-name key)
-                       property-name (if (keyword? key) (name key) key)
+                 (let [property-name (api-block/sanitize-user-property-name key)
                        ident (api-block/get-db-ident-from-property-name
                               property-name (api-block/resolve-property-prefix-for-db this))
-                       property-value (or (get properties key)
+                       property-value (or (get properties property-name)
                                           (get properties (keyword property-name))
                                           (get properties ident))
                        property-value (if-let [property-id (:db/id property-value)]
