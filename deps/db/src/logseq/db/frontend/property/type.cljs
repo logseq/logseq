@@ -134,7 +134,8 @@
   (if new-closed-value?
     (string? s)
     (when-let [ent (d/entity db s)]
-      (string? (:block/title ent)))))
+      (and (string? (:block/title ent))
+           (:block/page ent)))))
 
 (defn- node-entity?
   [db val]
@@ -161,7 +162,9 @@
    :datetime [:fn
               {:error/message "should be a datetime"}
               number?]
-   :checkbox boolean?
+   :checkbox [:fn
+              {:error/message "should be a boolean"}
+              boolean?]
    :url      [:fn
               {:error/message "should be a URL"}
               url-entity?]
@@ -172,9 +175,15 @@
    ;; Internal usage
    ;; ==============
 
-   :string   string?
-   :json     string?
-   :raw-number number?
+   :string   [:fn
+              {:error/message "should be a string"}
+              string?]
+   :json     [:fn
+              {:error/message "should be JSON string"}
+              string?]
+   :raw-number [:fn
+                {:error/message "should be a raw number"}
+                number?]
    :entity   [:fn
               {:error/message "should be an Entity"}
               entity?]
@@ -187,10 +196,16 @@
    :page     [:fn
               {:error/message "should be a Page"}
               page-entity?]
-   :keyword  keyword?
-   :map      map?
+   :keyword  [:fn
+              {:error/message "should be a Clojure keyword"}
+              keyword?]
+   :map      [:fn
+              {:error/message "should be a Clojure map"}
+              map?]
    ;; coll elements are ordered as it's saved as a vec
-   :coll     coll?
+   :coll     [:fn
+              {:error/message "should be a collection"}
+              coll?]
    :any      some?})
 
 (assert (= (set (keys built-in-validation-schemas))
