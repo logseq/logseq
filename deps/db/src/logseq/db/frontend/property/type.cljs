@@ -148,34 +148,9 @@
     (and (some? (:block/title ent))
          (entity-util/journal? ent))))
 
-(def built-in-validation-schemas
-  "Map of types to malli validation schemas that validate a property value for that type"
-  {:default  [:fn
-              {:error/message "should be a text block"}
-              text-entity?]
-   :number   [:fn
-              {:error/message "should be a number"}
-              number-entity?]
-   :date     [:fn
-              {:error/message "should be a journal date"}
-              date?]
-   :datetime [:fn
-              {:error/message "should be a datetime"}
-              number?]
-   :checkbox [:fn
-              {:error/message "should be a boolean"}
-              boolean?]
-   :url      [:fn
-              {:error/message "should be a URL"}
-              url-entity?]
-   :node   [:fn
-            {:error/message "should be a page/block with tags"}
-            node-entity?]
-
-   ;; Internal usage
-   ;; ==============
-
-   :string   [:fn
+;; Internal usage
+(def internal-validation-schemas
+  {:string   [:fn
               {:error/message "should be a string"}
               string?]
    :json     [:fn
@@ -207,6 +182,32 @@
               {:error/message "should be a collection"}
               coll?]
    :any      some?})
+
+(def built-in-validation-schemas
+  "Map of types to malli validation schemas that validate a property value for that type"
+  (into
+   {:default  [:fn
+               {:error/message "should be a text block"}
+               text-entity?]
+    :number   [:fn
+               {:error/message "should be a number"}
+               number-entity?]
+    :date     [:fn
+               {:error/message "should be a journal date"}
+               date?]
+    :datetime [:fn
+               {:error/message "should be a datetime"}
+               number?]
+    :checkbox [:fn
+               {:error/message "should be a boolean"}
+               boolean?]
+    :url      [:fn
+               {:error/message "should be a URL"}
+               url-entity?]
+    :node   [:fn
+             {:error/message "should be a page/block with tags"}
+             node-entity?]}
+   internal-validation-schemas))
 
 (assert (= (set (keys built-in-validation-schemas))
            (into internal-built-in-property-types
