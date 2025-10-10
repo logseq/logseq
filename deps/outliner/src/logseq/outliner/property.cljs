@@ -318,11 +318,11 @@
       v
 
       (= property-type :page)
-      (let [ex-data {:property-id property-id
-                     :property-type property-type
-                     :v v}]
+      (let [error-data {:property-id property-id
+                        :property-type property-type
+                        :v v}]
         (if (or (string/blank? v) (not (string? v)))
-          (throw (ex-info "Value should be non-empty string" ex-data))
+          (throw (ex-info "Value should be non-empty string" error-data))
           (let [page (ldb/get-page @conn v)]
             (if (entity-util/page? page)
               (:db/id page)
