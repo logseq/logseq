@@ -20,6 +20,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.validate :as outliner-validate]
+            [malli.core :as m]
             [malli.error :as me]
             [malli.util :as mu]))
 
@@ -228,27 +229,48 @@
         schema (get-property-value-schema db property-type property)]
     (validate-property-value-aux schema value {:many? many?})))
 
+(defn validate!
+  "Validates `data` against `schema`.
+   Throws an ex-info with readable message if validation fails."
+  [property schema value]
+  (when-not (and
+             (= :db.type/ref (:db/valueType property))
+             (= value :logseq.property/empty-placeholder))
+    (when-not (m/validate schema value)
+      (let [errors (-> (m/explain schema value)
+                       (me/humanize))
+            error-msg (str "\"" (:block/title property) "\"" " " (if (coll? errors) (first errors) errors))]
+        (throw
+         (ex-info "Schema validation failed"
+                  {:type :notification
+                   :payload {:message error-msg
+                             :type :warning}
+                   :property (:db/ident property)
+                   :value value
+                   :errors errors}))))))
+
+(defn- throw-error-if-invalid-property-value
+  [db property value]
+  (let [property-type (:logseq.property/type property)
+        many? (= :db.cardinality/many (:db/cardinality property))
+        schema (get-property-value-schema db property-type property)
+        value' (if (and many? (not (sequential? value)))
+                 #{value}
+                 value)]
+    (validate! property schema value')))
+
 (defn- ->eid
   [id]
   (if (uuid? id) [:block/uuid id] id))
 
 (defn- raw-set-block-property!
   "Adds the raw property pair (value not modified) to the given block if the property value is valid"
-  [conn block property property-type new-value]
+  [conn block property new-value]
   (throw-error-if-read-only-property (:db/ident property))
-  (let [k-name (:block/title property)
-        property-id (:db/ident property)
-        schema (get-property-value-schema @conn property-type property)]
-    (if-let [msg (and
-                  (not= new-value :logseq.property/empty-placeholder)
-                  (validate-property-value-aux schema new-value {:many? (db-property/many? property)}))]
-      (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
-        (throw (ex-info "Schema validation failed"
-                        {:type :notification
-                         :payload {:message msg'
-                                   :type :warning}})))
-      (let [tx-data (build-property-value-tx-data conn block property-id new-value)]
-        (ldb/transact! conn tx-data {:outliner-op :save-block})))))
+  (throw-error-if-invalid-property-value @conn property new-value)
+  (let [property-id (:db/ident property)
+        tx-data (build-property-value-tx-data conn block property-id new-value)]
+    (ldb/transact! conn tx-data {:outliner-op :save-block})))
 
 (defn create-property-text-block!
   "Creates a property value block for the given property and value. Adds it to
@@ -259,6 +281,11 @@
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
+        _ (when (and (not= (:logseq.property/type property) :number)
+                     (not (string? value')))
+            (throw (ex-info "value should be a string" {:block-id block-id
+                                                        :property-id property-id
+                                                        :value value'})))
         new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                           new-block-id
                           (assoc :block/uuid new-block-id))]
@@ -266,7 +293,7 @@
     (let [property-id (:db/ident property)]
       (when (and property-id block)
         (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-          (raw-set-block-property! conn block property (:logseq.property/type property) block-id)))
+          (raw-set-block-property! conn block property block-id)))
       (:block/uuid new-value-block))))
 
 (defn- get-property-value-eid
@@ -326,9 +353,9 @@
           (let [page (ldb/get-page @conn v)]
             (if (entity-util/page? page)
               (:db/id page)
-              (let [[_ page-uuid] (outliner-page/create! conn v {})]
+              (let [[_ page-uuid] (outliner-page/create! conn v error-data)]
                 (if-not page-uuid
-                  (throw (ex-info "Failed to create page" ex-data))
+                  (throw (ex-info "Failed to create page" {}))
                   (:db/id (d/entity @conn [:block/uuid page-uuid]))))))))
 
       :else
@@ -413,10 +440,14 @@
                  (fn [eid]
                    (if-let [block (d/entity @conn eid)]
                      (let [v' (if default-url-not-closed?
-                                (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
-                                  (convert-ref-property-value conn property-id v property-type))
+                                (do
+                                  (when (number? v)
+                                    (throw-error-if-invalid-property-value @conn property v))
+                                  (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
+                                    (convert-ref-property-value conn property-id v property-type)))
                                 v')]
                        (throw-error-if-self-value block v' ref?)
+                       (throw-error-if-invalid-property-value @conn property v')
                        (build-property-value-tx-data conn block property-id v'))
                      (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
                  block-eids))]
@@ -469,7 +500,8 @@
   attributes as properties"
   [conn block-eid property-id v]
   (throw-error-if-read-only-property property-id)
-  (let [block-eid (->eid block-eid)
+  (let [db @conn
+        block-eid (->eid block-eid)
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema property-id))
@@ -489,13 +521,15 @@
           (outliner-validate/validate-extends-property @conn v [block]))
         (cond
           db-attribute?
-          (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
-            (let [tx-data (cond->
-                           [{:db/id (:db/id block) property-id v}]
-                            (= property-id :logseq.property.class/extends)
-                            (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
-              (ldb/transact! conn tx-data
-                             {:outliner-op :save-block})))
+          (do
+            (throw-error-if-invalid-property-value db property v)
+            (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+              (let [tx-data (cond->
+                             [{:db/id (:db/id block) property-id v}]
+                              (= property-id :logseq.property.class/extends)
+                              (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
+                (ldb/transact! conn tx-data
+                               {:outliner-op :save-block}))))
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
                 property-type (get property :logseq.property/type :default)
@@ -505,8 +539,9 @@
                             v)
                 existing-value (get block property-id)]
             (throw-error-if-self-value block new-value ref?)
+
             (when-not (= existing-value new-value)
-              (raw-set-block-property! conn block property property-type new-value))))))))
+              (raw-set-block-property! conn block property new-value))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property

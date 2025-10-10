@@ -106,8 +106,11 @@
   [value]
   (cond
     (boolean? value) :checkbox
+    (or (number? value)
+        (and (coll? value) (every? number? value))) :number
     (or (db-property-type/url? value)
         (and (coll? value) (every? db-property-type/url? value))) :url
+    (map? value) :json
     :else :default))
 
 (defn- set-block-properties!

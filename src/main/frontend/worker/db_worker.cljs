@@ -632,7 +632,10 @@
               {:keys [type payload]} (when (map? data) data)]
           (case type
             :notification
-            (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
+            (do
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
+              (log/error ::apply-outliner-ops-failed e)
+              (throw e))
             (throw e)))))))
 
 (def-thread-api :thread-api/file-writes-finished?
