@@ -109,8 +109,9 @@
    this
    (when-not (string/blank? k)
      (p/let [opts (or (some-> opts bean/->clj) {})
-             property-ident (api-block/get-db-ident-from-property-name k this)
-             _ (api-block/ensure-property-upsert-control this property-ident k)
+             k' (api-block/sanitize-user-property-name k)
+             property-ident (api-block/get-db-ident-from-property-name k' this)
+             _ (api-block/ensure-property-upsert-control this property-ident k')
              schema (or (some-> schema (bean/->clj)
                                 (update-keys #(if (contains? #{:hide :public} %)
                                                 (keyword (str (name %) "?")) %))) {})
@@ -123,7 +124,7 @@
                       (-> (assoc :logseq.property/type (keyword (:type schema)))
                           (dissoc :type)))
              p (db-property-handler/upsert-property! property-ident schema
-                                                     (assoc opts :property-name name))
+                                                     (assoc opts :property-name k'))
              p (db/entity (:db/id p))]
        (sdk-utils/result->js p)))))
 
