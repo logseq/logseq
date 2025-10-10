@@ -39,7 +39,7 @@
             [promesa.core :as p]))
 
 (defn- <get-block
-  [id-or-name & opts]
+  [id-or-name & {:as opts}]
   (when id-or-name
     (db-async/<get-block (state/get-current-repo) id-or-name opts)))
 
