@@ -74,7 +74,7 @@
   (when-let [prop (and (string? property-value)
                        (plugin-property-key? ident)
                        (some-> ident (db-utils/entity)))]
-    (if (= (:logseq.property/type prop) :string)
+    (if (= (:logseq.property/type prop) :json)
       (try
         (js/JSON.parse property-value)
         (catch js/Error _e
@@ -107,9 +107,9 @@
   (cond
     (boolean? value) :checkbox
     (or (number? value)
-        (and (coll? value) (every? number? value))) :number
+        (and (sequential? value) (every? number? value))) :number
     (or (db-property-type/url? value)
-        (and (coll? value) (every? db-property-type/url? value))) :url
+        (and (sequential? value) (every? db-property-type/url? value))) :url
     (map? value) :json
     :else :default))
 
@@ -129,10 +129,12 @@
                                   (infer-property-type value)))
            cardinality (or (:db/cardinality property)
                            (if (and (or (= "many" (:cardinality schema))
-                                        (coll? value))
+                                        (sequential? value))
                                     (not= (:cardinality schema) "one"))
                              :db.cardinality/many
                              :db.cardinality/one))
+           _ (when (and (= cardinality :many) (= property-type :json))
+               (throw (ex-info ":json type doesn't support multiple values" {:property-id property-ident})))
            error-data {:property-id property-id
                        :property-ident property-ident
                        :schema schema
@@ -140,7 +142,7 @@
            schema' {:logseq.property/type property-type
                     :db/cardinality cardinality}
            many? (= cardinality :db.cardinality/many)
-           value' (if (and many? (not (coll? value)))
+           value' (if (and many? (not (sequential? value)))
                     (when value [value])
                     value)]
 
@@ -152,7 +154,7 @@
          (throw (ex-info (str "Missing `type` in schema for property: " property-id)
                          error-data)))
 
-       (when (and (not many?) (coll? value))
+       (when (and (not many?) (sequential? value))
          (throw (ex-info (util/format "Property %s has cardinality `one` but passed multiple values" property-id)
                          error-data)))
 
@@ -166,7 +168,7 @@
        (let [set-property! (fn [value]
                              (outliner-op/set-block-property! block-id property-ident
                                                               (convert-json-and-string property-type value)))
-             values (if (coll? value') value' [value'])]
+             values (if (sequential? value') value' [value'])]
          (doseq [value values]
            (set-property! value)))))))
 
