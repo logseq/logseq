@@ -85,14 +85,11 @@
 
 (defn- api-tool
   "Calls API method w/ args and returns a MCP response"
-  [api-fn api-method method-args & {:keys [write-tool?]}]
+  [api-fn api-method method-args]
   (-> (p/let [body (api-fn api-method method-args)]
         (if-let [error (and body (aget body "error"))]
           (mcp-error-response (str "API Error: " error))
-          (if write-tool?
-            ;; Writes that return have succeeded since writes fail fast if they don't write
-            (mcp-success-response {:ok true})
-            (mcp-success-response body))))
+          (mcp-success-response body)))
       (p/catch unexpected-api-error)))
 
 (defn- api-get-page
@@ -110,22 +107,6 @@
 (defn- api-list-properties
   [call-api-fn _args]
   (call-api-fn "logseq.cli.listProperties" []))
-
-(defn- api-add-to-page
-  [call-api-fn args]
-  (call-api-fn "logseq.editor.appendBlockInPage"
-               [(aget args "pageName")
-                (aget args "content")
-                #js {:mcp-options #js {:force (aget args "force")}}]
-               {:write-tool? true}))
-
-(defn- api-update-block
-  [call-api-fn args]
-  (call-api-fn "logseq.editor.updateBlock"
-               [(aget args "blockUUID")
-                (aget args "content")
-                #js {:mcp true}]
-               {:write-tool? true}))
 
 (defn- api-search-blocks
   [call-api-fn args]
@@ -146,21 +127,6 @@
     :config #js {:title "Get Page"
                  :description "Get a page's content including its blocks. A property and a tag are pages."
                  :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
-   :addToPage
-   {:fn api-add-to-page
-    :config #js {:title "Add to Page"
-                 :description "Add a block to a page"
-                 :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))
-                                   :content (-> (z/string) (.describe "Block content"))
-                                   :force (-> (z/boolean)
-                                              (z/optional)
-                                              (.describe "Force given page to be created"))}}}
-   :updateBlock
-   {:fn api-update-block
-    :config #js {:title "Update Block"
-                 :description "Update block with new content"
-                 :inputSchema #js {:blockUUID (z/string)
-                                   :content (-> (z/string) (.describe "Block content"))}}}
    :upsertNodes
    {:fn api-upsert-nodes
     :config
