@@ -24,12 +24,21 @@
 (defn- local-list-tags [conn _args]
   (cli-common-mcp-server/mcp-success-response (cli-common-mcp-tools/list-tags @conn)))
 
+(defn- local-upsert-nodes [conn args]
+  (cli-common-mcp-server/mcp-success-response
+   (cli-common-mcp-tools/upsert-nodes
+    conn
+    ;; string is used by a -t invocation
+    (-> (if (string? (.-operations args)) (js/JSON.parse (.-operations args)) (.-operations args))
+        (js->clj :keywordize-keys true)))))
+
 (def ^:private local-tools
   "MCP Tools when running with a local graph"
   (let [tools {:getPage {:fn local-get-page}
                :listPages {:fn local-list-pages}
                :listProperties {:fn local-list-properties}
-               :listTags {:fn local-list-tags}}]
+               :listTags {:fn local-list-tags}
+               :upsertNodes {:fn local-upsert-nodes}}]
     (merge-with
      merge
      (select-keys cli-common-mcp-server/api-tools (keys tools))
