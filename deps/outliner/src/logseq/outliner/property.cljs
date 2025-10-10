@@ -30,6 +30,20 @@
     (throw (ex-info "Read-only property value shouldn't be edited"
                     {:property property-ident}))))
 
+(defn- db-ident->eid
+  [db db-ident]
+  (assert (qualified-keyword? db-ident))
+  (let [id (:db/id (d/entity db db-ident))]
+    (when-not id
+      (throw (ex-info "Wrong property db/ident" {:db-ident db-ident})))
+    id))
+
+(defn- resolve-property-value
+  [db property-type value]
+  (if (and (qualified-keyword? value) (not= :keyword property-type))
+    (db-ident->eid db value)
+    value))
+
 (defonce ^:private built-in-class-property->properties
   (->>
    (mapcat
@@ -425,8 +439,10 @@
                 @conn
                 (if (number? v) (d/entity @conn v) v)
                 (map #(d/entity @conn %) block-eids)))
-           _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+           _ (when (nil? property)
+               (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)
+           v (resolve-property-value @conn property-type v)
            _ (assert (some? v) "Can't set a nil property value must be not nil")
            ref? (contains? db-property-type/all-ref-property-types property-type)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
@@ -505,7 +521,9 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         db-attribute? (some? (db-schema/schema property-id))
-        property (d/entity @conn property-id)]
+        property (d/entity @conn property-id)
+        property-type (get property :logseq.property/type :default)
+        v (resolve-property-value db property-type v)]
     (when-not (and block property)
       (throw (ex-info "Set block property failed: block or property doesn't exist"
                       {:block-eid block-eid
@@ -532,7 +550,6 @@
                                {:outliner-op :save-block}))))
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
-                property-type (get property :logseq.property/type :default)
                 ref? (db-property-type/all-ref-property-types property-type)
                 new-value (if ref?
                             (convert-ref-property-value conn property-id v property-type)
