@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils'
 import { FormHTMLAttributes, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircleIcon, Loader2Icon, LucideEye, LucideEyeClosed, LucideX, LucideXCircle } from 'lucide-react'
-import { t, useAuthFormState } from './core'
+import { AuthFormRootContext, t, useAuthFormState } from './core'
 import * as Auth from 'aws-amplify/auth'
 import { Skeleton } from '@/components/ui/skeleton'
+import * as React from 'react'
 
 function ErrorTip({ error, removeError }: {
   error: string | { variant?: 'warning' | 'destructive', title?: string, message: string | any },
@@ -112,7 +113,7 @@ function useCountDown() {
 }
 
 export function LoginForm() {
-  const { setErrors, setCurrentTab, onSessionCallback } = useAuthFormState()
+  const { setErrors, setCurrentTab, onSessionCallback, userSessionRender } = useAuthFormState()
   const [loading, setLoading] = useState<boolean>(false)
   const [sessionUser, setSessionUser] = useState<any>(null)
   const loadSession = async () => {
@@ -142,15 +143,26 @@ export function LoginForm() {
       </div>)
   }
 
+  const signOut = async () => {
+    await Auth.signOut()
+    setSessionUser(false)
+    setErrors(null)
+  }
+
   if (sessionUser?.username) {
+    if (userSessionRender) {
+      if (typeof userSessionRender === 'function') {
+        return userSessionRender({ sessionUser, signOut })
+      }
+      return userSessionRender
+    }
+
     return (
       <div className={'w-full text-center'}>
         <p className={'mb-4'}>{t('You are already logged in as')} <strong>{sessionUser.username}</strong></p>
-        <Button variant={'secondary'} className={'w-full'} onClick={async () => {
-          await Auth.signOut()
-          setSessionUser(false)
-          setErrors(null)
-        }}>{t('Sign out')}</Button>
+        <Button variant={'secondary'} className={'w-full'} onClick={signOut}>
+          {t('Sign out')}
+        </Button>
       </div>
     )
   }
@@ -621,5 +633,49 @@ export function ConfirmWithCodeForm(
         </p>
       </div>
     </FormGroup>
+  )
+}
+
+export function LSAuthenticator(props: any) {
+  const [errors, setErrors] = React.useState<string | null>(null)
+  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup' | 'confirm-code' | any>('login')
+  const onSessionCallback = React.useCallback((session: any) => {
+    props.onSessionCallback?.(session)
+  }, [props.onSessionCallback])
+
+  React.useEffect(() => {
+    setErrors(null)
+  }, [currentTab])
+
+  let content = null
+  // support passing object with type field
+  let _currentTab = currentTab?.type ? currentTab.type : currentTab
+  let _currentTabProps = currentTab?.props || {}
+
+  switch (_currentTab) {
+    case 'login':
+      content = <LoginForm/>
+      break
+    case 'reset':
+      content = <ResetPasswordForm/>
+      break
+    case 'signup':
+      content = <SignupForm/>
+      break
+    case 'confirm-code':
+      content = <ConfirmWithCodeForm {..._currentTabProps}/>
+      break
+  }
+
+  return (
+    <AuthFormRootContext.Provider value={{
+      errors, setErrors, setCurrentTab,
+      onSessionCallback, userSessionRender: props.children
+    }}>
+      {props.titleRender?.(_currentTab)}
+      <div className={'ls-authenticator-content'}>
+        {content}
+      </div>
+    </AuthFormRootContext.Provider>
   )
 }

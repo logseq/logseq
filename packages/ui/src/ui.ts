@@ -94,11 +94,13 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import * as uniqolor from 'uniqolor'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { setLocale, setTranslate } from './i18n'
+import * as amplifyAuth from './amplify'
 
 declare global {
   var LSUI: any
   var LSUtils: any
   var LSI18N: any
+  var LSAuth: any
 }
 
 const shadui = {
@@ -206,6 +208,8 @@ function setupGlobals() {
     setTranslate,
     setLocale,
   }
+
+  window.LSAuth = amplifyAuth
 }
 
 // setup
