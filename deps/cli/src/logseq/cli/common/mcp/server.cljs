@@ -16,7 +16,7 @@
 ;; for how to respond to different MCP requests
 (defn handle-post-request [mcp-server {:keys [port host]} req res]
   (let [session-id (aget (.-headers req) "mcp-session-id")]
-    (js/console.log "POST /mcp request" session-id (.-body req))
+    (js/console.log "POST /mcp request" session-id (pr-str (.-body req)))
     (cond
       (and session-id (@transports session-id))
       (let [^js transport (@transports session-id)]
@@ -131,7 +131,11 @@
   [call-api-fn args]
   (call-api-fn "logseq.app.search" [(aget args "searchTerm") #js {:enable-snippet? false}]))
 
-(def api-tools
+(defn- api-upsert-nodes
+  [call-api-fn args]
+  (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations")]))
+
+(def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
   {:listPages
    {:fn api-list-pages
@@ -140,7 +144,7 @@
    :getPage
    {:fn api-get-page
     :config #js {:title "Get Page"
-                 :description "Get a page's content including its blocks"
+                 :description "Get a page's content including its blocks. A property and a tag are pages."
                  :inputSchema #js {:pageName (-> (z/string) (.describe "The page's name or uuid"))}}}
    :addToPage
    {:fn api-add-to-page
@@ -157,6 +161,67 @@
                  :description "Update block with new content"
                  :inputSchema #js {:blockUUID (z/string)
                                    :content (-> (z/string) (.describe "Block content"))}}}
+   :upsertNodes
+   {:fn api-upsert-nodes
+    :config
+    #js {:title "Upsert Nodes"
+         :description
+         "Takes an object with field :operations, which is an array of operation objects.
+          Each operation creates or edits a page, block, tag or property. Each operation is a object
+          that must have :operation, :entityType and :data fields. More about fields in an operation object:
+            * :operation  - Either :add or :edit
+            * :entityType - What type of node, e.g. :block, :page, :tag or :property
+            * :id - For :edit, this _must_ be a string uuid. For :add, use a temporary unique string if the new page is referenced by later operations e.g. add blocks
+            * :data - A map of fields to set or update. This map can have the following keys:
+              * :title - A page/tag/property's name or a block's content
+              * :page-id - A page string uuid of a block. Required when entityType is :block.
+              * :tags - A list of tags as string uuids
+              * :property-type - A property's type
+              * :property-cardinality - A property's cardinality. Must be :one or :many
+              * :property-classes - A property's list of allowed tags, each being a uuid string or a tag's name
+              * :class-extends - List of parent tags, each being a uuid string or a tag's name
+              * :class-properties - A tag's list of properties, each eing a uuid string or a property's name
+
+         Example inputs with their prompt, description and data as clojure EDN:
+
+         Description: This input adds a new block to page with id '119268a6-704f-4e9e-8c34-36dfc6133729' and update the title of a page with uuid '119268a6-704f-4e9e-8c34-36dfc6133729':
+
+         {:operations
+          [{:operation :add
+            :entityType :block
+            :id nil
+            :data {:page-id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
+                   :title \"New block text\"}}
+           {:operation :edit
+            :entity :page
+            :id \"119268a6-704f-4e9e-8c34-36dfc6133729\"
+            :data {:title \"Revised page title\"}}]}
+
+        Prompt: Add task 't1' to new page 'Inbox'
+        Description: This input creates a page 'Inbox' and adds a 't1' block with tag \"00000002-1282-1814-5700-000000000000\" (task) to it:
+
+        {:operations
+          [{:operation :add
+            :entityType :page
+            :id \"temp-Inbox\"
+            :data {:title \"Inbox\"}}
+           {:operation :add
+            :entityType :block
+            :data {:page-id \"temp-Inbox\"
+                   :title \"t1\"
+                   :tags [\"00000002-1282-1814-5700-000000000000\"]}}]}
+
+         Additional advice for building operations:
+         * When building a block update operation, use the 'page' key of the searchBlocks tool to fill in the value of :page-id under :data
+         * Before creating any page, tag or property, check that it exists with getPage"
+         :inputSchema
+         #js {:operations
+              (z/array
+               (z/object
+                #js {:operation   (z/enum #js ["add" "edit"])
+                     :entityType  (z/enum #js ["block" "page" "tag" "property"])
+                     :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
+                     :data        (-> (z/object #js {}) (.passthrough))}))}}}
    :searchBlocks
    {:fn api-search-blocks
     :config #js {:title "Search Blocks"

@@ -144,12 +144,14 @@
 
 (defn validate-property-title
   "Validates a property's title when it has changed"
-  [new-title]
-  (when-not (db-property/valid-property-name? new-title)
-    (throw (ex-info "Property name is invalid"
-                    {:type :notification
-                     :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
-                               :type :error}}))))
+  ([new-title] (validate-property-title new-title {}))
+  ([new-title meta-m]
+   (when-not (db-property/valid-property-name? new-title)
+     (throw (ex-info "Property name is invalid"
+                     (merge meta-m
+                            {:type :notification
+                             :payload {:message "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['."
+                                       :type :error}}))))))
 
 (defn- validate-extends-property-have-correct-type
   "Validates whether given parent and children are classes"
