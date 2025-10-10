@@ -414,29 +414,41 @@
           opts' (assoc opts :before false :sibling false :start true)]
       (insert_block (str (:block/uuid block)) content (bean/->js opts')))))
 
+(defn- get-current-page-or-today
+  []
+  (or
+   (state/get-current-page)
+   (date/today)))
+
 (defn append_block_in_page
-  [uuid-or-page-name content ^js opts]
-  (let [uuid-or-page-name (or
-                           uuid-or-page-name
-                           (state/get-current-page)
-                           (date/today))]
-    (p/let [_ (<ensure-page-loaded uuid-or-page-name)
-            page? (not (util/uuid-string? uuid-or-page-name))
-            page (db-model/get-page uuid-or-page-name)
-            page-not-exist? (and page? (nil? page))
-            new-page (when page-not-exist?
-                       (page-handler/<create! uuid-or-page-name
-                                              {:redirect? false
-                                               :format (state/get-preferred-format)}))
-            block (or page new-page)]
-      (let [children (:block/_parent block)
-            [target sibling?] (if (seq children)
-                                [(last (ldb/sort-by-order children)) true]
-                                [block false])
-            target-id (str (:block/uuid target))
-            opts (-> (bean/->clj opts)
-                     (assoc :sibling sibling?))]
-        (insert_block target-id content opts)))))
+  ([content]
+   (append_block_in_page (get-current-page-or-today) content nil))
+  ([uuid-or-page-name-or-content content-or-opts]
+   (if (string? content-or-opts)
+     (append_block_in_page uuid-or-page-name-or-content content-or-opts nil)
+     (append_block_in_page (get-current-page-or-today) uuid-or-page-name-or-content content-or-opts)))
+  ([uuid-or-page-name content ^js opts]
+   (let [uuid-or-page-name (or
+                            uuid-or-page-name
+                            (state/get-current-page)
+                            (date/today))]
+     (p/let [_ (<ensure-page-loaded uuid-or-page-name)
+             page? (not (util/uuid-string? uuid-or-page-name))
+             page (db-model/get-page uuid-or-page-name)
+             page-not-exist? (and page? (nil? page))
+             new-page (when page-not-exist?
+                        (page-handler/<create! uuid-or-page-name
+                                               {:redirect? false
+                                                :format (state/get-preferred-format)}))
+             block (or page new-page)]
+       (let [children (:block/_parent block)
+             [target sibling?] (if (seq children)
+                                 [(last (ldb/sort-by-order children)) true]
+                                 [block false])
+             target-id (str (:block/uuid target))
+             opts (-> (bean/->clj opts)
+                      (assoc :sibling sibling?))]
+         (insert_block target-id content opts))))))
 
 (defn download_graph_db
   []
