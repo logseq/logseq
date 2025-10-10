@@ -31,29 +31,32 @@
 
 (defn get-sanitized-plugin-id
   [^js plugin]
-  (when (some-> js/window.LSPlugin (.-PluginLocal))
-    (some->> plugin (.-id) sanitize-user-property-name)))
+  (or
+   (when (some-> js/window.LSPlugin (.-PluginLocal))
+     (some->> plugin (.-id) sanitize-user-property-name))
+   "_test_plugin"))
 
 (defn resolve-property-prefix-for-db
   [^js plugin]
   (let [plugin-id (get-sanitized-plugin-id plugin)]
     (when-not plugin-id
-      (js/console.error "Can't get current plugin-id")
-      (throw (ex-info "Can't get current plugin-id"
+      (js/console.error "Can't get current plugin id")
+      (throw (ex-info "Can't get current plugin id"
                       {:plugin plugin})))
     (str plugin-property-prefix plugin-id)))
 
 (defn get-db-ident-from-property-name
   "Finds a property :db/ident for a given property name"
   [property-name plugin]
-  (when-not (string? property-name)
-    (throw (ex-info "property-name should be a string" {:property-name property-name})))
-  (let [property-key (keyword property-name)]
+  (let [property-name' (if-not (string? property-name)
+                         (str property-name)
+                         property-name)
+        property-key (keyword property-name')]
     (if (qualified-keyword? property-key)
       property-key
       ;; plugin property
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
-        (keyword plugin-ns (db-ident/normalize-ident-name-part property-name))))))
+        (keyword plugin-ns (db-ident/normalize-ident-name-part property-name'))))))
 
 (defn plugin-property-key?
   [ident]
