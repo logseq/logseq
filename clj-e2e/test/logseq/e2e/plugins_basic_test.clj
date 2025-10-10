@@ -81,8 +81,8 @@
           props2 (ls-api-call! :editor.getPageProperties "test-block-properties-apis")]
       (w/wait-for ".property-k:text('p1')")
       (is (= 1 (get prop1 "value")))
-      (is (= (get prop1 "ident") ":plugin.property._api/p1"))
-      (is (= 1 (get props1 ":plugin.property._api/p1")))
+      (is (= (get prop1 "ident") ":plugin.property._test_plugin/p1"))
+      (is (= 1 (get props1 ":plugin.property._test_plugin/p1")))
       (is (= ["Page"] (get props2 ":block/tags")))
       (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2")
       (ls-api-call! :editor.upsertBlockProperty uuid' "p3" true)
@@ -102,8 +102,8 @@
       (ls-api-call! :editor.upsertBlockProperty uuid' "p2" "p2-updated")
       (w/wait-for ".block-title-wrap:text('p2-updated')")
       (let [props (ls-api-call! :editor.getBlockProperties uuid')]
-        (is (= (get props ":plugin.property._api/p3") false))
-        (is (= (get props ":plugin.property._api/p2") "p2-updated")))))
+        (is (= (get props ":plugin.property._test_plugin/p3") false))
+        (is (= (get props ":plugin.property._test_plugin/p2") "p2-updated")))))
 
   (testing "properties management related apis"
     (let [_ (ls-api-call! :editor.upsertProperty "o1")
@@ -112,7 +112,7 @@
           prop1 (ls-api-call! :editor.getProperty "o1")
           prop2 (ls-api-call! :editor.getProperty "o2")
           prop3 (ls-api-call! :editor.getProperty "user.property/o3")]
-      (is (= (get prop1 "ident") ":plugin.property._api/o1"))
+      (is (= (get prop1 "ident") ":plugin.property._test_plugin/o1"))
       (is (= (get prop1 "type") "default"))
       (is (= (get prop2 "type") "number"))
       (is (= (get prop3 "ident") ":user.property/o3"))
