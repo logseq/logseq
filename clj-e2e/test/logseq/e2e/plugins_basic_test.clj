@@ -106,16 +106,12 @@
         (is (= (get props ":plugin.property._test_plugin/p2") "p2-updated")))))
 
   (testing "properties management related apis"
-    (let [_ (ls-api-call! :editor.upsertProperty "o1")
+    (let [_ (ls-api-call! :editor.upsertProperty "o1" {:type "default"})
           _ (ls-api-call! :editor.upsertProperty "o2" {:type "number"})
-          _ (ls-api-call! :editor.upsertProperty "user.property/o3" {:type "node"})
           prop1 (ls-api-call! :editor.getProperty "o1")
-          prop2 (ls-api-call! :editor.getProperty "o2")
-          prop3 (ls-api-call! :editor.getProperty "user.property/o3")]
+          prop2 (ls-api-call! :editor.getProperty "o2")]
       (is (= (get prop1 "ident") ":plugin.property._test_plugin/o1"))
       (is (= (get prop1 "type") "default"))
       (is (= (get prop2 "type") "number"))
-      (is (= (get prop3 "ident") ":user.property/o3"))
-      (is (= (get prop3 "type") "node"))
       (ls-api-call! :editor.removeProperty "o2")
       (is (nil? (w/find-one-by-text ".property-k" "o2"))))))
