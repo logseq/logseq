@@ -2303,7 +2303,7 @@
   [:div.relative
    [:div.dnd-separator.absolute
     {:style {:left (cond-> (if (= move-to :nested) 48 20)
-                     (util/capacitor-new?)
+                     (util/capacitor?)
                      (- 20))
              :top 0
              :width "100%"
@@ -3002,7 +3002,7 @@
                                             journal-title?
                                             (do
                                               (.preventDefault e)
-                                              (when-not (util/capacitor-new?)
+                                              (when-not (util/capacitor?)
                                                 (route-handler/redirect-to-page! (:block/uuid block))))
 
                                             (ldb/journal? block)
@@ -3349,7 +3349,7 @@
                           (and top? (<= (js/Math.abs (- cursor-top element-top)) 16))
                           :top
 
-                          (> x-offset (if (util/capacitor-new?) 100 50))
+                          (> x-offset (if (util/capacitor?) 100 50))
                           :nested
 
                           :else
@@ -3392,7 +3392,7 @@
         ;; dnd block moving in current Logseq instance
         (do
           (dnd/move-blocks event blocks target-block original-block @*move-to')
-          (when (util/capacitor-new?)
+          (when (util/capacitor?)
             (state/set-state! :mobile/show-action-bar? false)
             (state/clear-selection!)))
         ;; handle DataTransfer
@@ -3675,7 +3675,7 @@
        :on-touch-cancel (fn [e]
                           (block-handler/on-touch-cancel e))}
 
-       (and (util/capacitor-new?) (not (ldb/page? block)))
+       (and (util/capacitor?) (not (ldb/page? block)))
        (assoc
         :draggable true
         :on-drag-start
