@@ -574,6 +574,10 @@
                                              :payload {:message "Property failed to create. Please try a different property name."
                                                        :type :error}})))))]
     (assert (qualified-keyword? db-ident))
+    (when (and (contains? #{:checkbox} (:logseq.property/type  schema))
+               (= :db.cardinality/many (:db/cardinality schema)))
+      (throw (ex-info ":checkbox property doesn't allow multiple values" {:property-id property-id
+                                                                          :schema schema})))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (update-property conn db-ident property schema opts)
       (let [k-name (or (and property-name (name property-name))

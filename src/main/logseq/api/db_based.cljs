@@ -96,6 +96,23 @@
                      (sdk-utils/normalize-keyword-for-json)
                      (bean/->js)))))
 
+(defn ->cardinality
+  [input]
+  (let [valid-input #{"one" "many" "db.cardinality/one" "db.cardinality/many"}]
+    (when-not (contains? valid-input input)
+      (throw (ex-info "Invalid cardinality, choices: \"one\" or \"many\"" {:input input})))
+    (let [result (keyword input)]
+      (case result
+        :one :db.cardinality/one
+        :many :db.cardinality/many
+        result))))
+
+(defn- schema-type-check!
+  [type]
+  (let [valid-types #{:default :number :date :datetime :checkbox :url :node :json :string}]
+    (when-not (contains? valid-types type)
+      (throw (ex-info (str "Invalid type, type should be one of: " valid-types) {:type type})))))
+
 (defn upsert-property
   "schema:
     {:type :default | :number | :date | :datetime | :checkbox | :url | :node | :json | :string
@@ -115,9 +132,11 @@
              schema (or (some-> schema (bean/->clj)
                                 (update-keys #(if (contains? #{:hide :public} %)
                                                 (keyword (str (name %) "?")) %))) {})
+             _ (when (:type schema)
+                 (schema-type-check! (:type schema)))
              schema (cond-> schema
                       (string? (:cardinality schema))
-                      (-> (assoc :db/cardinality (keyword (:cardinality schema)))
+                      (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
                           (dissoc :cardinality))
 
                       (string? (:type schema))
