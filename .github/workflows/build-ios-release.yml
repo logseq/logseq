@@ -25,7 +25,7 @@ jobs:
           ref: ${{ github.event.inputs.git-ref }}
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.0.0'
+          xcode-version: '26.0.1'
       - name: Show runtimes
         run: |
           xcrun simctl list > /dev/null

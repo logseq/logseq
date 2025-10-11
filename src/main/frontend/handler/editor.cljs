@@ -943,7 +943,7 @@
           block-parent (get uuid->dom-block (:block/uuid block))
           sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))
           blocks' (block-handler/get-top-level-blocks blocks)
-          mobile? (util/capacitor-new?)]
+          mobile? (util/capacitor?)]
       (p/do!
        (when (and sibling-block (not mobile?))
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block
@@ -1067,7 +1067,7 @@
                                       (assoc :db/id (:db/id b)))))))]
         (common-handler/copy-to-clipboard-without-id-property! repo (get block :block/format :markdown) content (when html? html) copied-blocks))
       (state/set-block-op-type! :copy)
-      (when-not (util/capacitor-new?)
+      (when-not (util/capacitor?)
         (notification/show! "Copied!" :success)))))
 
 (defn copy-block-refs
