@@ -56,7 +56,8 @@
                        (mobile-state/close-left-sidebar!))
                      (when (state/get-edit-block)
                        (state/clear-edit!))
-
+                     (when (mobile-state/quick-add-open?)
+                       (mobile-state/close-popup!))
                      (mobile-state/open-block-modal! entity)))))))
 
          :graphs
