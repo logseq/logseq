@@ -84,7 +84,7 @@
                                      (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID GraphSchemaVersion])
 
                                      :else
-                                     (when-not (util/capacitor-new?)
+                                     (when-not (util/capacitor?)
                                        (state/pub-event! [:graph/pull-down-remote-graph repo]))))))]
       (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
         [:small.text-muted-foreground (str "Last opened at: " time)])]
@@ -207,7 +207,7 @@
                           (config/db-based-graph? (:url item)))))
         {remote-graphs true local-graphs false} (group-by (comp boolean :remote?) repos)]
     [:div#graphs
-     (when-not (util/capacitor-new?)
+     (when-not (util/capacitor?)
        [:h1.title (t :graph/all-graphs)])
 
      [:div.pl-1.content.mt-3
@@ -217,7 +217,7 @@
        (when (seq local-graphs)
          (repos-inner local-graphs))
 
-       (when-not (util/capacitor-new?)
+       (when-not (util/capacitor?)
          [:div.flex.flex-row.my-4
           (if util/web-platform?
             [:div.mr-8
@@ -245,7 +245,7 @@
             :background "gray"
             :disabled remotes-loading?
             :on-click (fn []
-                        (when-not (util/capacitor-new?)
+                        (when-not (util/capacitor?)
                           (file-sync/load-session-graphs))
                         (rtc-handler/<get-remote-graphs)))]]
          (repos-inner remote-graphs)])]]))
