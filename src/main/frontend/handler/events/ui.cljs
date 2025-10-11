@@ -90,7 +90,7 @@
 
 (defmethod events/handle :redirect-to-home [_]
   (page-handler/create-today-journal!)
-  (when (util/capacitor-new?)
+  (when (util/capacitor?)
     (mobile-state/redirect-to-tab! "home")))
 
 (defmethod events/handle :page/show-delete-dialog [[_ selected-rows ok-handler]]

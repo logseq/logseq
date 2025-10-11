@@ -103,18 +103,19 @@
 
 (defn- reload-app-if-old-db-worker-exists
   []
-  (when-let [client-id @state/*db-worker-client-id]
-    (js/navigator.locks.request client-id #js {:mode "exclusive"
-                                               :ifAvailable true}
-                                (fn [lock]
-                                  (when-not lock
-                                    (js/window.location.reload))))))
+  (when (util/capacitor?)
+    (when-let [client-id @state/*db-worker-client-id]
+      (js/navigator.locks.request client-id #js {:mode "exclusive"
+                                                 :ifAvailable true}
+                                  (fn [lock]
+                                    (when-not lock
+                                      (js/window.location.reload)))))))
 
 (defn start-db-worker!
   []
-  (p/do!
-   (reload-app-if-old-db-worker-exists)
-   (when-not util/node-test?
+  (when-not util/node-test?
+    (p/do!
+     (reload-app-if-old-db-worker-exists)
      (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
            worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
