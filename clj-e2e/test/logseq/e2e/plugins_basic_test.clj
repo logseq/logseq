@@ -31,7 +31,7 @@
       ;; Remove redundant underscores and trim
         (clojure.string/replace #"_+" "_")
         (clojure.string/trim)
-      ;; Convert to lowercase
+        ;; Convert to lowercase
         (clojure.string/lower-case))))
 
 (defn- ls-api-call!
@@ -43,10 +43,10 @@
         ns1 (string/lower-case (if (and ns? (not inbuilt?))
                                  (str "sdk." (first ns')) "api"))
         name1 (if ns? (to-snake-case (last ns')) tag)
-        estr (format "s => { const args = JSON.parse(s);const o=logseq.%1$s; return o['%2$s']?.apply(null, args || []); }" ns1 name1)]
-    (let [args (json/write-value-as-string (vec args))]
-      ;(prn "Debug: eval-js #" estr args)
-      (w/eval-js estr args))))
+        estr (format "s => { const args = JSON.parse(s);const o=logseq.%1$s; return o['%2$s']?.apply(null, args || []); }" ns1 name1)
+        args (json/write-value-as-string (vec args))]
+    ;; (prn "Debug: eval-js #" estr args)
+    (w/eval-js estr args)))
 
 (defn- assert-api-ls-block!
   ([ret] (assert-api-ls-block! ret 1))
@@ -56,8 +56,8 @@
      (assert/assert-have-count (str "#ls-block-" uuid') count)
      uuid')))
 
-(deftest apis-related-test
-  (testing "block related apis"
+(deftest editor-apis-test
+  (testing "editor related apis"
     (page/new-page "test-block-apis")
     (ls-api-call! :ui.showMsg "hello world" "info")
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-apis" "append-block-in-page-0")
@@ -70,8 +70,9 @@
       (k/esc)
       (w/wait-for ".block-title-wrap:text('append-but-updated-0')")
       (ls-api-call! :editor.removeBlock uuid')
-      (assert-api-ls-block! uuid' 0)))
+      (assert-api-ls-block! uuid' 0))))
 
+(deftest block-properties-test
   (testing "block properties related apis"
     (page/new-page "test-block-properties-apis")
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-properties-apis" "block-in-page-0" {:properties {:p1 1}})
@@ -103,15 +104,18 @@
       (w/wait-for ".block-title-wrap:text('p2-updated')")
       (let [props (ls-api-call! :editor.getBlockProperties uuid')]
         (is (= (get props ":plugin.property._test_plugin/p3") false))
-        (is (= (get props ":plugin.property._test_plugin/p2") "p2-updated")))))
+        (is (= (get props ":plugin.property._test_plugin/p2") "p2-updated"))))))
 
+(deftest property-related-test
   (testing "properties management related apis"
-    (let [_ (ls-api-call! :editor.upsertProperty "o1" {:type "default"})
-          _ (ls-api-call! :editor.upsertProperty "o2" {:type "number"})
-          prop1 (ls-api-call! :editor.getProperty "o1")
-          prop2 (ls-api-call! :editor.getProperty "o2")]
-      (is (= (get prop1 "ident") ":plugin.property._test_plugin/o1"))
-      (is (= (get prop1 "type") "default"))
-      (is (= (get prop2 "type") "number"))
-      (ls-api-call! :editor.removeProperty "o2")
-      (is (nil? (w/find-one-by-text ".property-k" "o2"))))))
+    (dorun
+     (map-indexed
+      (fn [idx property-type]
+        (let [property-name (str "property-" idx)
+              _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
+              property (ls-api-call! :editor.getProperty property-name)]
+          (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
+          (is (= (get property "type") property-type))
+          (ls-api-call! :editor.removeProperty property-name)
+          (is (nil? (ls-api-call! :editor.getProperty property-name)))))
+      ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]))))
