@@ -698,7 +698,7 @@
             (when (not tag-dialog?)
               [:div.ls-page-blocks
                {:style {:margin-left (if (or whiteboard? (util/mobile?)) 0 -20)}
-                :class (when-not (or sidebar? (util/capacitor-new?))
+                :class (when-not (or sidebar? (util/capacitor?))
                          "mt-4")}
                (page-blocks-cp page (merge option {:sidebar? sidebar?
                                                    :container-id (:container-id state)

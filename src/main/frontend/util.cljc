@@ -77,7 +77,7 @@
        (when-not node-test?
          (safe-re-find #"Mobi" js/navigator.userAgent)))
      (def mobile? (memoize mobile*?))
-     (def capacitor-new? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
+     (def capacitor? (memoize #(and js/window (gobj/get js/window "isCapacitorNew"))))))
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
@@ -103,11 +103,11 @@
 
 #?(:cljs (defn app-scroll-container-node
            ([]
-            (if (capacitor-new?)
+            (if (capacitor?)
               (mobile-page-scroll)
               (gdom/getElement "main-content-container")))
            ([el]
-            (if (capacitor-new?)
+            (if (capacitor?)
               (mobile-page-scroll el)
               (if (some-> el (.closest "#main-content-container"))
                 (app-scroll-container-node)
@@ -1491,7 +1491,7 @@ Arg *stop: atom, reset to true to stop the loop"
      ([schedule?]
       (when (mobile?)
         (let [f #(when-let [node (or (get-keep-keyboard-input-el "in-modal")
-                                  (get-keep-keyboard-input-el))]
+                                     (get-keep-keyboard-input-el))]
                    (.focus node))]
           (if schedule? (schedule f) (f)))))))
 
