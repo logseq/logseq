@@ -243,7 +243,7 @@
         schema (get-property-value-schema db property-type property)]
     (validate-property-value-aux schema value {:many? many?})))
 
-(defn validate!
+(defn- validate!
   "Validates `data` against `schema`.
    Throws an ex-info with readable message if validation fails."
   [property schema value]
