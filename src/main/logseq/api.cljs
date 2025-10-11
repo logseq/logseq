@@ -33,6 +33,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.shell :as shell]
+            [frontend.handler.ui :as ui-handler]
             [frontend.idb :as idb]
             [frontend.loader :as loader]
             [frontend.modules.layout.core]
@@ -48,6 +49,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.api.block :as api-block]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
@@ -1156,6 +1158,38 @@
   (when-let [args (and args (seq (bean/->clj args)))]
     (shell/run-git-command! args)))
 
+;; Internal CLI API
+;; TODO: Use transit for internal APIs
+(defn ^:export list_tags
+  []
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-tags (state/get-current-repo))]
+    (clj->js resp)))
+
+(defn ^:export list_properties
+  []
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-properties (state/get-current-repo))]
+    (clj->js resp)))
+
+(defn ^:export list_pages
+  []
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-pages (state/get-current-repo))]
+    (clj->js resp)))
+
+(defn ^:export get_page_data
+  "Like get_page_blocks_tree but for MCP tools"
+  [page-title]
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
+    (if resp
+      (clj->js resp)
+      #js {:error (str "Page " (pr-str page-title) " not found")})))
+
+(defn ^:export upsert_nodes
+  "Given a list of MCP operations, batch upserts resulting EDN data"
+  [operations]
+  (p/let [resp (cli-common-mcp-tools/upsert-nodes (conn/get-db false) (js->clj operations :keywordize-keys true))]
+    (ui-handler/re-render-root!)
+    resp))
+
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
 (def ^:export query_element_rect sdk-ui/query_element_rect)
@@ -1241,7 +1275,7 @@
 (defn ^:export search
   [q' & [opts]]
   (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
-      (p/then #(bean/->js %))))
+      (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers
 (defn ^:export set_focused_settings

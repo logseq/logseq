@@ -6,6 +6,7 @@
             [frontend.db :as db]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.db.frontend.content :as db-content]))
 
 (defn- keep-json-keyword?
@@ -20,12 +21,7 @@
   (assert (de/entity? e))
   (assoc (into {} e) :db/id (:db/id e)))
 
-(defn remove-hidden-properties
-  [m]
-  (->> (remove (fn [[k _v]]
-                 (or (= "block.temp" (namespace k))
-                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at} k))) m)
-       (into {})))
+(def remove-hidden-properties cli-common-mcp-tools/remove-hidden-properties)
 
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
