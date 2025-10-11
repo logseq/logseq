@@ -34,6 +34,11 @@
         ;; Convert to lowercase
         (clojure.string/lower-case))))
 
+(let [*idx (atom 0)]
+  (defn- new-property
+    []
+    (str "p" (swap! *idx inc))))
+
 (defn- ls-api-call!
   [tag & args]
   (let [tag (name tag)
@@ -106,12 +111,38 @@
         (is (= (get props ":plugin.property._test_plugin/p3") false))
         (is (= (get props ":plugin.property._test_plugin/p2") "p2-updated"))))))
 
+(deftest property-upsert-test
+  (testing "property with default settings"
+    (let [p (new-property)]
+      (ls-api-call! :editor.upsertProperty p)
+      (let [property (ls-api-call! :editor.getProperty p)]
+        (is (= "default" (get property "type")))
+        (is (= ":db.cardinality/one" (get property "cardinality"))))))
+  (testing "property with specified cardinality && type"
+    (let [p (new-property)]
+      (ls-api-call! :editor.upsertProperty p {:type "number"
+                                              :cardinality "one"})
+      (let [property (ls-api-call! :editor.getProperty p)]
+        (is (= "number" (get property "type")))
+        (is (= ":db.cardinality/one" (get property "cardinality")))))
+    (let [p (new-property)]
+      (ls-api-call! :editor.upsertProperty p {:type "number"
+                                              :cardinality "many"})
+      (let [property (ls-api-call! :editor.getProperty p)]
+        (is (= "number" (get property "type")))
+        (is (= ":db.cardinality/many" (get property "cardinality"))))))
+  ;; TODO: How to test against eval-js errors on playwright?
+  #_(testing ":checkbox property doesn't allow :many cardinality"
+      (let [p (new-property)]
+        (ls-api-call! :editor.upsertProperty p {:type "checkbox"
+                                                :cardinality "many"}))))
+
 (deftest property-related-test
   (testing "properties management related apis"
     (dorun
      (map-indexed
       (fn [idx property-type]
-        (let [property-name (str "property-" idx)
+        (let [property-name (str "p" idx)
               _ (ls-api-call! :editor.upsertProperty property-name {:type property-type})
               property (ls-api-call! :editor.getProperty property-name)]
           (is (= (get property "ident") (str ":plugin.property._test_plugin/" property-name)))
