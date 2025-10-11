@@ -633,9 +633,8 @@
           (case type
             :notification
             (do
-              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)])
               (log/error ::apply-outliner-ops-failed e)
-              (throw e))
+              (shared-service/broadcast-to-clients! :notification [(:message payload) (:type payload)]))
             (throw e)))))))
 
 (def-thread-api :thread-api/file-writes-finished?
