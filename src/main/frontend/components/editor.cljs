@@ -341,7 +341,7 @@
                      (let [page-entity (db/entity [:block/uuid page])
                            repo (state/sub :git/current-repo)
                            format (get page-entity :block/format :markdown)
-                           block (db-model/query-block-by-uuid uuid)
+                           block (db-model/get-block-by-uuid uuid)
                            content (:block/title block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))

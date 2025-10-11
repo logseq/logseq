@@ -703,6 +703,8 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{
       before: boolean
       sibling: boolean
+      start: boolean
+      end: boolean
       isPageBlock: boolean
       focus: boolean
       customUUID: string

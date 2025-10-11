@@ -174,10 +174,7 @@
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
-  (p/let [result (state/<invoke-db-worker :thread-api/get-block-refs graph eid)
-          conn (db/get-db graph false)
-          _ (d/transact! conn result)]
-    result))
+  (state/<invoke-db-worker :thread-api/get-block-refs graph eid))
 
 (defn <get-block-refs-count
   [graph eid]
