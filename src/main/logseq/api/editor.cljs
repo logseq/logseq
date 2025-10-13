@@ -320,9 +320,9 @@
 
 (def get_block
   (fn [id ^js opts]
-    (p/let [_ (db-async/<get-block (state/get-current-repo) id {:children? true
-                                                                :include-collapsed-children? true})]
-      (api-block/get_block id (or opts #js {:includePage true})))))
+    (p/let [block (db-async/<get-block (state/get-current-repo) id {:children? true
+                                                                    :include-collapsed-children? true})]
+      (api-block/get_block (:db/id block) (or opts #js {:includePage true})))))
 
 (def get_current_block
   (fn [^js opts]
