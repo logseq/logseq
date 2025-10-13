@@ -123,22 +123,22 @@
          (try
            (let [conn repo-or-conn
                  db @conn
-                 skip-validate? (:skip-validate-db? tx-meta false)
                  db-based? (entity-plus/db-based-graph? db)
-                 [validate-result tx-report] (if (or (:reset-conn! tx-meta)
-                                                     (not db-based?)
-                                                     skip-validate?
-                                                     (:pipeline-replace? tx-meta))
-                                               [true nil]
+                 [validate-result tx-report] (if (and db-based?
+                                                      (:pipeline-replace? tx-meta)
+                                                      (not (:reset-conn! tx-meta))
+                                                      (not (:skip-validate-db? tx-meta false)))
                                                (let [tx-report (d/with db tx-data tx-meta)]
-                                                 [(db-validate/validate-tx-report tx-report nil) tx-report]))]
+                                                 [(db-validate/validate-tx-report tx-report nil) tx-report])
+                                               [true nil])]
              (if validate-result
                (if (and tx-report (seq (:tx-data tx-report)))
                  ;; perf enhancement: avoid repeated call on `d/with`
                  (do
                    (reset! conn (:db-after tx-report))
                    (dc/store-after-transact! conn tx-report)
-                   (dc/run-callbacks conn tx-report))
+                   (dc/run-callbacks conn tx-report)
+                   tx-report)
                  (d/transact! conn tx-data tx-meta))
                (do
                  ;; notify ui
