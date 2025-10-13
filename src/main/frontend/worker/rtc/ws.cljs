@@ -202,3 +202,10 @@
     (let [req-id (str (random-uuid))
           message (assoc message :req-id req-id)]
       (m/? (send&recv* mws message :timeout-ms timeout-ms)))))
+
+(comment
+  (defn- inject-fake-message-to-recv
+    "Debug fn.
+  use `queryObjects(WebSocket)` to fetch all websocket objs under db-worker.js context"
+    [ws fake-message-to-recv]
+    (.dispatchEvent ws (js/MessageEvent. "message" #js {:data fake-message-to-recv}))))
