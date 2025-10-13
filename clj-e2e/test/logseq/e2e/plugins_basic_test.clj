@@ -270,16 +270,15 @@
         ":logseq.class/Page"
         (-> (ls-api-call! :editor.getBlock (first (get result "tags")))
             (get "ident"))))))
+
   (testing "create page with properties"
     (let [result (ls-api-call! :editor.createPage "Test page 2"
                                {:px1 "test"
                                 :px2 1
-                                ;; :px3 "Page 1"
-                                ;; :px4 ["Page 2" "Page 3"]
-                                }
-                               ;; {:schema {:px3 "page"
-                               ;;           :px4 "page"}}
-                               )
+                                :px3 "Page 1"
+                                :px4 ["Page 2" "Page 3"]}
+                               {:schema {:px3 {:type "page"}
+                                         :px4 {:type "page"}}})
           page (ls-api-call! :editor.getBlock "Test page 2")]
       (is (= "Test page 2" (get result "title")))
       (is
@@ -292,9 +291,18 @@
                         (get "title"))))
       (is (= 1 (-> (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px2") "id"]))
                    (get ":logseq.property/value"))))
-      ;; (let [page-1 (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px3") "id"]))]
-      ;;   (is (= "page 1" (get page-1 "name"))))
-      ;; (is (= ["page 2" "page 3"] (map #(-> (ls-api-call! :editor.getBlock %)
-      ;;                                      (get "name"))
-      ;;                                 (map #(get % "id") (get page (->plugin-ident "px4"))))))
-      )))
+      (let [page-1 (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px3") "id"]))]
+        (is (= "page 1" (get page-1 "name"))))
+      (is (= ["page 2" "page 3"] (map #(-> (ls-api-call! :editor.getBlock %)
+                                           (get "name"))
+                                      (map #(get % "id") (get page (->plugin-ident "px4"))))))))
+
+  (testing "create tag page"
+    (let [result (ls-api-call! :editor.createPage "Tag new"
+                               {}
+                               {:class true})]
+      (is
+       (=
+        ":logseq.class/Tag"
+        (-> (ls-api-call! :editor.getBlock (first (get result "tags")))
+            (get "ident")))))))
