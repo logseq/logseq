@@ -156,7 +156,7 @@
                             default-value-tx-data [default-value-block
                                                    {:db/id (:db/id property)
                                                     :logseq.property/default-value [:block/uuid (:block/uuid default-value-block)]}]]
-                        (d/transact! conn default-value-tx-data)
+                        (ldb/transact! conn default-value-tx-data)
                         1))
         unit (:logseq.property.repeat/recur-unit entity)
         property (d/entity db property-ident)

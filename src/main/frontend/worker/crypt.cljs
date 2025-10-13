@@ -3,6 +3,7 @@
   (:require [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce ^:private encoder (new js/TextEncoder "utf-8"))
@@ -115,7 +116,7 @@
     (assert (some? conn) repo)
     (let [aes-key-datom (first (d/datoms @conn :avet :aes-key-jwk))]
       (assert (nil? aes-key-datom) aes-key-datom)
-      (d/transact! conn [[:db/add "e1" :aes-key-jwk aes-key-jwk]]))))
+      (ldb/transact! conn [[:db/add "e1" :aes-key-jwk aes-key-jwk]]))))
 
 (defn get-graph-keys-jwk
   [repo]
