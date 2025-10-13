@@ -5,6 +5,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as walk]
+            [datascript.conn :as dc]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
@@ -20,6 +21,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util])
   (:refer-clojure :exclude [object?]))
 
@@ -32,9 +34,14 @@
 (def build-favorite-tx db-db/build-favorite-tx)
 
 (defonce *transact-fn (atom nil))
+(defonce *transact-invalid-callback (atom nil))
+
 (defn register-transact-fn!
   [f]
   (when f (reset! *transact-fn f)))
+(defn register-transact-invalid-callback-fn!
+  [f]
+  (when f (reset! *transact-invalid-callback f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -69,6 +76,15 @@
                         :tx-data tx-data}))
        f))
    tx-data))
+
+(comment
+  (defn- skip-db-validate?
+    [datoms]
+    (every?
+     (fn [d]
+       (contains? #{:logseq.property/created-by-ref :block/refs :block/tx-id}
+                  (:a d)))
+     datoms)))
 
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
@@ -105,7 +121,30 @@
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
          (try
-           (d/transact! repo-or-conn tx-data tx-meta)
+           (let [conn repo-or-conn
+                 db @conn
+                 skip-validate? (:skip-validate-db? tx-meta false)
+                 db-based? (entity-plus/db-based-graph? db)
+                 [validate-result tx-report] (if (or (:reset-conn! tx-meta)
+                                                     (not db-based?)
+                                                     skip-validate?
+                                                     (:pipeline-replace? tx-meta))
+                                               [true nil]
+                                               (let [tx-report (d/with db tx-data tx-meta)]
+                                                 [(db-validate/validate-tx-report tx-report nil) tx-report]))]
+             (if validate-result
+               (if (and tx-report (seq (:tx-data tx-report)))
+                 ;; perf enhancement: avoid repeated call on `d/with`
+                 (do
+                   (reset! conn (:db-after tx-report))
+                   (dc/store-after-transact! conn tx-report)
+                   (dc/run-callbacks conn tx-report))
+                 (d/transact! conn tx-data tx-meta))
+               (do
+                 ;; notify ui
+                 (when-let [f @*transact-invalid-callback]
+                   (f tx-report))
+                 (throw (ex-info "DB write with invalid data" {:tx-data tx-data})))))
            (catch :default e
              (js/console.trace)
              (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
