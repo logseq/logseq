@@ -26,15 +26,16 @@
         id-ref->page #(db-content/content-id-ref->page % [page-entity])]
     (when (seq refs)
       (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
-                                ;; block content
-                              (let [content' (id-ref->page raw-title)
-                                    content-tx (when (not= raw-title content')
-                                                 {:db/id (:db/id ref)
-                                                  :block/title content'})
-                                    tx content-tx]
-                                (concat
-                                 [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
-                                 (when tx [tx])))) refs)]
+                              ;; block content
+                              (when raw-title
+                                (let [content' (id-ref->page raw-title)
+                                      content-tx (when (not= raw-title content')
+                                                   {:db/id (:db/id ref)
+                                                    :block/title content'})
+                                      tx content-tx]
+                                  (concat
+                                   [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
+                                   (when tx [tx]))))) refs)]
         tx-data))))
 
 (defn delete!
