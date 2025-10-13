@@ -376,7 +376,7 @@
          {:rtc-download-graph? true
           :gen-undo-ops? false
             ;; only transact db schema, skip validation to avoid warning
-          :frontend.worker.pipeline/skip-validate-db? true
+          :skip-validate-db? true
           :persist-op? false}
          (worker-state/get-context))
         (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
@@ -534,7 +534,7 @@
     {:rtc-download-graph? true
      :gen-undo-ops? false
       ;; only transact db schema, skip validation to avoid warning
-     :frontend.worker.pipeline/skip-validate-db? true
+     :skip-validate-db? true
      :persist-op? false}
     (worker-state/get-context))
    (prn :xxx3 (js/Date.))
