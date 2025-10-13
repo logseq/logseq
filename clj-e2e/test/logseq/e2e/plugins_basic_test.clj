@@ -14,6 +14,10 @@
 (use-fixtures :once fixtures/open-page)
 (use-fixtures :each fixtures/new-logseq-page)
 
+(defn ->plugin-ident
+  [property-name]
+  (str ":plugin.property._test_plugin/" property-name))
+
 (defn- to-snake-case
   "Converts a string to snake_case. Handles camelCase, PascalCase, spaces, hyphens, and existing underscores.
    Examples:
@@ -67,8 +71,8 @@
     (ls-api-call! :ui.showMsg "hello world" "info")
     (let [ret (ls-api-call! :editor.appendBlockInPage "test-block-apis" "append-block-in-page-0")
           ret1 (ls-api-call! :editor.appendBlockInPage "append-block-in-current-page-0")
-          _ (assert-api-ls-block! ret1)
           uuid' (assert-api-ls-block! ret)]
+      (assert-api-ls-block! ret1)
       (-> (ls-api-call! :editor.insertBlock uuid' "insert-0")
           (assert-api-ls-block!))
       (ls-api-call! :editor.updateBlock uuid' "append-but-updated-0")
@@ -153,3 +157,144 @@
           (ls-api-call! :editor.removeProperty property-name)
           (is (nil? (ls-api-call! :editor.getProperty property-name)))))
       ["default" "number" "date" "datetime" "checkbox" "url" "node" "json" "string"]))))
+
+(deftest insert-block-with-properties
+  (testing "insert block with properties"
+    (let [page "insert-block-properties-test"
+          _ (page/new-page page)
+          ;; :checkbox, :number, :url, :json can be infered and default to :default, but not for :page
+          b1 (ls-api-call! :editor.insertBlock page "b1" {:properties {"x1" true
+                                                                       "x2" "https://logseq.com"
+                                                                       "x3" 1
+                                                                       "x4" [1]
+                                                                       "x5" {:foo "bar"}
+                                                                       "x6" "Page x"
+                                                                       "x7" ["Page y" "Page z"]
+                                                                       "x8" "some content"}
+                                                          :schema {"x6" {:type "page"}
+                                                                   "x7" {:type "page"}}})]
+      (is (true? (get b1 (->plugin-ident "x1"))))
+      (is (= "https://logseq.com" (-> (ls-api-call! :editor.getBlock (get b1 (->plugin-ident "x2")))
+                                      (get "title"))))
+      (is (= 1 (-> (ls-api-call! :editor.getBlock (get b1 (->plugin-ident "x3")))
+                   (get ":logseq.property/value"))))
+      (is (= 1 (-> (ls-api-call! :editor.getBlock (first (get b1 (->plugin-ident "x4"))))
+                   (get ":logseq.property/value"))))
+      (is (= "{\"foo\":\"bar\"}" (get b1 (->plugin-ident "x5"))))
+      (let [page-x (ls-api-call! :editor.getBlock (get b1 (->plugin-ident "x6")))]
+        (is (= "page x" (get page-x "name"))))
+      (is (= ["page y" "page z"] (map #(-> (ls-api-call! :editor.getBlock %)
+                                           (get "name")) (get b1 (->plugin-ident "x7")))))
+      (let [x8-block-value (ls-api-call! :editor.getBlock (get b1 (->plugin-ident "x8")))]
+        (is (= "some content" (get x8-block-value "title")))
+        (is (some? (get x8-block-value "page")))))))
+
+(deftest update-block-with-properties
+  (testing "update block with properties"
+    (let [page "update-block-properties-test"
+          _ (page/new-page page)
+          block (ls-api-call! :editor.insertBlock page "b1")
+          _ (ls-api-call! :editor.updateBlock (get block "uuid")
+                          "b1-new-content"
+                          {:properties {"y1" true
+                                        "y2" "https://logseq.com"
+                                        "y3" 1
+                                        "y4" [1]
+                                        "y5" {:foo "bar"}
+                                        "y6" "Page x"
+                                        "y7" ["Page y" "Page z"]
+                                        "y8" "some content"}
+                           :schema {"y6" {:type "page"}
+                                    "y7" {:type "page"}}})
+          b1 (ls-api-call! :editor.getBlock (get block "uuid"))]
+      (is (true? (get b1 (->plugin-ident "y1"))))
+      (is (= "https://logseq.com" (-> (ls-api-call! :editor.getBlock (get-in b1 [(->plugin-ident "y2") "id"]))
+                                      (get "title"))))
+      (is (= 1 (-> (ls-api-call! :editor.getBlock (get-in b1 [(->plugin-ident "y3") "id"]))
+                   (get ":logseq.property/value"))))
+      (is (= 1 (-> (ls-api-call! :editor.getBlock (get (first (get b1 (->plugin-ident "y4"))) "id"))
+                   (get ":logseq.property/value"))))
+      (is (= "{\"foo\":\"bar\"}" (get b1 (->plugin-ident "y5"))))
+      (let [page-x (ls-api-call! :editor.getBlock (get-in b1 [(->plugin-ident "y6") "id"]))]
+        (is (= "page x" (get page-x "name"))))
+      (is (= ["page y" "page z"] (map #(-> (ls-api-call! :editor.getBlock %)
+                                           (get "name"))
+                                      (map #(get % "id") (get b1 (->plugin-ident "y7"))))))
+      (let [y8-block-value (ls-api-call! :editor.getBlock (get-in b1 [(->plugin-ident "y8") "id"]))]
+        (is (= "some content" (get y8-block-value "title")))
+        (is (some? (get y8-block-value "page")))))))
+
+(deftest insert-batch-blocks-test
+  (testing "insert batch blocks"
+    (let [page "insert batch blocks"
+          _ (page/new-page page)
+          page-uuid (get (ls-api-call! :editor.getBlock page) "uuid")
+          result (ls-api-call! :editor.insertBatchBlock page-uuid
+                               [{:content "b1"
+                                 :children [{:content "b1.1"
+                                             :children [{:content "b1.1.1"}
+                                                        {:content "b1.1.2"}]}
+                                            {:content "b1.2"}]}
+                                {:content "b2"}])
+          contents (util/get-page-blocks-contents)]
+      (is (= contents ["b1" "b1.1" "b1.1.1" "b1.1.2" "b1.2" "b2"]))
+      (is (= (map #(get % "title") result) ["b1" "b1.1" "b1.1.1" "b1.1.2" "b1.2" "b2"]))))
+  (testing "insert batch blocks with properties"
+    (let [page "insert batch blocks with properties"
+          _ (page/new-page page)
+          page-uuid (get (ls-api-call! :editor.getBlock page) "uuid")
+          result (ls-api-call! :editor.insertBatchBlock page-uuid
+                               [{:content "b1"
+                                 :children [{:content "b1.1"
+                                             :children [{:content "b1.1.1"
+                                                         :properties {"z3" "Page 1"
+                                                                      "z4" ["Page 2" "Page 3"]}}
+                                                        {:content "b1.1.2"}]}
+                                            {:content "b1.2"}]
+                                 :properties {"z1" "test"
+                                              "z2" true}}
+                                {:content "b2"}]
+                               {:schema {"z3" "page"
+                                         "z4" "page"}})
+          contents (util/get-page-blocks-contents)]
+      (is (= contents
+             ["b1" "test" "b1.1" "b1.1.1" "Page 1" "Page 2" "Page 3" "b1.1.2" "b1.2" "b2"]))
+      (is (true? (get (first result) (->plugin-ident "z2")))))))
+
+(deftest create-page-test
+  (testing "create page"
+    (let [result (ls-api-call! :editor.createPage "Test page 1")]
+      (is (= "Test page 1" (get result "title")))
+      (is
+       (=
+        ":logseq.class/Page"
+        (-> (ls-api-call! :editor.getBlock (first (get result "tags")))
+            (get "ident"))))))
+  (testing "create page with properties"
+    (let [result (ls-api-call! :editor.createPage "Test page 2"
+                               {:px1 "test"
+                                :px2 1
+                                ;; :px3 "Page 1"
+                                ;; :px4 ["Page 2" "Page 3"]
+                                }
+                               ;; {:schema {:px3 "page"
+                               ;;           :px4 "page"}}
+                               )
+          page (ls-api-call! :editor.getBlock "Test page 2")]
+      (is (= "Test page 2" (get result "title")))
+      (is
+       (=
+        ":logseq.class/Page"
+        (-> (ls-api-call! :editor.getBlock (first (get result "tags")))
+            (get "ident"))))
+      ;; verify properties
+      (is (= "test" (-> (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px1") "id"]))
+                        (get "title"))))
+      (is (= 1 (-> (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px2") "id"]))
+                   (get ":logseq.property/value"))))
+      ;; (let [page-1 (ls-api-call! :editor.getBlock (get-in page [(->plugin-ident "px3") "id"]))]
+      ;;   (is (= "page 1" (get page-1 "name"))))
+      ;; (is (= ["page 2" "page 3"] (map #(-> (ls-api-call! :editor.getBlock %)
+      ;;                                      (get "name"))
+      ;;                                 (map #(get % "id") (get page (->plugin-ident "px4"))))))
+      )))
