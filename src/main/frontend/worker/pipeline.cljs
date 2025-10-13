@@ -6,9 +6,7 @@
             [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
-            [frontend.worker.shared-service :as shared-service]
             [frontend.worker.state :as worker-state]
-            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
@@ -16,7 +14,6 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.exporter :as gp-exporter]
@@ -97,44 +94,6 @@
                                          (:tx-data result)))))))]
     tx-data))
 
-(defkeywords
-  ::skip-validate-db? {:doc "tx-meta option, default = false"}
-  ::skip-store-conn {:doc "tx-meta option, skip `d/store` on conn. default = false"})
-
-(defn validate-db!
-  "Validate db is slow, we probably don't want to enable it for production."
-  [repo conn tx-report tx-meta context]
-  (when (and (not (::skip-validate-db? tx-meta false))
-             (or (:dev? context) (:undo? tx-meta) (:redo? tx-meta))
-             (not (:importing? context)) (sqlite-util/db-based-graph? repo))
-    (let [valid? (if (get-in tx-report [:tx-meta :reset-conn!])
-                   true
-                   (db-validate/validate-tx-report! tx-report (:validate-db-options context)))]
-      (when-not valid?
-        (when (and (or (get-in context [:validate-db-options :fail-invalid?]) worker-util/dev?)
-                   ;; don't notify on production when undo/redo failed
-                   (not (and (not (:dev? context)) (or (:undo? tx-meta) (:redo? tx-meta)))))
-          (shared-service/broadcast-to-clients! :notification
-                                                [["Invalid DB!"] :error]))
-        (throw (ex-info "Invalid data" {:graph repo})))))
-
-  ;; Ensure :block/order is unique for any block that has :block/parent
-  (when false;; (:dev? context)
-    (let [order-datoms (filter (fn [d] (= :block/order (:a d)))
-                               (:tx-data tx-report))]
-      (doseq [datom order-datoms]
-        (let [entity (d/entity @conn (:e datom))
-              parent (:block/parent entity)]
-          (when parent
-            (let [children (:block/_parent parent)
-                  order-different? (= (count (distinct (map :block/order children))) (count children))]
-              (when-not order-different?
-                (throw (ex-info (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))
-                                {:children (->> (map (fn [b] (select-keys b [:db/id :block/title :block/order])) children)
-                                                (sort-by :block/order))
-                                 :tx-meta tx-meta
-                                 :tx-data (:tx-data tx-report)}))))))))))
-
 (defn- fix-page-tags
   "Add missing attributes and remove #Page when inserting or updating block/title with inline tags"
   [{:keys [db-after tx-data tx-meta]}]
@@ -158,7 +117,7 @@
                    [:db/add eid :logseq.property.class/extends :logseq.class/Root]
                    [:db/retract eid :block/tags :logseq.class/Page]])))
 
-            ;; remove #Page from tags/journals/whitebaords, etc.
+            ;; remove #Page from tags/journals/whiteboards, etc.
             (and (= :block/tags (:a datom))
                  (:added datom)
                  (= (:db/id page-tag) (:v datom)))
@@ -415,7 +374,6 @@
                           (compute-extra-tx-data repo conn tx-report))
           tx-report* (if (seq extra-tx-data)
                        (let [result (ldb/transact! conn extra-tx-data {:pipeline-replace? true
-                                                                       :outliner-op :pre-hook-invoke
                                                                        :skip-store? true})]
                          (assoc tx-report
                                 :tx-data (concat (:tx-data tx-report) (:tx-data result))
@@ -442,38 +400,23 @@
           blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
           block-refs (when (seq blocks')
                        (rebuild-block-refs repo tx-report* blocks'))
-          refs-tx-report (when (seq block-refs)
-                           (ldb/transact! conn block-refs {:pipeline-replace? true
-                                                           :skip-store? true}))
-          replace-tx (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report*))]
-                       (concat
-                        ;; update block/tx-id
-                        (let [updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
-                                                     (concat pages blocks))
-                              tx-id (get-in (or refs-tx-report tx-report*) [:tempids :db/current-tx])]
-                          (keep (fn [b]
-                                  (when-let [db-id (:db/id b)]
-                                    (when (:block/uuid (d/entity db-after db-id))
-                                      {:db/id db-id
-                                       :block/tx-id tx-id}))) updated-blocks))))
-          tx-report' (ldb/transact! conn replace-tx {:pipeline-replace? true
-                                                     ;; Ensure db persisted
-                                                     :db-persist? true})
-          _ (when-not (:revert-tx-data? tx-meta)
-              (try
-                (validate-db! repo conn tx-report* tx-meta context)
-                (catch :default e
-                  (when-not (rtc-tx-or-download-graph? tx-meta)
-                    (prn :debug :revert-invalid-tx
-                         :tx-meta
-                         tx-meta
-                         :tx-data
-                         (:tx-data tx-report*))
-                    (reverse-tx! conn (:tx-data tx-report*)))
-                  (throw e))))
+          tx-id-data (let [db-after (:db-after tx-report*)
+                           updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
+                                                  (concat pages blocks))
+                           tx-id (get-in tx-report* [:tempids :db/current-tx])]
+                       (keep (fn [b]
+                               (when-let [db-id (:db/id b)]
+                                 (when (:block/uuid (d/entity db-after db-id))
+                                   {:db/id db-id
+                                    :block/tx-id tx-id}))) updated-blocks))
+          block-refs-tx-id-data (concat block-refs tx-id-data)
+          replace-tx-report (when (seq block-refs-tx-id-data)
+                              (ldb/transact! conn block-refs-tx-id-data {:pipeline-replace? true
+                                                                         ;; Ensure db persisted
+                                                                         :db-persist? true}))
+          tx-report' (or replace-tx-report tx-report*)
           full-tx-data (concat (:tx-data tx-report*)
-                               (:tx-data refs-tx-report)
-                               (:tx-data tx-report'))
+                               (:tx-data replace-tx-report))
           final-tx-report (assoc tx-report'
                                  :tx-data full-tx-data
                                  :tx-meta tx-meta
