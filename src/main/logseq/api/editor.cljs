@@ -126,7 +126,7 @@
    this
    (let [properties (bean/->clj properties)
          db-based? (config/db-based-graph?)
-         {:keys [redirect format journal schema]} (bean/->clj opts)]
+         {:keys [redirect format journal schema class]} (bean/->clj opts)]
      (p/let [page (<get-block name {:children? false})
              new-page (when-not page
                         (page-handler/<create!
@@ -134,6 +134,7 @@
                          (cond->
                           {:redirect? (if (boolean? redirect) redirect true)
                            :journal? journal
+                           :class? class
                            :format format}
                            (not db-based?)
                            (assoc :properties properties))))
