@@ -34,10 +34,10 @@
         ;; Convert to lowercase
         (clojure.string/lower-case))))
 
-(let [*idx (atom 0)]
-  (defn- new-property
-    []
-    (str "p" (swap! *idx inc))))
+(defonce ^:private *property-idx (atom 0))
+(defn- new-property
+  []
+  (str "p" (swap! *property-idx inc)))
 
 (defn- ls-api-call!
   [tag & args]
@@ -130,7 +130,10 @@
                                               :cardinality "many"})
       (let [property (ls-api-call! :editor.getProperty p)]
         (is (= "number" (get property "type")))
-        (is (= ":db.cardinality/many" (get property "cardinality"))))))
+        (is (= ":db.cardinality/many" (get property "cardinality"))))
+      (ls-api-call! :editor.upsertProperty p {:type "default"})
+      (let [property (ls-api-call! :editor.getProperty p)]
+        (is (= "default" (get property "type"))))))
   ;; TODO: How to test against eval-js errors on playwright?
   #_(testing ":checkbox property doesn't allow :many cardinality"
       (let [p (new-property)]

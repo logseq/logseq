@@ -133,7 +133,7 @@
                                 (update-keys #(if (contains? #{:hide :public} %)
                                                 (keyword (str (name %) "?")) %))) {})
              _ (when (:type schema)
-                 (schema-type-check! (:type schema)))
+                 (schema-type-check! (keyword (:type schema))))
              schema (cond-> schema
                       (string? (:cardinality schema))
                       (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
