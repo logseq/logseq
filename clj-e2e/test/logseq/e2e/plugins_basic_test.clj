@@ -162,7 +162,7 @@
   (testing "insert block with properties"
     (let [page "insert-block-properties-test"
           _ (page/new-page page)
-          ;; :checkbox, :number, :url, :json can be infered and default to :default, but not for :page
+          ;; :checkbox, :number, :url, :json can be inferred and default to :default, but not for :page
           b1 (ls-api-call! :editor.insertBlock page "b1" {:properties {"x1" true
                                                                        "x2" "https://logseq.com"
                                                                        "x3" 1

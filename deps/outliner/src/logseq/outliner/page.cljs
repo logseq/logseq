@@ -308,5 +308,5 @@
   [conn title opts]
   (let [{:keys [tx-meta tx-data title' page-uuid]} (create @conn title opts)]
     (when (seq tx-data)
-      (d/transact! conn tx-data tx-meta)
+      (ldb/transact! conn tx-data tx-meta)
       [title' page-uuid])))

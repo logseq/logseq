@@ -255,8 +255,8 @@
       (doseq [db (if @*publishing? [sqlite-db] [sqlite-db client-ops-db])]
         (sqlite-gc/gc-kvs-table! db {:full-gc? full-gc?})
         (.exec db "VACUUM"))
-      (d/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
-                                     :kv/value (common-util/time-ms)}]))))
+      (ldb/transact! datascript-conn [{:db/ident :logseq.kv/graph-last-gc-at
+                                       :kv/value (common-util/time-ms)}]))))
 
 (defn- create-or-open-db!
   [repo {:keys [config datoms] :as opts}]
@@ -295,7 +295,7 @@
           (let [config (or config "")
                 initial-data (sqlite-create-graph/build-db-initial-data
                               config (select-keys opts [:import-type :graph-git-sha]))]
-            (d/transact! conn initial-data {:initial-db? true})))
+            (ldb/transact! conn initial-data {:initial-db? true})))
 
         (gc-sqlite-dbs! db client-ops-db conn {})
 

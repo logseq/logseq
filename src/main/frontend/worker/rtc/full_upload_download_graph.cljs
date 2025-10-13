@@ -215,11 +215,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (when-let [schema-version (:kv/value (d/entity db :logseq.kv/schema-version))]
-        (d/transact! conn
-                     [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
-                     {:rtc-download-graph? true
-                      :gen-undo-ops? false
-                      :persist-op? false})))))
+        (ldb/transact! conn
+                       [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
+                       {:rtc-download-graph? true
+                        :gen-undo-ops? false
+                        :persist-op? false})))))
 
 (defn- <transact-block-refs!
   [repo graph-uuid]
