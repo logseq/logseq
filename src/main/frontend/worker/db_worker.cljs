@@ -883,9 +883,19 @@
           (reset! *service [graph service])
           service)))))
 
+(defn- notify-invalid-data
+  [{:keys [tx-meta]}]
+  ;; don't notify on production when undo/redo failed
+  (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
+                 (not worker-util/dev?))
+    (shared-service/broadcast-to-clients! :notification
+                                          [["Invalid DB!"] :error])))
+
 (defn init
   "web worker entry"
   []
+  (ldb/register-transact-invalid-callback-fn! notify-invalid-data)
+
   (let [proxy-object (->>
                       fns
                       (map
