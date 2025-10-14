@@ -102,7 +102,11 @@
                                (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (map :db/id (:property/closed-values property))) val)))
+                               (let [ids (set (map :db/id (:property/closed-values property)))
+                                     result (contains? ids val)]
+                                 (when-not result
+                                   (js/console.error (str "Error: not a closed value, id: " val ", existing choices: " ids ", property: " (:db/ident property))))
+                                 result)))
                         validate-fn')]
     (if (db-property/many? property)
       (or (every? validate-fn'' property-val)
