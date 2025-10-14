@@ -210,7 +210,7 @@
                (or (not= (:logseq.property/type schema) (:logseq.property/type property))
                    (and (:db/cardinality schema) (not= (:db/cardinality schema) (keyword (name (:db/cardinality property)))))
                    (and (= :default (:logseq.property/type schema)) (not= :db.type/ref (:db/valueType property)))
-                   (seq (:property/closed-values property))))
+                   (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
           (concat (update-datascript-schema property schema)))
         tx-data (concat property-tx-data
                         (when (seq properties)
@@ -327,7 +327,7 @@
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
   (let [property (d/entity @conn property-id)
-        closed-values? (seq (:property/closed-values property))
+        closed-values? (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))
         default-or-url? (contains? #{:default :url} (:logseq.property/type property))]
     (cond
       closed-values?
@@ -442,24 +442,28 @@
            _ (when (nil? property)
                (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)
-           v (resolve-property-value @conn property-type v)
-           _ (assert (some? v) "Can't set a nil property value must be not nil")
+           entity-id? (and (:entity-id? options) (number? v))
+           [v' entity-id?] (let [v' (resolve-property-value @conn property-type v)]
+                             (if (and (keyword? v) (integer? v'))
+                               [v' true]
+                               [v' entity-id?]))
+           _ (assert (some? v') "Can't set a nil property value must be not nil")
            ref? (contains? db-property-type/all-ref-property-types property-type)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
-                                        (not (seq (:property/closed-values property))))
-           entity-id? (and (:entity-id? options) (number? v))
+                                        (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
            v' (if (and ref? (not entity-id?))
-                (convert-ref-property-value conn property-id v property-type)
-                v)
+                (convert-ref-property-value conn property-id v' property-type)
+                v')
            txs (doall
                 (mapcat
                  (fn [eid]
                    (if-let [block (d/entity @conn eid)]
-                     (let [v' (if default-url-not-closed?
+                     (let [v' (if (and default-url-not-closed?
+                                       (not (and (keyword? v) entity-id?)))
                                 (do
-                                  (when (number? v)
-                                    (throw-error-if-invalid-property-value @conn property v))
-                                  (let [v (if (number? v) (:block/title (d/entity @conn v)) v)]
+                                  (when (number? v')
+                                    (throw-error-if-invalid-property-value @conn property v'))
+                                  (let [v (if (number? v') (:block/title (d/entity @conn v')) v')]
                                     (convert-ref-property-value conn property-id v property-type)))
                                 v')]
                        (throw-error-if-self-value block v' ref?)
@@ -721,7 +725,7 @@
                         {:block/title resolved-value})))
                      icon
                      (assoc :logseq.property/icon icon))]
-                  (let [max-order (:block/order (last (:property/closed-values property)))
+                  (let [max-order (:block/order (last (entity-plus/lookup-kv-then-entity property :property/closed-values)))
                         new-block (-> (db-property-build/build-closed-value-block block-id nil resolved-value
                                                                                   property {:icon icon})
                                       (assoc :block/order (db-order/gen-key max-order nil)))]
@@ -808,6 +812,11 @@
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
   [conn property-id value-block-id]
+  (when (or (nil? property-id)
+            (nil? value-block-id))
+    (throw (ex-info "empty property-id or value-block-id when delete-closed-value!"
+                    {:property-id property-id
+                     :value-block-id value-block-id})))
   (when-let [value-block (d/entity @conn value-block-id)]
     (if (ldb/built-in? value-block)
       (throw (ex-info "The choice can't be deleted"
