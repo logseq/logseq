@@ -86,6 +86,38 @@
                   (:a d)))
      datoms)))
 
+(defn- transact-sync
+  [repo-or-conn tx-data tx-meta]
+  (try
+    (let [conn repo-or-conn
+          db @conn
+          db-based? (entity-plus/db-based-graph? db)
+          [validate-result tx-report] (if (and db-based?
+                                               (:pipeline-replace? tx-meta)
+                                               (not (:reset-conn! tx-meta))
+                                               (not (:skip-validate-db? tx-meta false)))
+                                        (let [tx-report (d/with db tx-data tx-meta)]
+                                          [(db-validate/validate-tx-report tx-report nil) tx-report])
+                                        [true nil])]
+      (if validate-result
+        (if (and tx-report (seq (:tx-data tx-report)))
+          ;; perf enhancement: avoid repeated call on `d/with`
+          (do
+            (reset! conn (:db-after tx-report))
+            (dc/store-after-transact! conn tx-report)
+            (dc/run-callbacks conn tx-report)
+            tx-report)
+          (d/transact! conn tx-data tx-meta))
+        (do
+          ;; notify ui
+          (when-let [f @*transact-invalid-callback]
+            (f tx-report))
+          (throw (ex-info "DB write with invalid data" {:tx-data tx-data})))))
+    (catch :default e
+      (js/console.trace)
+      (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
+      (throw e))))
+
 (defn transact!
   "`repo-or-conn`: repo for UI thread and conn for worker/node"
   ([repo-or-conn tx-data]
@@ -120,35 +152,7 @@
 
        (if-let [transact-fn @*transact-fn]
          (transact-fn repo-or-conn tx-data tx-meta)
-         (try
-           (let [conn repo-or-conn
-                 db @conn
-                 db-based? (entity-plus/db-based-graph? db)
-                 [validate-result tx-report] (if (and db-based?
-                                                      (:pipeline-replace? tx-meta)
-                                                      (not (:reset-conn! tx-meta))
-                                                      (not (:skip-validate-db? tx-meta false)))
-                                               (let [tx-report (d/with db tx-data tx-meta)]
-                                                 [(db-validate/validate-tx-report tx-report nil) tx-report])
-                                               [true nil])]
-             (if validate-result
-               (if (and tx-report (seq (:tx-data tx-report)))
-                 ;; perf enhancement: avoid repeated call on `d/with`
-                 (do
-                   (reset! conn (:db-after tx-report))
-                   (dc/store-after-transact! conn tx-report)
-                   (dc/run-callbacks conn tx-report)
-                   tx-report)
-                 (d/transact! conn tx-data tx-meta))
-               (do
-                 ;; notify ui
-                 (when-let [f @*transact-invalid-callback]
-                   (f tx-report))
-                 (throw (ex-info "DB write with invalid data" {:tx-data tx-data})))))
-           (catch :default e
-             (js/console.trace)
-             (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
-             (throw e))))))))
+         (transact-sync repo-or-conn tx-data tx-meta))))))
 
 (def page? common-entity-util/page?)
 (def internal-page? entity-util/internal-page?)
