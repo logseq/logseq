@@ -93,7 +93,7 @@
           db @conn
           db-based? (entity-plus/db-based-graph? db)
           [validate-result tx-report] (if (and db-based?
-                                               (:pipeline-replace? tx-meta)
+                                               (not (:pipeline-replace? tx-meta))
                                                (not (:reset-conn! tx-meta))
                                                (not (:skip-validate-db? tx-meta false)))
                                         (let [tx-report (d/with db tx-data tx-meta)]
