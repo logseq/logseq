@@ -140,9 +140,20 @@
                     (cond-> property-map
                       (and (:build/property-value v) (seq pvalue-attrs))
                       (assoc :property-value-properties pvalue-attrs)))
-                  (if (:build/property-value v)
-                    (or (:logseq.property/value v) (:block/title v))
-                    v)])))
+                  (let [property (when (keyword? k) (get properties-config k))
+                        closed-value-id (when property (some (fn [item]
+                                                               (when (= (:value item) v)
+                                                                 (:uuid item)))
+                                                             (get property :build/closed-values)))]
+                    (cond
+                      closed-value-id
+                      closed-value-id
+
+                      (:build/property-value v)
+                      (or (:logseq.property/value v) (:block/title v))
+
+                      :else
+                      v))])))
        (db-property-build/build-property-values-tx-m new-block)))
 
 (defn- extract-basic-content-refs
@@ -502,7 +513,9 @@
         [init-tx block-props-tx]
         (reduce (fn [[init-tx* block-props-tx*] m]
                   (let [props (select-keys m property-idents)]
-                    [(conj init-tx* (apply dissoc m property-idents))
+                    [(if (map? m)
+                       (conj init-tx* (apply dissoc m property-idents))
+                       init-tx*)
                      (if (seq props)
                        (conj block-props-tx*
                              (merge {:block/uuid (or (:block/uuid m)

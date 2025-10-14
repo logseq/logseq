@@ -294,11 +294,11 @@ prop-d:: [[nada]]"}])
                  {:block/title "bug2"
                   :build/tags [:Bug]}]}]})
 
-    (is (= ["task2" "bug2"]
-           (map :block/title (dsl-query "(property status \"Todo\")")))
+    (is (= #{"task2" "bug2"}
+           (set (map :block/title (dsl-query "(property status \"Todo\")"))))
         "Blocks or tagged with or descended from a tag that has closed default-value property")
-    (is (= ["task1" "bug1"]
-           (map :block/title (dsl-query "(property status \"Doing\")")))
+    (is (= #{"task1" "bug1"}
+           (set (map :block/title (dsl-query "(property status \"Doing\")"))))
         "Blocks or tagged with or descended from a tag that don't have closed default-value property value")))
 
 (deftest block-property-query-performance

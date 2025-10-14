@@ -135,7 +135,7 @@
     (string? s)
     (when-let [ent (d/entity db s)]
       (and (string? (:block/title ent))
-           (:block/page ent)))))
+           (some? (:block/page ent))))))
 
 (defn- node-entity?
   [db val]
