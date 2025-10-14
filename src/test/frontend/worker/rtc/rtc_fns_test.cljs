@@ -172,10 +172,12 @@
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid1-client :block/title "uuid1-client"
+      [{:block/uuid uuid1-client
+        :block/title "uuid1-client"
         :block/order "a1"
         :block/parent [:block/uuid page-uuid]}
-       {:block/uuid uuid2-client :block/title "uuid2-client"
+       {:block/uuid uuid2-client
+        :block/title "uuid2-client"
         :block/order "a2"
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
@@ -188,7 +190,10 @@
                           {uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [page-uuid]
-                                         :block/order "a0"}}}
+                                         :block/order "a0"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}}}
             move-ops (#'r.remote/move-ops-map->sorted-move-ops
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops
@@ -208,11 +213,17 @@
                           {uuid2-remote {:op :move
                                          :self uuid2-remote
                                          :parents [uuid1-client]
-                                         :block/order "a0"}
+                                         :block/order "a0"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}
                            uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [uuid2-remote]
-                                         :block/order "a1"}}}
+                                         :block/order "a1"
+                                         :block/title (ldb/write-transit-str "")
+                                         :block/created-at (js/Date.now)
+                                         :block/updated-at (js/Date.now)}}}
             move-ops (#'r.remote/move-ops-map->sorted-move-ops
                       (:move-ops-map
                        (#'r.remote/affected-blocks->diff-type-ops

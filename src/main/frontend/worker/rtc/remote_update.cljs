@@ -208,13 +208,14 @@ so need to pull earlier remote-data from websocket."})
           b (d/entity @conn [:block/uuid block-uuid])]
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]
-        (do (if move?
-              (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
-              (transact-db! :insert-blocks repo conn
-                            [{:block/uuid block-uuid
-                              :block/title ""}]
-                            local-parent {:sibling? false :keep-uuid? true}))
-            (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
+        (do
+          (if move?
+            (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
+            (transact-db! :insert-blocks repo conn
+                          [{:block/uuid block-uuid
+                            :block/title ""}]
+                          local-parent {:sibling? false :keep-uuid? true}))
+          (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
         [false true false]
         (if move?
@@ -447,7 +448,8 @@ so need to pull earlier remote-data from websocket."})
             remote-v* (set (map ldb/read-transit-str remote-v))
             [local-only remote-only] (data/diff (set local-v) remote-v*)]
         (cond-> []
-          (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
+          (seq local-only) (concat (map (fn [v]
+                                          [:db/retract e k v]) local-only))
           (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only)))))))
 
 (defn- diff-block-map->tx-data
