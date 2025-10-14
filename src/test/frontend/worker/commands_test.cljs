@@ -2,7 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [cljs.test :refer [deftest is testing]]
-            [frontend.worker.commands :as commands]))
+            [logseq.outliner.commands :as commands]))
 
 (def get-next-time #'commands/get-next-time)
 (def minute-unit {:db/ident :logseq.property.repeat/recur-unit.minute})
