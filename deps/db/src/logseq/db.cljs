@@ -95,7 +95,8 @@
           [validate-result tx-report] (if (and db-based?
                                                (not (:pipeline-replace? tx-meta))
                                                (not (:reset-conn! tx-meta))
-                                               (not (:skip-validate-db? tx-meta false)))
+                                               (not (:skip-validate-db? tx-meta false))
+                                               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
                                         (let [tx-report (d/with db tx-data tx-meta)]
                                           [(db-validate/validate-tx-report tx-report nil) tx-report])
                                         [true nil])]
