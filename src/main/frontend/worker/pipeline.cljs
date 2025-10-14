@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.commands :as commands]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]
@@ -17,6 +16,7 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.outliner.commands :as commands]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]))
