@@ -56,7 +56,7 @@
 
 (defmethod handle :record-worker-client-id [_ _worker data]
   (when-let [client-id (:client-id data)]
-    (reset! state/*db-worker-client-id client-id)))
+    (state/set-db-worker-client-id! client-id)))
 
 (defmethod handle :capture-error [_ _worker data]
   (state/pub-event! [:capture-error data]))
