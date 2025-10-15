@@ -6,7 +6,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.file-based.status :as status]
@@ -189,7 +189,9 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/title "Test"}
+       :block/title "Test"
+       ;; :block/tags #{:logseq.class/Page}
+       }
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id
@@ -240,7 +242,8 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (db-page-handler/add-tag repo block-uuid (db/get-page tag))))
+    (db-property-handler/set-block-property! block-uuid :block/tags
+                                             (db/get-page tag))))
 
 (defn create-page!
   [title & {:as opts}]
