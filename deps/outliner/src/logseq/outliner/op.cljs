@@ -1,7 +1,6 @@
 (ns logseq.outliner.op
   "Transact outliner ops"
-  (:require [cljs.pprint :as pprint]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.db.sqlite.export :as sqlite-export]
@@ -153,16 +152,15 @@
   (reset! *op-handlers handlers))
 
 (defn- import-edn-data
-  [conn *result export-map import-options]
-  (let [{:keys [init-tx block-props-tx misc-tx] :as txs}
-        (try (sqlite-export/build-import export-map @conn import-options)
+  [conn *result export-map {:keys [tx-meta] :as import-options}]
+  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
+        (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
              (catch :default e
                (js/console.error "Import EDN error: " e)
-               (reset! *result {:error "An unexpected error occurred building the import. See the javascript console for details."})))]
-    (pprint/pprint txs)
-    (let [tx-meta {::sqlite-export/imported-data? true
-                   :import-db? true}]
-      (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta))))
+               (reset! *result {:error "An unexpected error occurred building the import. See the javascript console for details."})))
+        ;; _ (cljs.pprint/pprint _txs)
+        tx-meta' (merge {:import-db? true} tx-meta)]
+    (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta')))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
