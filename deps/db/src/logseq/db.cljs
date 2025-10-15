@@ -70,14 +70,16 @@
               data))
           tx-data)))
 
-(defn assert-no-entities
+(defn entity->db-id
   [tx-data]
   (walk/prewalk
    (fn [f]
      (if (de/entity? f)
-       (throw (ex-info "ldb/transact! doesn't support Entity"
-                       {:entity f
-                        :tx-data tx-data}))
+       (if-let [id (:db/id f)]
+         id
+         (throw (ex-info "ldb/transact! doesn't support Entity"
+                         {:entity f
+                          :tx-data tx-data})))
        f))
    tx-data))
 
@@ -138,19 +140,18 @@
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (when (or (exists? js/process)
-             (and (exists? js/goog) js/goog.DEBUG))
-     (assert-no-entities tx-data))
-   (let [tx-data (map (fn [m]
-                        (if (map? m)
-                          (cond->
-                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                   :block/level :block/container :db/other-tx
-                                   :block/unordered)
-                            (not @*transact-fn)
-                            (dissoc :block.temp/load-status))
-                          m)) tx-data)
-         tx-data (->> (remove-temp-block-data tx-data)
+   (let [tx-data (->> tx-data
+                      entity->db-id
+                      (map (fn [m]
+                             (if (map? m)
+                               (cond->
+                                (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                        :block/level :block/container :db/other-tx
+                                        :block/unordered)
+                                 (not @*transact-fn)
+                                 (dissoc :block.temp/load-status))
+                               m)))
+                      (remove-temp-block-data)
                       (common-util/fast-remove-nils)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
