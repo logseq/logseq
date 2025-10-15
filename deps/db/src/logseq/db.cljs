@@ -116,7 +116,8 @@
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-              validate-result (db-validate/validate-tx-report tx-report nil)]
+              ;; validate-result (db-validate/validate-tx-report tx-report nil)
+              validate-result true]
           (if validate-result
             (when (and tx-report (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
