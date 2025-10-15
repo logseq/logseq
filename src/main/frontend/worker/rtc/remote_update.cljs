@@ -566,16 +566,18 @@ so need to pull earlier remote-data from websocket."})
     (doseq [{:keys [self _page-name]
              title :block/title
              :as op-value} update-page-ops]
-      (let [create-opts {:uuid self
-                         :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
-            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
-                                                                  (ldb/read-transit-str title)
-                                                                  create-opts)]
-        ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
-        ;; if there's already existing same name page
-        (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
-        (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})
-        (update-block-attrs repo conn self op-value)))))
+      (let [db-ident (:db/ident op-value)]
+        (when-not (and db-ident (d/entity @conn db-ident)) ; property or class exists
+          (let [create-opts {:uuid self
+                             :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
+                [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
+                                                                      (ldb/read-transit-str title)
+                                                                      create-opts)]
+            ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
+            ;; if there's already existing same name page
+            (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
+            (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})
+            (update-block-attrs repo conn self op-value)))))))
 
 (defn- ensure-refed-blocks-exist
   "Ensure refed-blocks from remote existing in client"
