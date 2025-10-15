@@ -18,8 +18,7 @@
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.text :as text]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.graph-parser.text :as text]))
 
 (def node? (exists? js/process))
 
