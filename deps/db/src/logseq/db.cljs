@@ -131,7 +131,6 @@
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
-      (js/console.trace)
       (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
       (throw e))))
 
