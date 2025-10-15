@@ -349,7 +349,7 @@ result:
         conn (conn/get-db repo false)
         [page1-uuid ;; page2-uuid page3-uuid page4-uuid
          ](repeatedly random-uuid)
-        page-tag-str (ldb/write-transit-str [(str (:block/uuid (d/entity @conn :logseq.class/Page)))])]
+        page-tags [(:block/uuid (d/entity @conn :logseq.class/Page))]]
     (testing "apply-remote-update-page-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -357,7 +357,9 @@ result:
                                        :self page1-uuid
                                        :page-name (ldb/write-transit-str (str "X" page1-uuid))
                                        :block/title (ldb/write-transit-str (str "X" page1-uuid))
-                                       :block/tags page-tag-str}}}
+                                       :block/tags page-tags
+                                       :block/created-at (js/Date.now)
+                                       :block/updated-at (js/Date.now)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -372,7 +374,9 @@ result:
                                        :self page1-uuid
                                        :page-name (ldb/write-transit-str (str page1-uuid "-rename"))
                                        :block/title (ldb/write-transit-str (str page1-uuid "-rename"))
-                                       :block/tags page-tag-str}}}
+                                       :block/tags page-tags
+                                       :block/created-at (js/Date.now)
+                                       :block/updated-at (js/Date.now)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
