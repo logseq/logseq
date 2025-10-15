@@ -127,7 +127,7 @@
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
                 (f tx-report))
-              (throw (ex-info "DB write with invalid data" {:tx-data tx-data}))))
+              (throw (ex-info "DB write failed with invalid data" {:tx-data tx-data}))))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
     (catch :default e
