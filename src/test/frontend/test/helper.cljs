@@ -13,6 +13,7 @@
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
@@ -33,9 +34,11 @@
         test-db' (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! test-db')
     (conn/start! test-db' opts)
+    (ldb/register-transact-pipeline-fn!
+     (fn [tx-report]
+       (worker-pipeline/transact-pipeline test-db' tx-report)))
     (let [conn (conn/get-db test-db' false)]
       (when db-graph?
-        (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]

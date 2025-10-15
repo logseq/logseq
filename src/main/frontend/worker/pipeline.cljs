@@ -10,11 +10,11 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.sqlite.export :as sqlite-export]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.commands :as commands]
             [logseq.outliner.core :as outliner-core]
@@ -169,9 +169,9 @@
        (apply concat)))))
 
 (defn- toggle-page-and-block
-  [conn {:keys [db-before db-after tx-data tx-meta]}]
+  [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
-    (let [page-tag (d/entity @conn :logseq.class/Page)
+    (let [page-tag (d/entity db :logseq.class/Page)
           library-page (ldb/get-library-page db-after)]
       (mapcat
        (fn [datom]
@@ -320,15 +320,16 @@
           (nil? created-by-ent) (cons created-by-block))))))
 
 (defn- compute-extra-tx-data
-  [repo conn tx-report]
+  [repo tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
+        db db-after
         fix-page-tags-tx-data (fix-page-tags tx-report)
         fix-inline-page-tx-data (fix-inline-built-in-page-classes tx-report)
         toggle-page-and-block-tx-data (when (empty? fix-inline-page-tx-data)
-                                        (toggle-page-and-block conn tx-report))
+                                        (toggle-page-and-block db tx-report))
         display-blocks-tx-data (add-missing-properties-to-typed-display-blocks db-after tx-data tx-meta)
         commands-tx (when-not (or (:undo? tx-meta) (:redo? tx-meta) (rtc-tx-or-download-graph? tx-meta))
-                      (commands/run-commands conn tx-report))
+                      (commands/run-commands tx-report))
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
                               (insert-tag-templates repo tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
@@ -340,92 +341,71 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
-(defn- reverse-tx!
-  [conn tx-data]
-  (let [reversed-tx-data (map (fn [[e a v _tx add?]]
-                                (let [op (if add? :db/retract :db/add)]
-                                  [op e a v])) tx-data)]
-    (d/transact! conn reversed-tx-data {:revert-tx-data? true
-                                        :gen-undo-ops? false})))
-
-(defn- undo-tx-data-if-disallowed!
-  [conn {:keys [tx-data tx-meta]}]
-  (when-not (:rtc-download-graph? tx-meta)
-    (let [db @conn
-          page-has-block-parent? (some (fn [d] (and (:added d)
-                                                    (= :block/parent (:a d))
-                                                    (ldb/page? (d/entity db (:e d)))
-                                                    (not (ldb/page? (d/entity db (:v d)))))) tx-data)]
-      ;; TODO: add other cases that need to be undo
-      (when page-has-block-parent?
-        (reverse-tx! conn tx-data)
-        (throw (ex-info "Page can't have block as parent"
-                        {:type :notification
-                         :payload {:message "Page can't have block as parent"
-                                   :type :warning}
-                         :tx-data tx-data}))))))
+(defn transact-pipeline
+  "Compute extra tx-data and block/refs, should ensure it's a pure function and
+  doesn't call `d/transact!` or `ldb/transact!`."
+  [repo {:keys [db-after tx-meta] :as tx-report}]
+  (let [db-based? (entity-plus/db-based-graph? db-after)
+        extra-tx-data (when db-based?
+                        (compute-extra-tx-data repo tx-report))
+        tx-report* (if (seq extra-tx-data)
+                     (let [result (d/with db-after extra-tx-data)]
+                       (assoc tx-report
+                              :tx-data (concat (:tx-data tx-report) (:tx-data result))
+                              :db-after (:db-after result)))
+                     tx-report)
+        {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
+        deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
+        deleted-block-ids (set (map :db/id deleted-blocks))
+        blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
+        block-refs (when (seq blocks')
+                     (rebuild-block-refs repo tx-report* blocks'))
+        tx-id-data (let [db-after (:db-after tx-report*)
+                         updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
+                                                (concat pages blocks))
+                         tx-id (get-in tx-report* [:tempids :db/current-tx])]
+                     (keep (fn [b]
+                             (when-let [db-id (:db/id b)]
+                               (when (:block/uuid (d/entity db-after db-id))
+                                 {:db/id db-id
+                                  :block/tx-id tx-id}))) updated-blocks))
+        block-refs-tx-id-data (concat block-refs tx-id-data)
+        replace-tx-report (when (seq block-refs-tx-id-data)
+                            (d/with (:db-after tx-report*) block-refs-tx-id-data))
+        tx-report' (or replace-tx-report tx-report*)
+        full-tx-data (concat (:tx-data tx-report*)
+                             (:tx-data replace-tx-report))]
+    (assoc tx-report'
+           :tx-data full-tx-data
+           :tx-meta tx-meta
+           :db-before (:db-before tx-report)
+           :db-after (or (:db-after tx-report')
+                         (:db-after tx-report)))))
 
 (defn- invoke-hooks-default
   [repo conn {:keys [tx-meta] :as tx-report} context]
-  ;; Notice: don't catch `undo-tx-data-if-disallowed!` since we want it failed immediately
-  (undo-tx-data-if-disallowed! conn tx-report)
   (try
-    (let [extra-tx-data (when (sqlite-util/db-based-graph? repo)
-                          (compute-extra-tx-data repo conn tx-report))
-          tx-report* (if (seq extra-tx-data)
-                       (let [result (ldb/transact! conn extra-tx-data {:pipeline-replace? true
-                                                                       :skip-store? true})]
-                         (assoc tx-report
-                                :tx-data (concat (:tx-data tx-report) (:tx-data result))
-                                :db-after (:db-after result)))
-                       tx-report)
-          {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report*)
+    (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report))
           _ (when (common-sqlite/local-file-based-graph? repo)
               (let [page-ids (distinct (map :db/id pages))]
                 (doseq [page-id page-ids]
                   (when (d/entity @conn page-id)
                     (file/sync-to-file repo page-id tx-meta)))))
-          deleted-blocks (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report*))
-          deleted-block-ids (set (map :db/id deleted-blocks))
           deleted-block-uuids (set (map :block/uuid deleted-blocks))
+          deleted-block-ids (set (map :db/id deleted-blocks))
           _ (when (seq deleted-block-uuids)
               (swap! worker-state/*deleted-block-uuid->db-id merge
                      (zipmap (map :block/uuid deleted-blocks)
                              (map :db/id deleted-blocks))))
           deleted-assets (keep (fn [id]
-                                 (let [e (d/entity (:db-before tx-report*) id)]
+                                 (let [e (d/entity (:db-before tx-report) id)]
                                    (when (ldb/asset? e)
                                      {:block/uuid (:block/uuid e)
                                       :ext (:logseq.property.asset/type e)}))) deleted-block-ids)
-          blocks' (remove (fn [b] (deleted-block-ids (:db/id b))) blocks)
-          block-refs (when (seq blocks')
-                       (rebuild-block-refs repo tx-report* blocks'))
-          tx-id-data (let [db-after (:db-after tx-report*)
-                           updated-blocks (remove (fn [b] (contains? deleted-block-ids (:db/id b)))
-                                                  (concat pages blocks))
-                           tx-id (get-in tx-report* [:tempids :db/current-tx])]
-                       (keep (fn [b]
-                               (when-let [db-id (:db/id b)]
-                                 (when (:block/uuid (d/entity db-after db-id))
-                                   {:db/id db-id
-                                    :block/tx-id tx-id}))) updated-blocks))
-          block-refs-tx-id-data (concat block-refs tx-id-data)
-          replace-tx-report (when (seq block-refs-tx-id-data)
-                              (ldb/transact! conn block-refs-tx-id-data {:pipeline-replace? true
-                                                                         ;; Ensure db persisted
-                                                                         :db-persist? true}))
-          tx-report' (or replace-tx-report tx-report*)
-          full-tx-data (concat (:tx-data tx-report*)
-                               (:tx-data replace-tx-report))
-          final-tx-report (assoc tx-report'
-                                 :tx-data full-tx-data
-                                 :tx-meta tx-meta
-                                 :db-before (:db-before tx-report)
-                                 :db-after (or (:db-after tx-report')
-                                               (:db-after tx-report)))
           affected-query-keys (when-not (or (:importing? context) (:rtc-download-graph? tx-meta))
-                                (worker-react/get-affected-queries-keys final-tx-report))]
-      {:tx-report final-tx-report
+                                (worker-react/get-affected-queries-keys tx-report))]
+      {:tx-report tx-report
        :affected-keys affected-query-keys
        :deleted-block-uuids deleted-block-uuids
        :deleted-assets deleted-assets
@@ -437,15 +417,13 @@
 
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
-  (when-not (or (:pipeline-replace? tx-meta)
-                (:revert-tx-data? tx-meta))
-    (let [{:keys [from-disk? new-graph?]} tx-meta]
-      (cond
-        (or from-disk? new-graph?)
-        {:tx-report tx-report}
+  (let [{:keys [from-disk? new-graph?]} tx-meta]
+    (cond
+      (or from-disk? new-graph?)
+      {:tx-report tx-report}
 
-        (or (::gp-exporter/new-graph? tx-meta) (::sqlite-export/imported-data? tx-meta))
-        (invoke-hooks-for-imported-graph conn tx-report)
+      (or (::gp-exporter/new-graph? tx-meta) (::sqlite-export/imported-data? tx-meta))
+      (invoke-hooks-for-imported-graph conn tx-report)
 
-        :else
-        (invoke-hooks-default repo conn tx-report context)))))
+      :else
+      (invoke-hooks-default repo conn tx-report context))))

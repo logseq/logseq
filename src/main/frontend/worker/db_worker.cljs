@@ -25,6 +25,7 @@
             [frontend.worker.file.reset :as file-reset]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.rtc.asset-db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.core :as rtc.core]
@@ -274,6 +275,9 @@
       (common-sqlite/create-kvs-table! db)
       (when-not @*publishing? (common-sqlite/create-kvs-table! client-ops-db))
       (search/create-tables-and-triggers! search-db)
+      (ldb/register-transact-pipeline-fn!
+       (fn [tx-report]
+         (worker-pipeline/transact-pipeline repo tx-report)))
       (let [schema (ldb/get-schema repo)
             conn (common-sqlite/get-storage-conn storage schema)
             _ (db-fix/check-and-fix-schema! repo conn)
