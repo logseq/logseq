@@ -51,29 +51,6 @@
      (state/set-current-repo! graph)
      (finished-ok-handler))))
 
-(defn- safe-build-edn-import [export-map import-options]
-  (try
-    (sqlite-export/build-import export-map (db/get-db) import-options)
-    (catch :default e
-      (js/console.error "Import EDN error: " e)
-      {:error "An unexpected error occurred building the import. See the javascript console for details."})))
-
-(defn- import-edn-data-from-file
-  [export-map]
-  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs} (safe-build-edn-import export-map {})]
-    ;; (cljs.pprint/pprint _txs)
-    (if error
-      (notification/show! error :error)
-      (let [tx-meta {::sqlite-export/imported-data? true
-                     :import-db? true}
-            repo (state/get-current-repo)]
-        (p/do
-          (db/transact! repo init-tx tx-meta)
-          (when (seq block-props-tx)
-            (db/transact! repo block-props-tx tx-meta))
-          (when (seq misc-tx)
-            (db/transact! repo misc-tx tx-meta)))))))
-
 (defn import-from-edn-file!
   "Creates a new DB graph and imports sqlite.build EDN file"
   [bare-graph-name file-body finished-ok-handler]
@@ -91,13 +68,19 @@
                      (finished-error-handler)
                      nil))]
     (when (some? edn-data)
-      (-> (p/do!
-           (persist-db/<new graph {:import-type :edn})
-           (state/add-repo! {:url graph})
-           (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
-           (state/set-current-repo! graph)
-           (import-edn-data-from-file edn-data)
-           (finished-ok-handler))
+      (-> (p/let
+           [_ (persist-db/<new graph {:import-type :edn})
+            _ (state/add-repo! {:url graph})
+            _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
+            _ (state/set-current-repo! graph)
+            {:keys [error]} (ui-outliner-tx/transact!
+                             {:outliner-op :batch-import-edn}
+                             (outliner-op/batch-import-edn! edn-data {:tx-meta {::sqlite-export/imported-data? true}}))]
+            (if error
+              (do
+                (notification/show! error :error)
+                (finished-error-handler))
+              (finished-ok-handler)))
           (p/catch
            (fn [e]
              (js/console.error e)
