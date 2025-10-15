@@ -1,4 +1,4 @@
-(ns logseq.outliner.commands
+(ns frontend.worker.commands
   "Invoke commands based on user settings"
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
