@@ -576,8 +576,8 @@ so need to pull earlier remote-data from websocket."})
             ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
             ;; if there's already existing same name page
             (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
-            (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})
-            (update-block-attrs repo conn self op-value)))))))
+            (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})))
+        (update-block-attrs repo conn self op-value)))))
 
 (defn- ensure-refed-blocks-exist
   "Ensure refed-blocks from remote existing in client"
