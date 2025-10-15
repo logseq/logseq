@@ -240,12 +240,14 @@
              (case (:type event)
                (:remote-update :remote-asset-block-update)
 
-               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
-                    (catch :default e
-                      (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
-                        (m/? (r.client/new-task--pull-remote-data
-                              repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
-                        (throw (r.ex/e->ex-info e)))))
+               (try
+                 (m/? (r.remote-update/task--apply-remote-update
+                       graph-uuid repo conn date-formatter event add-log-fn))
+                 (catch :default e
+                   (if (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                     (m/? (r.client/new-task--pull-remote-data
+                           repo conn graph-uuid major-schema-version date-formatter get-ws-create-task add-log-fn))
+                     (throw (r.ex/e->ex-info e)))))
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
