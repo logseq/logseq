@@ -1109,8 +1109,7 @@
     (let [result (apply f args)]
       (when result
         (let [tx-meta (assoc (:tx-meta result)
-                             :outliner-op outliner-op
-                             :skip-store? true)]
+                             :outliner-op outliner-op)]
           (ldb/transact! (second args) (:tx-data result) tx-meta)))
       result)
     (catch :default e

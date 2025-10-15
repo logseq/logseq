@@ -35,6 +35,7 @@
 
 (defonce *transact-fn (atom nil))
 (defonce *transact-invalid-callback (atom nil))
+(defonce *transact-pipeline-fn (atom nil))
 
 (defn register-transact-fn!
   [f]
@@ -42,6 +43,9 @@
 (defn register-transact-invalid-callback-fn!
   [f]
   (when f (reset! *transact-invalid-callback f)))
+(defn register-transact-pipeline-fn!
+  [f]
+  (when f (reset! *transact-pipeline-fn f)))
 
 (defn- remove-temp-block-data
   [tx-data]
@@ -86,34 +90,44 @@
                   (:a d)))
      datoms)))
 
+(defn- throw-if-page-has-block-parent!
+  [db tx-data]
+  (when (some (fn [d] (and (:added d)
+                           (= :block/parent (:a d))
+                           (entity-util/page? (d/entity db (:e d)))
+                           (not (entity-util/page? (d/entity db (:v d)))))) tx-data)
+    (throw (ex-info "Page can't have block as parent"
+                    {:tx-data tx-data}))))
+
 (defn- transact-sync
   [repo-or-conn tx-data tx-meta]
   (try
     (let [conn repo-or-conn
           db @conn
-          db-based? (entity-plus/db-based-graph? db)
-          [validate-result tx-report] (if (and db-based?
-                                               (not (:pipeline-replace? tx-meta))
-                                               (not (:reset-conn! tx-meta))
-                                               (not (:skip-validate-db? tx-meta false))
-                                               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
-                                        (let [tx-report (d/with db tx-data tx-meta)]
-                                          [(db-validate/validate-tx-report tx-report nil) tx-report])
-                                        [true nil])]
-      (if validate-result
-        (if (and tx-report (seq (:tx-data tx-report)))
-          ;; perf enhancement: avoid repeated call on `d/with`
-          (do
-            (reset! conn (:db-after tx-report))
-            (dc/store-after-transact! conn tx-report)
-            (dc/run-callbacks conn tx-report)
-            tx-report)
-          (d/transact! conn tx-data tx-meta))
-        (do
-          ;; notify ui
-          (when-let [f @*transact-invalid-callback]
-            (f tx-report))
-          (throw (ex-info "DB write with invalid data" {:tx-data tx-data})))))
+          db-based? (entity-plus/db-based-graph? db)]
+      (if (and db-based?
+               (not (:reset-conn! tx-meta))
+               (not (:initial-db? tx-meta))
+               (not (:skip-validate-db? tx-meta false))
+               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+        (let [tx-report* (d/with db tx-data tx-meta)
+              pipeline-f @*transact-pipeline-fn
+              tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
+              _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
+              validate-result (db-validate/validate-tx-report tx-report nil)]
+          (if validate-result
+            (when (and tx-report (seq (:tx-data tx-report)))
+              ;; perf enhancement: avoid repeated call on `d/with`
+              (reset! conn (:db-after tx-report))
+              (dc/store-after-transact! conn tx-report)
+              (dc/run-callbacks conn tx-report))
+            (do
+              ;; notify ui
+              (when-let [f @*transact-invalid-callback]
+                (f tx-report))
+              (throw (ex-info "DB write with invalid data" {:tx-data tx-data}))))
+          tx-report)
+        (d/transact! conn tx-data tx-meta)))
     (catch :default e
       (js/console.trace)
       (prn :debug :transact-failed :tx-meta tx-meta :tx-data tx-data)
@@ -145,7 +159,7 @@
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
-     (when (or (seq tx-data) (:db-persist? tx-meta))
+     (when (seq tx-data)
 
        ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
        ;; (cljs.pprint/pprint tx-data)
