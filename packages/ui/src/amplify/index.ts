@@ -4,5 +4,5 @@ import { LSAuthenticator } from './ui'
 
 export {
   init, Auth,
-  LSAuthenticator,
+  LSAuthenticator
 }

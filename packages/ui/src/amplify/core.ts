@@ -18,7 +18,8 @@ export function init({ lang, authCognito }: any) {
   Amplify.configure({
     Auth: {
       Cognito: {
-        ...authCognito, loginWith: { email: true }
+        ...authCognito,
+        loginWith: { email: true }
       }
     }
   })

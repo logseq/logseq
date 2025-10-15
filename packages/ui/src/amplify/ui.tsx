@@ -119,11 +119,18 @@ export function LoginForm() {
   const loadSession = async () => {
     try {
       const ret = await Auth.fetchAuthSession()
-      console.log(ret)
       if (!ret?.userSub) throw new Error('no session')
       const user = await Auth.getCurrentUser()
       onSessionCallback?.({ ...ret, user })
-      setSessionUser(user)
+      const tokens = ret.tokens
+      setSessionUser({
+        ...user, signInUserSession: {
+          idToken: { jwtToken: tokens?.idToken?.toString() },
+          accessToken: { jwtToken: tokens?.accessToken.toString() },
+          refreshToken: null
+        }
+      })
+      await (new Promise(resolve => setTimeout(resolve, 100)))
     } catch (e) {
       console.warn('no current session:', e)
       setSessionUser(false)
@@ -194,7 +201,7 @@ export function LoginForm() {
             return
           case 'DONE':
             // signed in
-            loadSession()
+            await loadSession()
             return
           default:
             throw new Error('Unsupported sign-in step: ' + nextStep)
@@ -206,8 +213,8 @@ export function LoginForm() {
         setLoading(false)
       }
     }}>
-      <InputRow id="email" type="text" name="email" label={t('Email')}/>
-      <InputRow id="password" type="password" name="password" label={t('Password')}/>
+      <InputRow id="email" type="text" required={true} name="email" autoFocus={true} label={t('Email')}/>
+      <InputRow id="password" type="password" required={true} name="password" label={t('Password')}/>
 
       <div className={'w-full'}>
         <Button type="submit" disabled={loading} className={'w-full'}>
