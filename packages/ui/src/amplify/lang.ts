@@ -2,7 +2,7 @@ export default {
   'en': {
     'CODE_ON_THE_WAY_TIP': 'Your code is on the way. To log in, enter the code we sent you. It may take a minute to arrive.',
   },
-  'zh-CN': {
+  'zh-cn': {
     'CODE_ON_THE_WAY_TIP': '验证码已发送。请输入我们发送给您的验证码以登录。可能需要一分钟才能收到。',
     'Sign in to your account': '登录到您的账户',
     'Email': '电子邮箱',
@@ -28,7 +28,7 @@ export default {
     'Back to login': '返回登录',
     'Enter your email': '请输入您的电子邮箱'
   },
-  'zh-Han': {
+  'zh-hant': {
     'CODE_ON_THE_WAY_TIP': '驗證碼已發送。請輸入我們發送給您的驗證碼以登入。可能需要一分鐘才能收到。',
     'Sign in to your account': '登入到您的帳戶',
     'Email': '電子郵箱',
