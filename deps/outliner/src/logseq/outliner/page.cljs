@@ -229,7 +229,7 @@
        [page])
      (remove nil?))))
 
-(defn ^:large-vars/cleanup-todo create
+(defn ^:large-vars/cleanup-todo ^:api create
   "Pure function without side effects"
   [db title*
    {uuid' :uuid
