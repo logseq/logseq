@@ -15,9 +15,15 @@
             [malli.core :as m]
             [malli.error :as me]))
 
+(defn- ensure-db-graph
+  [db]
+  (when-not (ldb/db-based-graph? db)
+    (throw (ex-info "This tool must be called on a DB graph" {}))))
+
 (defn list-properties
   "Main fn for ListProperties tool"
   [db]
+  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Property)
        (map #(d/entity db (:e %)))
        #_((fn [x] (prn :prop-keys (distinct (mapcat keys x))) x))
@@ -36,6 +42,7 @@
 (defn list-tags
   "Main fn for ListTags tool"
   [db]
+  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/tags :logseq.class/Tag)
        (map #(d/entity db (:e %)))
        (map (fn [e]
@@ -72,6 +79,7 @@
 (defn get-page-data
   "Get page data for GetPage tool including the page's entity and its blocks"
   [db page-name-or-uuid]
+  (ensure-db-graph db)
   (when-let [page (ldb/get-page db page-name-or-uuid)]
     {:entity (-> (remove-hidden-properties page)
                  (dissoc :block/tags :block/refs)
@@ -85,6 +93,7 @@
 (defn list-pages
   "Main fn for ListPages tool"
   [db]
+  (ensure-db-graph db)
   (->> (d/datoms db :avet :block/name)
        (map #(d/entity db (:e %)))
        (remove entity-util/hidden?)
@@ -309,20 +318,22 @@
                            " " (pr-str (:title (ex-data e))) " is invalid: " (ex-message e))
                       (ex-data e))))))
 
-(defn- summarize-upsert-operations [operations]
+(defn- summarize-upsert-operations [operations {:keys [dry-run]}]
   (let [counts (reduce (fn [acc op]
                          (let [entity-type (keyword (:entityType op))
                                operation-type (keyword (:operation op))]
                            (update-in acc [operation-type entity-type] (fnil inc 0))))
                        {}
                        operations)]
-    (str (when (counts :add)
+    (str (if dry-run "Dry run: " "")
+         (when (counts :add)
            (str "Added: " (pr-str (counts :add)) "."))
          (when (counts :edit)
            (str " Edited: " (pr-str (counts :edit)) ".")))))
 
 (defn upsert-nodes
-  [conn operations*]
+  [conn operations* {:keys [dry-run] :as opts}]
+  (ensure-db-graph @conn)
   ;; Only support these operations with appropriate outliner validations
   (when (seq (filter #(and (#{"page" "tag" "property"} (:entityType %)) (= "edit" (:operation %))) operations*))
     (throw (ex-info "Editing a page, tag or property isn't supported yet" {})))
@@ -351,5 +362,5 @@
           (assoc :properties properties))]
     (prn :import-edn import-edn)
     (validate-import-edn import-edn)
-    (import-edn-data conn import-edn)
-    (summarize-upsert-operations operations*)))
+    (when-not dry-run (import-edn-data conn import-edn))
+    (summarize-upsert-operations operations* opts)))
