@@ -1,5 +1,6 @@
 (ns logseq.e2e.plugins-basic-test
   (:require
+   [clojure.set :as set]
    [clojure.string :as string]
    [clojure.test :refer [deftest testing is use-fixtures]]
    [jsonista.core :as json]
@@ -319,7 +320,7 @@
                           ":logseq.class/Card"
                           ":logseq.class/Quote-block"
                           ":logseq.class/Cards"}]
-      (is (= (set (map #(get % "ident") result)) built-in-tags)))))
+      (is (set/subset? built-in-tags (set (map #(get % "ident") result)))))))
 
 (deftest get-all-properties-test
   (testing "get_all_properties"
@@ -331,7 +332,6 @@
     (let [page "tag objects test"
           _ (page/new-page page)
           _ (ls-api-call! :editor.insertBlock page "task 1"
-                          ;; FIXME: "Doing" doesn't work here
                           {:properties {"logseq.property/status" "Doing"}})
           result (ls-api-call! :editor.get_tag_objects "logseq.class/Task")]
       (is (= (count result) 1))

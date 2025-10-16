@@ -106,19 +106,19 @@
     (when page
       (sdk-utils/result->js page))))
 
-;; FIXME: this doesn't work because the ui doesn't have all pages
 (defn get_all_pages
   []
-  (let [db (conn/get-db (state/get-current-repo))]
-    (some->
-     (->>
-      (d/datoms db :avet :block/name)
-      (map #(db-utils/pull (:e %)))
-      (remove ldb/hidden?)
-      (remove (fn [page]
-                (common-util/uuid-string? (:block/name page)))))
-     (sdk-utils/normalize-keyword-for-json)
-     (bean/->js))))
+  (p/let [result (db-async/<q
+                  (state/get-current-repo)
+                  {:transact-db? false}
+                  '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...]
+                    :where
+                    [?page :block/name]
+                    [(get-else $ ?page :logseq.property/hide? false) ?hide]
+                    [(false? ?hide)]])]
+    (->> result
+         (sort-by :block/title)
+         sdk-utils/result->js)))
 
 (defn create_page
   [name ^js properties ^js opts]
