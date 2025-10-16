@@ -306,3 +306,34 @@
         ":logseq.class/Tag"
         (-> (ls-api-call! :editor.getBlock (first (get result "tags")))
             (get "ident")))))))
+
+(deftest get-all-tags-test
+  (testing "get_all_tags"
+    (let [result (ls-api-call! :editor.get_all_tags)
+          built-in-tags #{":logseq.class/Template"
+                          ":logseq.class/Query"
+                          ":logseq.class/Math-block"
+                          ":logseq.class/Pdf-annotation"
+                          ":logseq.class/Task"
+                          ":logseq.class/Code-block"
+                          ":logseq.class/Card"
+                          ":logseq.class/Quote-block"
+                          ":logseq.class/Cards"}]
+      (is (= (set (map #(get % "ident") result)) built-in-tags)))))
+
+(deftest get-all-properties-test
+  (testing "get_all_properties"
+    (let [result (ls-api-call! :editor.get_all_properties)]
+      (is (>= (count result) 94)))))
+
+(deftest get-tag-objects-test
+  (testing "get_tag_objects"
+    (let [page "tag objects test"
+          _ (page/new-page page)
+          _ (ls-api-call! :editor.insertBlock page "task 1"
+                          ;; FIXME: "Doing" doesn't work here
+                          {:properties {"logseq.property/status" "Doing"}})
+          _ (repl/pause)
+          result (ls-api-call! :editor.get_tag_objects "logseq.class/Task")]
+      (is (= (count result) 1))
+      (is (= "task 1" (get (first result) "title"))))))
