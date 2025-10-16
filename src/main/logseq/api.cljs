@@ -1185,8 +1185,10 @@
 
 (defn ^:export upsert_nodes
   "Given a list of MCP operations, batch upserts resulting EDN data"
-  [operations]
-  (p/let [resp (cli-common-mcp-tools/upsert-nodes (conn/get-db false) (js->clj operations :keywordize-keys true))]
+  [operations options]
+  (p/let [resp (cli-common-mcp-tools/upsert-nodes (conn/get-db false)
+                                                  (js->clj operations :keywordize-keys true)
+                                                  (js->clj options :keywordize-keys true))]
     (ui-handler/re-render-root!)
     resp))
 
