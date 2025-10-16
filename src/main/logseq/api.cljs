@@ -37,7 +37,9 @@
             [frontend.idb :as idb]
             [frontend.loader :as loader]
             [frontend.modules.layout.core]
+            [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as st]
             [frontend.state :as state]
@@ -1184,13 +1186,18 @@
       #js {:error (str "Page " (pr-str page-title) " not found")})))
 
 (defn ^:export upsert_nodes
-  "Given a list of MCP operations, batch upserts resulting EDN data"
-  [operations options]
-  (p/let [resp (cli-common-mcp-tools/upsert-nodes (conn/get-db false)
-                                                  (js->clj operations :keywordize-keys true)
-                                                  (js->clj options :keywordize-keys true))]
+  "Given a list of MCP operations, batch imports with resulting EDN data"
+  [operations options*]
+  (p/let [ops (js->clj operations :keywordize-keys true)
+          {:keys [dry-run] :as options} (js->clj options* :keywordize-keys true)
+          edn-data (state/<invoke-db-worker :thread-api/api-build-upsert-nodes-edn (state/get-current-repo) ops)
+          {:keys [error]} (when-not dry-run
+                            (ui-outliner-tx/transact!
+                             {:outliner-op :batch-import-edn}
+                             (outliner-op/batch-import-edn! edn-data {})))]
+    (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)
-    resp))
+    (cli-common-mcp-tools/summarize-upsert-operations ops options)))
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)

@@ -803,6 +803,11 @@
   (let [conn (worker-state/get-datascript-conn repo)]
     (cli-common-mcp-tools/list-pages @conn)))
 
+(def-thread-api :thread-api/api-build-upsert-nodes-edn
+  [repo ops]
+  (let [conn (worker-state/get-datascript-conn repo)]
+    (cli-common-mcp-tools/build-upsert-nodes-edn @conn ops)))
+
 (comment
   (def-thread-api :general/dangerousRemoveAllDbs
     []
