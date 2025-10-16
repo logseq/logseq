@@ -30,7 +30,8 @@
     conn
     ;; string is used by a -t invocation
     (-> (if (string? (.-operations args)) (js/JSON.parse (.-operations args)) (.-operations args))
-        (js->clj :keywordize-keys true)))))
+        (js->clj :keywordize-keys true))
+    {:dry-run (.-dry-run args)})))
 
 (def ^:private local-tools
   "MCP Tools when running with a local graph"

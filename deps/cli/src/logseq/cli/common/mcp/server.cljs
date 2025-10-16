@@ -114,7 +114,7 @@
 
 (defn- api-upsert-nodes
   [call-api-fn args]
-  (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations")]))
+  (call-api-fn "logseq.cli.upsertNodes" [(aget args "operations") #js {:dry-run (aget args "dry-run")}]))
 
 (def ^:large-vars/data-var api-tools
   "MCP Tools when calling API server"
@@ -187,7 +187,8 @@
                 #js {:operation   (z/enum #js ["add" "edit"])
                      :entityType  (z/enum #js ["block" "page" "tag" "property"])
                      :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
-                     :data        (-> (z/object #js {}) (.passthrough))}))}}}
+                     :data        (-> (z/object #js {}) (.passthrough))}))
+              :dry-run (-> (z/boolean) (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
    :searchBlocks
    {:fn api-search-blocks
     :config #js {:title "Search Blocks"
