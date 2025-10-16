@@ -153,14 +153,16 @@
 
 (defn- import-edn-data
   [conn *result export-map {:keys [tx-meta] :as import-options}]
-  (let [{:keys [init-tx block-props-tx misc-tx] :as _txs}
+  (let [{:keys [init-tx block-props-tx misc-tx error] :as _txs}
         (try (sqlite-export/build-import export-map @conn (dissoc import-options :tx-meta))
              (catch :default e
                (js/console.error "Import EDN error: " e)
-               (reset! *result {:error "An unexpected error occurred building the import. See the javascript console for details."})))
-        ;; _ (cljs.pprint/pprint _txs)
-        tx-meta' (merge {::sqlite-export/imported-data? true} tx-meta)]
-    (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta')))
+               {:error "An unexpected error occurred building the import. See the javascript console for details."}))]
+    ;; (cljs.pprint/pprint _txs)
+    (if error
+      (reset! *result {:error error})
+      (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx))
+                     (merge {::sqlite-export/imported-data? true} tx-meta)))))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
