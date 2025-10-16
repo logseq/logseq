@@ -25,10 +25,10 @@
 ;; Alert: All apis shouldn't invoke any reactive queries
 
 ;; plugin apis
-(def ^:export get-caller-plugin-id api-plugin/get-caller-plugin-id)
-(def ^:export install-plugin-hook api-plugin/install-plugin-hook)
-(def ^:export uninstall-plugin-hook api-plugin/uninstall-plugin-hook)
-(def ^:export should-exec-plugin-hook api-plugin/should-exec-plugin-hook)
+(def ^:export get_caller_plugin_id api-plugin/get-caller-plugin-id)
+(def ^:export install_plugin_hook api-plugin/install-plugin-hook)
+(def ^:export uninstall_plugin_hook api-plugin/uninstall-plugin-hook)
+(def ^:export should_exec_plugin_hook api-plugin/should-exec-plugin-hook)
 (def ^:export load_plugin_config api-plugin/load_plugin_config)
 (def ^:export load_plugin_readme api-plugin/load_plugin_readme)
 (def ^:export save_plugin_package_json api-plugin/save_plugin_package_json)
