@@ -132,7 +132,8 @@
     :config
     #js {:title "Upsert Nodes"
          :description
-         "Takes an object with field :operations, which is an array of operation objects.
+         "This tool must be called at most once per user request. Never re-call it unless explicitly asked.
+          It takes an object with field :operations, which is an array of operation objects.
           Each operation creates or edits a page, block, tag or property. Each operation is a object
           that must have :operation, :entityType and :data fields. More about fields in an operation object:
             * :operation  - Either :add or :edit

@@ -141,6 +141,8 @@
                     new-pages)
               ;; existing pages
               (map (fn [[page-id ops]]
+                     (when-not (common-util/uuid-string? page-id)
+                       (throw (ex-info (str "Existing page id " (pr-str page-id) " must be a uuid") {})))
                      {:page {:block/uuid (uuid page-id)}
                       :blocks (mapv (fn [op]
                                       (if (= "add" (:operation op))
@@ -318,7 +320,7 @@
                            " " (pr-str (:title (ex-data e))) " is invalid: " (ex-message e))
                       (ex-data e))))))
 
-(defn- summarize-upsert-operations [operations {:keys [dry-run]}]
+(defn ^:api summarize-upsert-operations [operations {:keys [dry-run]}]
   (let [counts (reduce (fn [acc op]
                          (let [entity-type (keyword (:entityType op))
                                operation-type (keyword (:operation op))]
@@ -331,9 +333,11 @@
          (when (counts :edit)
            (str " Edited: " (pr-str (counts :edit)) ".")))))
 
-(defn upsert-nodes
-  [conn operations* {:keys [dry-run] :as opts}]
-  (ensure-db-graph @conn)
+(defn ^:api build-upsert-nodes-edn
+  "Given llm generated operations, builds the import EDN, validates it and returns it. It fails
+   fast on anything invalid"
+  [db operations*]
+  (ensure-db-graph db)
   ;; Only support these operations with appropriate outliner validations
   (when (seq (filter #(and (#{"page" "tag" "property"} (:entityType %)) (= "edit" (:operation %))) operations*))
     (throw (ex-info "Editing a page, tag or property isn't supported yet" {})))
@@ -348,7 +352,7 @@
         _ (when-let [errors (m/explain Upsert-nodes-operations-schema operations)]
             (throw (ex-info (str "Tool arguments are invalid:\n" (me/humanize errors))
                             {:errors errors})))
-        idents (operations->idents @conn operations)
+        idents (operations->idents db operations)
         pages-and-blocks (ops->pages-and-blocks operations idents)
         classes (ops->classes operations idents)
         properties (ops->properties operations idents)
@@ -362,5 +366,12 @@
           (assoc :properties properties))]
     (prn :import-edn import-edn)
     (validate-import-edn import-edn)
+    import-edn))
+
+(defn upsert-nodes
+  "Builds import-edn from llm generated operations and then imports resulting data. Only
+   used for CLI. See logseq.api/upsert_nodes for API equivalent"
+  [conn operations* {:keys [dry-run] :as opts}]
+  (let [import-edn (build-upsert-nodes-edn @conn operations*)]
     (when-not dry-run (import-edn-data conn import-edn))
     (summarize-upsert-operations operations* opts)))
