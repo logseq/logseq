@@ -1,7 +1,7 @@
 (ns frontend.components.user.login
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [dommy.core :refer-macros [sel]]
+            [dommy.core :refer-macros [sel by-id]]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
@@ -55,17 +55,19 @@
 
 (rum/defc page-impl
   []
-  (let [*ref-el (rum/use-ref nil)]
-
+  (let [*ref-el (rum/use-ref nil)
+        [tab set-tab!] (rum/use-state nil)]
     [:div.cp__user-login
-     {:ref *ref-el}
+     {:ref *ref-el
+      :id (str "user-auth-" tab)}
      (LSAuthenticator
-      {:titleRender (fn [tab]
+      {:titleRender (fn [key title]
+                      (set-tab! key)
                       (shui/card-header
                        {:class "px-0"}
                        (shui/card-title
                         {:class "capitalize"}
-                        (string/replace tab "-" " "))))
+                        (string/replace title "-" " "))))
        :onSessionCallback #()}
       (fn [^js op]
         (let [sign-out!' (.-signOut op)
@@ -86,7 +88,9 @@
   (shui/dialog-open!
    (fn [_close] (modal-inner))
    {:label "user-login"
-    :content-props {:onPointerDownOutside #(let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")
-                                                 inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
-                                             (when (seq inputs)
-                                               (.preventDefault %)))}}))
+    :content-props {:onPointerDownOutside #(if (by-id "#user-auth-login")
+                                             (let [inputs (sel ".ls-authenticator-content form input:not([type=checkbox])")
+                                                   inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
+                                               (when (seq inputs)
+                                                 (.preventDefault %)))
+                                             (.preventDefault %))}}))

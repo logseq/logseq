@@ -59,7 +59,7 @@ function InputRow(
       <Input type={localType} {...rest as any} />
 
       {isPassword && (
-        <a className={'absolute px-2 right-1 top-6 py-3  flex items-center opacity-50 hover:opacity-80 select-none'}
+        <a className={'absolute px-2 right-1 top-7 py-3  flex items-center opacity-50 hover:opacity-80 select-none'}
            onClick={() => {
              setShowPassword(!showPassword)
              setLocalType(showPassword ? 'password' : 'text')
@@ -197,7 +197,7 @@ export function LoginForm() {
             setCurrentTab({ type: 'confirm-code', props: { user: { ...ret, username }, nextStep } })
             return
           case 'RESET_PASSWORD':
-            setCurrentTab({ type: 'reset', props: { user: { ...ret, username }, nextStep } })
+            setCurrentTab({ type: 'reset-password', props: { user: { ...ret, username }, nextStep } })
             return
           case 'DONE':
             // signed in
@@ -227,15 +227,15 @@ export function LoginForm() {
             <span className={'opacity-50'}>{t('Don\'t have an account?')} </span>
             <a
               onClick={() => setCurrentTab('signup')}
-              className={'underline opacity-50 hover:opacity-80'}
+              className={'underline opacity-60 hover:opacity-80'}
             >{t('Sign up')}</a>
             <br/>
             <span className={'opacity-50'}>{t('or')} &nbsp;</span>
           </span>
 
           <a onClick={() => {
-            setCurrentTab('reset')
-          }} className={'text-sm opacity-50 hover:opacity-80 underline'}>
+            setCurrentTab('reset-password')
+          }} className={'text-sm opacity-60 hover:opacity-80 underline'}>
             {t('Forgot your password?')}
           </a>
         </p>
@@ -357,7 +357,7 @@ export function SignupForm() {
 
         <p className={'pt-1 text-center'}>
           <a onClick={() => setCurrentTab('login')}
-             className={'text-sm opacity-50 hover:opacity-80 underline'}>
+             className={'text-sm opacity-60 hover:opacity-80 underline'}>
             {t('Back to login')}
           </a>
         </p>
@@ -487,7 +487,7 @@ export function ResetPasswordForm() {
 
             <p className={'pt-4 text-center'}>
               <a onClick={() => setCurrentTab('login')}
-                 className={'text-sm opacity-50 hover:opacity-80 underline'}>
+                 className={'text-sm opacity-60 hover:opacity-80 underline'}>
                 {t('Back to login')}
               </a>
             </p>
@@ -510,7 +510,7 @@ export function ResetPasswordForm() {
 
             <p className={'pt-3 text-center'}>
               <a onClick={() => setCurrentTab('login')}
-                 className={'text-sm opacity-50 hover:opacity-80 underline'}>
+                 className={'text-sm opacity-60 hover:opacity-80 underline'}>
                 {t('Back to login')}
               </a>
             </p>
@@ -564,7 +564,7 @@ export function ConfirmWithCodeForm(
               challengeResponse: data.code as string,
             })
 
-            console.log('===>> confirmSignIn: ', ret)
+            console.debug('confirmSignIn: ', ret)
           }
         } catch (e) {
           setErrors({ code: { message: (e as Error).message, title: t('Bad Response.') } })
@@ -605,7 +605,7 @@ export function ConfirmWithCodeForm(
                   username: props.user?.username
                 })
 
-                console.log('===>>', ret)
+                console.debug('resendSignUpCode: ', ret)
               } else {
                 // await Auth.resendSignInCode(props.user)
               }
@@ -634,7 +634,7 @@ export function ConfirmWithCodeForm(
 
         <p className={'pt-4 text-center'}>
           <a onClick={() => setCurrentTab('login')}
-             className={'text-sm opacity-50 hover:opacity-80 underline'}>
+             className={'text-sm opacity-60 hover:opacity-80 underline'}>
             {t('Back to login')}
           </a>
         </p>
@@ -645,7 +645,7 @@ export function ConfirmWithCodeForm(
 
 export function LSAuthenticator(props: any) {
   const [errors, setErrors] = React.useState<string | null>(null)
-  const [currentTab, setCurrentTab] = React.useState<'login' | 'reset' | 'signup' | 'confirm-code' | any>('login')
+  const [currentTab, setCurrentTab] = React.useState<'login' | 'signup' | 'reset-password' | 'confirm-code' | any>('login')
   const onSessionCallback = React.useCallback((session: any) => {
     props.onSessionCallback?.(session)
   }, [props.onSessionCallback])
@@ -663,11 +663,11 @@ export function LSAuthenticator(props: any) {
     case 'login':
       content = <LoginForm/>
       break
-    case 'reset':
-      content = <ResetPasswordForm/>
-      break
     case 'signup':
       content = <SignupForm/>
+      break
+    case 'reset-password':
+      content = <ResetPasswordForm/>
       break
     case 'confirm-code':
       content = <ConfirmWithCodeForm {..._currentTabProps}/>
@@ -679,7 +679,7 @@ export function LSAuthenticator(props: any) {
       errors, setErrors, setCurrentTab,
       onSessionCallback, userSessionRender: props.children
     }}>
-      {props.titleRender?.(_currentTab)}
+      {props.titleRender?.(_currentTab, t(_currentTab))}
       <div className={'ls-authenticator-content'}>
         {content}
       </div>

@@ -1,8 +1,15 @@
 export default {
   'en': {
+    'signup': 'Sign Up',
+    'reset-password': 'Reset Password',
+    'confirm-code': 'Confirm Code',
     'CODE_ON_THE_WAY_TIP': 'Your code is on the way. To log in, enter the code we sent you. It may take a minute to arrive.',
   },
   'zh-cn': {
+    'login': '登录',
+    'signup': '注册',
+    'reset-password': '重置密码',
+    'confirm-code': '确认验证码',
     'CODE_ON_THE_WAY_TIP': '验证码已发送。请输入我们发送给您的验证码以登录。可能需要一分钟才能收到。',
     'Sign in to your account': '登录到您的账户',
     'Email': '电子邮箱',
@@ -29,6 +36,10 @@ export default {
     'Enter your email': '请输入您的电子邮箱'
   },
   'zh-hant': {
+    'login': '登入',
+    'signup': '註冊',
+    'reset-password': '重置密碼',
+    'confirm-code': '確認驗證碼',
     'CODE_ON_THE_WAY_TIP': '驗證碼已發送。請輸入我們發送給您的驗證碼以登入。可能需要一分鐘才能收到。',
     'Sign in to your account': '登入到您的帳戶',
     'Email': '電子郵箱',
@@ -55,6 +66,10 @@ export default {
     'Enter your email': '請輸入您的電子郵箱'
   },
   'ja': {
+    'login': 'ログイン',
+    'signup': 'サインアップ',
+    'reset-password': 'パスワードをリセットする',
+    'confirm-code': 'コードを確認する',
     'CODE_ON_THE_WAY_TIP': 'コードが送信されました。ログインするには、送信したコードを入力してください。届くまでに1分ほどかかる場合があります。',
     'Sign in to your account': 'アカウントにサインイン',
     'Email': 'メール',

@@ -1,10 +1,14 @@
-.cp__user-login {}
+.cp__user-login {
+  span.opacity-50, a.opacity-60 {
+    @apply opacity-80;
+  }
+}
 
 .ui__dialog-content[label=user-login] {
   @apply flex items-center top-0 px-6 pt-0 w-auto;
 
   .ui__dialog-main-content {
-    @apply p-0 w-[70vw] relative max-w-[600px] sm:max-w-[80vw] sm:w-[450px];
+    @apply p-0 w-[70vw] relative max-w-[500px] sm:w-[440px];
   }
 
   .ui__modal-close-wrap {
