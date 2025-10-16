@@ -38,12 +38,6 @@
       (throw (ex-info "Wrong property db/ident" {:db-ident db-ident})))
     id))
 
-(defn- resolve-property-value
-  [db property-type value]
-  (if (and (qualified-keyword? value) (not= :keyword property-type))
-    (db-ident->eid db value)
-    value))
-
 (defonce ^:private built-in-class-property->properties
   (->>
    (mapcat
@@ -331,7 +325,10 @@
         default-or-url? (contains? #{:default :url} (:logseq.property/type property))]
     (cond
       closed-values?
-      (get-property-value-eid @conn property-id v)
+      (some (fn [item]
+              (when (or (= (:block/title item) v)
+                        (= (:logseq.property/value item) v))
+                (:db/id item))) (:block/_closed-value-property property))
 
       (and default-or-url?
            ;; FIXME: remove this when :logseq.property/order-list-type updated to closed values
@@ -350,6 +347,9 @@
   [conn property-id v property-type]
   (let [number-property? (= property-type :number)]
     (cond
+      (and (qualified-keyword? v) (not= :keyword property-type))
+      (db-ident->eid @conn v)
+
       (and (integer? v)
            (or (not number-property?)
                ;; Allows :number property to use number as a ref (for closed value) or value
@@ -443,17 +443,14 @@
                (throw (ex-info (str "Property " property-id " doesn't exist yet") {:property-id property-id})))
            property-type (get property :logseq.property/type :default)
            entity-id? (and (:entity-id? options) (number? v))
-           [v' entity-id?] (let [v' (resolve-property-value @conn property-type v)]
-                             (if (and (keyword? v) (integer? v'))
-                               [v' true]
-                               [v' entity-id?]))
-           _ (assert (some? v') "Can't set a nil property value must be not nil")
            ref? (contains? db-property-type/all-ref-property-types property-type)
            default-url-not-closed? (and (contains? #{:default :url} property-type)
                                         (not (seq (entity-plus/lookup-kv-then-entity property :property/closed-values))))
            v' (if (and ref? (not entity-id?))
-                (convert-ref-property-value conn property-id v' property-type)
-                v')
+                (convert-ref-property-value conn property-id v property-type)
+                v)
+           _ (when (nil? v')
+               (throw (ex-info "Property value must be not nil" {:v v})))
            txs (doall
                 (mapcat
                  (fn [eid]
@@ -527,27 +524,30 @@
         db-attribute? (some? (db-schema/schema property-id))
         property (d/entity @conn property-id)
         property-type (get property :logseq.property/type :default)
-        v (resolve-property-value db property-type v)]
+        ref? (db-property-type/all-ref-property-types property-type)
+        v' (if ref?
+             (convert-ref-property-value conn property-id v property-type)
+             v)]
     (when-not (and block property)
       (throw (ex-info "Set block property failed: block or property doesn't exist"
                       {:block-eid block-eid
                        :property-id property-id
                        :block block
                        :property property})))
-    (if (nil? v)
+    (if (nil? v')
       (remove-block-property! conn block-eid property-id)
       (do
         (when (= property-id :block/tags)
-          (outliner-validate/validate-tags-property @conn [block-eid] v))
+          (outliner-validate/validate-tags-property @conn [block-eid] v'))
         (when (= property-id :logseq.property.class/extends)
-          (outliner-validate/validate-extends-property @conn v [block]))
+          (outliner-validate/validate-extends-property @conn v' [block]))
         (cond
           db-attribute?
           (do
-            (throw-error-if-invalid-property-value db property v)
-            (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+            (throw-error-if-invalid-property-value db property v')
+            (when-not (and (= property-id :block/alias) (= v' (:db/id block))) ; alias can't be itself
               (let [tx-data (cond->
-                             [{:db/id (:db/id block) property-id v}]
+                             [{:db/id (:db/id block) property-id v'}]
                               (= property-id :logseq.property.class/extends)
                               (conj [:db/retract (:db/id block) :logseq.property.class/extends :logseq.class/Root]))]
                 (ldb/transact! conn tx-data
@@ -555,14 +555,11 @@
           :else
           (let [_ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
                 ref? (db-property-type/all-ref-property-types property-type)
-                new-value (if ref?
-                            (convert-ref-property-value conn property-id v property-type)
-                            v)
                 existing-value (get block property-id)]
-            (throw-error-if-self-value block new-value ref?)
+            (throw-error-if-self-value block v' ref?)
 
-            (when-not (= existing-value new-value)
-              (raw-set-block-property! conn block property new-value))))))))
+            (when-not (= existing-value v')
+              (raw-set-block-property! conn block property v'))))))))
 
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
