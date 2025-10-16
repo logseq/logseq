@@ -159,7 +159,7 @@
                (js/console.error "Import EDN error: " e)
                (reset! *result {:error "An unexpected error occurred building the import. See the javascript console for details."})))
         ;; _ (cljs.pprint/pprint _txs)
-        tx-meta' (merge {:import-db? true} tx-meta)]
+        tx-meta' (merge {::sqlite-export/imported-data? true} tx-meta)]
     (ldb/transact! conn (vec (concat init-tx block-props-tx misc-tx)) tx-meta')))
 
 (defn ^:large-vars/cleanup-todo apply-ops!

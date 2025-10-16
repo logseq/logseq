@@ -75,7 +75,7 @@
             _ (state/set-current-repo! graph)
             {:keys [error]} (ui-outliner-tx/transact!
                              {:outliner-op :batch-import-edn}
-                             (outliner-op/batch-import-edn! edn-data {:tx-meta {::sqlite-export/imported-data? true}}))]
+                             (outliner-op/batch-import-edn! edn-data {:tx-meta {:import-db? true}}))]
             (if error
               (do
                 (notification/show! error :error)
