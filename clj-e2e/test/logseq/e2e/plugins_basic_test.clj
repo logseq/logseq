@@ -333,7 +333,6 @@
           _ (ls-api-call! :editor.insertBlock page "task 1"
                           ;; FIXME: "Doing" doesn't work here
                           {:properties {"logseq.property/status" "Doing"}})
-          _ (repl/pause)
           result (ls-api-call! :editor.get_tag_objects "logseq.class/Task")]
       (is (= (count result) 1))
       (is (= "task 1" (get (first result) "title"))))))
