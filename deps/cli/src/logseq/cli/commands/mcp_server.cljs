@@ -15,14 +15,17 @@
     (cli-common-mcp-server/mcp-success-response resp)
     (cli-common-mcp-server/mcp-error-response (str "Error: Page " (pr-str (aget args "pageName")) " not found"))))
 
-(defn- local-list-pages [conn _args]
-  (cli-common-mcp-server/mcp-success-response (cli-common-mcp-tools/list-pages @conn)))
+(defn- local-list-pages [conn args]
+  (cli-common-mcp-server/mcp-success-response
+   (cli-common-mcp-tools/list-pages @conn {:expand (aget args "expand")})))
 
-(defn- local-list-properties [conn _args]
-  (cli-common-mcp-server/mcp-success-response (cli-common-mcp-tools/list-properties @conn)))
+(defn- local-list-properties [conn args]
+  (cli-common-mcp-server/mcp-success-response
+   (cli-common-mcp-tools/list-properties @conn {:expand (aget args "expand")})))
 
-(defn- local-list-tags [conn _args]
-  (cli-common-mcp-server/mcp-success-response (cli-common-mcp-tools/list-tags @conn)))
+(defn- local-list-tags [conn args]
+  (cli-common-mcp-server/mcp-success-response
+   (cli-common-mcp-tools/list-tags @conn {:expand (aget args "expand")})))
 
 (defn- local-upsert-nodes [conn args]
   (cli-common-mcp-server/mcp-success-response
