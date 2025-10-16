@@ -30,3 +30,15 @@ import "@logseq/libs"
 #### Feedback
 If you have any feedback or encounter any issues, feel free to join Logseq's discord group.
 https://discord.gg/KpN4eHY
+
+#### Generate CLJS SDK wrappers
+
+To regenerate the ClojureScript facade from the JS SDK declarations:
+
+```bash
+yarn run generate:schema              # emits dist/logseq-sdk-schema.json
+bb libs:generate-cljs-sdk            # writes per-proxy CLJS under target/generated-cljs
+```
+
+Each interface is emitted to its own namespace (e.g. `logseq.app`, `logseq.editor`).
+Pass `--out-dir` to change the output directory or `--ns-prefix` to use a different namespace root.
