@@ -1163,18 +1163,24 @@
 ;; Internal CLI API
 ;; TODO: Use transit for internal APIs
 (defn ^:export list_tags
-  []
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-tags (state/get-current-repo))]
+  [options]
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-tags
+                                        (state/get-current-repo)
+                                        (js->clj options :keywordize-keys true))]
     (clj->js resp)))
 
 (defn ^:export list_properties
-  []
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-properties (state/get-current-repo))]
+  [options]
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-properties
+                                        (state/get-current-repo)
+                                        (js->clj options :keywordize-keys true))]
     (clj->js resp)))
 
 (defn ^:export list_pages
-  []
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-pages (state/get-current-repo))]
+  [options]
+  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-pages
+                                        (state/get-current-repo)
+                                        (js->clj options :keywordize-keys true))]
     (clj->js resp)))
 
 (defn ^:export get_page_data

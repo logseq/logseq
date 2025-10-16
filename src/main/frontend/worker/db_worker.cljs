@@ -789,19 +789,19 @@
     (cli-common-mcp-tools/get-page-data @conn page-title)))
 
 (def-thread-api :thread-api/api-list-properties
-  [repo]
+  [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-properties @conn)))
+    (cli-common-mcp-tools/list-properties @conn options)))
 
 (def-thread-api :thread-api/api-list-tags
-  [repo]
+  [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-tags @conn)))
+    (cli-common-mcp-tools/list-tags @conn options)))
 
 (def-thread-api :thread-api/api-list-pages
-  [repo]
+  [repo options]
   (let [conn (worker-state/get-datascript-conn repo)]
-    (cli-common-mcp-tools/list-pages @conn)))
+    (cli-common-mcp-tools/list-pages @conn options)))
 
 (def-thread-api :thread-api/api-build-upsert-nodes-edn
   [repo ops]

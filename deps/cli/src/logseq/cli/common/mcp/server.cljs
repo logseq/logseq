@@ -97,16 +97,16 @@
   (call-api-fn "logseq.cli.getPageData" [(aget args "pageName")]))
 
 (defn- api-list-pages
-  [call-api-fn _args]
-  (call-api-fn "logseq.cli.listPages" []))
+  [call-api-fn args]
+  (call-api-fn "logseq.cli.listPages" [#js {:expand (aget args "expand")}]))
 
 (defn- api-list-tags
-  [call-api-fn _args]
-  (call-api-fn "logseq.cli.listTags" []))
+  [call-api-fn args]
+  (call-api-fn "logseq.cli.listTags" [#js {:expand (aget args "expand")}]))
 
 (defn- api-list-properties
-  [call-api-fn _args]
-  (call-api-fn "logseq.cli.listProperties" []))
+  [call-api-fn args]
+  (call-api-fn "logseq.cli.listProperties" [#js {:expand (aget args "expand")}]))
 
 (defn- api-search-blocks
   [call-api-fn args]
@@ -121,7 +121,9 @@
   {:listPages
    {:fn api-list-pages
     :config #js {:title "List Pages"
-                 :description "List all pages in a graph"}}
+                 :description "List all pages in a graph"
+                 :inputSchema
+                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each page"))}}}
    :getPage
    {:fn api-get-page
     :config #js {:title "Get Page"
@@ -189,7 +191,7 @@
                      :entityType  (z/enum #js ["block" "page" "tag" "property"])
                      :id          (.optional (z/union #js [(z/string) (z/number) (z/null)]))
                      :data        (-> (z/object #js {}) (.passthrough))}))
-              :dry-run (-> (z/boolean) (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
+              :dry-run (-> (z/boolean) .optional (.describe "Pretend to do batch update. Does everything except actually commit change to db e.g. validation."))}}}
    :searchBlocks
    {:fn api-search-blocks
     :config #js {:title "Search Blocks"
@@ -198,11 +200,15 @@
    :listTags
    {:fn api-list-tags
     :config #js {:title "List Tags"
-                 :description "List all tags in a graph"}}
+                 :description "List all tags in a graph"
+                 :inputSchema
+                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each tag"))}}}
    :listProperties
    {:fn api-list-properties
     :config #js {:title "List Properties"
-                 :description "List all properties in a graph"}}})
+                 :description "List all properties in a graph"
+                 :inputSchema
+                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property"))}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
   (tool-fn (partial api-tool api-fn) args))
