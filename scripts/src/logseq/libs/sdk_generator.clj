@@ -6,6 +6,7 @@
 (def default-schema "libs/dist/logseq-sdk-schema.json")
 (def default-output-dir "target/generated-cljs")
 (def default-ns-prefix "logseq")
+(def core-namespace "core")
 
 (defn parse-args
   [args]
@@ -16,8 +17,8 @@
       (let [[flag value & more] tokens]
         (case flag
           "--schema" (recur (assoc opts :schema value) more)
-          "--out" (recur (assoc opts :out-dir value) more)
           "--out-dir" (recur (assoc opts :out-dir value) more)
+          "--out" (recur (assoc opts :out-dir value) more)
           "--ns-prefix" (recur (assoc opts :ns-prefix value) more)
           (throw (ex-info (str "Unknown flag: " flag) {:flag flag})))))))
 
@@ -34,84 +35,160 @@
       (string/replace #"^I" "")
       (string/replace #"Proxy$" "")))
 
-(defn interface->suffix [iface-name]
-  (-> iface-name
-      interface->target
-      camel->kebab))
+(defn interface->namespace [ns-prefix iface-name]
+  (str ns-prefix "." (camel->kebab (interface->target iface-name))))
 
-(defn interface->namespace [iface-name ns-prefix]
-  (prn :debug :iface-name iface-name
-       :ns-prefix ns-prefix
-       :suffix (interface->suffix iface-name))
-  (str ns-prefix "." (interface->suffix iface-name)))
+(defn getter->interface-name [return-type]
+  (some->> (re-find #"\.(I[A-Za-z0-9]+)" return-type)
+           second))
+
+(defn iface-key->string [k]
+  (cond
+    (string? k) k
+    (keyword? k) (name k)
+    :else (str k)))
 
 (defn format-docstring [doc]
   (when (and doc (not (string/blank? doc)))
     (str "  " (pr-str doc) "\n")))
 
-(defn bean-specs [params]
-  (when (seq params)
-    (vec
-     (map (fn [{:keys [beanToJs rest]}]
-            (let [spec (cond-> {}
-                         beanToJs (assoc :bean-to-js true)
-                         rest (assoc :rest true))]
-              spec))
-          params))))
+(defn param->info
+  [{:keys [name optional rest beanToJs rest?]}]
+  (let [sym (camel->kebab name)
+        spec (cond-> {}
+               beanToJs (assoc :bean-to-js true))]
+    {:name name
+     :sym sym
+     :optional (boolean optional)
+     :rest (boolean (or rest rest?))
+     :spec (when (seq spec) spec)}))
 
-(defn rest-index [params]
-  (some (fn [[idx {:keys [rest]}]]
-          (when rest idx))
-        (map-indexed vector params)))
+(defn emit-convert-binding [convert-sym {:keys [sym spec]}]
+  (if spec
+    (str "        arg-" sym " (" convert-sym " " (pr-str spec) " " sym ")\n")
+    (str "        arg-" sym " " sym "\n")))
 
-(defn select-primary-signature [signatures]
-  (when (seq signatures)
-    (apply max-key #(count (:parameters %)) signatures)))
+(defn emit-rest-binding [convert-sym {:keys [sym spec]}]
+  (let [rest-var (str "rest-" sym)
+        line (if spec
+               (str "        " rest-var " (map #(" convert-sym " " (pr-str spec) " %) " sym "))\n")
+               (str "        " rest-var " (vec " sym ")\n"))]
+    {:binding line
+     :var rest-var}))
+
+(defn format-param-vector [params]
+  (str "[" (string/join " " params) "]"))
+
+(defn emit-method-body
+  [owner-expr method-name params {:keys [convert call]}]
+  (let [rest-param (some #(when (:rest %) %) params)
+        fixed-params (if rest-param (vec (remove :rest params)) params)
+        convert-lines (map #(emit-convert-binding convert %) fixed-params)
+        {:keys [binding var]} (when rest-param (emit-rest-binding convert rest-param))
+        rest-lines (if binding [binding] [])
+        arg-syms (map #(str "arg-" (:sym %)) fixed-params)
+        args-expr (if rest-param
+                    (str "(into [" (string/join " " arg-syms) "] " var ")")
+                    (str "[" (string/join " " arg-syms) "]"))]
+    (str "  (let [owner " owner-expr "\n"
+         "        method (.-" method-name " owner)\n"
+         (apply str convert-lines)
+         (apply str rest-lines)
+         "        args " args-expr "]\n"
+         "    (" call " owner method args)))\n")))
+
+(defn emit-optional-def
+  [fn-name doc-str params impl-name owner-expr helpers method-name]
+  (let [required (take-while (complement :optional) params)
+        total (count params)
+        param-syms (map :sym params)
+        arities (range (count required) (inc total))
+        header (str "\n(defn " fn-name "\n"
+                    (or doc-str ""))]
+    (str "\n(defn- " impl-name "\n"
+         "  " (format-param-vector param-syms) "\n"
+         (emit-method-body owner-expr method-name params helpers)
+         header
+         (apply str
+                (for [arity arities
+                      :let [provided (take arity param-syms)
+                            missing (- total arity)
+                            call-args (concat provided (repeat missing "nil"))
+                            param-vector (format-param-vector provided)
+                            call-arg-str (string/join " " call-args)
+                            call-arg-str (if (string/blank? call-arg-str) "" (str " " call-arg-str))]]
+                  (str "  (" param-vector "\n"
+                       "  (" impl-name call-arg-str "))")))
+         ")\n")))
 
 (defn emit-method
   [{:keys [name documentation signatures]}
-   iface-name]
-  (let [{:keys [parameters]} (select-primary-signature signatures)
-        specs (bean-specs parameters)
-        rest-idx (rest-index parameters)
+   owner-expr helpers]
+  (let [{:keys [parameters]} (apply max-key #(count (:parameters %)) signatures)
+        params (map param->info parameters)
         fn-name (camel->kebab name)
-        owner-prop (interface->target iface-name)
-        js-prop (str ".-" name)]
-    (str "\n"
-         "(defn " fn-name "\n"
-         (or (format-docstring documentation) "")
-         "  [& args]\n"
-         "  (let [owner  (.-" owner-prop " js/logseq)\n"
-         "        method (" js-prop " owner)\n"
-         "        specs  " (pr-str specs) "\n"
-         "        rest-idx " (if (number? rest-idx) rest-idx "nil") "]\n"
-         "    (call-proxy owner method specs rest-idx args)))\n")))
+        doc-str (format-docstring documentation)
+        rest-param (some #(when (:rest %) %) params)
+        optional-params (filter :optional params)
+        impl-name (str fn-name "-impl")
+        method-body (emit-method-body owner-expr name params helpers)]
+    (cond
+      rest-param
+      (let [fixed-syms (map :sym (vec (remove :rest params)))
+            param-vector (format-param-vector (concat fixed-syms ["&" (:sym rest-param)]))]
+        (str "\n(defn " fn-name "\n"
+             (or doc-str "")
+             "  " param-vector "\n"
+             method-body))
 
-(defn emit-namespace
-  [iface-name iface ns-prefix]
-  (let [ns (interface->namespace iface-name ns-prefix)
+      (seq optional-params)
+      (emit-optional-def fn-name doc-str params impl-name owner-expr helpers name)
+
+      :else
+      (let [param-vector (format-param-vector (map :sym params))]
+        (str "\n(defn " fn-name "\n"
+             (or doc-str "")
+             "  " param-vector "\n"
+             method-body)))))
+
+(defn emit-core-namespace
+  [ns-prefix {:keys [methods]}]
+  (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
                     "  (:require [cljs-bean.core :as bean]))\n\n"
-                    "(defn- convert-args [specs rest-idx args]\n"
-                    "  (if (seq specs)\n"
-                    "    (map-indexed\n"
-                    "      (fn [idx arg]\n"
-                    "        (let [spec (if (and rest-idx (>= idx rest-idx))\n"
-                    "                       (nth specs rest-idx nil)\n"
-                    "                       (nth specs idx nil))]\n"
-                    "          (if (and spec (:bean-to-js spec))\n"
-                    "            (bean/->js arg)\n"
-                    "            arg)))\n"
-                    "      args)\n"
-                    "    args))\n\n"
-                    "(defn- call-proxy [owner method specs rest-idx args]\n"
+                    "(defn convert-arg [spec value]\n"
+                    "  (cond\n"
+                    "    (nil? spec) value\n"
+                    "    (identical? value js/undefined) value\n"
+                    "    (:bean-to-js spec) (bean/->js value)\n"
+                    "    :else value))\n\n"
+                    "(defn- normalize-result [result]\n"
+                    "  (if (instance? js/Promise result)\n"
+                    "    (.then result (fn [value] (normalize-result value)))\n"
+                    "    (bean/->clj result)))\n\n"
+                    "(defn call-method [owner method args]\n"
                     "  (when-not method\n"
                     "    (throw (js/Error. \"Missing method on logseq namespace\")))\n"
-                    "  (let [converted (convert-args specs rest-idx args)]\n"
-                    "    (.apply method owner (to-array (vec converted)))))\n")
+                    "  (normalize-result (.apply method owner (to-array args))))\n")
+        helpers {:convert "convert-arg"
+                 :call "call-method"}
+        methods-str (->> methods
+                         (map #(emit-method % "js/logseq" helpers))
+                         (apply str))]
+    [ns (str header methods-str)]))
+
+(defn emit-proxy-namespace
+  [ns-prefix iface-name iface]
+  (let [ns (interface->namespace ns-prefix iface-name)
+        owner-expr (str "(.-" (interface->target iface-name) " js/logseq)")
+        header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
+                    "(ns " ns "\n"
+                    "  (:require [logseq.core :as core]))\n")
+        helpers {:convert "core/convert-arg"
+                 :call "core/call-method"}
         methods-str (->> (:methods iface)
-                         (map #(emit-method % iface-name))
+                         (map #(emit-method % owner-expr helpers))
                          (apply str))]
     [ns (str header methods-str)]))
 
@@ -122,8 +199,7 @@
         file-name (str (last parts) ".cljs")]
     (apply fs/path out-dir (concat dir-parts [file-name]))))
 
-(defn ensure-schema!
-  [schema-path]
+(defn ensure-schema! [schema-path]
   (when-not (fs/exists? schema-path)
     (throw (ex-info (str "Schema not found, run `yarn --cwd libs generate:schema` first: " schema-path)
                     {:schema schema-path}))))
@@ -136,22 +212,32 @@
       (spit (str file) content)
       (println "Generated" (str file)))))
 
-(defn generate!
-  ([] (generate! {}))
+(defn run!
+  ([] (run! {}))
   ([opts]
    (let [schema-path (fs/absolutize (or (:schema opts) default-schema))
-         out-dir     (fs/absolutize (or (:out-dir opts) default-output-dir))
-         ns-prefix   (or (:ns-prefix opts) default-ns-prefix)]
+         out-dir (fs/absolutize (or (:out-dir opts) default-output-dir))
+         ns-prefix (or (:ns-prefix opts) default-ns-prefix)]
      (ensure-schema! schema-path)
      (let [schema (json/parse-string (slurp (str schema-path)) true)
-           namespaces (map (fn [[iface-name iface]]
-                             (emit-namespace (name iface-name) iface ns-prefix))
-                           (:interfaces schema))]
+           interfaces (:interfaces schema)
+           ls-user (get-in schema [:classes :LSPluginUser])
+           _ (when-not ls-user
+               (throw (ex-info "Missing LSPluginUser metadata in schema" {:schema schema-path})))
+           getters (:getters ls-user)
+           proxy-names (->> getters
+                            (keep #(some-> (getter->interface-name (:returnType %)) keyword))
+                            distinct)
+           proxies (for [iface-key proxy-names
+                         :let [iface (get interfaces iface-key)]
+                         :when iface]
+                     (emit-proxy-namespace ns-prefix (iface-key->string iface-key) iface))
+           core (emit-core-namespace ns-prefix ls-user)
+           namespaces (cons core proxies)]
        (fs/create-dirs out-dir)
        (write-namespaces! out-dir namespaces)
        out-dir))))
 
-(defn -main
-  [& args]
+(defn -main [& args]
   (let [opts (parse-args args)]
-    (generate! opts)))
+    (run! opts)))

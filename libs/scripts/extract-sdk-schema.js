@@ -41,7 +41,7 @@ const TARGET_INTERFACES = [
  * cljs-bean when crossing the JS <-> CLJS boundary.
  */
 const BEAN_TO_JS_REGEX =
-  /(Record<|Array<|UIOptions|UIContainerAttrs|StyleString|StyleOptions|object|any|unknown|IHookEvent|BlockEntity|PageEntity|Promise<\s*Record)/i;
+  /(Record<|Array<|Partial<|UIOptions|UIContainerAttrs|StyleString|StyleOptions|object|any|unknown|IHookEvent|BlockEntity|PageEntity|Promise<\s*Record)/i;
 
 const project = new Project({
   compilerOptions: { allowJs: true },
@@ -57,6 +57,7 @@ DECL_FILES.forEach((file) => {
 const schema = {
   generatedAt: new Date().toISOString(),
   interfaces: {},
+  classes: {},
 };
 
 const serializeDoc = (symbol) => {
@@ -114,6 +115,21 @@ const serializeSignature = (sig, memberNode) => {
   };
 };
 
+const serializeCallable = (symbol, member) => {
+  if (!symbol) return null;
+  const type = symbol.getTypeAtLocation(member);
+  const callSignatures = type.getCallSignatures();
+  if (!callSignatures.length) {
+    return null;
+  }
+
+  return {
+    name: symbol.getName(),
+    documentation: serializeDoc(symbol),
+    signatures: callSignatures.map((sig) => serializeSignature(sig, member)),
+  };
+};
+
 const sourceFiles = project.getSourceFiles();
 sourceFiles.forEach((source) => {
   source.getInterfaces().forEach((iface) => {
@@ -124,26 +140,40 @@ sourceFiles.forEach((source) => {
 
     const interfaceSymbol = iface.getType().getSymbol();
     const doc = serializeDoc(interfaceSymbol);
-    const methods = iface.getMembers().map((member) => {
-      const symbol = member.getSymbol();
-      if (!symbol) return null;
-
-      const type = symbol.getTypeAtLocation(member);
-      const callSignatures = type.getCallSignatures();
-      if (!callSignatures.length) {
-        return null;
-      }
-
-      return {
-        name: symbol.getName(),
-        documentation: serializeDoc(symbol),
-        signatures: callSignatures.map((sig) => serializeSignature(sig, member)),
-      };
-    }).filter(Boolean);
+    const methods = iface
+      .getMembers()
+      .map((member) => serializeCallable(member.getSymbol(), member))
+      .filter(Boolean);
 
     schema.interfaces[name] = {
       documentation: doc,
       methods,
+    };
+  });
+
+  source.getClasses().forEach((cls) => {
+    const name = cls.getName();
+    if (name !== 'LSPluginUser') {
+      return;
+    }
+
+    const classSymbol = cls.getType().getSymbol();
+    const doc = serializeDoc(classSymbol);
+    const methods = cls
+      .getInstanceMethods()
+      .filter((method) => method.getName() !== 'constructor')
+      .map((method) => serializeCallable(method.getSymbol(), method))
+      .filter(Boolean);
+    const getters = cls.getGetAccessors().map((accessor) => ({
+      name: accessor.getName(),
+      documentation: serializeDoc(accessor.getSymbol()),
+      returnType: accessor.getReturnType().getText(),
+    }));
+
+    schema.classes[name] = {
+      documentation: doc,
+      methods,
+      getters,
     };
   });
 });

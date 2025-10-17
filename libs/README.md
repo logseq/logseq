@@ -33,12 +33,13 @@ https://discord.gg/KpN4eHY
 
 #### Generate CLJS SDK wrappers
 
-To regenerate the ClojureScript facade from the JS SDK declarations:
+To regenerate the ClojureScript facade from the JS SDK declarations (keeping the same argument shapes as the JS APIs while auto-converting to/from CLJS data):
 
 ```bash
 yarn run generate:schema              # emits dist/logseq-sdk-schema.json
-bb libs:generate-cljs-sdk            # writes per-proxy CLJS under target/generated-cljs
+bb libs:generate-cljs-sdk            # emits logseq/core.cljs and per-proxy files under target/generated-cljs
 ```
 
-Each interface is emitted to its own namespace (e.g. `logseq.app`, `logseq.editor`).
-Pass `--out-dir` to change the output directory or `--ns-prefix` to use a different namespace root.
+Non-proxy methods (those defined on `ILSPluginUser`, e.g. `ready`, `provide-ui`) land in `logseq.core`. Each proxy (`IAppProxy`, `IEditorProxy`, ...) is emitted to its own namespace such as `logseq.app` or `logseq.editor`, preserving the original JS argument ordering while automatically bean-converting CLJS data.
+
+Pass `--out-dir` to change the output location or `--ns-prefix` to pick a different namespace root.
