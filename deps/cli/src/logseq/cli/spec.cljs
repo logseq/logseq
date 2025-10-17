@@ -58,11 +58,11 @@
    :stdio {:alias :s
            :desc "Run the MCP server via stdio transport"}
    :port {:alias :p
-          :default 3000
+          :default 12315
           :coerce :long
           :desc "Port for streamable HTTP server"}
-   :host {:default "localhost"
-          :desc "Host for streamable HHP server"}
+   :host {:default "127.0.0.1"
+          :desc "Host for streamable HTTP server"}
    :debug-tool {:alias :t
                 :coerce :keyword
                 :desc "Debug mcp tool with direct invocation"}})

@@ -74,7 +74,7 @@
   [{{:keys [graph args graphs properties-readable title-query]} :opts}]
   (let [graphs' (into [graph] graphs)]
     (doseq [graph' graphs']
-      (if (fs/existsSync (cli-util/get-graph-dir graph'))
+      (if (fs/existsSync (cli-util/get-graph-path graph'))
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
               query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
               results (cond

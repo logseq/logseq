@@ -86,7 +86,7 @@
     (cli-common-mcp-server/create-mcp-api-server (partial call-api api-server-token))))
 
 (defn start [{{:keys [debug-tool graph stdio api-server-token] :as opts} :opts :as m}]
-  (when (and graph (not (fs/existsSync (cli-util/get-graph-dir graph))))
+  (when (and graph (not (fs/existsSync (cli-util/get-graph-path graph))))
     (cli-util/error "Graph" (pr-str graph) "does not exist"))
   (if debug-tool
     (if graph
