@@ -25,7 +25,13 @@ When response from remote is too huge(> 32KB),
 the server will put it to s3 and return its presigned-url to clients."}
   :rtc.exception/bad-request-body {:doc "bad request body, rejected by server-schema"}
   :rtc.exception/not-allowed {:doc "this api-call is not allowed"}
-  :rtc.exception/ws-timeout {:doc "websocket timeout"})
+  :rtc.exception/ws-timeout {:doc "websocket timeout"}
+
+  :rtc.exception/fetch-user-rsa-key-pair-error {:doc "Failed to fetch user RSA key pair from server"}
+  :rtc.exception/fetch-graph-aes-key-error {:doc "Failed to fetch graph AES key from server"}
+  :rtc.exception/upload-graph-encrypted-aes-key-error {:doc "Failed to upload graph encrypted AES key to server"}
+  :rtc.exception/upload-user-rsa-key-pair-error {:doc "Failed to upload user RSA key pair to server"}
+  )
 
 (def ex-ws-already-disconnected
   (ex-info "websocket conn is already disconnected" {:type :rtc.exception/ws-already-disconnected}))
