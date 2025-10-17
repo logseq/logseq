@@ -262,7 +262,7 @@
                                        :kv/value (common-util/time-ms)}]))))
 
 (defn- <create-or-open-db!
-  [repo {:keys [config datoms rtc-e2ee-password] :as opts}]
+  [repo {:keys [config datoms] :as opts}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db client-ops-db :as dbs] (get-dbs repo)
             storage (new-sqlite-storage db)
@@ -308,6 +308,7 @@
                 (client-op/add-ops! repo client-ops))))
 
           (db-listener/listen-db-changes! repo (get @*datascript-conns repo)))))))
+
 
 (defn- iter->vec [iter']
   (when iter'
