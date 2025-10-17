@@ -7,7 +7,6 @@
             [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
             [frontend.worker.rtc.ws-util :as ws-util]
-            [lambdaisland.glogi :as log]
             [missionary.core :as m]
             [promesa.core :as p]))
 
@@ -47,8 +46,9 @@
                                            {:action "upload-graph-encrypted-aes-key"
                                             :graph-uuid graph-uuid
                                             :encrypted-aes-key encrypted-aes-key}))]
-      (when-not (:success response)
-        (log/error :msg "Failed to upload graph encrypted AES key" :response response)))))
+      (when (:ex-data response)
+        (throw (ex-info (:ex-message response)
+                        (assoc (:ex-data response) :type :rtc.exception/upload-graph-encrypted-aes-key-error)))))))
 
 (defn task--upload-user-rsa-key-pair
   "Uploads the user's RSA key pair to the server."
@@ -60,8 +60,9 @@
                                             :user-id               user-id
                                             :public-key            public-key
                                             :encrypted-private-key encrypted-private-key}))]
-      (when-not (:success response)
-        (log/error :msg "Failed to upload user RSA key pair" :response response)))))
+      (when (:ex-data response)
+        (throw (ex-info (:ex-message response)
+                        (assoc (:ex-data response) :type :rtc.exception/upload-user-rsa-key-pair-error)))))))
 
 (defn task--fetch-user-rsa-key-pair
   "Fetches the user's RSA key pair, from indexeddb or server."
@@ -76,13 +77,15 @@
               response (m/? (ws-util/send&recv get-ws-create-task
                                                {:action "fetch-user-rsa-key-pair"
                                                 :user-id user-id}))]
-          (if (:success response)
+          (if (:ex-data response)
+            (throw (ex-info (:ex-message response)
+                            (assoc (:ex-data response)
+                                   :type :rtc.exception/fetch-user-rsa-key-pair-error)))
             (let [retrieved-key-pair (:body response)]
               (c.m/<? (<set-item! (user-rsa-key-pair-idb-key user-id) retrieved-key-pair))
               (let [private-key (c.m/<? (crypt/<decrypt-private-key password (:encrypted-private-key retrieved-key-pair)))]
                 {:public-key (:public-key retrieved-key-pair)
-                 :private-key private-key}))
-            (log/error :msg "Failed to fetch user RSA key pair" :response response)))))))
+                 :private-key private-key}))))))))
 
 (defn task--fetch-graph-aes-key
   "Fetches the AES key for a graph, from indexeddb or server."
@@ -95,11 +98,12 @@
               response (m/? (ws-util/send&recv get-ws-create-task
                                                {:action "fetch-graph-aes-key"
                                                 :graph-uuid graph-uuid}))]
-          (if (:success response)
+          (if (:ex-data response)
+            (throw (ex-info (:ex-message response) (assoc (:ex-data response)
+                                                          :type :rtc.exception/fetch-graph-aes-key-error)))
             (let [fetched-encrypted-aes-key (:body response)]
               (c.m/<? (<set-item! (graph-encrypted-aes-key-idb-key graph-uuid) fetched-encrypted-aes-key))
-              (c.m/<? (crypt/<decrypt-aes-key private-key fetched-encrypted-aes-key)))
-            (log/error :msg "Failed to fetch graph AES key" :response response)))))))
+              (c.m/<? (crypt/<decrypt-aes-key private-key fetched-encrypted-aes-key)))))))))
 
 (comment
   (do
