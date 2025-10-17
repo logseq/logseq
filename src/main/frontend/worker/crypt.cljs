@@ -1,5 +1,6 @@
 (ns frontend.worker.crypt
-  "Fns to en/decrypt some block attrs"
+  "Deprecated ns. Remove later.
+  Fns to en/decrypt some block attrs"
   (:require [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.state :as worker-state]
