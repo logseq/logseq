@@ -8,7 +8,7 @@
             [logseq.cli.util :as cli-util]))
 
 (defn export [{{:keys [graph] :as options} :opts}]
-  (if (fs/existsSync (cli-util/get-graph-dir graph))
+  (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
           export-map (sqlite-export/build-export @conn
                                                  (cond-> {:export-type (:export-type options)}

@@ -19,7 +19,7 @@
 (defn show-graph
   [{{:keys [graphs]} :opts}]
   (doseq [graph graphs]
-    (let [graph-dir (cli-util/get-graph-dir graph)]
+    (let [graph-dir (cli-util/get-graph-path graph)]
       (if (fs/existsSync graph-dir)
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
               kv-value #(:kv/value (d/entity @conn %))]
