@@ -6,6 +6,10 @@
   p {
     @apply text-[inherit];
   }
+
+  .ui__alert-description {
+    @apply -mb-3;
+  }
 }
 
 .ui__dialog-content[label=user-login] {

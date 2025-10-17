@@ -4,12 +4,20 @@ export default {
     'reset-password': 'Reset Password',
     'confirm-code': 'Confirm Code',
     'CODE_ON_THE_WAY_TIP': 'Your code is on the way. To log in, enter the code we sent you. It may take a minute to arrive.',
+    'PW_POLICY_TIP': '1. at least 8 characters.\n' +
+      '2. must have lowercase characters.\n' +
+      '3. must have uppercase characters.\n' +
+      '4. must have symbol characters.',
   },
   'zh-cn': {
     'login': '登录',
     'signup': '注册',
     'reset-password': '重置密码',
     'confirm-code': '确认验证码',
+    'PW_POLICY_TIP': '1. 密码长度至少8个字符\n' +
+      '2. 密码必须包含小写字母\n' +
+      '3. 密码必须包含大写字母\n' +
+      '4. 密码必须包含特殊字符',
     'CODE_ON_THE_WAY_TIP': '验证码已发送。请输入我们发送给您的验证码以登录。可能需要一分钟才能收到。',
     'Sign in to your account': '登录到您的账户',
     'Email': '电子邮箱',
@@ -41,6 +49,10 @@ export default {
     'reset-password': '重置密碼',
     'confirm-code': '確認驗證碼',
     'CODE_ON_THE_WAY_TIP': '驗證碼已發送。請輸入我們發送給您的驗證碼以登入。可能需要一分鐘才能收到。',
+    'PW_POLICY_TIP': '1. 密碼長度至少8個字符\n' +
+      '2. 密碼必須包含小寫字母\n' +
+      '3. 密碼必須包含大寫字母\n' +
+      '4. 密碼必須包含特殊字符',
     'Sign in to your account': '登入到您的帳戶',
     'Email': '電子郵箱',
     'Password': '密碼',
@@ -71,6 +83,10 @@ export default {
     'reset-password': 'パスワードをリセットする',
     'confirm-code': 'コードを確認する',
     'CODE_ON_THE_WAY_TIP': 'コードが送信されました。ログインするには、送信したコードを入力してください。届くまでに1分ほどかかる場合があります。',
+    'PW_POLICY_TIP': '1. パスワードは8文字以上であること。\n' +
+      '2. パスワードには小文字を含める必要があります。\n' +
+      '3. パスワードには大文字を含める必要があります。\n' +
+      '4. パスワードには記号を含める必要があります。',
     'Sign in to your account': 'アカウントにサインイン',
     'Email': 'メール',
     'Password': 'パスワード',

@@ -25,7 +25,10 @@ function ErrorTip({ error, removeError }: {
       {error.title && <AlertTitle>{error.title}</AlertTitle>}
       <AlertDescription>
         <p>
-          {typeof error.message === 'string' ? error.message : JSON.stringify(error.message)}
+          {(typeof error.message === 'string' ? error.message : JSON.stringify(error.message))?.split('\n')
+            .map((line: string, idx: number) => {
+              return <span key={idx}>{line}<br/></span>
+            })}
         </p>
       </AlertDescription>
       <a className={'close absolute right-0 top-0 opacity-50 hover:opacity-80 p-2'}
@@ -37,7 +40,7 @@ function ErrorTip({ error, removeError }: {
 }
 
 function InputRow(
-  props: InputProps & { label: string }
+  props: InputProps & { label: string | React.ReactNode },
 ) {
   const { errors, setErrors } = useAuthFormState()
   const { label, type, ...rest } = props
@@ -55,7 +58,9 @@ function InputRow(
 
   return (
     <div className={'relative w-full flex flex-col gap-3 pb-1'}>
-      <Label htmlFor={props.id}>{label}</Label>
+      <Label htmlFor={props.id}>
+        {label}
+      </Label>
       <Input type={localType} {...rest as any} />
 
       {isPassword && (
@@ -86,6 +91,21 @@ function FormGroup(props: FormHTMLAttributes<any>) {
       {children}
     </form>
   )
+}
+
+// 1. Password must be at least 8 characters
+// 2. Password must have lowercase characters
+// 3. Password must have uppercase characters
+// 4. Password must have symbol characters
+function validatePasswordPolicy(password: string) {
+  if (!password ||
+    password.length < 8 ||
+    !/[a-z]/.test(password) ||
+    !/[A-Z]/.test(password) ||
+    !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+  ) {
+    throw new Error(t('PW_POLICY_TIP'))
+  }
 }
 
 function useCountDown() {
@@ -258,10 +278,12 @@ export function SignupForm() {
         const formData = new FormData(e.target as HTMLFormElement)
         const data = Object.fromEntries(formData.entries()) as any
 
-        if (data.password.length < 8) {
+        try {
+          validatePasswordPolicy(data.password)
+        } catch (e) {
           setErrors({
             password: {
-              message: t('Password must be at least 8 characters.'),
+              message: (e as Error).message,
               title: t('Invalid Password')
             }
           })
