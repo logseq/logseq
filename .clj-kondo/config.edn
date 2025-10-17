@@ -168,6 +168,7 @@
              logseq.cli.common.export.common cli-export-common
              logseq.cli.common.export.text cli-export-text
              logseq.cli.common.file common-file
+             logseq.cli.common.mcp.server cli-common-mcp-server
              logseq.cli.common.mcp.tools cli-common-mcp-tools
              logseq.cli.text-util cli-text-util
              logseq.common.config common-config
