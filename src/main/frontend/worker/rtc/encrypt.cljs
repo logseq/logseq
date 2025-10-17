@@ -1,5 +1,6 @@
 (ns frontend.worker.rtc.encrypt
-  "rtc e2ee related"
+  "Deprecated ns.
+  rtc e2ee related"
   (:require ["/frontend/idbkv" :as idb-keyval]
             [frontend.common.thread-api :as thread-api :refer [def-thread-api]]
             [logseq.db :as ldb]

@@ -23,3 +23,5 @@ You're Clojure(script) expert, you're responsible to check those common errors:
   - e.g. `["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]`
 
 - If common keywords are added or modified, make corresponding changes in their definitions.
+
+- A function that returns a promise, and its function name starts with "<".
