@@ -189,14 +189,13 @@
   (let [full-graph-name (string/lower-case (str config/db-version-prefix graph-name))]
     (some #(= (some-> (:url %) string/lower-case) full-graph-name) (state/get-repos))))
 
-(defn- create-db [full-graph-name {:keys [file-graph-import? rtc-e2ee-password]}]
+(defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
    (p/let [config (common-config/create-config-for-db-graph config/config-default-content)
            _ (persist-db/<new full-graph-name
                               (cond-> {:config config
                                        :graph-git-sha config/revision}
-                                file-graph-import? (assoc :import-type :file-graph)
-                                rtc-e2ee-password (assoc :rtc-e2ee-password rtc-e2ee-password)))
+                                file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
            _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
