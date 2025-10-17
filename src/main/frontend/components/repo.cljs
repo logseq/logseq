@@ -454,8 +454,6 @@
   (rum/local "" ::graph-name)
   (rum/local false ::cloud?)
   (rum/local false ::creating-db?)
-  (rum/local "" ::password)
-  (rum/local "" ::password-confirm)
   (rum/local (rum/create-ref) ::input-ref)
   {:did-mount (fn [s]
                 (when-let [^js input (some-> @(::input-ref s)
@@ -466,33 +464,28 @@
   (let [*creating-db? (::creating-db? state)
         *graph-name (::graph-name state)
         *cloud? (::cloud? state)
-        *password (::password state)
-        *password-confirm (::password-confirm state)
         input-ref @(::input-ref state)
         new-db-f (fn []
                    (when-not (or (string/blank? @*graph-name)
                                  @*creating-db?)
                      (if (invalid-graph-name? @*graph-name)
                        (invalid-graph-name-warning)
-                       (if (and (not (string/blank? @*password))
-                                (not= @*password @*password-confirm))
-                         (notification/show! [:p "Password and password confirmation do not match!"] :warning false)
-                         (do
-                           (reset! *creating-db? true)
-                           (p/let [repo (repo-handler/new-db! @*graph-name {:rtc-e2ee-password @*password})]
-                             (when @*cloud?
-                               (->
-                                (p/do
-                                  (state/set-state! :rtc/uploading? true)
-                                  (rtc-handler/<rtc-create-graph! repo)
-                                  (rtc-flows/trigger-rtc-start repo)
-                                  (rtc-handler/<get-remote-graphs))
-                                (p/catch (fn [error]
-                                           (log/error :create-db-failed error)))
-                                (p/finally (fn []
-                                             (state/set-state! :rtc/uploading? false)
-                                             (reset! *creating-db? false)))))
-                             (shui/dialog-close!)))))))
+                       (do
+                         (reset! *creating-db? true)
+                         (p/let [repo (repo-handler/new-db! @*graph-name)]
+                           (when @*cloud?
+                             (->
+                              (p/do
+                                (state/set-state! :rtc/uploading? true)
+                                (rtc-handler/<rtc-create-graph! repo)
+                                (rtc-flows/trigger-rtc-start repo)
+                                (rtc-handler/<get-remote-graphs))
+                              (p/catch (fn [error]
+                                         (log/error :create-db-failed error)))
+                              (p/finally (fn []
+                                           (state/set-state! :rtc/uploading? false)
+                                           (reset! *creating-db? false)))))
+                           (shui/dialog-close!))))))
         submit! (fn [^js e click?]
                   (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
                                         (util/trim-safe (.-value (rum/deref input-ref))))]
@@ -506,24 +499,6 @@
        :placeholder "your graph name"
        :on-key-down submit!
        :autoComplete "off"})
-     (when @*cloud?
-       [:div.flex.flex-col.gap-4
-        (shui/input
-         {:type "password"
-          :default-value @*password
-          :disabled @*creating-db?
-          :placeholder "password"
-          :on-change #(reset! *password %)
-          :on-key-down submit!
-          :autoComplete "new-password"})
-        (shui/input
-         {:type "password"
-          :default-value @*password-confirm
-          :disabled @*creating-db?
-          :placeholder "password confirm"
-          :on-change #(reset! *password-confirm %)
-          :on-key-down submit!
-          :autoComplete "new-password"})])
      (when (user-handler/rtc-group?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
