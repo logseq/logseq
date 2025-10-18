@@ -52,13 +52,13 @@
 
 (defn task--upload-user-rsa-key-pair
   "Uploads the user's RSA key pair to the server."
-  [token user-id public-key encrypted-private-key]
+  [token user-uuid public-key encrypted-private-key]
   (m/sp
     (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
           response (m/? (ws-util/send&recv get-ws-create-task
-                                           {:action                "upload-user-rsa-key-pair"
-                                            :user-id               user-id
-                                            :public-key            public-key
+                                           {:action "upload-user-rsa-key-pair"
+                                            :user-uuid user-uuid
+                                            :public-key public-key
                                             :encrypted-private-key encrypted-private-key}))]
       (when (:ex-data response)
         (throw (ex-info (:ex-message response)
@@ -66,9 +66,9 @@
 
 (defn task--fetch-user-rsa-key-pair
   "Fetches the user's RSA key pair, from indexeddb or server."
-  [token user-id password]
+  [token user-uuid password]
   (m/sp
-    (let [key-pair (c.m/<? (<get-item (user-rsa-key-pair-idb-key user-id)))]
+    (let [key-pair (c.m/<? (<get-item (user-rsa-key-pair-idb-key user-uuid)))]
       (if key-pair
         (let [private-key (c.m/<? (crypt/<decrypt-private-key password (:encrypted-private-key key-pair)))]
           {:public-key (:public-key key-pair)
@@ -76,13 +76,13 @@
         (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
               response (m/? (ws-util/send&recv get-ws-create-task
                                                {:action "fetch-user-rsa-key-pair"
-                                                :user-id user-id}))]
+                                                :user-uuid user-uuid}))]
           (if (:ex-data response)
             (throw (ex-info (:ex-message response)
                             (assoc (:ex-data response)
                                    :type :rtc.exception/fetch-user-rsa-key-pair-error)))
             (let [retrieved-key-pair (:body response)]
-              (c.m/<? (<set-item! (user-rsa-key-pair-idb-key user-id) retrieved-key-pair))
+              (c.m/<? (<set-item! (user-rsa-key-pair-idb-key user-uuid) retrieved-key-pair))
               (let [private-key (c.m/<? (crypt/<decrypt-private-key password (:encrypted-private-key retrieved-key-pair)))]
                 {:public-key (:public-key retrieved-key-pair)
                  :private-key private-key}))))))))
@@ -115,7 +115,7 @@
               arr2 (js/Uint8Array. buf2)]
           (= (vec arr1) (vec arr2)))))
 
-    (def user-id "test-user-uuid")
+    (def user-uuid "test-user-uuid")
     (def graph-uuid "test-graph-uuid")
     (def password "test-password")
     (def token "test-token")
@@ -144,18 +144,18 @@
 
            (prn "1. Test fetch from local storage")
            (prn "   Clean local storage first")
-           (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-id)))
+           (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
            (c.m/<? (<remove-item! (graph-encrypted-aes-key-idb-key graph-uuid)))
 
            (prn "   Set items to local storage")
-           (c.m/<? (<set-item! (user-rsa-key-pair-idb-key user-id)
+           (c.m/<? (<set-item! (user-rsa-key-pair-idb-key user-uuid)
                                (clj->js
                                 {:public-key            public-key
                                  :encrypted-private-key encrypted-private-key})))
            (c.m/<? (<set-item! (graph-encrypted-aes-key-idb-key graph-uuid) encrypted-aes-key))
 
            (prn "   Fetch user rsa key pair from local storage")
-           (let [fetched-key-pair (m/? (task--fetch-user-rsa-key-pair token user-id password))
+           (let [fetched-key-pair (m/? (task--fetch-user-rsa-key-pair token user-uuid password))
                  exported-public-key (c.m/<? (.exportKey crypt/subtle "spki" public-key))
                  exported-fetched-public-key (c.m/<? (.exportKey crypt/subtle "spki" (:public-key fetched-key-pair)))]
              (assert (array-buffers-equal? exported-public-key exported-fetched-public-key))
@@ -172,16 +172,16 @@
              ;; skip, server api not implemented yet
              (prn "2. Test fetch from server")
              (prn "   Clean local storage first")
-             (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-id)))
+             (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
              (c.m/<? (<remove-item! (graph-encrypted-aes-key-idb-key graph-uuid)))
 
              (prn "   Upload keys to server")
-             (m/? (task--upload-user-rsa-key-pair token user-id public-key encrypted-private-key))
+             (m/? (task--upload-user-rsa-key-pair token user-uuid public-key encrypted-private-key))
              (m/? (task--upload-graph-encrypted-aes-key token graph-uuid encrypted-aes-key))
              (prn "   Upload complete")
 
              (prn "   Fetch user rsa key pair from server")
-             (let [fetched-key-pair (m/? (task--fetch-user-rsa-key-pair token user-id password))
+             (let [fetched-key-pair (m/? (task--fetch-user-rsa-key-pair token user-uuid password))
                    exported-public-key (c.m/<? (.exportKey crypt/subtle "spki" public-key))
                    exported-fetched-public-key (c.m/<? (.exportKey crypt/subtle "spki" (:public-key fetched-key-pair)))]
                (assert (array-buffers-equal? exported-public-key exported-fetched-public-key))
