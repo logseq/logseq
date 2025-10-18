@@ -96,7 +96,7 @@
         (c.m/<? (crypt/<decrypt-aes-key private-key encrypted-aes-key))
         (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
               response (m/? (ws-util/send&recv get-ws-create-task
-                                               {:action "fetch-graph-aes-key"
+                                               {:action "fetch-graph-encrypted-aes-key"
                                                 :graph-uuid graph-uuid}))]
           (if (:ex-data response)
             (throw (ex-info (:ex-message response) (assoc (:ex-data response)
@@ -140,8 +140,9 @@
       (c.m/run-task*
        (m/sp
          (prn "--- Start testing crypt.cljs ---")
-         (let [{:keys [public-key private-key encrypted-private-key aes-key encrypted-aes-key]} (m/? prepare-keys-task)]
-
+         (let [{:keys [public-key private-key encrypted-private-key aes-key encrypted-aes-key] :as xxx}
+               (m/? prepare-keys-task)]
+           (def xxx xxx)
            (prn "1. Test fetch from local storage")
            (prn "   Clean local storage first")
            (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
