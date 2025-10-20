@@ -144,7 +144,7 @@
                                                            (date-time-util/safe-journal-title-formatters nil))]
                                        {:build/journal journal-day}
                                        {:block/title (get-in op [:data :title])})}
-                        (some-> (:id op) (get blocks-by-page))
+                        (some->> (:id op) (get blocks-by-page))
                         (assoc :blocks
                                (mapv #(hash-map :block/title (get-in % [:data :title]))
                                      (get blocks-by-page (:id op))))))
@@ -358,7 +358,7 @@
                      (assoc-in % [:data :title]
                                (or (get-in % [:data :name]) (get-in % [:data :title])))
                      %)))
-        _ (prn :ops operations)
+        ;; _ (prn :ops operations)
         _ (when-let [errors (m/explain Upsert-nodes-operations-schema operations)]
             (throw (ex-info (str "Tool arguments are invalid:\n" (me/humanize errors))
                             {:errors errors})))
@@ -374,7 +374,7 @@
           (assoc :classes classes)
           (seq properties)
           (assoc :properties properties))]
-    (prn :import-edn import-edn)
+    (prn :debug-import-edn import-edn)
     (validate-import-edn import-edn)
     import-edn))
 
