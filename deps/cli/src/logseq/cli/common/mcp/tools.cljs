@@ -136,6 +136,10 @@
         (group-by #(get-in % [:data :page-id])
                   (filter #(= "block" (:entityType %)) operations))
         new-pages (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))) operations)
+        add-block (fn add-block [op]
+                    (cond-> {:block/title (get-in op [:data :title])}
+                      (get-in op [:data :tags])
+                      (assoc :build/tags (mapv #(get-ident class-idents %) (get-in op [:data :tags])))))
         pages-and-blocks
         (into (mapv (fn [op]
                       (cond-> {:page (if-let [journal-day (date-time-util/journal-title->int
@@ -146,8 +150,7 @@
                                        {:block/title (get-in op [:data :title])})}
                         (some->> (:id op) (get blocks-by-page))
                         (assoc :blocks
-                               (mapv #(hash-map :block/title (get-in % [:data :title]))
-                                     (get blocks-by-page (:id op))))))
+                               (mapv add-block (get blocks-by-page (:id op))))))
                     new-pages)
               ;; existing pages
               (map (fn [[page-id ops]]
@@ -156,9 +159,7 @@
                      {:page {:block/uuid (uuid page-id)}
                       :blocks (mapv (fn [op]
                                       (if (= "add" (:operation op))
-                                        (cond-> {:block/title (get-in op [:data :title])}
-                                          (get-in op [:data :tags])
-                                          (assoc :build/tags (mapv #(get-ident class-idents %) (get-in op [:data :tags]))))
+                                        (add-block op)
                                         ;; edit
                                         (cond-> {:block/uuid (uuid (:id op))}
                                           (get-in op [:data :title])
