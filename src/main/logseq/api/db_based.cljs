@@ -175,12 +175,17 @@
       sdk-utils/result->js))
 
 (defn get-tag-objects
-  [class-uuid-or-ident]
-  (let [eid (if (util/uuid-string? class-uuid-or-ident)
-              (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident)]
+  [class-uuid-or-ident-or-title]
+  (let [eid (if (util/uuid-string? class-uuid-or-ident-or-title)
+              (when-let [id (sdk-utils/uuid-or-throw-error class-uuid-or-ident-or-title)]
                 [:block/uuid id])
-              (keyword (api-block/sanitize-user-property-name class-uuid-or-ident)))
+              (let [k (keyword (api-block/sanitize-user-property-name class-uuid-or-ident-or-title))]
+                (if (qualified-keyword? k)
+                  k
+                  (ldb/get-case-page (db/get-db) class-uuid-or-ident-or-title))))
         class (db/entity eid)]
+    (when-not (ldb/class? class)
+      (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
     (if-not class
       (throw (ex-info (str "Tag not exists with id: " eid) {}))
       (p/let [result (state/<invoke-db-worker :thread-api/get-class-objects
