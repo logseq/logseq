@@ -776,6 +776,9 @@ export interface IEditorProxy extends Record<string, any> {
   renamePage: (oldName: string, newName: string) => Promise<void>
 
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>
+  getAllTags: () => Promise<PageEntity[] | null>
+  getAllProperties: () => Promise<PageEntity[] | null>
+  getTagObjects: (PageIdentity) => Promise<BlockEntity[] | null>
 
   prependBlockInPage: (
     page: PageIdentity,
