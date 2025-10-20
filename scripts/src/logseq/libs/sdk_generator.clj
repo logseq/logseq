@@ -5,7 +5,7 @@
 
 (def default-schema "libs/dist/logseq-sdk-schema.json")
 (def default-output-dir "libs/cljs-sdk/src")
-(def default-ns-prefix "logseq")
+(def default-ns-prefix "com.logseq")
 (def core-namespace "core")
 
 (defn parse-args
@@ -53,26 +53,16 @@
     (str "  " (pr-str doc) "\n")))
 
 (defn param->info
-  [{:keys [name optional rest beanToJs rest?]}]
-  (let [sym (camel->kebab name)
-        spec (cond-> {}
-               beanToJs (assoc :bean-to-js true))]
+  [{:keys [name optional rest rest?]}]
+  (let [sym (camel->kebab name)]
     {:name name
      :sym sym
      :optional (boolean optional)
-     :rest (boolean (or rest rest?))
-     :spec (when (seq spec) spec)}))
+     :rest (boolean (or rest rest?))}))
 
-(defn emit-convert-binding [convert-sym {:keys [sym spec]}]
-  (if spec
-    (str "        arg-" sym " (" convert-sym " " (pr-str spec) " " sym ")\n")
-    (str "        arg-" sym " " sym "\n")))
-
-(defn emit-rest-binding [convert-sym {:keys [sym spec]}]
+(defn emit-rest-binding [{:keys [sym]}]
   (let [rest-var (str "rest-" sym)
-        line (if spec
-               (str "        " rest-var " (map #(" convert-sym " " (pr-str spec) " %) " sym ")\n")
-               (str "        " rest-var " (vec " sym ")\n"))]
+        line (str "        " rest-var " (vec " sym ")\n")]
     {:binding line
      :var rest-var}))
 
@@ -80,24 +70,22 @@
   (str "[" (string/join " " params) "]"))
 
 (defn emit-method-body
-  [owner-expr method-name params {:keys [convert call]}]
+  [method-name params {:keys [call]}]
   (let [rest-param (some #(when (:rest %) %) params)
-        fixed-params (if rest-param (vec (remove :rest params)) params)
-        convert-lines (map #(emit-convert-binding convert %) fixed-params)
-        {:keys [binding var]} (when rest-param (emit-rest-binding convert rest-param))
+        fixed-params (->> (if rest-param (vec (remove :rest params)) params)
+                          (map :sym))
+        {:keys [binding var]} (when rest-param (emit-rest-binding rest-param))
         rest-lines (if binding [binding] [])
-        arg-syms (map #(str "arg-" (:sym %)) fixed-params)
         args-expr (if rest-param
-                    (str "(into [" (string/join " " arg-syms) "] " var ")")
-                    (str "[" (string/join " " arg-syms) "]"))]
-    (str (format "  (let [method (aget %s \"%s\")\n" owner-expr method-name)
-         (apply str convert-lines)
+                    (str "(into [" (string/join " " fixed-params) "] " var ")")
+                    (str "[" (string/join " " fixed-params) "]"))]
+    (str (format "  (let [method (aget api-proxy \"%s\")\n"  method-name)
          (apply str rest-lines)
          "        args " args-expr "]\n"
-         "    (" call " method args)))\n")))
+         "    (" call " api-proxy method args)))\n")))
 
 (defn emit-optional-def
-  [fn-name doc-str params impl-name owner-expr helpers method-name]
+  [fn-name doc-str params impl-name helpers method-name]
   (let [required (take-while (complement :optional) params)
         total (count params)
         param-syms (map :sym params)
@@ -106,7 +94,7 @@
                     (or doc-str ""))]
     (str "\n(defn- " impl-name "\n"
          "  " (format-param-vector param-syms) "\n"
-         (emit-method-body owner-expr method-name params helpers)
+         (emit-method-body method-name params helpers)
          header
          (apply str
                 (for [arity arities
@@ -122,7 +110,7 @@
 
 (defn emit-method
   [{:keys [name documentation signatures]}
-   owner-expr helpers]
+   helpers]
   (let [{:keys [parameters]} (apply max-key #(count (:parameters %)) signatures)
         params (map param->info parameters)
         fn-name (camel->kebab name)
@@ -130,7 +118,7 @@
         rest-param (some #(when (:rest %) %) params)
         optional-params (filter :optional params)
         impl-name (str fn-name "-impl")
-        method-body (emit-method-body owner-expr name params helpers)]
+        method-body (emit-method-body name params helpers)]
     (when-not (string/starts-with? name "_") ; system methods
       (cond
         rest-param
@@ -142,7 +130,7 @@
                method-body))
 
         (seq optional-params)
-        (emit-optional-def fn-name doc-str params impl-name owner-expr helpers name)
+        (emit-optional-def fn-name doc-str params impl-name helpers name)
 
         :else
         (let [param-vector (format-param-vector (map :sym params))]
@@ -156,37 +144,36 @@
   (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
-                    "  (:require [cljs-bean.core :as bean]\n[\"@logseq/libs\" :as logseq]))\n\n"
-                    "(defn convert-arg [spec value]\n"
-                    "  (if (:bean-to-js spec) (bean/->js value) value))\n\n"
+                    "  (:require [cljs-bean.core :as bean]\n[\"@logseq/libs\"]))\n\n"
                     "(defn- normalize-result [result]\n"
                     "  (if (instance? js/Promise result)\n"
                     "    (.then result (fn [value] (normalize-result value)))\n"
                     "    (bean/->clj result)))\n\n"
-                    "(defn call-method [method args]
+                    "(defn call-method [owner method args]
   (when-not method
     (throw (js/Error. \"Missing method on logseq namespace\")))
-  (normalize-result (.apply method (to-array args))))\n")
-        helpers {:convert "convert-arg"
-                 :call "call-method"}
+  (normalize-result (.apply method owner (bean/->js args))))\n")
+        helpers {:call "call-method"}
+        owner "\n(def api-proxy js/logseq)\n"
         methods-str (->> methods
-                         (map #(emit-method % "logseq" helpers))
+                         (map #(emit-method % helpers))
                          (apply str))]
-    [ns (str header methods-str)]))
+    [ns (str header owner methods-str)]))
 
 (defn emit-proxy-namespace
   [ns-prefix iface-name iface]
   (let [ns (interface->namespace ns-prefix iface-name)
-        owner-expr (format "(aget logseq \"%s\")" (interface->target iface-name))
+        target (interface->target iface-name)
+        owner-expr (format "(aget js/logseq \"%s\")" target)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
-                    "  (:require [logseq.core :as core]\n[\"@logseq/libs\" :as logseq]))\n")
-        helpers {:convert "core/convert-arg"
-                 :call "core/call-method"}
+                    "  (:require [com.logseq.core :as core]))\n")
+        helpers {:call "core/call-method"}
+        owner (format "\n(def api-proxy %s)\n" owner-expr)
         methods-str (->> (:methods iface)
-                         (map #(emit-method % owner-expr helpers))
+                         (map #(emit-method % helpers))
                          (apply str))]
-    [ns (str header methods-str)]))
+    [ns (str header owner methods-str)]))
 
 (defn namespace->file
   [out-dir ns]
@@ -203,10 +190,11 @@
 (defn write-namespaces!
   [out-dir namespaces]
   (doseq [[ns content] namespaces]
-    (let [file (namespace->file out-dir ns)]
-      (fs/create-dirs (fs/parent file))
-      (spit (str file) content)
-      (println "Generated" (str file)))))
+    (when ns
+      (let [file (namespace->file out-dir ns)]
+        (fs/create-dirs (fs/parent file))
+        (spit (str file) content)
+        (println "Generated" (str file))))))
 
 (defn run!
   ([] (run! {}))
@@ -223,6 +211,7 @@
            getters (:getters ls-user)
            proxy-names (->> getters
                             (keep #(some-> (getter->interface-name (:returnType %)) keyword))
+                            (remove #{:IUtilsProxy})
                             distinct)
            proxies (for [iface-key proxy-names
                          :let [iface (get interfaces iface-key)]
