@@ -4,7 +4,7 @@
             [clojure.string :as string]))
 
 (def default-schema "libs/dist/logseq-sdk-schema.json")
-(def default-output-dir "target/generated-cljs")
+(def default-output-dir "libs/cljs-sdk/src")
 (def default-ns-prefix "logseq")
 (def core-namespace "core")
 
@@ -71,7 +71,7 @@
 (defn emit-rest-binding [convert-sym {:keys [sym spec]}]
   (let [rest-var (str "rest-" sym)
         line (if spec
-               (str "        " rest-var " (map #(" convert-sym " " (pr-str spec) " %) " sym "))\n")
+               (str "        " rest-var " (map #(" convert-sym " " (pr-str spec) " %) " sym ")\n")
                (str "        " rest-var " (vec " sym ")\n"))]
     {:binding line
      :var rest-var}))
@@ -90,12 +90,11 @@
         args-expr (if rest-param
                     (str "(into [" (string/join " " arg-syms) "] " var ")")
                     (str "[" (string/join " " arg-syms) "]"))]
-    (str "  (let [owner " owner-expr "\n"
-         "        method (.-" method-name " owner)\n"
+    (str (format "  (let [method (aget %s \"%s\")\n" owner-expr method-name)
          (apply str convert-lines)
          (apply str rest-lines)
          "        args " args-expr "]\n"
-         "    (" call " owner method args)))\n")))
+         "    (" call " method args)))\n")))
 
 (defn emit-optional-def
   [fn-name doc-str params impl-name owner-expr helpers method-name]
@@ -118,7 +117,7 @@
                             call-arg-str (string/join " " call-args)
                             call-arg-str (if (string/blank? call-arg-str) "" (str " " call-arg-str))]]
                   (str "  (" param-vector "\n"
-                       "  (" impl-name call-arg-str "))")))
+                       "   (" impl-name call-arg-str "))\n")))
          ")\n")))
 
 (defn emit-method
@@ -132,24 +131,25 @@
         optional-params (filter :optional params)
         impl-name (str fn-name "-impl")
         method-body (emit-method-body owner-expr name params helpers)]
-    (cond
-      rest-param
-      (let [fixed-syms (map :sym (vec (remove :rest params)))
-            param-vector (format-param-vector (concat fixed-syms ["&" (:sym rest-param)]))]
-        (str "\n(defn " fn-name "\n"
-             (or doc-str "")
-             "  " param-vector "\n"
-             method-body))
+    (when-not (string/starts-with? name "_") ; system methods
+      (cond
+        rest-param
+        (let [fixed-syms (map :sym (vec (remove :rest params)))
+              param-vector (format-param-vector (concat fixed-syms ["&" (:sym rest-param)]))]
+          (str "\n(defn " fn-name "\n"
+               (or doc-str "")
+               "  " param-vector "\n"
+               method-body))
 
-      (seq optional-params)
-      (emit-optional-def fn-name doc-str params impl-name owner-expr helpers name)
+        (seq optional-params)
+        (emit-optional-def fn-name doc-str params impl-name owner-expr helpers name)
 
-      :else
-      (let [param-vector (format-param-vector (map :sym params))]
-        (str "\n(defn " fn-name "\n"
-             (or doc-str "")
-             "  " param-vector "\n"
-             method-body)))))
+        :else
+        (let [param-vector (format-param-vector (map :sym params))]
+          (str "\n(defn " fn-name "\n"
+               (or doc-str "")
+               "  " param-vector "\n"
+               method-body))))))
 
 (defn emit-core-namespace
   [ns-prefix {:keys [methods]}]
@@ -158,19 +158,15 @@
                     "(ns " ns "\n"
                     "  (:require [cljs-bean.core :as bean]))\n\n"
                     "(defn convert-arg [spec value]\n"
-                    "  (cond\n"
-                    "    (nil? spec) value\n"
-                    "    (identical? value js/undefined) value\n"
-                    "    (:bean-to-js spec) (bean/->js value)\n"
-                    "    :else value))\n\n"
+                    "  (if (:bean-to-js spec) (bean/->js value) value))\n\n"
                     "(defn- normalize-result [result]\n"
                     "  (if (instance? js/Promise result)\n"
                     "    (.then result (fn [value] (normalize-result value)))\n"
                     "    (bean/->clj result)))\n\n"
-                    "(defn call-method [owner method args]\n"
-                    "  (when-not method\n"
-                    "    (throw (js/Error. \"Missing method on logseq namespace\")))\n"
-                    "  (normalize-result (.apply method owner (to-array args))))\n")
+                    "(defn call-method [method args]
+  (when-not method
+    (throw (js/Error. \"Missing method on logseq namespace\")))
+  (normalize-result (.apply method (to-array args))))\n")
         helpers {:convert "convert-arg"
                  :call "call-method"}
         methods-str (->> methods
@@ -181,7 +177,7 @@
 (defn emit-proxy-namespace
   [ns-prefix iface-name iface]
   (let [ns (interface->namespace ns-prefix iface-name)
-        owner-expr (str "(.-" (interface->target iface-name) " js/logseq)")
+        owner-expr (format "(aget js/logseq \"%s\")" (interface->target iface-name))
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
                     "  (:require [logseq.core :as core]))\n")
