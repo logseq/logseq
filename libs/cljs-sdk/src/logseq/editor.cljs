@@ -1,11 +1,12 @@
 ;; Auto-generated via `bb libs:generate-cljs-sdk`
 (ns logseq.editor
-  (:require [logseq.core :as core]))
+  (:require ["@logseq/libs" :as logseq]
+            [logseq.core :as core]))
 
 (defn register-slash-command
   "register a custom command which will be added to the Logseq slash command list"
   [tag action]
-  (let [method (aget (aget js/logseq "Editor") "registerSlashCommand")
+  (let [method (aget (aget logseq "Editor") "registerSlashCommand")
         arg-tag tag
         arg-action (core/convert-arg {:bean-to-js true} action)
         args [arg-tag arg-action]]
@@ -14,7 +15,7 @@
 (defn register-block-context-menu-item
   "register a custom command in the block context menu (triggered by right-clicking the block dot)"
   [label action]
-  (let [method (aget (aget js/logseq "Editor") "registerBlockContextMenuItem")
+  (let [method (aget (aget logseq "Editor") "registerBlockContextMenuItem")
         arg-label label
         arg-action action
         args [arg-label arg-action]]
@@ -22,7 +23,7 @@
 
 (defn- register-highlight-context-menu-item-impl
   [label action opts]
-  (let [method (aget (aget js/logseq "Editor") "registerHighlightContextMenuItem")
+  (let [method (aget (aget logseq "Editor") "registerHighlightContextMenuItem")
         arg-label label
         arg-action (core/convert-arg {:bean-to-js true} action)
         arg-opts opts
@@ -38,26 +39,26 @@
 
 (defn check-editing
   []
-  (let [method (aget (aget js/logseq "Editor") "checkEditing")
+  (let [method (aget (aget logseq "Editor") "checkEditing")
         args []]
     (core/call-method method args)))
 
 (defn insert-at-editing-cursor
   [content]
-  (let [method (aget (aget js/logseq "Editor") "insertAtEditingCursor")
+  (let [method (aget (aget logseq "Editor") "insertAtEditingCursor")
         arg-content content
         args [arg-content]]
     (core/call-method method args)))
 
 (defn restore-editing-cursor
   []
-  (let [method (aget (aget js/logseq "Editor") "restoreEditingCursor")
+  (let [method (aget (aget logseq "Editor") "restoreEditingCursor")
         args []]
     (core/call-method method args)))
 
 (defn- exit-editing-mode-impl
   [select-block]
-  (let [method (aget (aget js/logseq "Editor") "exitEditingMode")
+  (let [method (aget (aget logseq "Editor") "exitEditingMode")
         arg-select-block select-block
         args [arg-select-block]]
     (core/call-method method args)))
@@ -70,51 +71,51 @@
 
 (defn get-editing-cursor-position
   []
-  (let [method (aget (aget js/logseq "Editor") "getEditingCursorPosition")
+  (let [method (aget (aget logseq "Editor") "getEditingCursorPosition")
         args []]
     (core/call-method method args)))
 
 (defn get-editing-block-content
   []
-  (let [method (aget (aget js/logseq "Editor") "getEditingBlockContent")
+  (let [method (aget (aget logseq "Editor") "getEditingBlockContent")
         args []]
     (core/call-method method args)))
 
 (defn get-current-page
   []
-  (let [method (aget (aget js/logseq "Editor") "getCurrentPage")
+  (let [method (aget (aget logseq "Editor") "getCurrentPage")
         args []]
     (core/call-method method args)))
 
 (defn get-current-block
   []
-  (let [method (aget (aget js/logseq "Editor") "getCurrentBlock")
+  (let [method (aget (aget logseq "Editor") "getCurrentBlock")
         args []]
     (core/call-method method args)))
 
 (defn get-selected-blocks
   []
-  (let [method (aget (aget js/logseq "Editor") "getSelectedBlocks")
+  (let [method (aget (aget logseq "Editor") "getSelectedBlocks")
         args []]
     (core/call-method method args)))
 
 (defn clear-selected-blocks
   []
-  (let [method (aget (aget js/logseq "Editor") "clearSelectedBlocks")
+  (let [method (aget (aget logseq "Editor") "clearSelectedBlocks")
         args []]
     (core/call-method method args)))
 
 (defn get-current-page-blocks-tree
   "get all blocks of the current page as a tree structure"
   []
-  (let [method (aget (aget js/logseq "Editor") "getCurrentPageBlocksTree")
+  (let [method (aget (aget logseq "Editor") "getCurrentPageBlocksTree")
         args []]
     (core/call-method method args)))
 
 (defn get-page-blocks-tree
   "get all blocks for the specified page"
   [src-page]
-  (let [method (aget (aget js/logseq "Editor") "getPageBlocksTree")
+  (let [method (aget (aget logseq "Editor") "getPageBlocksTree")
         arg-src-page src-page
         args [arg-src-page]]
     (core/call-method method args)))
@@ -122,7 +123,7 @@
 (defn get-page-linked-references
   "get all page/block linked references"
   [src-page]
-  (let [method (aget (aget js/logseq "Editor") "getPageLinkedReferences")
+  (let [method (aget (aget logseq "Editor") "getPageLinkedReferences")
         arg-src-page src-page
         args [arg-src-page]]
     (core/call-method method args)))
@@ -130,7 +131,7 @@
 (defn get-pages-from-namespace
   "get flatten pages from top namespace"
   [namespace]
-  (let [method (aget (aget js/logseq "Editor") "getPagesFromNamespace")
+  (let [method (aget (aget logseq "Editor") "getPagesFromNamespace")
         arg-namespace namespace
         args [arg-namespace]]
     (core/call-method method args)))
@@ -138,7 +139,7 @@
 (defn get-pages-tree-from-namespace
   "construct pages tree from namespace pages"
   [namespace]
-  (let [method (aget (aget js/logseq "Editor") "getPagesTreeFromNamespace")
+  (let [method (aget (aget logseq "Editor") "getPagesTreeFromNamespace")
         arg-namespace namespace
         args [arg-namespace]]
     (core/call-method method args)))
@@ -146,20 +147,20 @@
 (defn new-block-uuid
   "Create a unique UUID string which can then be assigned to a block."
   []
-  (let [method (aget (aget js/logseq "Editor") "newBlockUUID")
+  (let [method (aget (aget logseq "Editor") "newBlockUUID")
         args []]
     (core/call-method method args)))
 
 (defn is-page-block
   [block]
-  (let [method (aget (aget js/logseq "Editor") "isPageBlock")
+  (let [method (aget (aget logseq "Editor") "isPageBlock")
         arg-block (core/convert-arg {:bean-to-js true} block)
         args [arg-block]]
     (core/call-method method args)))
 
 (defn- insert-block-impl
   [src-block content opts]
-  (let [method (aget (aget js/logseq "Editor") "insertBlock")
+  (let [method (aget (aget logseq "Editor") "insertBlock")
         arg-src-block src-block
         arg-content content
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -174,7 +175,7 @@
 
 (defn- insert-batch-block-impl
   [src-block batch opts]
-  (let [method (aget (aget js/logseq "Editor") "insertBatchBlock")
+  (let [method (aget (aget logseq "Editor") "insertBatchBlock")
         arg-src-block src-block
         arg-batch batch
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -189,7 +190,7 @@
 
 (defn- update-block-impl
   [src-block content opts]
-  (let [method (aget (aget js/logseq "Editor") "updateBlock")
+  (let [method (aget (aget logseq "Editor") "updateBlock")
         arg-src-block src-block
         arg-content content
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -204,14 +205,14 @@
 
 (defn remove-block
   [src-block]
-  (let [method (aget (aget js/logseq "Editor") "removeBlock")
+  (let [method (aget (aget logseq "Editor") "removeBlock")
         arg-src-block src-block
         args [arg-src-block]]
     (core/call-method method args)))
 
 (defn- get-block-impl
   [src-block opts]
-  (let [method (aget (aget js/logseq "Editor") "getBlock")
+  (let [method (aget (aget logseq "Editor") "getBlock")
         arg-src-block src-block
         arg-opts (core/convert-arg {:bean-to-js true} opts)
         args [arg-src-block arg-opts]]
@@ -225,7 +226,7 @@
 
 (defn set-block-collapsed
   [uuid opts]
-  (let [method (aget (aget js/logseq "Editor") "setBlockCollapsed")
+  (let [method (aget (aget logseq "Editor") "setBlockCollapsed")
         arg-uuid uuid
         arg-opts opts
         args [arg-uuid arg-opts]]
@@ -233,7 +234,7 @@
 
 (defn- get-page-impl
   [src-page opts]
-  (let [method (aget (aget js/logseq "Editor") "getPage")
+  (let [method (aget (aget logseq "Editor") "getPage")
         arg-src-page src-page
         arg-opts (core/convert-arg {:bean-to-js true} opts)
         args [arg-src-page arg-opts]]
@@ -247,7 +248,7 @@
 
 (defn- create-page-impl
   [page-name properties opts]
-  (let [method (aget (aget js/logseq "Editor") "createPage")
+  (let [method (aget (aget logseq "Editor") "createPage")
         arg-page-name page-name
         arg-properties properties
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -264,21 +265,21 @@
 
 (defn create-journal-page
   [date]
-  (let [method (aget (aget js/logseq "Editor") "createJournalPage")
+  (let [method (aget (aget logseq "Editor") "createJournalPage")
         arg-date date
         args [arg-date]]
     (core/call-method method args)))
 
 (defn delete-page
   [page-name]
-  (let [method (aget (aget js/logseq "Editor") "deletePage")
+  (let [method (aget (aget logseq "Editor") "deletePage")
         arg-page-name page-name
         args [arg-page-name]]
     (core/call-method method args)))
 
 (defn rename-page
   [old-name new-name]
-  (let [method (aget (aget js/logseq "Editor") "renamePage")
+  (let [method (aget (aget logseq "Editor") "renamePage")
         arg-old-name old-name
         arg-new-name new-name
         args [arg-old-name arg-new-name]]
@@ -286,7 +287,7 @@
 
 (defn- get-all-pages-impl
   [repo]
-  (let [method (aget (aget js/logseq "Editor") "getAllPages")
+  (let [method (aget (aget logseq "Editor") "getAllPages")
         arg-repo repo
         args [arg-repo]]
     (core/call-method method args)))
@@ -299,7 +300,7 @@
 
 (defn- prepend-block-in-page-impl
   [page content opts]
-  (let [method (aget (aget js/logseq "Editor") "prependBlockInPage")
+  (let [method (aget (aget logseq "Editor") "prependBlockInPage")
         arg-page page
         arg-content content
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -314,7 +315,7 @@
 
 (defn- append-block-in-page-impl
   [page content opts]
-  (let [method (aget (aget js/logseq "Editor") "appendBlockInPage")
+  (let [method (aget (aget logseq "Editor") "appendBlockInPage")
         arg-page page
         arg-content content
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -329,21 +330,21 @@
 
 (defn get-previous-sibling-block
   [src-block]
-  (let [method (aget (aget js/logseq "Editor") "getPreviousSiblingBlock")
+  (let [method (aget (aget logseq "Editor") "getPreviousSiblingBlock")
         arg-src-block src-block
         args [arg-src-block]]
     (core/call-method method args)))
 
 (defn get-next-sibling-block
   [src-block]
-  (let [method (aget (aget js/logseq "Editor") "getNextSiblingBlock")
+  (let [method (aget (aget logseq "Editor") "getNextSiblingBlock")
         arg-src-block src-block
         args [arg-src-block]]
     (core/call-method method args)))
 
 (defn- move-block-impl
   [src-block target-block opts]
-  (let [method (aget (aget js/logseq "Editor") "moveBlock")
+  (let [method (aget (aget logseq "Editor") "moveBlock")
         arg-src-block src-block
         arg-target-block target-block
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -358,7 +359,7 @@
 
 (defn- edit-block-impl
   [src-block opts]
-  (let [method (aget (aget js/logseq "Editor") "editBlock")
+  (let [method (aget (aget logseq "Editor") "editBlock")
         arg-src-block src-block
         arg-opts opts
         args [arg-src-block arg-opts]]
@@ -372,27 +373,27 @@
 
 (defn select-block
   [src-block]
-  (let [method (aget (aget js/logseq "Editor") "selectBlock")
+  (let [method (aget (aget logseq "Editor") "selectBlock")
         arg-src-block src-block
         args [arg-src-block]]
     (core/call-method method args)))
 
 (defn save-focused-code-editor-content
   []
-  (let [method (aget (aget js/logseq "Editor") "saveFocusedCodeEditorContent")
+  (let [method (aget (aget logseq "Editor") "saveFocusedCodeEditorContent")
         args []]
     (core/call-method method args)))
 
 (defn get-property
   [key]
-  (let [method (aget (aget js/logseq "Editor") "getProperty")
+  (let [method (aget (aget logseq "Editor") "getProperty")
         arg-key key
         args [arg-key]]
     (core/call-method method args)))
 
 (defn- upsert-property-impl
   [key schema opts]
-  (let [method (aget (aget js/logseq "Editor") "upsertProperty")
+  (let [method (aget (aget logseq "Editor") "upsertProperty")
         arg-key key
         arg-schema (core/convert-arg {:bean-to-js true} schema)
         arg-opts opts
@@ -409,14 +410,14 @@
 
 (defn remove-property
   [key]
-  (let [method (aget (aget js/logseq "Editor") "removeProperty")
+  (let [method (aget (aget logseq "Editor") "removeProperty")
         arg-key key
         args [arg-key]]
     (core/call-method method args)))
 
 (defn upsert-block-property
   [block key value]
-  (let [method (aget (aget js/logseq "Editor") "upsertBlockProperty")
+  (let [method (aget (aget logseq "Editor") "upsertBlockProperty")
         arg-block block
         arg-key key
         arg-value (core/convert-arg {:bean-to-js true} value)
@@ -425,7 +426,7 @@
 
 (defn remove-block-property
   [block key]
-  (let [method (aget (aget js/logseq "Editor") "removeBlockProperty")
+  (let [method (aget (aget logseq "Editor") "removeBlockProperty")
         arg-block block
         arg-key key
         args [arg-block arg-key]]
@@ -433,7 +434,7 @@
 
 (defn get-block-property
   [block key]
-  (let [method (aget (aget js/logseq "Editor") "getBlockProperty")
+  (let [method (aget (aget logseq "Editor") "getBlockProperty")
         arg-block block
         arg-key key
         args [arg-block arg-key]]
@@ -441,21 +442,21 @@
 
 (defn get-block-properties
   [block]
-  (let [method (aget (aget js/logseq "Editor") "getBlockProperties")
+  (let [method (aget (aget logseq "Editor") "getBlockProperties")
         arg-block block
         args [arg-block]]
     (core/call-method method args)))
 
 (defn get-page-properties
   [page]
-  (let [method (aget (aget js/logseq "Editor") "getPageProperties")
+  (let [method (aget (aget logseq "Editor") "getPageProperties")
         arg-page page
         args [arg-page]]
     (core/call-method method args)))
 
 (defn- scroll-to-block-in-page-impl
   [page-name block-id opts]
-  (let [method (aget (aget js/logseq "Editor") "scrollToBlockInPage")
+  (let [method (aget (aget logseq "Editor") "scrollToBlockInPage")
         arg-page-name page-name
         arg-block-id block-id
         arg-opts opts
@@ -470,14 +471,14 @@
 
 (defn open-in-right-sidebar
   [id]
-  (let [method (aget (aget js/logseq "Editor") "openInRightSidebar")
+  (let [method (aget (aget logseq "Editor") "openInRightSidebar")
         arg-id id
         args [arg-id]]
     (core/call-method method args)))
 
 (defn on-input-selection-end
   [callback]
-  (let [method (aget (aget js/logseq "Editor") "onInputSelectionEnd")
+  (let [method (aget (aget logseq "Editor") "onInputSelectionEnd")
         arg-callback (core/convert-arg {:bean-to-js true} callback)
         args [arg-callback]]
     (core/call-method method args)))

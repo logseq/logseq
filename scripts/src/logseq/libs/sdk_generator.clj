@@ -156,7 +156,7 @@
   (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
-                    "  (:require [cljs-bean.core :as bean]))\n\n"
+                    "  (:require [cljs-bean.core :as bean]\n[\"@logseq/libs\" :as logseq]))\n\n"
                     "(defn convert-arg [spec value]\n"
                     "  (if (:bean-to-js spec) (bean/->js value) value))\n\n"
                     "(defn- normalize-result [result]\n"
@@ -170,17 +170,17 @@
         helpers {:convert "convert-arg"
                  :call "call-method"}
         methods-str (->> methods
-                         (map #(emit-method % "js/logseq" helpers))
+                         (map #(emit-method % "logseq" helpers))
                          (apply str))]
     [ns (str header methods-str)]))
 
 (defn emit-proxy-namespace
   [ns-prefix iface-name iface]
   (let [ns (interface->namespace ns-prefix iface-name)
-        owner-expr (format "(aget js/logseq \"%s\")" (interface->target iface-name))
+        owner-expr (format "(aget logseq \"%s\")" (interface->target iface-name))
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
-                    "  (:require [logseq.core :as core]))\n")
+                    "  (:require [logseq.core :as core]\n[\"@logseq/libs\" :as logseq]))\n")
         helpers {:convert "core/convert-arg"
                  :call "core/call-method"}
         methods-str (->> (:methods iface)

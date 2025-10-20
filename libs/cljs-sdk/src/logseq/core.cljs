@@ -1,6 +1,7 @@
 ;; Auto-generated via `bb libs:generate-cljs-sdk`
 (ns logseq.core
-  (:require [cljs-bean.core :as bean]))
+  (:require ["@logseq/libs" :as logseq]
+            [cljs-bean.core :as bean]))
 
 (defn convert-arg [spec value]
   (if (:bean-to-js spec) (bean/->js value) value))
@@ -17,7 +18,7 @@
 
 (defn- ready-impl
   [model callback]
-  (let [method (aget js/logseq "ready")
+  (let [method (aget logseq "ready")
         arg-model (convert-arg {:bean-to-js true} model)
         arg-callback (convert-arg {:bean-to-js true} callback)
         args [arg-model arg-callback]]
@@ -33,95 +34,95 @@
 
 (defn ensure-connected
   []
-  (let [method (aget js/logseq "ensureConnected")
+  (let [method (aget logseq "ensureConnected")
         args []]
     (call-method method args)))
 
 (defn beforeunload
   [callback]
-  (let [method (aget js/logseq "beforeunload")
+  (let [method (aget logseq "beforeunload")
         arg-callback (convert-arg {:bean-to-js true} callback)
         args [arg-callback]]
     (call-method method args)))
 
 (defn provide-model
   [model]
-  (let [method (aget js/logseq "provideModel")
+  (let [method (aget logseq "provideModel")
         arg-model (convert-arg {:bean-to-js true} model)
         args [arg-model]]
     (call-method method args)))
 
 (defn provide-theme
   [theme]
-  (let [method (aget js/logseq "provideTheme")
+  (let [method (aget logseq "provideTheme")
         arg-theme theme
         args [arg-theme]]
     (call-method method args)))
 
 (defn provide-style
   [style]
-  (let [method (aget js/logseq "provideStyle")
+  (let [method (aget logseq "provideStyle")
         arg-style style
         args [arg-style]]
     (call-method method args)))
 
 (defn provide-ui
   [ui]
-  (let [method (aget js/logseq "provideUI")
+  (let [method (aget logseq "provideUI")
         arg-ui (convert-arg {:bean-to-js true} ui)
         args [arg-ui]]
     (call-method method args)))
 
 (defn use-settings-schema
   [schema]
-  (let [method (aget js/logseq "useSettingsSchema")
+  (let [method (aget logseq "useSettingsSchema")
         arg-schema schema
         args [arg-schema]]
     (call-method method args)))
 
 (defn update-settings
   [attrs]
-  (let [method (aget js/logseq "updateSettings")
+  (let [method (aget logseq "updateSettings")
         arg-attrs (convert-arg {:bean-to-js true} attrs)
         args [arg-attrs]]
     (call-method method args)))
 
 (defn on-settings-changed
   [cb]
-  (let [method (aget js/logseq "onSettingsChanged")
+  (let [method (aget logseq "onSettingsChanged")
         arg-cb cb
         args [arg-cb]]
     (call-method method args)))
 
 (defn show-settings-ui
   []
-  (let [method (aget js/logseq "showSettingsUI")
+  (let [method (aget logseq "showSettingsUI")
         args []]
     (call-method method args)))
 
 (defn hide-settings-ui
   []
-  (let [method (aget js/logseq "hideSettingsUI")
+  (let [method (aget logseq "hideSettingsUI")
         args []]
     (call-method method args)))
 
 (defn set-main-ui-attrs
   [attrs]
-  (let [method (aget js/logseq "setMainUIAttrs")
+  (let [method (aget logseq "setMainUIAttrs")
         arg-attrs (convert-arg {:bean-to-js true} attrs)
         args [arg-attrs]]
     (call-method method args)))
 
 (defn set-main-ui-inline-style
   [style]
-  (let [method (aget js/logseq "setMainUIInlineStyle")
+  (let [method (aget logseq "setMainUIInlineStyle")
         arg-style style
         args [arg-style]]
     (call-method method args)))
 
 (defn- hide-main-ui-impl
   [opts]
-  (let [method (aget js/logseq "hideMainUI")
+  (let [method (aget logseq "hideMainUI")
         arg-opts opts
         args [arg-opts]]
     (call-method method args)))
@@ -134,7 +135,7 @@
 
 (defn- show-main-ui-impl
   [opts]
-  (let [method (aget js/logseq "showMainUI")
+  (let [method (aget logseq "showMainUI")
         arg-opts opts
         args [arg-opts]]
     (call-method method args)))
@@ -147,13 +148,13 @@
 
 (defn toggle-main-ui
   []
-  (let [method (aget js/logseq "toggleMainUI")
+  (let [method (aget logseq "toggleMainUI")
         args []]
     (call-method method args)))
 
 (defn resolve-resource-full-url
   [file-path]
-  (let [method (aget js/logseq "resolveResourceFullUrl")
+  (let [method (aget logseq "resolveResourceFullUrl")
         arg-file-path file-path
         args [arg-file-path]]
     (call-method method args)))

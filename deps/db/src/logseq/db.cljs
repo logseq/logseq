@@ -111,7 +111,8 @@
                (not (:reset-conn! tx-meta))
                (not (:initial-db? tx-meta))
                (not (:skip-validate-db? tx-meta false))
-               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+               (not (:logseq.graph-parser.exporter/new-graph? tx-meta))
+               false)
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)

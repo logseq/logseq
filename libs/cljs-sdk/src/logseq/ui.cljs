@@ -1,10 +1,11 @@
 ;; Auto-generated via `bb libs:generate-cljs-sdk`
 (ns logseq.ui
-  (:require [logseq.core :as core]))
+  (:require ["@logseq/libs" :as logseq]
+            [logseq.core :as core]))
 
 (defn- show-msg-impl
   [content status opts]
-  (let [method (aget (aget js/logseq "UI") "showMsg")
+  (let [method (aget (aget logseq "UI") "showMsg")
         arg-content content
         arg-status status
         arg-opts (core/convert-arg {:bean-to-js true} opts)
@@ -21,35 +22,35 @@
 
 (defn close-msg
   [key]
-  (let [method (aget (aget js/logseq "UI") "closeMsg")
+  (let [method (aget (aget logseq "UI") "closeMsg")
         arg-key key
         args [arg-key]]
     (core/call-method method args)))
 
 (defn query-element-rect
   [selector]
-  (let [method (aget (aget js/logseq "UI") "queryElementRect")
+  (let [method (aget (aget logseq "UI") "queryElementRect")
         arg-selector selector
         args [arg-selector]]
     (core/call-method method args)))
 
 (defn query-element-by-id
   [id]
-  (let [method (aget (aget js/logseq "UI") "queryElementById")
+  (let [method (aget (aget logseq "UI") "queryElementById")
         arg-id id
         args [arg-id]]
     (core/call-method method args)))
 
 (defn check-slot-valid
   [slot]
-  (let [method (aget (aget js/logseq "UI") "checkSlotValid")
+  (let [method (aget (aget logseq "UI") "checkSlotValid")
         arg-slot slot
         args [arg-slot]]
     (core/call-method method args)))
 
 (defn resolve-theme-css-props-vals
   [props]
-  (let [method (aget (aget js/logseq "UI") "resolveThemeCssPropsVals")
+  (let [method (aget (aget logseq "UI") "resolveThemeCssPropsVals")
         arg-props props
         args [arg-props]]
     (core/call-method method args)))
