@@ -168,12 +168,12 @@
     pages-and-blocks))
 
 (defn- ops->classes
-  [operations {:keys [property-idents class-idents existing-idents]}]
+  [operations {:keys [property-idents class-idents existing-classes]}]
   (let [new-classes (filter #(and (= "tag" (:entityType %)) (= "add" (:operation %))) operations)
         classes (merge
                  (into {} (keep (fn [[k v]]
                                   ;; Removing existing until edits are supported
-                                  (when-not (existing-idents v) [v {:block/title k}]))
+                                  (when-not (existing-classes v) [v {:block/title k}]))
                                 class-idents))
                  (->> new-classes
                       (map (fn [{:keys [data] :as op}]
@@ -188,14 +188,11 @@
     classes))
 
 (defn- ops->properties
-  [operations {:keys [property-idents class-idents existing-idents]}]
+  [operations {:keys [property-idents class-idents existing-properties]}]
   (let [new-properties (filter #(and (= "property" (:entityType %)) (= "add" (:operation %))) operations)
         properties
         (merge
-         (into {} (map (fn [[k v]]
-                         ;; Removing existing until edits are supported
-                         (when-not (existing-idents v) [v {:block/title k}]))
-                       property-idents))
+         existing-properties
          (->> new-properties
               (map (fn [{:keys [data] :as op}]
                      (let [title (get-in op [:data :title])
@@ -215,7 +212,8 @@
 (defn- operations->idents
   "Creates property and class idents from all uses of them in operations"
   [db operations]
-  (let [existing-idents (atom #{})
+  (let [existing-classes (atom #{})
+        existing-properties (atom {})
         property-idents
         (->> (filter #(and (= "property" (:entityType %)) (= "add" (:operation %)))
                      operations)
@@ -231,7 +229,7 @@
                                    (throw (ex-info (str (pr-str (:block/title ent))
                                                         " is not a property and can't be used as one")
                                                    {})))
-                                 (swap! existing-idents conj ident)
+                                 (swap! existing-properties assoc ident (select-keys ent [:db/cardinality :logseq.property/type]))
                                  ident)
                                (db-property/create-user-property-ident-from-name %))))
              (into {}))
@@ -253,13 +251,14 @@
                                    (throw (ex-info (str (pr-str (:block/title ent))
                                                         " is not a tag and can't be used as one")
                                                    {})))
-                                 (swap! existing-idents conj ident)
+                                 (swap! existing-classes conj ident)
                                  ident)
                                (db-class/create-user-class-ident-from-name db %))))
              (into {}))]
     {:property-idents property-idents
      :class-idents class-idents
-     :existing-idents @existing-idents}))
+     :existing-classes @existing-classes
+     :existing-properties @existing-properties}))
 
 (def ^:private add-non-block-schema
   [:map
@@ -312,7 +311,9 @@
   node. Will need to adjust add operation assumption when supporting editing pages"
   [{:keys [pages-and-blocks properties classes]}]
   (try
-    (doseq [{:block/keys [title] :as m} (vals properties)]
+    (doseq [{:block/keys [title] :as m}
+            ;; Only validate new properties
+            (filter :block/title (vals properties))]
       (outliner-validate/validate-property-title title {:entity-type :property :title title :entity-map m})
       (outliner-validate/validate-page-title-characters title {:entity-type :property :title title :entity-map m})
       (outliner-validate/validate-page-title title {:entity-type :property :title title :entity-map m}))
