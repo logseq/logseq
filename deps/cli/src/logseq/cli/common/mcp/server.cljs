@@ -202,13 +202,13 @@
     :config #js {:title "List Tags"
                  :description "List all tags in a graph"
                  :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each tag"))}}}
+                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each tag e.g. their parents (extends) and tag properties"))}}}
    :listProperties
    {:fn api-list-properties
     :config #js {:title "List Properties"
                  :description "List all properties in a graph"
                  :inputSchema
-                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property"))}}}})
+                 #js {:expand (-> (z/boolean) .optional (.describe "Provide additional detail on each property e.g. property type, cardinality"))}}}})
 
 (defn call-api-tool [tool-fn api-fn args]
   (tool-fn (partial api-tool api-fn) args))
