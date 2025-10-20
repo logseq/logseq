@@ -61,7 +61,7 @@
                 message* (if s3-key
                            (-> message
                                (assoc :s3-key s3-key)
-                               (dissoc :graph-uuid :ops :t-before))
+                               (dissoc :graph-uuid :ops :t-before :schema-version))
                            message)]
             (handle-remote-ex (m/? (ws/send&recv ws message* opts)))))]
     (m/sp

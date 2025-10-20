@@ -422,7 +422,8 @@
       (or from-disk? new-graph?)
       {:tx-report tx-report}
 
-      (or (::gp-exporter/new-graph? tx-meta) (::sqlite-export/imported-data? tx-meta))
+      (or (::gp-exporter/new-graph? tx-meta)
+          (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta)))
       (invoke-hooks-for-imported-graph conn tx-report)
 
       :else
