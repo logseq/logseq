@@ -205,7 +205,7 @@
                {:error/message "should be a URL"}
                url-entity?]
     :node   [:fn
-             {:error/message "should be a page/block with tags"}
+             {:error/message "should be a node with a title"}
              node-entity?]}
    internal-validation-schemas))
 

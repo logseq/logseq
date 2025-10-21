@@ -13,6 +13,7 @@
    doesn't handle updating DB graphs well yet e.g. doesn't handle :block/tx-id"
   [conn tx-report]
   (when-not (:pipeline-replace? (:tx-meta tx-report))
+    ;; TODO: Handle block edits with separate :block/refs rebuild as deleting property values is buggy
     (outliner-pipeline/transact-new-db-graph-refs conn tx-report)))
 
 (defn ^:api add-listener
