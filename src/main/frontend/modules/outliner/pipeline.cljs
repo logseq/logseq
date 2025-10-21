@@ -28,8 +28,7 @@
   [{:keys [repo tx-meta tx-data deleted-block-uuids deleted-assets affected-keys blocks]}]
   ;; (prn :debug
   ;;      :tx-meta tx-meta
-  ;;      ;; :tx-data tx-data
-  ;;      )
+  ;;      :tx-data tx-data)
   (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}]
