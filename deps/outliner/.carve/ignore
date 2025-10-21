@@ -1,7 +1,3 @@
-;; private
-logseq.outliner.core/*transaction-opts*
-;; API fn
-logseq.outliner.datascript/transact!
 ;; API fn
 logseq.outliner.op/apply-ops!
 ;; API fn
@@ -10,5 +6,3 @@ logseq.outliner.op/register-op-handlers!
 logseq.outliner.page/delete!
 ;; API fn
 logseq.outliner.page/create!
-;; API fn
-logseq.outliner.property/validate!
