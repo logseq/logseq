@@ -7,6 +7,8 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -14,9 +16,7 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.shui.ui :as shui]
-            [promesa.core :as p]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [promesa.core :as p]))
 
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]

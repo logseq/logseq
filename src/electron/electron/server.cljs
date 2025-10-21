@@ -151,7 +151,7 @@
                                                  (string/replace-first "${HOST}" HOST)
                                                  (string/replace-first "${PORT}" PORT))]
                                     (doto rep (.type "text/html")
-                                              (.send html))))))
+                                          (.send html))))))
               ;; listen port
               _     (.listen s (bean/->js (select-keys @*state [:host :port])))]
         (reset! *server s)

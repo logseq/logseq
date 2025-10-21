@@ -10,3 +10,5 @@ logseq.outliner.op/register-op-handlers!
 logseq.outliner.page/delete!
 ;; API fn
 logseq.outliner.page/create!
+;; API fn
+logseq.outliner.property/validate!
