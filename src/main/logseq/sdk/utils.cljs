@@ -4,6 +4,7 @@
             [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
             [logseq.db.common.entity-util :as common-entity-util]
@@ -22,11 +23,26 @@
                      (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} k))) m)
        (into {})))
 
+(def ^:private kw-tag "___kw___") ; unlikely in normal strings; change if you prefer
+
+(defn- encode-kw [v]
+  (if (keyword? v)
+    ;; __kw__ns/name or __kw__name
+    (str kw-tag (if-let [ns (namespace v)]
+                  (str ns "/" (name v))
+                  (name v)))
+    v))
+
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
   ([input camel-case?]
    (when input
-     (let [input (cond
+     (let [pid (some-> (gobj/get js/window "$$callerPluginID"))
+           plugin (and pid (plugin-handler/get-plugin-inst pid))
+           runtime (some-> (gobj/get plugin "sdk")
+                           (gobj/get "runtime"))
+           cljs? (= "cljs" runtime)
+           input (cond
                    (de/entity? input) (common-entity-util/entity->map input)
                    (sequential? input) (map #(if (de/entity? %)
                                                (common-entity-util/entity->map %)
@@ -35,6 +51,9 @@
        (walk/prewalk
         (fn [a]
           (cond
+            (and cljs? (keyword? a))
+            (encode-kw a)
+
             (keyword? a)
             (if (keep-json-keyword? a)
               (str a)

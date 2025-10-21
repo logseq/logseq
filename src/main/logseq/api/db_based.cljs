@@ -90,11 +90,10 @@
 (defn get-property
   [k]
   (this-as this
-           (p/let [prop (-get-property this k)]
-             (some-> prop
-                     (assoc :type (:logseq.property/type prop))
-                     (sdk-utils/normalize-keyword-for-json)
-                     (bean/->js)))))
+           (p/let [prop (-get-property this k)
+                   prop' (some-> prop
+                                 (assoc :type (:logseq.property/type prop)))]
+             (sdk-utils/result->js prop'))))
 
 (defn ->cardinality
   [input]
