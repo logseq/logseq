@@ -179,7 +179,7 @@
                         (into-array (map :db/id stale-block-chunk))
                         false))
                     tx-data (labels-update-tx-data @conn e+updated-at-coll)]
-                (d/transact! conn tx-data {:skip-refresh? true})
+                (ldb/transact! conn tx-data {:skip-refresh? true})
                 (m/? (task--update-index-info!* repo infer-worker true))
                 (c.m/<? (.write-index! infer-worker repo))))
             (m/? (task--update-index-info!* repo infer-worker false))))))))
@@ -207,7 +207,7 @@
                                         (d/datoms @conn :avet :block/title)
                                         (map (fn [d]
                                                [:db/add (:e d) :logseq.property.embedding/hnsw-label-updated-at 0])))]
-            (d/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
+            (ldb/transact! conn mark-embedding-tx-data {:skip-refresh? true})))
 
         (embedding-stale-blocks! repo reset-embedding?)))))
 
@@ -236,7 +236,7 @@
     (when-let [^js infer-worker @worker-state/*infer-worker]
       (let [conn (worker-state/get-datascript-conn repo)]
         (when (c.m/<? (.load-model infer-worker model-name))
-          (d/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
+          (ldb/transact! conn [(ldb/kv :logseq.kv/graph-text-embedding-model-name model-name)])
           (log/info :loaded-model model-name))))))
 
 (defn task--search
