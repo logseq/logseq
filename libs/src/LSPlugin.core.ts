@@ -154,6 +154,7 @@ interface PluginLocalOptions {
   url: string // Plugin package absolute fs location
   name: string
   version: string
+  runtime: string
   mode: 'shadow' | 'iframe'
   webPkg?: any // web plugin package.json data
   settingsSchema?: SettingSchemaDesc[]
@@ -166,6 +167,7 @@ interface PluginLocalOptions {
 
 interface PluginLocalSDKMetadata {
   version: string
+  runtime: string
 
   [key: string]: any
 }
@@ -669,7 +671,7 @@ class PluginLocal extends EventEmitter<
           ? `<script src="${sdkPathRoot}/lsplugin.user.js?v=${tag}"></script>`
           : `<script src="https://cdn.jsdelivr.net/npm/@logseq/libs/dist/lsplugin.user.min.js?v=${tag}"></script>`
       }
-    
+
   </head>
   <body>
   <div id="app"></div>
