@@ -575,6 +575,7 @@ export class LSPluginUser
       try {
         await this._execCallableAPIAsync('setSDKMetadata', {
           version: this._version,
+          runtime: 'js',
         })
       } catch (e) {
         console.warn(e)
