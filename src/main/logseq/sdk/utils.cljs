@@ -39,7 +39,8 @@
    (when input
      (let [pid (some-> (gobj/get js/window "$$callerPluginID"))
            plugin (and pid (plugin-handler/get-plugin-inst pid))
-           runtime (some-> (gobj/get plugin "sdk")
+           runtime (some-> plugin
+                           (gobj/get "sdk")
                            (gobj/get "runtime"))
            cljs? (= "cljs" runtime)
            input (cond
