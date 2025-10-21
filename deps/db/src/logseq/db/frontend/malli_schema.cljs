@@ -102,7 +102,11 @@
                                (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (map :db/id (:property/closed-values property))) val)))
+                               (let [ids (set (map :db/id (:property/closed-values property)))
+                                     result (contains? ids val)]
+                                 (when-not result
+                                   (js/console.error (str "Error: not a closed value, id: " val ", existing choices: " ids ", property: " (:db/ident property))))
+                                 result)))
                         validate-fn')]
     (if (db-property/many? property)
       (or (every? validate-fn'' property-val)
@@ -346,7 +350,7 @@
    (concat
     [:map
      [:db/ident plugin-property-ident]
-     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
+     [:logseq.property/type (apply vector :enum (concat db-property-type/user-built-in-property-types [:json :string :page]))]]
     property-common-schema-attrs
     property-attrs
     page-attrs

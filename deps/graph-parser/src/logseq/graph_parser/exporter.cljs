@@ -1791,7 +1791,7 @@
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options) @(:upstream-properties tx-options))
         ;; _ (when (seq property-pages-tx) (cljs.pprint/pprint {:property-pages-tx property-pages-tx}))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        main-props-tx-report (d/transact! conn property-pages-tx {::new-graph? true ::path file})
+        main-props-tx-report (ldb/transact! conn property-pages-tx {::new-graph? true ::path file})
         _ (save-from-tx property-pages-tx options)
 
         classes-tx @(:classes-tx tx-options)
@@ -1817,13 +1817,13 @@
         ;;                        [:whiteboard-pages :pages-index :page-properties-tx :property-page-properties-tx :pages-tx' :classes-tx :blocks-index :blocks-tx]
         ;;                        [whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' classes-tx blocks-index blocks-tx]))
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {#_:property-pages-tx #_property-pages-tx :pages-tx pages-tx :tx tx'}))
-        main-tx-report (d/transact! conn tx' {::new-graph? true ::path file})
+        main-tx-report (ldb/transact! conn tx' {::new-graph? true ::path file})
         _ (save-from-tx tx' options)
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
         ;; _ (when (seq upstream-properties-tx) (cljs.pprint/pprint {:upstream-properties-tx upstream-properties-tx}))
-        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {::new-graph? true ::path file}))
+        upstream-tx-report (when (seq upstream-properties-tx) (ldb/transact! conn upstream-properties-tx {::new-graph? true ::path file}))
         _ (save-from-tx upstream-properties-tx options)]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed

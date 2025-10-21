@@ -14,6 +14,7 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [logseq.common.path :as path]
+            [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m]))
 
@@ -144,11 +145,11 @@
                (throw (ex-info "upload asset failed" r)))
              ;; asset might be deleted by the user before uploaded successfully
              (when (d/entity @conn [:block/uuid asset-uuid])
-               (d/transact! conn
-                            [{:block/uuid asset-uuid
-                              :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
+               (ldb/transact! conn
+                              [{:block/uuid asset-uuid
+                                :logseq.property.asset/remote-metadata {:checksum checksum :type asset-type}}]
                             ;; Don't generate rtc ops again, (block-ops & asset-ops)
-                            {:persist-op? false}))
+                              {:persist-op? false}))
              (client-op/remove-asset-op repo asset-uuid))))
        (c.m/concurrent-exec-flow 3 (m/seed asset-uuid->url))
        (m/reduce (constantly nil))))

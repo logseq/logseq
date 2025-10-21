@@ -556,7 +556,9 @@
                  (state/set-state! :editor/async-unsaved-chars nil))))))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties
+  [content {:keys [page block-uuid
+                   sibling? before? start? end?
+                   properties
                    custom-uuid replace-empty-target? edit-block? ordered-list? other-attrs]
             :or {sibling? false
                  before? false
@@ -598,6 +600,7 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (merge new-block other-attrs)
+              block' (db/entity (:db/id block))
               [target-block sibling?] (cond
                                         before?
                                         (let [left-or-parent (or (ldb/get-left-sibling block)
@@ -607,13 +610,21 @@
                                           [left-or-parent sibling?])
 
                                         sibling?
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
+
+                                        start?
+                                        [block' false]
+
+                                        end?
+                                        (if last-block
+                                          [block' false]
+                                          [last-block true])
 
                                         last-block
                                         [last-block true]
 
                                         block
-                                        [(db/entity (:db/id block)) sibling?]
+                                        [block' sibling?]
 
                                         ;; FIXME: assert
                                         :else
@@ -2064,12 +2075,11 @@
                                               (when-not keep-uuid? [:id])
                                               [:custom_id :custom-id]
                                               exclude-properties))
-                    :block/format format)
-             (not db-based?)
-             (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
+                    :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                          (concat
                                                           (when-not keep-uuid? [:id])
-                                                          exclude-properties)))))))
+                                                          exclude-properties))
+                    :block/format format)))))
 
 (defn- edit-last-block-after-inserted!
   [result]
@@ -2179,17 +2189,15 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [tree-vec format {:keys [target-block keep-uuid?] :as opts}]
   (let [repo (state/get-current-repo)
-        page-id (:db/id (:block/page target-block))
+        page-id (or (:db/id (:block/page target-block))
+                    (when (ldb/page? target-block)
+                      (:db/id target-block)))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
-        blocks (gp-block/with-parent-and-order page-id blocks)
-        block-refs (->> (mapcat :block/refs blocks)
-                        (set)
-                        (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
+        blocks (gp-block/with-parent-and-order page-id blocks)]
+
     (ui-outliner-tx/transact!
      {:outliner-op :paste-blocks}
-     (when (seq block-refs)
-       (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
      (paste-blocks blocks (merge opts {:ops-only? true})))))
 
 (defn insert-block-tree-after-target

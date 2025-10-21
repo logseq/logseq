@@ -288,8 +288,6 @@
                   (dissoc :block/children :block/meta :block/unordered
                           :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/load-status
                           :block.temp/has-children?)
-                  common-util/remove-nils
-
                   (fix-tag-ids db {:db-graph? db-based?}))
                (not collapse-or-expand?)
                block-with-updated-at)
@@ -1103,12 +1101,13 @@
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
 (defn- op-transact!
-  [f & args]
+  [outliner-op f & args]
   {:pre [(fn? f)]}
   (try
     (let [result (apply f args)]
       (when result
-        (let [tx-meta (assoc (:tx-meta result) :skip-store? true)]
+        (let [tx-meta (assoc (:tx-meta result)
+                             :outliner-op outliner-op)]
           (ldb/transact! (second args) (:tx-data result) tx-meta)))
       result)
     (catch :default e
@@ -1119,31 +1118,29 @@
           (save-block repo @conn date-formatter block opts))]
   (defn save-block!
     [repo conn date-formatter block & {:as opts}]
-    (op-transact! f repo conn date-formatter block opts)))
+    (op-transact! :save-block f repo conn date-formatter block opts)))
 
 (let [f (fn [repo conn blocks target-block opts]
           (insert-blocks repo @conn blocks target-block opts))]
   (defn insert-blocks!
     [repo conn blocks target-block opts]
-    (op-transact! f repo conn blocks target-block (assoc opts :outliner-op :insert-blocks))))
+    (op-transact! :insert-blocks f repo conn blocks target-block (assoc opts :outliner-op :insert-blocks))))
 
-(let [f (fn [_repo conn blocks opts]
-          (let [{:keys [tx-data]} (delete-blocks @conn blocks)]
-            {:tx-data tx-data
-             :tx-meta (select-keys opts [:outliner-op])}))]
+(let [f (fn [_repo conn blocks _opts]
+          (delete-blocks @conn blocks))]
   (defn delete-blocks!
     [repo conn _date-formatter blocks opts]
-    (op-transact! f repo conn blocks opts)))
+    (op-transact! :delete-blocks f repo conn blocks opts)))
 
 (defn move-blocks!
   [repo conn blocks target-block opts]
-  (op-transact! move-blocks repo conn blocks target-block
+  (op-transact! :move-blocks move-blocks repo conn blocks target-block
                 (assoc opts :outliner-op :move-blocks)))
 
 (defn move-blocks-up-down!
   [repo conn blocks up?]
-  (op-transact! move-blocks-up-down repo conn blocks up?))
+  (op-transact! :move-blocks-up-down move-blocks-up-down repo conn blocks up?))
 
 (defn indent-outdent-blocks!
   [repo conn blocks indent? & {:as opts}]
-  (op-transact! indent-outdent-blocks repo conn blocks indent? opts))
+  (op-transact! :indent-outdent-blocks indent-outdent-blocks repo conn blocks indent? opts))
