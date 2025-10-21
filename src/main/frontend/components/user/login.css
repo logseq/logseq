@@ -7,9 +7,18 @@
     @apply text-[inherit];
   }
 
-  .ui__alert-description {
-    @apply -mb-3;
+  .ui__alert {
+    @apply bg-red-300 dark:border-red-800 dark:bg-red-800/90 dark:text-red-200;
+
+    svg {
+      @apply dark:text-red-200;
+    }
+
+    &-description {
+      @apply -mb-3;
+    }
   }
+
 }
 
 .ui__dialog-content[label=user-login] {

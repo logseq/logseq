@@ -34,5 +34,7 @@ export const translate = (
   ...args: any
 ) => {
   const dicts = (_nsDicts as any)[ns] || {}
-  return _translate(_locale, dicts, key, ...args)
+  return _translate(
+    _nsDicts?.hasOwnProperty(_locale) ? _locale : 'en',
+    dicts, key, ...args)
 }
