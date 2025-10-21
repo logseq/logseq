@@ -2153,3 +2153,25 @@
   line-height: 1.625;
 }
 
+/* Image caption styles */
+figure.asset-container-with-caption {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0.5em 0;
+}
+
+.asset-caption {
+  display: block;
+  text-align: center;
+  font-size: 0.9em;
+  color: hsl(var(--ls-secondary-text-color, var(--muted-foreground)));
+  font-style: italic;
+  margin-top: 0.5em;
+  padding: 0 0.5em;
+  line-height: 1.4;
+}
+
+/* Dark mode support */
+.dark .asset-caption {
+  color: hsl(var(--ls-secondary-text-color, var(--muted-foreground)));
+}
