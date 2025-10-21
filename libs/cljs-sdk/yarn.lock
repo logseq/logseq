@@ -2,10 +2,10 @@
 # yarn lockfile v1
 
 
-"@logseq/libs@^0.2.1":
-  version "0.2.1"
-  resolved "https://registry.yarnpkg.com/@logseq/libs/-/libs-0.2.1.tgz#140846ffa5fda24a61ea73140475b090ab45f69b"
-  integrity sha512-lC2HTyJU3thHlqwXq++ZvwBHqhIlrlSel1O7xEAT5NW5wTPHVq3Mq1jJbvPrNpXaZtqhWn9nYuVj1ULKv9540g==
+"@logseq/libs@^0.2.3":
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/@logseq/libs/-/libs-0.2.3.tgz#33c4b7ad1db02a2335269cd38eac7e5f5196f675"
+  integrity sha512-aMtZFsNvbFgVhiaA9K9DANPhIv+ZKaC5qW61si2UMsfwgykr4/hyT9Q7aoqf7ir3ZIwYDDhfEJqpthZCsUwbeA==
   dependencies:
     csstype "3.1.0"
     debug "4.3.4"

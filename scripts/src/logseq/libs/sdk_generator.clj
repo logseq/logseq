@@ -97,15 +97,19 @@
          (emit-method-body method-name params helpers)
          header
          (apply str
-                (for [arity arities
-                      :let [provided (take arity param-syms)
-                            missing (- total arity)
-                            call-args (concat provided (repeat missing "nil"))
-                            param-vector (format-param-vector provided)
-                            call-arg-str (string/join " " call-args)
-                            call-arg-str (if (string/blank? call-arg-str) "" (str " " call-arg-str))]]
-                  (str "  (" param-vector "\n"
-                       "   (" impl-name call-arg-str "))\n")))
+                (map-indexed
+                 (fn [idx arity]
+                   (let [provided (take arity param-syms)
+                         missing (- total arity)
+                         call-args (concat provided (repeat missing "nil"))
+                         param-vector (format-param-vector provided)
+                         call-arg-str (string/join " " call-args)
+                         call-arg-str (if (string/blank? call-arg-str) "" (str " " call-arg-str))]
+                     (str "  (" param-vector "\n"
+                          "   (" impl-name call-arg-str "))"
+                          (when (not= (inc idx) (count arities))
+                            "\n"))))
+                 arities))
          ")\n")))
 
 (defn emit-method
@@ -144,11 +148,13 @@
   (let [ns (str ns-prefix "." core-namespace)
         header (str ";; Auto-generated via `bb libs:generate-cljs-sdk`\n"
                     "(ns " ns "\n"
-                    "  (:require [cljs-bean.core :as bean]\n[\"@logseq/libs\"]))\n\n"
+                    "  (:require [\"@logseq/libs\"]
+            [cljs-bean.core :as bean]
+            [com.logseq.util :as util]))\n\n"
                     "(defn- normalize-result [result]\n"
                     "  (if (instance? js/Promise result)\n"
                     "    (.then result (fn [value] (normalize-result value)))\n"
-                    "    (bean/->clj result)))\n\n"
+                    "    (util/->clj-tagged result)))\n\n"
                     "(defn call-method [owner method args]
   (when-not method
     (throw (js/Error. \"Missing method on logseq namespace\")))

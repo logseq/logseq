@@ -2,40 +2,12 @@
 (ns com.logseq.core
   (:require ["@logseq/libs"]
             [cljs-bean.core :as bean]
-            [clojure.string :as string]
-            [clojure.walk :as walk]))
-
-(def ^:private kw-tag "___kw___")
-
-(defn- decode-kw [v]
-  (if (and (string? v) (string/starts-with? v kw-tag))
-    (let [s (subs v (count kw-tag))
-          i (.indexOf s "/")]
-      (if (neg? i)
-        (keyword s)                                ; :name
-        (keyword (subs s 0 i) (subs s (inc i)))))  ; :ns/name
-    v))
-
-(defn ->clj-tagged [js]
-  (some->> js
-           bean/->clj
-           (walk/postwalk (fn [f]
-                            (cond
-                              (keyword? f)
-                              (decode-kw (if-let [ns (namespace f)]
-                                           (str ns "/" (name f))
-                                           (name f)))
-
-                              (string? f)
-                              (decode-kw f)
-
-                              :else
-                              f)))))
+            [com.logseq.util :as util]))
 
 (defn- normalize-result [result]
   (if (instance? js/Promise result)
     (.then result (fn [value] (normalize-result value)))
-    (->clj-tagged result)))
+    (util/->clj-tagged result)))
 
 (defn call-method [owner method args]
   (when-not method
@@ -48,11 +20,7 @@
   [model callback]
   (let [method (aget api-proxy "ready")
         args [model callback]]
-    (-> (call-method api-proxy method args)
-        (.then (fn []
-                 (js/logseq._execCallableAPIAsync
-                  "setSDKMetadata"
-                  #js {:runtime "cljs"}))))))
+    (call-method api-proxy method args)))
 
 (defn ready
   ([]

@@ -261,6 +261,24 @@
   ([repo]
    (get-all-pages-impl repo)))
 
+(defn get-all-tags
+  []
+  (let [method (aget api-proxy "getAllTags")
+        args []]
+    (core/call-method api-proxy method args)))
+
+(defn get-all-properties
+  []
+  (let [method (aget api-proxy "getAllProperties")
+        args []]
+    (core/call-method api-proxy method args)))
+
+(defn get-tag-objects
+  [page-identity]
+  (let [method (aget api-proxy "getTagObjects")
+        args [page-identity]]
+    (core/call-method api-proxy method args)))
+
 (defn- prepend-block-in-page-impl
   [page content opts]
   (let [method (aget api-proxy "prependBlockInPage")
