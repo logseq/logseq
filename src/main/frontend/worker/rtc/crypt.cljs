@@ -37,19 +37,6 @@
   (assert (some? user-uuid))
   (str "user-rsa-key-pair###" user-uuid))
 
-(defn task--upload-graph-encrypted-aes-key
-  "Uploads the encrypted AES key for a graph to the server."
-  [token graph-uuid encrypted-aes-key]
-  (m/sp
-    (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
-          response (m/? (ws-util/send&recv get-ws-create-task
-                                           {:action "upload-graph-encrypted-aes-key"
-                                            :graph-uuid graph-uuid
-                                            :encrypted-aes-key encrypted-aes-key}))]
-      (when (:ex-data response)
-        (throw (ex-info (:ex-message response)
-                        (assoc (:ex-data response) :type :rtc.exception/upload-graph-encrypted-aes-key-error)))))))
-
 (defn task--upload-user-rsa-key-pair
   "Uploads the user's RSA key pair to the server."
   [token user-uuid public-key encrypted-private-key]
@@ -168,31 +155,5 @@
                  exported-fetched-aes-key (c.m/<? (.exportKey crypt/subtle "raw" fetched-aes-key))]
              (assert (array-buffers-equal? exported-aes-key exported-fetched-aes-key))
              (prn "   Fetched graph aes key successfully"))
-
-           (comment
-             ;; skip, server api not implemented yet
-             (prn "2. Test fetch from server")
-             (prn "   Clean local storage first")
-             (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
-             (c.m/<? (<remove-item! (graph-encrypted-aes-key-idb-key graph-uuid)))
-
-             (prn "   Upload keys to server")
-             (m/? (task--upload-user-rsa-key-pair token user-uuid public-key encrypted-private-key))
-             (m/? (task--upload-graph-encrypted-aes-key token graph-uuid encrypted-aes-key))
-             (prn "   Upload complete")
-
-             (prn "   Fetch user rsa key pair from server")
-             (let [fetched-key-pair (m/? (task--fetch-user-rsa-key-pair token user-uuid password))
-                   exported-public-key (c.m/<? (.exportKey crypt/subtle "spki" public-key))
-                   exported-fetched-public-key (c.m/<? (.exportKey crypt/subtle "spki" (:public-key fetched-key-pair)))]
-               (assert (array-buffers-equal? exported-public-key exported-fetched-public-key))
-               (prn "   Fetched user rsa key pair successfully"))
-
-             (prn "   Fetch graph aes key from server")
-             (let [fetched-aes-key (m/? (task--fetch-graph-aes-key token graph-uuid private-key))
-                   exported-aes-key (c.m/<? (.exportKey crypt/subtle "raw" aes-key))
-                   exported-fetched-aes-key (c.m/<? (.exportKey crypt/subtle "raw" fetched-aes-key))]
-               (assert (array-buffers-equal? exported-aes-key exported-fetched-aes-key))
-               (prn "   Fetched graph aes key successfully")))
 
            (prn "--- Test finished ---")))))))
