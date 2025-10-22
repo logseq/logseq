@@ -45,3 +45,7 @@
   @apply border rounded pl-2;
   min-width: 3em;
 }
+
+.ls-properties-area .empty-btn {
+  @apply !text-base;
+}

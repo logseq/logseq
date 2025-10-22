@@ -182,7 +182,7 @@
                   (shui/dialog-close!)
                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
-(defn- editor-new-property [block target {:keys [selected-blocks] :as opts}]
+(defn- editor-new-property [block target {:keys [selected-blocks popup-id] :as opts}]
   (let [editing-block (state/get-edit-block)
         pos (state/get-edit-pos)
         edit-block-or-selected (cond
@@ -234,7 +234,9 @@
         (if target'
           (shui/popup-show! target'
                             #(property-dialog/dialog blocks opts')
-                            {:align "start"})
+                            (cond-> {:align "start"}
+                              popup-id
+                              (assoc :id popup-id)))
           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                              {:id :property-dialog
                               :align "start"}))))))
