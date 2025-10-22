@@ -208,13 +208,14 @@ so need to pull earlier remote-data from websocket."})
           b (d/entity @conn [:block/uuid block-uuid])]
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]
-        (do (if move?
-              (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
-              (transact-db! :insert-blocks repo conn
-                            [{:block/uuid block-uuid
-                              :block/title ""}]
-                            local-parent {:sibling? false :keep-uuid? true}))
-            (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
+        (do
+          (if move?
+            (transact-db! :move-blocks repo conn [(block-reuse-db-id b)] local-parent {:sibling? false})
+            (transact-db! :insert-blocks repo conn
+                          [{:block/uuid block-uuid
+                            :block/title ""}]
+                          local-parent {:sibling? false :keep-uuid? true}))
+          (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
         [false true false]
         (if move?
@@ -447,7 +448,8 @@ so need to pull earlier remote-data from websocket."})
             remote-v* (set (map ldb/read-transit-str remote-v))
             [local-only remote-only] (data/diff (set local-v) remote-v*)]
         (cond-> []
-          (seq local-only) (concat (map (fn [v] [:db/retract e k v]) local-only))
+          (seq local-only) (concat (map (fn [v]
+                                          [:db/retract e k v]) local-only))
           (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only)))))))
 
 (defn- diff-block-map->tx-data
@@ -564,15 +566,17 @@ so need to pull earlier remote-data from websocket."})
     (doseq [{:keys [self _page-name]
              title :block/title
              :as op-value} update-page-ops]
-      (let [create-opts {:uuid self
-                         :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
-            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
-                                                                  (ldb/read-transit-str title)
-                                                                  create-opts)]
-        ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
-        ;; if there's already existing same name page
-        (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
-        (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})
+      (let [db-ident (:db/ident op-value)]
+        (when-not (and db-ident (d/entity @conn db-ident)) ; property or class exists
+          (let [create-opts {:uuid self
+                             :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
+                [_ page-name page-uuid] (worker-page/rtc-create-page! conn config
+                                                                      (ldb/read-transit-str title)
+                                                                      create-opts)]
+            ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
+            ;; if there's already existing same name page
+            (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
+            (assert (some? (d/entity @conn [:block/uuid page-uuid])) {:page-uuid page-uuid :page-name page-name})))
         (update-block-attrs repo conn self op-value)))))
 
 (defn- ensure-refed-blocks-exist

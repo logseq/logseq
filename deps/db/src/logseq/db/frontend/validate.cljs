@@ -21,10 +21,10 @@
   [closed-schema?]
   (if closed-schema? closed-db-schema-explainer db-schema-explainer))
 
-(defn validate-tx-report!
+(defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-after tx-data tx-meta]} validate-options]
+  [{:keys [db-after tx-data _tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (keep :e) distinct)
         tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
         ent-maps* (map (fn [[db-id m]]
@@ -38,7 +38,7 @@
                               ;; remove :db/id as it adds needless declarations to schema
                               #(validator [(dissoc % :db/id)])
                               ent-maps)]
-        (prn "changed eids:" changed-ids :tx-meta tx-meta)
+        ;; (prn "changed eids:" changed-ids :tx-meta tx-meta)
         (if (seq invalid-ent-maps)
           (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
             (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids)

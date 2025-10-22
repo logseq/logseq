@@ -363,9 +363,6 @@ a.control-link {
 .ls-property-dropdown {
   @apply w-[260px] p-1.5;
 
-  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
-  }
-
   [role=separator] {
     @apply my-2;
   }
