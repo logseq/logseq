@@ -27,7 +27,6 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
             [lambdaisland.glogi :as log]
             [logseq.common.util.macro :as macro-util]
@@ -95,6 +94,11 @@
 
 (rum/defc icon-row
   [block editing?]
+  (hooks/use-effect!
+   (fn []
+     (fn []
+       (when editing?
+         (editor-handler/restore-last-saved-cursor!)))))
   (let [icon-value (:logseq.property/icon block)
         clear-overlay! (fn []
                          (shui/popup-hide-all!))
@@ -108,36 +112,18 @@
                         (when icon (select-keys icon [:type :id :color]))))
                      (clear-overlay!)
                      (when editing?
-                       (editor-handler/restore-last-saved-cursor!)))]
-
-    (hooks/use-effect!
-     (fn []
-       (when editing?
-         (clear-overlay!)
-         (let [^js container (or (some-> js/document.activeElement (.closest ".page"))
-                                 (gdom/getElement "main-content-container"))
-               icon (get block :logseq.property/icon)]
-           (util/schedule
-            (fn []
-              (when-let [^js target (some-> (.querySelector container (str "#ls-block-" (str (:block/uuid block))))
-                                            (.querySelector ".block-main-container"))]
-                (state/set-editor-action! :property-icon-picker)
-                (shui/popup-show! target
-                                  #(icon-component/icon-search
-                                    {:on-chosen on-chosen!
-                                     :icon-value icon
-                                     :del-btn? (some? icon)})
-                                  {:id :ls-icon-picker
-                                   :on-after-hide #(state/set-editor-action! nil)
-                                   :content-props {:onEscapeKeyDown #(when editing? (editor-handler/restore-last-saved-cursor!))}
-                                   :align :start})))))))
-     [editing?])
-
-    [:div.col-span-3.flex.flex-row.items-center.gap-2
-     (icon-component/icon-picker icon-value
-                                 {:disabled? config/publishing?
-                                  :del-btn? (some? icon-value)
-                                  :on-chosen on-chosen!})]))
+                       (editor-handler/restore-last-saved-cursor!)))
+        icon (get block :logseq.property/icon)]
+    (if editing?
+      (icon-component/icon-search
+       {:on-chosen on-chosen!
+        :icon-value icon
+        :del-btn? (some? icon)})
+      [:div.col-span-3.flex.flex-row.items-center.gap-2
+       (icon-component/icon-picker icon-value
+                                   {:disabled? config/publishing?
+                                    :del-btn? (some? icon-value)
+                                    :on-chosen on-chosen!})])))
 
 (defn select-type?
   [block property]
