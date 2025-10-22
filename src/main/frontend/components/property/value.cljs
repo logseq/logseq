@@ -616,9 +616,13 @@
                          (not (and (ldb/class? block) (= (:db/ident property) :logseq.property.class/extends)))
                          (not= (:db/ident property) :logseq.property.view/type))
                   (concat sorted-items
-                          [{:value clear-value
-                            :label clear-value-label
-                            :clear? true}])
+                          (when-not (or (= (:logseq.property/default-value property)
+                                           (get block (:db/ident property)))
+                                        (= (:logseq.property/scalar-default-value property)
+                                           (get block (:db/ident property))))
+                            [{:value clear-value
+                              :label clear-value-label
+                              :clear? true}]))
                   sorted-items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
         k :on-chosen
