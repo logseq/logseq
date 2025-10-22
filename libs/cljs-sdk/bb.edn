@@ -1,0 +1,31 @@
+{:paths ["src" "test"]
+ :deps {org.babashka/cli {:mvn/version "0.7.53"}
+        slipset/deps-deploy {:mvn/version "0.2.1"}}
+ :tasks
+ {:requires ([babashka.cli :as cli])
+  :init (do
+          (defn run [cmd]
+            (let [result (shell cmd)]
+              (when-not (zero? (:exit result))
+                (throw (ex-info "Command failed" result))))))
+
+  clean {:doc "Clean compiled files"
+         :task (do
+                 (run "rm -rf dist")
+                 (run "rm -rf .shadow-cljs")
+                 (run "rm -rf node_modules")
+                 (run "rm -rf out")
+                 (run "rm -rf .nyc_output")
+                 (run "rm -rf coverage"))}
+
+  install {:doc "Install dependencies"
+           :task (run "yarn install")}
+
+  build-jar {:doc "Build jar file"
+             :task (shell "clojure -T:build jar")}
+
+  deploy {:doc "Deploy jar to Clojars"
+          :task (shell "clojure -T:build deploy")}
+
+  release {:doc "Build release version and deploy to Clojars"
+           :depends [clean install build-jar deploy]}}}

@@ -33,8 +33,10 @@
              ["class1" "class2"]))
            (set (map :block/title (model/get-all-classes repo)))))))
 
+;; TODO: Async test
 (deftest ^:fix-me get-class-objects-test
-  (let [opts {:redirect? false}
+  (let [opts {:class? true
+              :redirect? false}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]

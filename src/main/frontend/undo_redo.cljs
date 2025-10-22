@@ -269,8 +269,7 @@
           (when (seq tx-data)
             (let [reversed-tx-data (get-reversed-datoms conn undo? data tx-meta)
                   tx-meta' (-> tx-meta
-                               (dissoc :pipeline-replace?
-                                       :batch-tx/batch-tx-mode?)
+                               (dissoc :batch-tx/batch-tx-mode?)
                                (assoc
                                 :gen-undo-ops? false
                                 :undo? undo?

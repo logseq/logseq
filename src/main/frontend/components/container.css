@@ -232,7 +232,7 @@
             @apply px-2 flex items-center justify-between relative h-[32px] w-full rounded-md;
 
             .page-title {
-              @apply whitespace-nowrap hidden text-ellipsis flex-grow overflow-hidden pr-2;
+              @apply whitespace-nowrap text-ellipsis flex-grow overflow-hidden pr-2;
             }
 
             .page-icon {
