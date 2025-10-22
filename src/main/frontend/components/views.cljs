@@ -1941,9 +1941,11 @@
                   (and references? (not hover?)) "opacity-0"
                   hover? "opacity-100"
                   :else "opacity-75")]
-    [:div.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
+    [:div.ls-view-head.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
      {:on-mouse-over #(set-hover? true)
-      :on-mouse-out #(set-hover? false)}
+      :on-mouse-out #(when-not (or (ui/popup-exists?)
+                                   (ui/dropdown-exists?))
+                       (set-hover? false))}
      [:div.flex.flex-row.items-center.gap-2
       (if db-based?
         (if (= view-feature-type :query-result)
