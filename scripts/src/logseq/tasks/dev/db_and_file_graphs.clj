@@ -15,6 +15,7 @@
   (mapv escape-shell-regex
         ["logseq.db.sqlite." "logseq.db.frontend."
          "logseq.outliner.property" "logseq.outliner.validate" "logseq.outliner.page" "logseq.outliner.cli" "logseq.outliner.db-pipeline"
+         "logseq.api.db-based"
          "electron.db"
          "frontend.handler.db-based."
          "frontend.inference-worker"
@@ -63,6 +64,7 @@
          "src/main/frontend/components/db_based"
          "src/main/frontend/components/query/view.cljs"
          "src/main/frontend/inference_worker"
+         "src/main/logseq/api/db_based.cljs"
          "src/electron/electron/db.cljs"
          "src/main/mobile"]))
 
