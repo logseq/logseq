@@ -12,7 +12,6 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.graph :as common-graph]
-            [logseq.db :as ldb]
             [logseq.db.common.sqlite-cli :as sqlite-cli]
             [logseq.db.frontend.asset :as db-asset]
             [logseq.graph-parser.exporter :as gp-exporter]
@@ -23,7 +22,8 @@
             [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
-(def original-transact! ldb/transact!)
+;; This is a lower-level dev hook to inspect txs and shouldn't hook into ldb/transact!
+(def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
                     (let [new-queue (conj queue {:tx-data tx-data :tx-meta tx-meta})]
