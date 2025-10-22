@@ -1861,67 +1861,73 @@
       (db/entity [:block/uuid (:block/uuid result)]))))
 
 (rum/defc views-tab < rum/reactive db-mixins/query
-  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? references? opacity]}]
-  [:div.views
-   (for [view* views]
-     (let [view (db/sub-block (:db/id view*))
-           current-view? (= (:db/id current-view) (:db/id view))]
-       (shui/button
-        {:variant :text
-         :size :sm
-         :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
-         :on-click (fn [e]
-                     (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
-                       (shui/popup-show!
-                        (.-target e)
-                        (fn []
-                          [:<>
-                           (shui/dropdown-menu-sub
-                            (shui/dropdown-menu-sub-trigger
-                             "Rename")
-                            (shui/dropdown-menu-sub-content
-                             (when-let [block-container-cp (state/get-component :block/container)]
-                               (block-container-cp {} view))))
-                           (shui/dropdown-menu-item
-                            {:key "Delete"
-                             :on-click (fn []
-                                         (p/do!
-                                          (editor-handler/delete-block-aux! view)
-                                          (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
-                                            (set-views! views')
-                                            (set-view-entity! (first views'))
-                                            (shui/popup-hide!))))}
-                            "Delete")])
-                        {:as-dropdown? true
-                         :dropdown-menu? true
-                         :align "start"
-                         :content-props {:onClick shui/popup-hide!}})
-                       (do
-                         (set-view-entity! view)
-                         (set-data! nil))))}
-        (when-not references?
-          (let [display-type (or (:db/ident (get view :logseq.property.view/type))
-                                 :logseq.property.view/type.table)]
-            (when-let [icon (:logseq.property/icon (db/entity display-type))]
-              (icon-component/icon icon {:color? true
-                                         :size 15}))))
-        (let [title (:block/title view)]
-          (if (= title "")
-            "New view"
-            title))
-        (when (and current-view? show-items-count? (> items-count 0) (seq data))
-          [:span.text-muted-foreground.text-xs
-           items-count]))))
+  [view-parent current-view {:keys [views data items-count set-view-entity! set-data! set-views! view-feature-type show-items-count? config references? opacity]}]
+  (let [refs-total-count (:refs-total-count config)]
+    [:div.views
+     (for [view* views]
+       (let [view (db/sub-block (:db/id view*))
+             current-view? (= (:db/id current-view) (:db/id view))]
+         (shui/button
+          {:variant :text
+           :size :sm
+           :class (str "text-sm px-0 py-0 h-6 " (when-not current-view? "text-muted-foreground"))
+           :on-click (fn [e]
+                       (if (and current-view? (not= (:db/id view) (:db/id view-parent)))
+                         (shui/popup-show!
+                          (.-target e)
+                          (fn []
+                            [:<>
+                             (shui/dropdown-menu-sub
+                              (shui/dropdown-menu-sub-trigger
+                               "Rename")
+                              (shui/dropdown-menu-sub-content
+                               (when-let [block-container-cp (state/get-component :block/container)]
+                                 (block-container-cp {} view))))
+                             (shui/dropdown-menu-item
+                              {:key "Delete"
+                               :on-click (fn []
+                                           (p/do!
+                                            (editor-handler/delete-block-aux! view)
+                                            (let [views' (remove (fn [v] (= (:db/id v) (:db/id view))) views)]
+                                              (set-views! views')
+                                              (set-view-entity! (first views'))
+                                              (shui/popup-hide!))))}
+                              "Delete")])
+                          {:as-dropdown? true
+                           :dropdown-menu? true
+                           :align "start"
+                           :content-props {:onClick shui/popup-hide!}})
+                         (do
+                           (set-view-entity! view)
+                           (set-data! nil))))}
+          (when-not references?
+            (let [display-type (or (:db/ident (get view :logseq.property.view/type))
+                                   :logseq.property.view/type.table)]
+              (when-let [icon (:logseq.property/icon (db/entity display-type))]
+                (icon-component/icon icon {:color? true
+                                           :size 15}))))
+          (let [title (:block/title view)]
+            (if (= title "")
+              "New view"
+              title))
+          (when (and current-view? show-items-count? (> items-count 0) (seq data))
+            [:span.text-muted-foreground.text-xs
+             items-count
+             (when (and refs-total-count
+                        (> refs-total-count items-count))
+               [:span
+                [:span "/"]
+                [:span {:title "Total refs count"} refs-total-count]])]))))
 
-   (shui/button
-    {:variant :text
-     :size :sm
-     :title "Add new view"
-     :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
-     :on-click (fn []
-                 (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
-                   (set-views! (concat views [view]))))}
-    (ui/icon "plus" {:size 15}))])
+     (shui/button
+      {:variant :text
+       :size :sm
+       :title "Add new view"
+       :class (str "!px-1 -ml-1 text-muted-foreground hover:text-foreground transition-opacity ease-in duration-300 " opacity)
+       :on-click (fn []
+                   (p/let [view (create-view! view-parent view-feature-type {:auto-triggered? false})]
+                     (set-views! (concat views [view]))))}
+      (ui/icon "plus" {:size 15}))]))
 
 (rum/defc view-head < rum/static
   [view-parent view-entity table columns input sorting
@@ -1935,9 +1941,11 @@
                   (and references? (not hover?)) "opacity-0"
                   hover? "opacity-100"
                   :else "opacity-75")]
-    [:div.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
+    [:div.ls-view-head.flex.flex-1.flex-nowrap.items-center.justify-between.gap-1.overflow-hidden
      {:on-mouse-over #(set-hover? true)
-      :on-mouse-out #(set-hover? false)}
+      :on-mouse-out #(when-not (or (ui/popup-exists?)
+                                   (ui/dropdown-exists?))
+                       (set-hover? false))}
      [:div.flex.flex-row.items-center.gap-2
       (if db-based?
         (if (= view-feature-type :query-result)

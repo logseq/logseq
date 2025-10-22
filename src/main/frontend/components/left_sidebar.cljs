@@ -119,8 +119,7 @@
            (assoc :title (block-handler/block-unique-title page))))
        [:span.page-icon {:key "page-icon"} icon]
        [:span.page-title {:key "title"
-                          :class (when untitled? "opacity-50")
-                          :style {:display "ruby"}}
+                          :class (when untitled? "opacity-50")}
         (cond
           (not (db/page? page))
           (block/inline-text :markdown (string/replace (apply str (take 64 (:block/title page))) "\n" " "))

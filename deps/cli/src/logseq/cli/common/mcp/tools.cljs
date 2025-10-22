@@ -79,7 +79,7 @@
   [m]
   (->> (remove (fn [[k _v]]
                  (or (= "block.temp" (namespace k))
-                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at} k))) m)
+                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} k))) m)
        (into {})))
 
 (defn get-page-data

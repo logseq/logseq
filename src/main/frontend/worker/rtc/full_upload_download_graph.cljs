@@ -215,11 +215,11 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (let [db @conn]
       (when-let [schema-version (:kv/value (d/entity db :logseq.kv/schema-version))]
-        (d/transact! conn
-                     [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
-                     {:rtc-download-graph? true
-                      :gen-undo-ops? false
-                      :persist-op? false})))))
+        (ldb/transact! conn
+                       [(ldb/kv :logseq.kv/remote-schema-version schema-version)]
+                       {:rtc-download-graph? true
+                        :gen-undo-ops? false
+                        :persist-op? false})))))
 
 (defn- <transact-block-refs!
   [repo graph-uuid]
@@ -376,7 +376,7 @@
          {:rtc-download-graph? true
           :gen-undo-ops? false
             ;; only transact db schema, skip validation to avoid warning
-          :frontend.worker.pipeline/skip-validate-db? true
+          :skip-validate-db? true
           :persist-op? false}
          (worker-state/get-context))
         (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db-2
@@ -534,7 +534,7 @@
     {:rtc-download-graph? true
      :gen-undo-ops? false
       ;; only transact db schema, skip validation to avoid warning
-     :frontend.worker.pipeline/skip-validate-db? true
+     :skip-validate-db? true
      :persist-op? false}
     (worker-state/get-context))
    (prn :xxx3 (js/Date.))

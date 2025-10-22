@@ -683,7 +683,8 @@
   [db property-id]
   (when db
     (when-let [property (d/entity db property-id)]
-      (:property/closed-values property))))
+      (some->> (:block/_closed-value-property property)
+               (sort-by :block/order)))))
 
 (defn closed-value-content
   "Gets content/value of a given closed value ent/map. Works for all closed value types"

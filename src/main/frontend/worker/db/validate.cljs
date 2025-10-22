@@ -1,6 +1,7 @@
 (ns frontend.worker.db.validate
   "Validate db"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
@@ -19,6 +20,8 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (and (:block/tx-id entity) (nil? (:block/title entity)))
+                           [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
                            (concat [[:db/retractEntity (:db/id entity)]]
                                    (try
@@ -96,11 +99,36 @@
     (when (seq tx-data)
       (d/transact! conn tx-data {:fix-db? true}))))
 
+(defn- fix-num-prefix-db-idents!
+  "Fix invalid db/ident keywords for both classes and properties"
+  [conn]
+  (let [db @conn
+        tx-data (->> (d/datoms db :avet :db/ident)
+                     (filter (fn [d] (re-find #"^(\d)" (name (:v d)))))
+                     (mapcat (fn [d]
+                               (let [new-db-ident (keyword (namespace (:v d)) (string/replace-first (name (:v d)) #"^(\d)" "NUM-$1"))
+                                     property (ldb/property? (d/entity db (:v d)))]
+                                 (concat
+                                  [[:db/add (:e d) :db/ident new-db-ident]]
+                                  (when property
+                                    (->> (d/datoms db :avet (:v d))
+                                         (mapcat (fn [d]
+                                                   [[:db/retract (:e d) (:a d) (:v d)]
+                                                    [:db/add (:e d) new-db-ident (:v d)]])))))))))]
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data))))
+
 (defn validate-db
   [conn]
+  (fix-num-prefix-db-idents! conn)
+
   (let [db @conn
         {:keys [errors datom-count entities]} (db-validate/validate-db! db)
         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
+
+    (doseq [id invalid-entity-ids]
+      (prn :debug :id id :entity (into {} (d/entity db id))))
+
     (if errors
       (do
         (fix-invalid-blocks! conn errors)

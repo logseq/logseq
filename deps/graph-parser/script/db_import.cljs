@@ -22,6 +22,7 @@
             [promesa.core :as p]))
 
 (def tx-queue (atom cljs.core/PersistentQueue.EMPTY))
+;; This is a lower-level dev hook to inspect txs and shouldn't hook into ldb/transact!
 (def original-transact! d/transact!)
 (defn dev-transact! [conn tx-data tx-meta]
   (swap! tx-queue (fn [queue]
@@ -94,8 +95,7 @@
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
       (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
-                                                (or (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))
-                                                    (= (get-in % [:tx-meta ::outliner-pipeline/original-tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path]))))
+                                                (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path])))
                                           @tx-queue))]
         (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
         (pprint/pprint matching-tx))))
