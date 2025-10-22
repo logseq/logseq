@@ -2,15 +2,19 @@
 - Use clojure-mcp `clojure_inspect_project` to get project structure.
 - `src/`: Core source code
   - `src/main/`: The core logic of the application
-	- `src/main/mobile/`: Mobile app code
-	- `src/main/frontend/inference_worker/`: Code running in a webworker for text-embedding and vector-search
-	- `src/main/frontend/worker/`: Code running in an another webworker
-		- `src/main/frontend/worker/rtc/`: RTC(Real Time Collaboration) related code
-	- `src/main/frontend/components/`: UI components
+    - `src/main/mobile/`: Mobile app code
+    - `src/main/frontend/inference_worker/`: Code running in a webworker for text-embedding and vector-search
+    - `src/main/frontend/worker/`: Code running in an another webworker
+        - `src/main/frontend/worker/rtc/`: RTC(Real Time Collaboration) related code
+    - `src/main/frontend/components/`: UI components
   - `src/electron/`: Code specifically for the Electron desktop application.
   - `src/test/`: unit-tests
 - `deps/`: Internal dependencies/modules
 - `clj-e2e/`: End to end test code
+
+## Common used cljs keywords
+- All commonly used ClojureScript keywords are defined using `logseq.common.defkeywords/defkeyword`.
+- Search for `defkeywords` to find all the definitions.
 
 ## Testing Commands
 - Run linters and unit-tests: `bb dev:lint-and-test`

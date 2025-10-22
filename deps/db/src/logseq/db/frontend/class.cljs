@@ -7,6 +7,7 @@
             [flatland.ordered.map :refer [ordered-map]]
             [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -173,3 +174,14 @@
   "Determines if namespace string is a user class"
   [s]
   (string/includes? s ".class"))
+
+(defn get-class-objects
+  "Get class objects including children classes'"
+  [db class-id]
+  (let [class-children (get-structured-children db class-id)
+        class-ids (distinct (conj class-children class-id))
+        datoms (mapcat (fn [id] (d/datoms db :avet :block/tags id)) class-ids)
+        non-hidden-e (fn [id] (let [e (d/entity db id)]
+                                (when-not (entity-util/hidden? e)
+                                  e)))]
+    (keep (fn [d] (non-hidden-e (:e d))) datoms)))

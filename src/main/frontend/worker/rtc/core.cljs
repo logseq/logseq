@@ -156,9 +156,9 @@
 (defn- update-remote-schema-version!
   [conn server-schema-version]
   (when server-schema-version
-    (d/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
-                 {:gen-undo-ops? false
-                  :persist-op? false})))
+    (ldb/transact! conn [(ldb/kv :logseq.kv/remote-schema-version server-schema-version)]
+                   {:gen-undo-ops? false
+                    :persist-op? false})))
 
 (defonce ^:private *rtc-lock (atom nil))
 (defn- holding-rtc-lock

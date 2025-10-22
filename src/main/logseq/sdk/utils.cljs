@@ -4,8 +4,10 @@
             [clojure.walk :as walk]
             [datascript.impl.entity :as de]
             [frontend.db :as db]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.content :as db-content]))
 
 (defn- keep-json-keyword?
@@ -14,32 +16,45 @@
            (contains? #{"block" "db" "file"})
            (not)))
 
-(defn- entity->map
-  "Convert a db Entity to a map"
-  [e]
-  (assert (de/entity? e))
-  (assoc (into {} e) :db/id (:db/id e)))
-
 (defn remove-hidden-properties
   [m]
   (->> (remove (fn [[k _v]]
                  (or (= "block.temp" (namespace k))
-                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at} k))) m)
+                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} k))) m)
        (into {})))
+
+(def ^:private kw-tag "___kw___") ; unlikely in normal strings; change if you prefer
+
+(defn- encode-kw [v]
+  (if (keyword? v)
+    ;; __kw__ns/name or __kw__name
+    (str kw-tag (if-let [ns (namespace v)]
+                  (str ns "/" (name v))
+                  (name v)))
+    v))
 
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
   ([input camel-case?]
    (when input
-     (let [input (cond
-                   (de/entity? input) (entity->map input)
+     (let [pid (some-> (gobj/get js/window "$$callerPluginID"))
+           plugin (and pid (plugin-handler/get-plugin-inst pid))
+           runtime (some-> plugin
+                           (gobj/get "sdk")
+                           (gobj/get "runtime"))
+           cljs? (= "cljs" runtime)
+           input (cond
+                   (de/entity? input) (common-entity-util/entity->map input)
                    (sequential? input) (map #(if (de/entity? %)
-                                               (entity->map %)
+                                               (common-entity-util/entity->map %)
                                                %) input)
                    :else input)]
        (walk/prewalk
         (fn [a]
           (cond
+            (and cljs? (keyword? a))
+            (encode-kw a)
+
             (keyword? a)
             (if (keep-json-keyword? a)
               (str a)
@@ -50,7 +65,6 @@
             (de/entity? a) (:db/id a)
             (uuid? a) (str a)
 
-            ;; @FIXME compatible layer for classic APIs
             (and (map? a) (:block/uuid a) (:block/title a))
             (-> a
                 (assoc :block/content (:block/title a)
@@ -84,6 +98,12 @@
               (assoc result k (jsx->clj v)))))
         (reduce {} (gobj/getKeys obj)))
     obj))
+
+(defn result->js
+  [result]
+  (-> result
+      normalize-keyword-for-json
+      bean/->js))
 
 (def ^:export to-clj bean/->clj)
 (def ^:export jsx-to-clj jsx->clj)

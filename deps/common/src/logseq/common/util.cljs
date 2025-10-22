@@ -6,7 +6,6 @@
             [cljs.reader :as reader]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.walk :as walk]
             [goog.string :as gstring]
             [logseq.common.log :as log]))
 
@@ -23,17 +22,6 @@
    Keep capitalization sensitivity"
   [s]
   (.normalize s "NFC"))
-
-(defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map or
-  coll of maps."
-  [nm]
-  (walk/postwalk
-   (fn [el]
-     (if (map? el)
-       (into {} (remove (comp nil? second)) el)
-       el))
-   nm))
 
 (defn remove-nils-non-nested
   "remove pairs of key-value that has nil value from a map (nested not supported)."

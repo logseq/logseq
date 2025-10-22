@@ -703,6 +703,8 @@ export interface IEditorProxy extends Record<string, any> {
     opts?: Partial<{
       before: boolean
       sibling: boolean
+      start: boolean
+      end: boolean
       isPageBlock: boolean
       focus: boolean
       customUUID: string
@@ -774,6 +776,9 @@ export interface IEditorProxy extends Record<string, any> {
   renamePage: (oldName: string, newName: string) => Promise<void>
 
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>
+  getAllTags: () => Promise<PageEntity[] | null>
+  getAllProperties: () => Promise<PageEntity[] | null>
+  getTagObjects: (PageIdentity) => Promise<BlockEntity[] | null>
 
   prependBlockInPage: (
     page: PageIdentity,
