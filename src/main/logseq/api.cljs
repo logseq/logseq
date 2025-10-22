@@ -7,16 +7,12 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.search :as search-handler]
             [frontend.loader :as loader]
-            [frontend.handler.ui :as ui-handler]
-            [logseq.sdk.utils :as sdk-utils]
-            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
-            [frontend.modules.outliner.op :as outliner-op]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.layout.core]
             [frontend.state :as state]
             [logseq.api.app :as api-app]
             [logseq.api.db :as api-db]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.db-based.cli :as cli-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.file-based :as file-based-api]
             [logseq.api.plugin :as api-plugin]
@@ -25,6 +21,7 @@
             [logseq.sdk.experiments]
             [logseq.sdk.git]
             [logseq.sdk.ui :as sdk-ui]
+            [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
 ;; Alert: All apis shouldn't invoke any reactive queries
@@ -138,51 +135,6 @@
 (def ^:export update_block api-editor/update_block)
 (def ^:export upsert_block_property api-editor/upsert_block_property)
 
-;; Internal CLI API
-;; TODO: Use transit for internal APIs
-(defn ^:export list_tags
-  [options]
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-tags
-                                        (state/get-current-repo)
-                                        (js->clj options :keywordize-keys true))]
-    (clj->js resp)))
-
-(defn ^:export list_properties
-  [options]
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-properties
-                                        (state/get-current-repo)
-                                        (js->clj options :keywordize-keys true))]
-    (clj->js resp)))
-
-(defn ^:export list_pages
-  [options]
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-list-pages
-                                        (state/get-current-repo)
-                                        (js->clj options :keywordize-keys true))]
-    (clj->js resp)))
-
-(defn ^:export get_page_data
-  "Like get_page_blocks_tree but for MCP tools"
-  [page-title]
-  (p/let [resp (state/<invoke-db-worker :thread-api/api-get-page-data (state/get-current-repo) page-title)]
-    (if resp
-      (clj->js resp)
-      #js {:error (str "Page " (pr-str page-title) " not found")})))
-
-(defn ^:export upsert_nodes
-  "Given a list of MCP operations, batch imports with resulting EDN data"
-  [operations options*]
-  (p/let [ops (js->clj operations :keywordize-keys true)
-          {:keys [dry-run] :as options} (js->clj options* :keywordize-keys true)
-          edn-data (state/<invoke-db-worker :thread-api/api-build-upsert-nodes-edn (state/get-current-repo) ops)
-          {:keys [error]} (when-not dry-run
-                            (ui-outliner-tx/transact!
-                             {:outliner-op :batch-import-edn}
-                             (outliner-op/batch-import-edn! edn-data {})))]
-    (when error (throw (ex-info error {})))
-    (ui-handler/re-render-root!)
-    (cli-common-mcp-tools/summarize-upsert-operations ops options)))
-
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
 (def ^:export query_element_rect sdk-ui/query_element_rect)
@@ -248,6 +200,13 @@
 (def ^:export get_all_tags db-based-api/get-all-tags)
 (def ^:export get_all_properties db-based-api/get-all-properties)
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
+
+;; Internal db-based CLI APIs
+(def ^:export list_tags cli-based-api/list-tags)
+(def ^:export list_properties cli-based-api/list-properties)
+(def ^:export list_pages cli-based-api/list-pages)
+(def ^:export get_page_data cli-based-api/get-page-data)
+(def ^:export upsert_nodes cli-based-api/upsert-nodes)
 
 ;; file based graph APIs
 (def ^:export get_current_graph_templates file-based-api/get_current_graph_templates)
