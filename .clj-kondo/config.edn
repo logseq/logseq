@@ -164,6 +164,7 @@
              frontend.worker.state worker-state
              frontend.worker.util worker-util
              lambdaisland.glogi log
+             logseq.api.db-based db-based-api
              logseq.cli.common.graph cli-common-graph
              logseq.cli.common.export.common cli-export-common
              logseq.cli.common.export.text cli-export-text
