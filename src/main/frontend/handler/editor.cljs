@@ -631,15 +631,16 @@
                                         nil)]
           (when target-block
             (p/do!
-             (ui-outliner-tx/transact!
-              {:outliner-op :insert-blocks}
-              (outliner-insert-block! config target-block new-block
-                                      {:sibling? sibling?
-                                       :keep-uuid? true
-                                       :ordered-list? ordered-list?
-                                       :replace-empty-target? replace-empty-target?})
-              (when (and db-based? (seq properties))
-                (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
+             (let [new-block' (if (and db-based? (seq properties))
+                                (into new-block properties)
+                                new-block)]
+               (ui-outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (outliner-insert-block! config target-block new-block'
+                                        {:sibling? sibling?
+                                         :keep-uuid? true
+                                         :ordered-list? ordered-list?
+                                         :replace-empty-target? replace-empty-target?})))
              (when edit-block?
                (if (and replace-empty-target?
                         (string/blank? (:block/title last-block)))
@@ -1564,7 +1565,7 @@
                (p/let [properties {:logseq.property.asset/type ext
                                    :logseq.property.asset/size (.-size file)
                                    :logseq.property.asset/checksum checksum
-                                   :block/tags (:db/id asset)}
+                                   :block/tags #{(:db/id asset)}}
                        insert-opts {:custom-uuid block-id
                                     :edit-block? false
                                     :properties properties}
