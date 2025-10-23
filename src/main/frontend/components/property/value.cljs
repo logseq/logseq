@@ -550,13 +550,15 @@
         class? (or (= :block/tags (:db/ident property))
                    (and (= :logseq.property.class/extends (:db/ident property))
                         (ldb/class? block))
-                   (every? (fn [class]
-                             (or
-                              (= :logseq.class/Tag (:db/ident class))
-                              (some (fn [e]
-                                      (= :logseq.class/Tag (:db/ident e)))
-                                    (ldb/get-class-extends class))))
-                           (:logseq.property/classes property)))
+                   (let [classes (:logseq.property/classes property)]
+                     (and (seq classes)
+                          (every? (fn [class]
+                                    (or
+                                     (= :logseq.class/Tag (:db/ident class))
+                                     (some (fn [e]
+                                             (= :logseq.class/Tag (:db/ident e)))
+                                           (ldb/get-class-extends class))))
+                                  classes))))
         ;; Note: property and other types shouldn't be converted to class
         page? (ldb/internal-page? page-entity)]
     (cond
