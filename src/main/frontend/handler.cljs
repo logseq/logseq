@@ -17,6 +17,7 @@
             [frontend.db.restore :as db-restore]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
+            [frontend.handler.crypt]
             [frontend.handler.db-based.vector-search-flows :as vector-search-flows]
             [frontend.handler.events :as events]
             [frontend.handler.events.ui]
