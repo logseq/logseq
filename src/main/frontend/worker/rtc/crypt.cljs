@@ -106,7 +106,7 @@
 (defn task--get-user-public-key
   [get-ws-create-task user-uuid]
   (m/sp
-   (:public-key (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid)))))
+    (:public-key (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid)))))
 
 (defn task--get-rsa-key-pair
   [get-ws-create-task user-uuid]
@@ -117,6 +117,12 @@
           private-key (c.m/<? (crypt/<decrypt-private-key password encrypted-private-key))]
       {:public-key public-key
        :private-key private-key})))
+
+(defn task--get-aes-key
+  [get-ws-create-task user-uuid graph-uuid]
+  (m/sp
+    (let [{:keys [_public-key private-key]} (m/? (task--get-rsa-key-pair get-ws-create-task user-uuid))]
+      (m/? (task--fetch-graph-aes-key get-ws-create-task graph-uuid private-key)))))
 
 (comment
   (do

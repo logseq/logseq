@@ -303,7 +303,8 @@
        [:map
         [:s3-key :string]
         [:graph-name :string]
-        [:schema-version db-schema/major-schema-version-string-schema]]]
+        [:schema-version db-schema/major-schema-version-string-schema]
+        [:encrypted-aes-key {:optional true} :string]]]
       ["branch-graph"
        [:map
         [:s3-key :string]
