@@ -29,9 +29,8 @@ the server will put it to s3 and return its presigned-url to clients."}
 
   :rtc.exception/fetch-user-rsa-key-pair-error {:doc "Failed to fetch user RSA key pair from server"}
   :rtc.exception/fetch-graph-aes-key-error {:doc "Failed to fetch graph AES key from server"}
-  :rtc.exception/upload-graph-encrypted-aes-key-error {:doc "Failed to upload graph encrypted AES key to server"}
   :rtc.exception/upload-user-rsa-key-pair-error {:doc "Failed to upload user RSA key pair to server"}
-  )
+  :rtc.exception/not-found-user-rsa-key-pair {:doc "user rsa-key-pair not found"})
 
 (def ex-ws-already-disconnected
   (ex-info "websocket conn is already disconnected" {:type :rtc.exception/ws-already-disconnected}))
