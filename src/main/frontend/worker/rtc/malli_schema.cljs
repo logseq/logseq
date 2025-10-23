@@ -243,6 +243,20 @@
                       [:graph<->user/user-type :keyword]
                       [:user/online? :boolean]]]]]]
      ["inject-users-info" [:map]]
+
+     ;; keys manage
+     ["fetch-user-rsa-key-pair"
+      [:map
+       [:public-key [:maybe :string]]
+       [:encrypted-private-key [:maybe :string]]]]
+     ["fetch-graph-encrypted-aes-key"
+      [:map
+       [:encrypted-aes-key [:maybe :string]]]]
+     ["upload-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+
      [nil data-from-ws-schema-fallback]]))
 
 (def data-from-ws-coercer (m/coercer data-from-ws-schema mt/string-transformer nil
@@ -349,6 +363,8 @@
         [:graph-uuid :uuid]
         [:schema-version db-schema/major-schema-version-string-schema]
         [:asset-uuids [:sequential :uuid]]]]
+      ;; ================================================================
+      ;; TODO: cleanup
       ["get-user-devices"
        [:map]]
       ["add-user-device"
@@ -373,6 +389,18 @@
       ["sync-encrypted-aes-key"
        [:map
         [:device-uuid->encrypted-aes-key [:map-of :uuid :string]]
+        [:graph-uuid :uuid]]]
+      ;; ================================================================
+      ["upload-user-rsa-key-pair"
+       [:map
+        [:user-uuid :uuid]
+        [:public-key :string]
+        [:encrypted-private-key :string]]]
+      ["fetch-user-rsa-key-pair"
+       [:map
+        [:user-uuid :uuid]]]
+      ["fetch-graph-encrypted-aes-key"
+       [:map
         [:graph-uuid :uuid]]]])))
 
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
