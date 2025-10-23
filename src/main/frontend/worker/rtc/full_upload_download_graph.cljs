@@ -4,15 +4,15 @@
   (:require [cljs-http-missionary.client :as http]
             [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :as thread-api]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.crypt :as crypt]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.crypt :as rtc-crypt]
             [frontend.worker.rtc.db :as rtc-db]
-            [frontend.worker.rtc.encrypt :as rtc-encrypt]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.shared-service :as shared-service]
@@ -130,7 +130,7 @@
            result []]
       (if-not block
         result
-        (let [block' (c.m/<? (rtc-encrypt/<encrypt-map encrypt-key encrypt-attr-set block))]
+        (let [block' (c.m/<? (crypt/<encrypt-map encrypt-key encrypt-attr-set block))]
           (recur rest-blocks (conj result block')))))))
 
 (comment
@@ -140,56 +140,64 @@
   (def canceler ((m/sp
                    (let [k (c.m/<? (rtc-encrypt/<salt+password->key salt "password"))]
                      (m/? (task--encrypt-blocks k #{:block/title :block/name} blocks))))
-                 #(def encrypted-blocks %) prn))
-  )
+                 #(def encrypted-blocks %) prn)))
 
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name major-schema-version]
   (m/sp
-    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
-                                                :message "fetching presigned put-url"})
-    (let [[{:keys [url key]} all-blocks-str]
-          (m/?
-           (m/join
-            vector
-            (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
-            (m/sp
-              (let [all-blocks (export-as-blocks
-                                @conn
-                                :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
-                                :ignore-entity-set rtc-const/ignore-entities-when-init-upload)
-                    encrypt-key (c.m/<? (rtc-encrypt/<get-encrypt-key repo))
-                    _ (assert (some? encrypt-key))
-                    encrypted-blocks (c.m/<? (task--encrypt-blocks encrypt-key rtc-const/encrypt-attr-set all-blocks))]
-                (ldb/write-transit-str encrypted-blocks)))))]
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
-                                                  :message "uploading data"})
-      (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
-      (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
-                                                  :message "requesting upload-graph"})
-      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
-            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
-            upload-resp
-            (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
-                                                        :s3-key key
-                                                        :schema-version (str major-schema-version)
-                                                        :graph-name remote-graph-name}))]
-        (if-let [graph-uuid (:graph-uuid upload-resp)]
-          (let [schema-version (ldb/get-graph-schema-version @conn)]
-            (ldb/transact! conn
-                           [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
-                            (ldb/kv :logseq.kv/graph-local-tx "0")
-                            (ldb/kv :logseq.kv/remote-schema-version schema-version)])
-            (client-op/update-graph-uuid repo graph-uuid)
-            (client-op/remove-local-tx repo)
-            (client-op/update-local-tx repo 1)
-            (client-op/add-all-exists-asset-as-ops repo)
-            (crypt/store-graph-keys-jwk repo aes-key-jwk)
-            (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
-            (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
-                                                        :message "upload-graph completed"})
-            {:graph-uuid graph-uuid})
-          (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
+    (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :generate-aes-key
+                                                :message "generate aes-encrypt-key"})
+    (let [aes-key (m/? (rtc-crypt/task--generate-graph-aes-key))
+          user-uuid (some-> (worker-state/get-id-token)
+                            worker-util/parse-jwt
+                            :sub)
+          public-key (when user-uuid
+                       (m/? (rtc-crypt/task--get-user-public-key get-ws-create-task user-uuid)))]
+      (when-not public-key
+        (throw (ex-info "user public-key not found" {:type :rtc.exception/not-found-user-rsa-key-pair
+                                                     :user-uuid user-uuid})))
+
+      (let [encrypted-aes-key (c.m/<? (crypt/<encrypt-aes-key public-key aes-key))
+            _ (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
+                                                          :message "fetching presigned put-url"})
+            [{:keys [url key]} all-blocks-str]
+            (m/?
+             (m/join
+              vector
+              (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+              (m/sp
+                (let [all-blocks (export-as-blocks
+                                  @conn
+                                  :ignore-attr-set rtc-const/ignore-attrs-when-init-upload
+                                  :ignore-entity-set rtc-const/ignore-entities-when-init-upload)
+                      encrypted-blocks (c.m/<? (task--encrypt-blocks aes-key rtc-const/encrypt-attr-set all-blocks))]
+                  (ldb/write-transit-str encrypted-blocks)))))]
+        (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
+                                                    :message "uploading data"})
+        (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
+        (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
+                                                    :message "requesting upload-graph"})
+        (let [upload-resp
+              (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
+                                                          :s3-key key
+                                                          :schema-version (str major-schema-version)
+                                                          :graph-name remote-graph-name}))]
+          (if-let [graph-uuid (:graph-uuid upload-resp)]
+            (let [schema-version (ldb/get-graph-schema-version @conn)]
+              (ldb/transact! conn
+                             [(ldb/kv :logseq.kv/graph-uuid graph-uuid)
+                              (ldb/kv :logseq.kv/graph-local-tx "0")
+                              (ldb/kv :logseq.kv/remote-schema-version schema-version)])
+              (client-op/update-graph-uuid repo graph-uuid)
+              (client-op/remove-local-tx repo)
+              (client-op/update-local-tx repo 1)
+              (client-op/add-all-exists-asset-as-ops repo)
+              (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
+              (m/? (rtc-crypt/task--persist-graph-encrypted-aes-key graph-uuid encrypted-aes-key))
+              (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
+                                                          :message "upload-graph completed"})
+              {:graph-uuid graph-uuid})
+            (throw (ex-info "upload-graph failed" {:upload-resp upload-resp}))))))))
 
 (defn- fill-block-fields
   [blocks]
@@ -515,9 +523,7 @@
       (m/? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :request-branch-graph
                                                         :message "requesting branch-graph"})
-      (let [aes-key (c.m/<? (crypt/<gen-aes-key))
-            aes-key-jwk (ldb/write-transit-str (c.m/<? (crypt/<export-key aes-key)))
-            resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
+      (let [resp (m/? (ws-util/send&recv get-ws-create-task {:action "branch-graph"
                                                              :s3-key key
                                                              :schema-version (str major-schema-version)
                                                              :graph-uuid graph-uuid}))]
@@ -530,7 +536,6 @@
             (client-op/update-graph-uuid repo graph-uuid)
             (client-op/remove-local-tx repo)
             (client-op/add-all-exists-asset-as-ops repo)
-            (crypt/store-graph-keys-jwk repo aes-key-jwk)
             (c.m/<? (worker-db-metadata/<store repo (pr-str {:kv/value graph-uuid})))
             (rtc-log-and-state/rtc-log :rtc.log/branch-graph {:sub-type :completed
                                                               :message "branch-graph completed"})

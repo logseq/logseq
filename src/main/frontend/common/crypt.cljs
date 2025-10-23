@@ -1,5 +1,6 @@
 (ns frontend.common.crypt
-  (:require [promesa.core :as p]))
+  (:require [logseq.db :as ldb]
+            [promesa.core :as p]))
 
 (defonce subtle (.. js/crypto -subtle))
 
@@ -118,7 +119,7 @@
                                    #js {:name "AES-GCM" :iv iv}
                                    aes-key
                                    encoded-text)]
-    [iv encrypted-data]))
+    [iv (js/Uint8Array. encrypted-data)]))
 
 (defn <decrypt-text
   "Decrypts text with an AES key."
@@ -132,6 +133,54 @@
                                    encrypted-data)
           decoded-text (.decode (js/TextDecoder.) decrypted-data)]
     decoded-text))
+
+(defn <decrypt-text-if-encrypted
+  "return nil if not a encrypted-package"
+  [aes-key maybe-encrypted-package]
+  (when (and (vector? maybe-encrypted-package)
+             (<= 2 (count maybe-encrypted-package)))
+    (<decrypt-text aes-key maybe-encrypted-package)))
+
+(defn <encrypt-map
+  [aes-key encrypt-attr-set m]
+  (assert (map? m))
+  (reduce
+   (fn [map-p encrypt-attr]
+     (p/let [m map-p]
+       (if-let [v (get m encrypt-attr)]
+         (p/let [v' (p/chain (<encrypt-text aes-key v) ldb/write-transit-str)]
+           (assoc m encrypt-attr v'))
+         m)))
+   (p/promise m) encrypt-attr-set))
+
+(defn <encrypt-av-coll
+  "see also `rtc-schema/av-schema`"
+  [aes-key encrypt-attr-set av-coll]
+  (p/all
+   (mapv
+    (fn [[a v & others]]
+      (p/let [v' (if (and (contains? encrypt-attr-set a)
+                          (string? v))
+                   (p/chain (<encrypt-text aes-key v) ldb/write-transit-str)
+                   v)]
+        (apply conj [a v'] others)))
+    av-coll)))
+
+(defn <decrypt-map
+  [aes-key encrypt-attr-set m]
+  (assert (map? m))
+  (reduce
+   (fn [map-p encrypt-attr]
+     (p/let [m map-p]
+       (if-let [v (get m encrypt-attr)]
+         (if (string? v)
+           (p/let [v' (<decrypt-text-if-encrypted aes-key (ldb/read-transit-str v))]
+             (if v'
+               (assoc m encrypt-attr v')
+               m))
+           m)
+         m)))
+   (p/promise m) encrypt-attr-set))
 
 (comment
   (let [array-buffers-equal?
