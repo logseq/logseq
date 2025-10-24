@@ -716,9 +716,9 @@
         :class-objects
         (when (seq page-ids)
           (when-not (= :logseq.class/Page (:db/ident view-parent))
-            (let [tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id view-parent)]) page-ids)]
-              (when (seq tx-data)
-                (outliner-op/transact! tx-data {:outliner-op :save-block})))))
+            (doseq [page pages]
+              (when-let [id (:block/uuid page)]
+                (outliner-op/delete-page! id)))))
 
         :property-objects
         ;; Relationships with built-in properties must not be deleted e.g. built-in? or parent
