@@ -347,13 +347,12 @@
 
 (defn- remove-conflict-datoms
   [datoms]
-  (let [conflict-datoms (->> datoms
-                             (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
-                             (mapcat (fn [[_eavt same-v-datoms]]
-                                       (butlast same-v-datoms)))
-                             (map vec)
-                             set)]
-    (remove (fn [datom] (conflict-datoms (vec datom))) datoms)))
+  (->> datoms
+       (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
+       (keep (fn [[_eavt same-eavt-datoms]]
+               (first (rseq same-eavt-datoms))))
+       ;; sort by :tx, use nth to make this fn works on both vector and datom
+       (sort-by #(nth % 3))))
 
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
