@@ -104,27 +104,36 @@
      (fn [datom]
        (when (and (= :block/tags (:a datom))
                   (:added datom))
-         (let [t (d/entity db-after (:e datom))]
+         (let [entity (d/entity db-after (:e datom))
+               v-entity (d/entity db-after (:v datom))]
            (cond
-              ;; add missing :db/ident and :logseq.property.class/extends for new tag
+             ;; add missing :db/ident and :logseq.property.class/extends for new tag
              (and (= (:v datom) (:db/id tag))
-                  (not (ldb/inline-tag? (:block/raw-title t) tag))
-                  (not (:db/ident t)))
-             (let [eid (:db/id t)]
-               [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title t))]
+                  (not (ldb/inline-tag? (:block/raw-title entity) tag))
+                  (not (:db/ident entity)))
+             (let [eid (:db/id entity)]
+               [[:db/add eid :db/ident (db-class/create-user-class-ident-from-name db-after (:block/title entity))]
                 [:db/add eid :logseq.property.class/extends :logseq.class/Root]
                 [:db/retract eid :block/tags :logseq.class/Page]])
 
-              ;; remove #Page from tags/journals/whiteboards, etc.
+             ;; remove #Page from tags/journals/whiteboards, etc.
              (= (:db/id page-tag) (:v datom))
-             (let [tags (->> (d/entity db-after (:e datom))
+             (let [tags (->> entity
                              :block/tags
                              (map :db/ident)
                              (remove #{:logseq.class/Page}))]
                (when (and (seq tags)
-                         ;; has other page-classes other than `:logseq.class/Page`
+                          ;; has other page-classes other than `:logseq.class/Page`
                           (some db-class/page-classes tags))
                  [[:db/retract (:e datom) :block/tags :logseq.class/Page]]))
+
+             ;; Add other page classes to an existing page
+             ;; Caused by invalid tags data from server
+             ;; TODO: remove this case
+             ;; DEADLINE: 2025-11-30
+             (and (contains? (disj db-class/page-classes :logseq.class/Page) (:db/ident v-entity))
+                  (ldb/internal-page? entity))
+             [[:db/retract (:e datom) :block/tags :logseq.class/Page]]
 
              :else
              nil))))
