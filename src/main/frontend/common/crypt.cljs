@@ -52,7 +52,7 @@
                                           #js {:name "AES-GCM" :iv iv}
                                           derived-key
                                           exported-private-key)]
-    [salt iv encrypted-private-key]))
+    [salt iv (js/Uint8Array. encrypted-private-key)]))
 
 (defn <decrypt-private-key
   "Decrypts a private key with a password."
@@ -89,11 +89,12 @@
 (defn <encrypt-aes-key
   "Encrypts an AES key with a public key."
   [public-key aes-key]
-  (p/let [exported-aes-key (.exportKey subtle "raw" aes-key)]
-    (.encrypt subtle
-              #js {:name "RSA-OAEP"}
-              public-key
-              exported-aes-key)))
+  (p/let [exported-aes-key (.exportKey subtle "raw" aes-key)
+          encrypted-aes-key (.encrypt subtle
+                                      #js {:name "RSA-OAEP"}
+                                      public-key
+                                      exported-aes-key)]
+    (js/Uint8Array. encrypted-aes-key)))
 
 (defn <decrypt-aes-key
   "Decrypts an AES key with a private key."
