@@ -896,7 +896,7 @@
                                           [["Invalid DB!"] :error])
     (worker-util/post-message :capture-error
                               {:error (ex-info "Invalid DB" {})
-                               :payload {:errors errors}})))
+                               :payload {:errors (str errors)}})))
 
 (defn init
   "web worker entry"
