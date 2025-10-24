@@ -24,7 +24,7 @@
 (defn validate-tx-report
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
-  [{:keys [db-after tx-data _tx-meta]} validate-options]
+  [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (keep :e) distinct)
         tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
         ent-maps* (map (fn [[db-id m]]
@@ -38,23 +38,28 @@
                               ;; remove :db/id as it adds needless declarations to schema
                               #(validator [(dissoc % :db/id)])
                               ent-maps)]
-        ;; (prn "changed eids:" changed-ids :tx-meta tx-meta)
         (if (seq invalid-ent-maps)
-          (let [explainer (get-schema-explainer (:closed-schema? validate-options))]
-            (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
-            (doseq [m invalid-ent-maps]
-              (let [m' (update m :block/properties (fn [properties]
-                                                     (map (fn [[p v]]
-                                                            [(:db/ident p) v])
-                                                          properties)))
-                    data {:entity-map m'
-                          :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
-                (try
-                  (pprint/pprint data)
-                  (catch :default _e
-                    (prn data)))))
-            false)
-          true)))))
+          (do
+            (prn "Invalid datascript entities detected amongst changed entity ids:" changed-ids :tx-meta tx-meta)
+            (let [explainer (get-schema-explainer (:closed-schema? validate-options))
+                  errors (doall
+                          (map
+                           (fn [m]
+                             (let [m' (update m :block/properties (fn [properties]
+                                                                    (map (fn [[p v]]
+                                                                           [(:db/ident p) v])
+                                                                         properties)))
+                                   data {:entity-map m'
+                                         :errors (me/humanize (explainer [(dissoc m :db/id)]))}]
+                               (try
+                                 (pprint/pprint data)
+                                 (catch :default _e
+                                   (prn data)))
+                               data))
+                           invalid-ent-maps))]
+
+              [false errors]))
+          [true nil])))))
 
 (defn group-errors-by-entity
   "Groups malli errors by entities. db is used for providing more debugging info"

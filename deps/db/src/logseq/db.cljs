@@ -117,7 +117,7 @@
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-              validate-result (db-validate/validate-tx-report tx-report nil)]
+              [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
           (if validate-result
             (when (and tx-report (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
@@ -127,7 +127,7 @@
             (do
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
-                (f tx-report))
+                (f tx-report errors))
               (throw (ex-info "DB write failed with invalid data" {:tx-data tx-data}))))
           tx-report)
         (d/transact! conn tx-data tx-meta)))
