@@ -344,7 +344,7 @@
                                        (butlast same-v-datoms)))
                              (map vec)
                              set)]
-    (map #(apply d/datom %) (remove conflict-datoms (map vec datoms)))))
+    (remove (fn [datom] (conflict-datoms (vec datom))) datoms)))
 
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
