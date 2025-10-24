@@ -342,8 +342,9 @@
                              (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
                              (mapcat (fn [[_eavt same-v-datoms]]
                                        (butlast same-v-datoms)))
+                             (map vec)
                              set)]
-    (remove conflict-datoms datoms)))
+    (map #(apply d/datom %) (remove conflict-datoms (map vec datoms)))))
 
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
