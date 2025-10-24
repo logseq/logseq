@@ -341,16 +341,14 @@
             fix-page-tags-tx-data
             fix-inline-page-tx-data)))
 
-(defn- remove-duplicated-datoms
+(defn- remove-conflict-datoms
   [datoms]
-  (let [duplicated-datoms (->> datoms
-                               (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
-                               (keep (fn [[_eavt same-v-datoms]]
-                                       (when (>= (count same-v-datoms) 2)
-                                         (butlast same-v-datoms))))
-                               (apply concat)
-                               set)]
-    (remove duplicated-datoms datoms)))
+  (let [conflict-datoms (->> datoms
+                             (group-by (fn [d] (take 4 d))) ; group by '(e a v tx)
+                             (mapcat (fn [[_eavt same-v-datoms]]
+                                       (butlast same-v-datoms)))
+                             set)]
+    (remove conflict-datoms datoms)))
 
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
@@ -386,7 +384,7 @@
         tx-report' (or replace-tx-report tx-report*)
         full-tx-data (-> (concat (:tx-data tx-report*)
                                  (:tx-data replace-tx-report))
-                         remove-duplicated-datoms)]
+                         remove-conflict-datoms)]
     (assoc tx-report'
            :tx-data full-tx-data
            :tx-meta tx-meta
