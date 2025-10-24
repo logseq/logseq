@@ -2493,6 +2493,10 @@
       (and (:page-title? config) (ldb/page? block) (string/blank? (:block/title block)))
       [:div.opacity-75 "Untitled"]
 
+      (and (ldb/asset? block)
+           (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
+      (asset-cp config block)
+
       (:raw-title? config)
       (text-block-title (dissoc config :raw-title?) block)
 
@@ -3182,18 +3186,23 @@
                                      edit-input-id
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
-         (if (ldb/asset? block)
+         (cond
+           (and (ldb/asset? block) (img-audio-video? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
                                (asset-cp config block)]})
             (if show-editor?
               [:div.mt-1 editor-cp]
-              (when (img-audio-video? block)
-                [:div.text-xs.opacity-60.mt-1.cursor-text
-                 {:on-click #(edit-block-content config block edit-input-id)}
-                 (text-block-title (dissoc config :raw-title?) block)]))]
-           (if show-editor? editor-cp (block-content-f {}))))
+              [:div.text-xs.opacity-60.mt-1.cursor-text
+               {:on-click #(edit-block-content config block edit-input-id)}
+               (text-block-title (dissoc config :raw-title?) block)])]
+
+           show-editor?
+           editor-cp
+
+           :else
+           (block-content-f {})))
 
        (when-not (:table-block-title? config)
          [:div.ls-block-right.flex.flex-row.items-center.self-start.gap-1
