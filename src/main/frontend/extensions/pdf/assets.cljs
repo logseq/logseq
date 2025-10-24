@@ -161,7 +161,7 @@
                                              (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
-                              {:block/tags :logseq.class/Pdf-annotation
+                              {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)
