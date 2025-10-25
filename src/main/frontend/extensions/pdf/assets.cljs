@@ -159,6 +159,8 @@
               colors     (:property/closed-values (db/entity :logseq.property.pdf/hl-color))
               color-id   (some (fn [color] (when (= (:block/title color) (:color properties))
                                              (:db/id color))) colors)]
+          (js/console.debug "PDF ensure-ref-block: Creating new highlight block" 
+                           (pr-str {:id id :page page :has-image? (boolean (:image content))}))
           (when color-id
             (let [properties (cond->
                               {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
@@ -403,16 +405,48 @@
 
 (rum/defcs area-display <
   (rum/local nil ::src)
+  (rum/local nil ::error)
   [state block]
-  (let [*src (::src state)]
-    (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
-                                       (conn/get-db (state/get-current-repo))
-                                       block
-                                       (db-utils/pull (:db/id (:block/page block)))))]
-      (when (nil? @*src)
-        (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
-          (reset! *src asset-path)))
-      (when @*src
+  (let [*src (::src state)
+        *error (::error state)]
+    (when (and block (not @*src) (not @*error))
+      (js/console.debug "PDF area-display: Attempting to display area highlight" 
+                        (pr-str {:uuid (:block/uuid block)
+                                :has-hl-image? (boolean (:logseq.property.pdf/hl-image block))})))
+    (if-not block
+      (do
+        (js/console.warn "PDF area-display: No block provided")
+        nil)
+      (let [asset-path' (try
+                         (when block
+                           (publish-db/get-area-block-asset-url
+                            (conn/get-db (state/get-current-repo))
+                            block
+                            (db-utils/pull (:db/id (:block/page block)))))
+                         (catch :default e
+                           (js/console.error "PDF area-display: Error getting asset URL" e)
+                           (reset! *error true)
+                           nil))]
+        (cond
+          @*error
+          [:div.hl-area.text-xs.text-muted-foreground "Failed to load highlight image"]
+          
+          (nil? asset-path')
+          (do
+            (js/console.warn "PDF area-display: No asset path found for block" (str (:block/uuid block)))
+            [:div.hl-area.text-xs.text-muted-foreground "Highlight image not found"])
+          
+          :else
+          (do
+            (when (nil? @*src)
+              (p/catch
+               (p/let [asset-path (assets-handler/<make-asset-url asset-path')]
+                 (js/console.debug "PDF area-display: Generated asset path" asset-path)
+                 (reset! *src asset-path))
+               (fn [e]
+                 (js/console.error "PDF area-display: Error making asset URL" e)
+                 (reset! *error true))))
+            (when @*src
         (let [asset-block (some-> block (:logseq.property.pdf/hl-image))
               resize-metadata (some-> asset-block :logseq.property.asset/resize-metadata)
               style (when-let [w (:width resize-metadata)] {:style {:width w}})]
@@ -447,4 +481,9 @@
                :on-click open-lightbox!}
 
               (ui/icon "maximize")]]
-            [:img.w-full {:src @*src}]]])))))
+            [:img.w-full {:src @*src
+                         :on-error (fn [e] 
+                                    (js/console.error "PDF area-display: Failed to load image" @*src)
+                                    (reset! *error true))
+                         :on-load (fn [] 
+                                   (js/console.debug "PDF area-display: Successfully loaded image" @*src))}]]])))))))
