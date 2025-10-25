@@ -152,7 +152,7 @@
                             worker-util/parse-jwt
                             :sub)
           public-key (when user-uuid
-                       (m/? (rtc-crypt/task--get-user-public-key get-ws-create-task user-uuid)))]
+                       (:public-key (m/? (rtc-crypt/task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))))]
       (when-not public-key
         (throw (ex-info "user public-key not found" {:type :rtc.exception/not-found-user-rsa-key-pair
                                                      :user-uuid user-uuid})))

@@ -6,10 +6,13 @@
   (:require ["/frontend/idbkv" :as idb-keyval]
             [frontend.common.crypt :as crypt]
             [frontend.common.missionary :as c.m]
+            [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p])
+  (:import [missionary Cancelled]))
 
 (defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 
@@ -40,14 +43,15 @@
 
 (defn task--upload-user-rsa-key-pair
   "Uploads the user's RSA key pair to the server."
-  [token user-uuid public-key encrypted-private-key]
+  [get-ws-create-task user-uuid public-key encrypted-private-key]
   (m/sp
-    (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+    (let [exported-public-key-str (ldb/write-transit-str (c.m/<? (crypt/<export-public-key public-key)))
+          encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)
           response (m/? (ws-util/send&recv get-ws-create-task
                                            {:action "upload-user-rsa-key-pair"
                                             :user-uuid user-uuid
-                                            :public-key public-key
-                                            :encrypted-private-key encrypted-private-key}))]
+                                            :public-key exported-public-key-str
+                                            :encrypted-private-key encrypted-private-key-str}))]
       (when (:ex-data response)
         (throw (ex-info (:ex-message response)
                         (assoc (:ex-data response) :type :rtc.exception/upload-user-rsa-key-pair-error)))))))
@@ -103,11 +107,6 @@
   []
   (m/sp (c.m/<? (crypt/<generate-aes-key))))
 
-(defn task--get-user-public-key
-  [get-ws-create-task user-uuid]
-  (m/sp
-    (:public-key (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid)))))
-
 (defn task--get-rsa-key-pair
   [get-ws-create-task user-uuid]
   (m/sp
@@ -123,6 +122,25 @@
   (m/sp
     (let [{:keys [_public-key private-key]} (m/? (task--get-rsa-key-pair get-ws-create-task user-uuid))]
       (m/? (task--fetch-graph-aes-key get-ws-create-task graph-uuid private-key)))))
+
+(def-thread-api :thread-api/get-user-rsa-key-pair-from-indexeddb
+  [user-uuid]
+  (<get-item (user-rsa-key-pair-idb-key user-uuid)))
+
+(def-thread-api :thread-api/init-user-rsa-key-pair
+  [token user-uuid]
+  (m/sp
+    (try
+      (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+        (when-not (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
+          (let [{:keys [publicKey privateKey]} (c.m/<? (crypt/<generate-rsa-key-pair))
+                password (c.m/<? (worker-state/<invoke-main-thread :thread-api/request-e2ee-password))
+                encrypted-private-key (c.m/<? (crypt/<encrypt-private-key password privateKey))]
+            (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key))
+            ;; fetch again
+            (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid)))))
+      (catch Cancelled _)
+      (catch :default e e))))
 
 (comment
   (do
