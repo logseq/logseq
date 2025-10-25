@@ -2,13 +2,10 @@
   @apply fixed bottom-[100px] h-[70px] p-1.5 rounded-md overflow-y-hidden overflow-x-auto
   bg-[var(--ls-secondary-background-color)] z-[99999];
 
-  box-shadow:
-      /* bottom = shadow-lg */
-      0 10px 15px -3px rgba(0,0,0,0.1),
-      0 4px 6px -4px rgba(0,0,0,0.1),
-      /* top = lighter (closer to shadow-md) */
-      0 -6px 10px -4px rgba(0,0,0,0.08),
-      0 -2px 4px -4px rgba(0,0,0,0.08);
+  box-shadow: /* bottom = shadow-lg */ 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+  0 4px 6px -4px rgba(0, 0, 0, 0.1),
+    /* top = lighter (closer to shadow-md) */ 0 -6px 10px -4px rgba(0, 0, 0, 0.08),
+  0 -2px 4px -4px rgba(0, 0, 0, 0.08);
 
   .action-bar-commands {
     @apply relative flex w-full;
@@ -143,4 +140,22 @@ html.is-zoomed-native-ios {
       @apply opacity-100;
     }
   }
+}
+
+html.has-mobile-keyboard {
+  .ui__dialog-overlay {
+    &:has(.app-login-modal) {
+      @apply overflow-y-auto;
+    }
+  }
+
+  .ui__dialog-content {
+    &.app-login-modal {
+      margin-bottom: 460px;
+    }
+  }
+}
+
+.ui__dialog-content[label=user-login] {
+  @apply rounded-lg pb-3;
 }

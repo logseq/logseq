@@ -8,6 +8,7 @@
             [frontend.components.content :as cp-content]
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
+            [frontend.components.user.login :as user.login]
             [frontend.components.reference :as reference]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
@@ -143,6 +144,7 @@
 
   (register-components-fns!)
   (user-handler/restore-tokens-from-localstorage)
+  (user.login/setup-configure!)
   (state/set-db-restoring! true)
   (when (util/electron?)
     (el/listen!))
