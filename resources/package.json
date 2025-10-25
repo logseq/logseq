@@ -15,7 +15,7 @@
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:make-win-arm64": "electron-forge make --platform=win32 --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:all": "electron-rebuild -v 37.2.6 -f",
+    "rebuild:all": "electron-rebuild -v 38.4.0 -f",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -55,7 +55,7 @@
     "@electron-forge/maker-squirrel": "^7.8.3",
     "@electron-forge/maker-zip": "^7.8.3",
     "@electron/rebuild": "4.0.1",
-    "electron": "37.2.6",
+    "electron": "38.4.0",
     "electron-builder": "26.0.12",
     "electron-forge-maker-appimage": "https://github.com/logseq/electron-forge-maker-appimage.git",
     "electron-devtools-installer": "4.0.0"

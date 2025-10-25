@@ -54,7 +54,13 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 24 20))
 
-(defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
+(defn popup-exists? []
+  (boolean (seq (shui-popup/get-popups))))
+
+(defn dropdown-exists?
+  []
+  (some? (js/document.querySelector "[data-radix-popper-content-wrapper]")))
+
 (defn last-shui-preview-popup?
   []
   (= "ls-preview-popup"
@@ -63,7 +69,7 @@
   []
   (if (util/mobile?)
     (shui/popup-hide!)
-    (while (and (shui-popups?)
+    (while (and (popup-exists?)
                 (not (last-shui-preview-popup?)))
       (shui/popup-hide!))))
 

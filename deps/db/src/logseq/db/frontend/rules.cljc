@@ -230,10 +230,9 @@
 
     :tags
     '[(tags ?b ?tags)
-      [?b :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?b :block/link)]
-      [(contains? ?tags ?tag)]]
+      [?b :block/tags ?tag]
+      [(contains? ?tags ?tag)]
+      [(missing? $ ?b :block/link)]]
 
     :task
     '[(task ?b ?statuses)

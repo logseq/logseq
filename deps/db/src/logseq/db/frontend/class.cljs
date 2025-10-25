@@ -140,11 +140,11 @@
   [class]
   (assert (de/entity? class) "get-class-extends `class` should be an entity")
   (loop [extends (:logseq.property.class/extends class)
-         result #{}]
+         result []]
     (if (seq extends)
-      (recur (set (mapcat :logseq.property.class/extends extends))
+      (recur (mapcat :logseq.property.class/extends extends)
              (into result extends))
-      result)))
+      (reverse (distinct result)))))
 
 (defn create-user-class-ident-from-name
   "Creates a class :db/ident for a default user namespace.

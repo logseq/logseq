@@ -65,7 +65,7 @@
                                       (map (fn [id] [:db/add id :logseq.property.embedding/hnsw-label-updated-at 0])))
           tx-data (concat remove-old-hnsw-tx-data mark-embedding-tx-data)]
       (when (seq tx-data)
-        (ldb/transact! conn tx-data {})))))
+        (ldb/transact! conn tx-data {:skip-validate-db? true})))))
 
 (defn listen-db-changes!
   [repo conn & {:keys [handler-keys]}]
