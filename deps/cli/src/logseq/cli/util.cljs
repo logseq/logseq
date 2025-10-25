@@ -1,20 +1,28 @@
 (ns ^:node-only logseq.cli.util
   "CLI only util fns"
   (:require ["path" :as node-path]
+            ["fs" :as fs]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
-            [promesa.core :as p]
-            [nbb.error]))
-
-(defn get-graph-dir
-  [graph]
-  (node-path/join (cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph)))
+            [nbb.error]
+            [promesa.core :as p]))
 
 (defn ->open-db-args
   "Creates args for sqlite-cli/open-db! given a graph. Similar to sqlite-cli/->open-db-args"
   [graph]
-  [(cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph)])
+  (cond
+    (and (fs/existsSync graph) (.isFile (fs/statSync graph)))
+    [graph]
+    (string/includes? graph "/")
+    ((juxt node-path/dirname node-path/basename) graph)
+    :else
+    [(cli-common-graph/get-db-graphs-dir) (common-sqlite/sanitize-db-name graph)]))
+
+(defn get-graph-path
+  "If graph is a file, return its path. Otherwise returns the graph's dir"
+  [graph]
+  (apply node-path/join (->open-db-args graph)))
 
 (defn api-fetch [token method args]
   (js/fetch "http://127.0.0.1:12315/api"
@@ -28,16 +36,19 @@
 
 (defn api-handle-error-response
   "Handles a non 200 response. For 500 return full response to provide more detail"
-  [resp]
-  (if (= 500 (.-status resp))
-    (p/let [body (.text resp)]
-      (js/console.error "Error: API Server responded with status" (.-status resp)
-                        "\nAPI Response:" (pr-str body))
-      (js/process.exit 1))
-    (do
-      (js/console.error "Error: API Server responded with status" (.-status resp)
-                        (when (.-statusText resp) (str "and body " (pr-str (.-statusText resp)))))
+  ([resp]
+   (api-handle-error-response
+    resp
+    (fn [msg]
+      (js/console.error msg)
       (js/process.exit 1))))
+  ([resp err-fn]
+   (if (= 500 (.-status resp))
+     (p/let [body (.text resp)]
+       (err-fn (str "Error: API Server responded with status " (.-status resp)
+                    "\nAPI Response: " (pr-str body))))
+     (err-fn (str "Error: API Server responded with status " (.-status resp)
+                  (when (.-statusText resp) (str " and body " (pr-str (.-statusText resp)))))))))
 
 (defn command-catch-handler
   "Default p/catch handler for commands which handles sci errors and HTTP API Server connections gracefully"
