@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [lambdaisland.glogi :as log]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
@@ -214,7 +215,7 @@
          :placeholder "repo name here"}]]]
 
      [:div.flex.my-2.items-center.gap-2
-      (ui/button (str "upload current repo")
+      (ui/button "upload current repo"
                  {:icon "upload"
                   :on-click (fn []
                               (let [repo (state/get-current-repo)
@@ -265,61 +266,22 @@
          (shui/button
           {:size :sm
            :on-click (fn [_]
-                       (p/let [graph-keys (state/<invoke-db-worker :thread-api/rtc-get-graph-keys (state/get-current-repo))
-                               devices (some->> (state/get-auth-id-token)
-                                                (state/<invoke-db-worker :thread-api/list-devices))]
-                         (swap! (get state ::keys-state) #(merge % graph-keys {:devices devices}))))}
-          (shui/tabler-icon "refresh") "keys-state")]
+                       (when-let [user-uuid (user/user-uuid)]
+                         (p/let [user-rsa-key-pair (state/<invoke-db-worker
+                                                    :thread-api/get-user-rsa-key-pair-from-indexeddb
+                                                    user-uuid)]
+                           (reset! *keys-state user-rsa-key-pair))))}
+          (shui/tabler-icon "refresh") "keys-state")
+         (shui/button
+          {:size :sm
+           :on-click (fn [_]
+                       (when-let [token (state/get-auth-id-token)]
+                         (p/let [r (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair token (user/user-uuid))]
+                           (when (instance? ExceptionInfo r)
+                             (log/error :thread-api/init-user-rsa-key-pair r)))))}
+          (shui/tabler-icon "upload") "init upload user rsa-key-pair")]
         [:div.pb-4
          [:pre.select-text
-          (-> {:devices (:devices keys-state)
-               :graph-aes-key-jwk (:aes-key-jwk keys-state)}
+          (-> keys-state
               (fipp/pprint {:width 20})
-              with-out-str)]]
-        (shui/button
-         {:size :sm
-          :on-click (fn [_]
-                      (when-let [device-uuid (not-empty (:remove-device-device-uuid keys-state))]
-                        (when-let [token (state/get-auth-id-token)]
-                          (state/<invoke-db-worker :thread-api/remove-device token device-uuid))))}
-         "Remove device:")
-        [:input.form-input.my-2.py-1.w-32
-         {:on-change (fn [e] (swap! *keys-state assoc :remove-device-device-uuid (util/evalue e)))
-          :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "device-uuid here")
-                                (set! (.-value (.-target e)) ""))))
-          :placeholder "device-uuid here"}]
-        (shui/button
-         {:size :sm
-          :on-click (fn [_]
-                      (when-let [device-uuid (not-empty (:remove-public-key-device-uuid keys-state))]
-                        (when-let [key-name (not-empty (:remove-public-key-key-name keys-state))]
-                          (when-let [token (state/get-auth-id-token)]
-                            (state/<invoke-db-worker :thread-api/remove-device-public-key token device-uuid key-name)))))}
-         "Remove public-key:")
-        [:input.form-input.my-2.py-1.w-32
-         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-device-uuid (util/evalue e)))
-          :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "device-uuid here")
-                                (set! (.-value (.-target e)) ""))))
-          :placeholder "device-uuid here"}]
-        [:input.form-input.my-2.py-1.w-32
-         {:on-change (fn [e] (swap! *keys-state assoc :remove-public-key-key-name (util/evalue e)))
-          :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "key-name here")
-                                (set! (.-value (.-target e)) ""))))
-          :placeholder "key-name here"}]
-        (shui/button
-         {:size :sm
-          :on-click (fn [_]
-                      (when-let [token (state/get-auth-id-token)]
-                        (when-let [device-uuid (not-empty (:sync-private-key-device-uuid keys-state))]
-                          (state/<invoke-db-worker :thread-api/rtc-sync-current-graph-encrypted-aes-key
-                                                   token [(parse-uuid device-uuid)]))))}
-         "Sync CurrentGraph EncryptedAesKey")
-        [:input.form-input.my-2.py-1.w-32
-         {:on-change (fn [e] (swap! *keys-state assoc :sync-private-key-device-uuid (util/evalue e)))
-          :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "device-uuid here")
-                                (set! (.-value (.-target e)) ""))))
-          :placeholder "device-uuid here"}]])]))
+              with-out-str)]]])]))

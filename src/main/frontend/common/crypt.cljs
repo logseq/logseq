@@ -4,6 +4,28 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
+(defn <export-public-key
+  [public-key]
+  (p/let [exported (.exportKey subtle "spki" public-key)]
+    (js/Uint8Array. exported)))
+
+(defn <import-public-key
+  [exported-public-key]
+  (.importKey subtle "spki" exported-public-key
+              #js {:name "RSA-OAEP" :hash "SHA-256"}
+              true
+              #js ["encrypt"]))
+
+(comment
+  (->
+   (p/let [kp (<generate-rsa-key-pair)
+           public-key (:publicKey kp)
+           exported-public-key (<export-public-key public-key)
+           public-key* (<import-public-key exported-public-key)
+           exported-public-key2 (<export-public-key public-key*)]
+     (prn (= (vec exported-public-key) (vec exported-public-key2))))
+   (p/catch (fn [e] (prn :e e)))))
+
 (defn <generate-rsa-key-pair
   "Generates a new RSA public/private key pair.
   Return
