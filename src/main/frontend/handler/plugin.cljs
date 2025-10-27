@@ -631,7 +631,7 @@
   [dirname ^js default]
   (fn [key]
     (when-let [key (and key (name key))]
-      (let [repo ""
+      (let [repo (state/get-current-repo)
             dotroot (get-ls-dotdir-root)
             filepath (util/node-path.join dotroot dirname (str key ".json"))]
         (if (util/electron?)

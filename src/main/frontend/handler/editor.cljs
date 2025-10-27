@@ -631,15 +631,16 @@
                                         nil)]
           (when target-block
             (p/do!
-             (ui-outliner-tx/transact!
-              {:outliner-op :insert-blocks}
-              (outliner-insert-block! config target-block new-block
-                                      {:sibling? sibling?
-                                       :keep-uuid? true
-                                       :ordered-list? ordered-list?
-                                       :replace-empty-target? replace-empty-target?})
-              (when (and db-based? (seq properties))
-                (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
+             (let [new-block' (if (and db-based? (seq properties))
+                                (into new-block properties)
+                                new-block)]
+               (ui-outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (outliner-insert-block! config target-block new-block'
+                                        {:sibling? sibling?
+                                         :keep-uuid? true
+                                         :ordered-list? ordered-list?
+                                         :replace-empty-target? replace-empty-target?})))
              (when edit-block?
                (if (and replace-empty-target?
                         (string/blank? (:block/title last-block)))
@@ -1527,87 +1528,95 @@
         ;; actually, writing binary using memory fs
         (fs/write-plain-text-file! repo dir file-rpath content nil)))))
 
+(defn- new-asset-block
+  [repo ^js file repo-dir asset-dir-rpath]
+  ;; WARN file name maybe fully qualified path when paste file
+  (p/let [file-name (node-path/basename (.-name file))
+          file-name-without-ext* (db-asset/asset-name->title file-name)
+          file-name-without-ext (if (= file-name-without-ext* "image")
+                                  (date/get-date-time-string-2)
+                                  file-name-without-ext*)
+          checksum (assets-handler/get-file-checksum file)
+          existing-asset (db-async/<get-asset-with-checksum repo checksum)]
+    (if existing-asset
+      (do
+        (notification/show! (str "Asset exists already, title: " (:block/title existing-asset)
+                                 ", node reference: [[" (:block/uuid existing-asset) "]]")
+                            :warning
+                            false)
+        nil)
+      (p/let [block-id (ldb/new-block-id)
+              ext (when file-name (db-asset/asset-path->type file-name))
+              _ (when (string/blank? ext)
+                  (throw (ex-info "File doesn't have a valid ext."
+                                  {:file-name file-name})))
+              file-path   (str block-id "." ext)
+              file-rpath  (str asset-dir-rpath "/" file-path)
+              dir repo-dir
+              asset (db/entity :logseq.class/Asset)]
+
+        (if (assets-handler/exceed-limit-size? file)
+          (do
+            (notification/show! [:div "Asset size shouldn't be larger than 100M"]
+                                :warning
+                                false)
+            (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
+          (p/do!
+           (db-based-save-asset! repo dir file file-rpath)
+           {:block/title file-name-without-ext
+            :block/uuid block-id
+            :logseq.property.asset/type ext
+            :logseq.property.asset/size (.-size file)
+            :logseq.property.asset/checksum checksum
+            :block/tags #{(:db/id asset)}}))))))
+
 (defn db-based-save-assets!
   "Save incoming(pasted) assets to assets directory.
 
-   Returns: asset entity"
+   Returns: asset entities"
   [repo files & {:keys [pdf-area? last-edit-block]}]
-  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)]
-    (p/all
-     (for [[_index ^js file] (map-indexed vector files)]
-      ;; WARN file name maybe fully qualified path when paste file
-       (p/let [file-name (node-path/basename (.-name file))
-               file-name-without-ext* (db-asset/asset-name->title file-name)
-               file-name-without-ext (if (= file-name-without-ext* "image")
-                                       (date/get-date-time-string-2)
-                                       file-name-without-ext*)
-               checksum (assets-handler/get-file-checksum file)
-               existing-asset (db-async/<get-asset-with-checksum repo checksum)]
-         (if existing-asset
-           existing-asset
-           (p/let [block-id (ldb/new-block-id)
-                   ext (when file-name (db-asset/asset-path->type file-name))
-                   _ (when (string/blank? ext)
-                       (throw (ex-info "File doesn't have a valid ext."
-                                       {:file-name file-name})))
-                   file-path   (str block-id "." ext)
-                   file-rpath  (str asset-dir-rpath "/" file-path)
-                   dir repo-dir
-                   asset (db/entity :logseq.class/Asset)]
-
-             (if (assets-handler/exceed-limit-size? file)
-               (do
-                 (notification/show! [:div "Asset size shouldn't be larger than 100M"]
-                                     :warning
-                                     false)
-                 (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))
-               (p/let [properties {:logseq.property.asset/type ext
-                                   :logseq.property.asset/size (.-size file)
-                                   :logseq.property.asset/checksum checksum
-                                   :block/tags (:db/id asset)}
-                       insert-opts {:custom-uuid block-id
-                                    :edit-block? false
-                                    :properties properties}
-                       _ (db-based-save-asset! repo dir file file-rpath)
-                       edit-block (or (state/get-edit-block) last-edit-block)
-                       today-page-name (date/today)
-                       today-page-e (db-model/get-journal-page today-page-name)
-                       today-page (if (nil? today-page-e)
-                                    (state/pub-event! [:page/create today-page-name])
-                                    today-page-e)
-                       insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
-                       insert-opts' (if insert-to-current-block-page?
-                                      (assoc insert-opts
-                                             :block-uuid (:block/uuid edit-block)
-                                             :replace-empty-target? true
-                                             :sibling? true)
-                                      (assoc insert-opts :page (:block/uuid today-page)))
-                       new-block (api-insert-new-block! file-name-without-ext insert-opts')]
-                 (when insert-to-current-block-page?
-                   (state/clear-edit!))
-                 (or new-block
-                     (throw (ex-info "Can't save asset" {:files files}))))))))))))
+  (p/let [[repo-dir asset-dir-rpath] (assets-handler/ensure-assets-dir! repo)
+          today-page-name (date/today)
+          today-page-e (db-model/get-journal-page today-page-name)
+          today-page (if (nil? today-page-e)
+                       (state/pub-event! [:page/create today-page-name])
+                       today-page-e)
+          blocks* (p/all
+                   (for [^js file files]
+                     (new-asset-block repo file repo-dir asset-dir-rpath)))
+          blocks (remove nil? blocks*)
+          edit-block (or (state/get-edit-block) last-edit-block)
+          insert-to-current-block-page? (and (:block/uuid edit-block) (not pdf-area?))
+          target (if insert-to-current-block-page?
+                   edit-block
+                   today-page)]
+    (when-not target
+      (throw (ex-info "invalid target" {:files files
+                                        :today-page today-page
+                                        :edit-block edit-block})))
+    (when (seq blocks)
+      (p/do!
+       (ui-outliner-tx/transact!
+        {:outliner-op :insert-blocks}
+        (outliner-op/insert-blocks! blocks target {:keep-uuid? true
+                                                   :sibling? (= edit-block target)
+                                                   :replace-empty-target? true}))
+       (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)))))
 
 (def insert-command! editor-common-handler/insert-command!)
 
 (defn db-upload-assets!
   "Paste asset for db graph and insert link to current editing block"
   [repo id ^js files format uploading? drop-or-paste?]
-  (when (or (config/local-file-based-graph? repo)
-            (config/db-based-graph? repo))
+  (when (config/db-based-graph? repo)
+    (insert-command!
+     id
+     ""
+     format
+     {:last-pattern (if drop-or-paste? "" commands/command-trigger)
+      :restore?     true
+      :command      :insert-asset})
     (-> (db-based-save-assets! repo (js->clj files))
-          ;; FIXME: only the first asset is handled
-        (p/then
-         (fn [entities]
-           (let [entity (first entities)]
-             (insert-command!
-              id
-              (ref/->page-ref (:block/uuid entity))
-              format
-              {:last-pattern (if drop-or-paste? "" commands/command-trigger)
-               :restore?     true
-               :command      :insert-asset})
-             entities)))
         (p/catch (fn [e]
                    (js/console.error e)))
         (p/finally
