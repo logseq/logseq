@@ -182,7 +182,8 @@
                                                           :s3-key key
                                                           :schema-version (str major-schema-version)
                                                           :graph-name remote-graph-name
-                                                          :encrypted-aes-key encrypted-aes-key}))]
+                                                          :encrypted-aes-key
+                                                          (ldb/write-transit-str encrypted-aes-key)}))]
           (if-let [graph-uuid (:graph-uuid upload-resp)]
             (let [schema-version (ldb/get-graph-schema-version @conn)]
               (ldb/transact! conn
