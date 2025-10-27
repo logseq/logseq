@@ -373,7 +373,7 @@
              (when-let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/order :block/collapsed?
+                                          :block/created-at :block/updated-at :block/collapsed?
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
@@ -2171,8 +2171,8 @@
                              :logseq.property.node/display-type
                              (= :code))]
     (->> properties
+         (remove #{:logseq.property.embedding/hnsw-label-updated-at})
          (map db/entity)
-         (remove ldb/hidden?)
          (ldb/sort-by-order)
          ((fn [cs] (build-columns config cs {:add-tags-column? false
                                              :advanced-query? advanced-query?}))))))
