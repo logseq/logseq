@@ -396,7 +396,8 @@
        [:map
         [:user-uuid :uuid]
         [:public-key :string]
-        [:encrypted-private-key :string]]]
+        [:encrypted-private-key :string]
+        [:force-reset {:optional true} :boolean]]]
       ["fetch-user-rsa-key-pair"
        [:map
         [:user-uuid :uuid]]]
