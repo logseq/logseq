@@ -30,15 +30,15 @@
        (map (fn [e]
               (if expand
                 (cond-> (into {} e)
-                 true
-                 (dissoc e :block/tags :block/order :block/refs :block/name :db/index
-                         :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
-                 true
-                 (update :block/uuid str)
-                 (:logseq.property/classes e)
-                 (update :logseq.property/classes #(mapv :db/ident %))
-                 (:logseq.property/description e)
-                 (update :logseq.property/description db-property/property-value-content))
+                  true
+                  (dissoc e :block/tags :block/order :block/refs :block/name :db/index
+                          :logseq.property.embedding/hnsw-label-updated-at :logseq.property/default-value)
+                  true
+                  (update :block/uuid str)
+                  (:logseq.property/classes e)
+                  (update :logseq.property/classes #(mapv :db/ident %))
+                  (:logseq.property/description e)
+                  (update :logseq.property/description db-property/property-value-content))
                 {:block/title (:block/title e)
                  :block/uuid (str (:block/uuid e))})))))
 
@@ -130,16 +130,47 @@
   (or (get idents title)
       (throw (ex-info (str "No ident found for " (pr-str title)) {}))))
 
+(defn- build-add-block [op {:keys [class-idents]}]
+  (cond-> {:block/title (get-in op [:data :title])}
+    (get-in op [:data :tags])
+    (assoc :build/tags (mapv #(get-ident class-idents %) (get-in op [:data :tags])))))
+
+(defn- ops->existing-pages-and-blocks
+  "Converts block operations for existing pages and prepares them for :pages-and-blocks"
+  [db operations idents]
+  (let [new-blocks-for-existing-pages
+        (->> (filter #(and (= "block" (:entityType %))
+                           (= "add" (:operation %))
+                           (common-util/uuid-string? (get-in % [:data :page-id]))) operations)
+             (map (fn [op] (assoc op ::page-id (uuid (get-in op [:data :page-id]))))))
+        edit-blocks
+        (->> (filter #(and (= "block" (:entityType %)) (= "edit" (:operation %))) operations)
+             (map (fn [op]
+                    (let [block-uuid (uuid (:id op))
+                          ent (d/entity db [:block/uuid block-uuid])]
+                      (when-not (:block/page ent)
+                        (throw (ex-info "Block edit operation requires a block to have a page." {})))
+                      (assoc op ::page-id (get-in ent [:block/page :block/uuid]))))))]
+    (->> (concat new-blocks-for-existing-pages edit-blocks)
+         (group-by ::page-id)
+         (map (fn [[page-id ops]]
+                {:page {:block/uuid page-id}
+                 :blocks (mapv (fn [op]
+                                 (prn :block-op op)
+                                 (if (= "add" (:operation op))
+                                   (build-add-block op idents)
+                                   ;; edit :block
+                                   (cond-> {:block/uuid (uuid (:id op))}
+                                     (get-in op [:data :title])
+                                     (assoc :block/title (get-in op [:data :title])))))
+                               ops)})))))
+
 (defn- ops->pages-and-blocks
-  [operations {:keys [class-idents]}]
-  (let [blocks-by-page
+  [db operations idents]
+  (let [new-blocks-by-page
         (group-by #(get-in % [:data :page-id])
-                  (filter #(= "block" (:entityType %)) operations))
+                  (filter #(and (= "block" (:entityType %)) (= "add" (:operation %))) operations))
         new-pages (filter #(and (= "page" (:entityType %)) (= "add" (:operation %))) operations)
-        add-block (fn add-block [op]
-                    (cond-> {:block/title (get-in op [:data :title])}
-                      (get-in op [:data :tags])
-                      (assoc :build/tags (mapv #(get-ident class-idents %) (get-in op [:data :tags])))))
         pages-and-blocks
         (into (mapv (fn [op]
                       (cond-> {:page (if-let [journal-day (date-time-util/journal-title->int
@@ -148,24 +179,11 @@
                                                            (date-time-util/safe-journal-title-formatters nil))]
                                        {:build/journal journal-day}
                                        {:block/title (get-in op [:data :title])})}
-                        (some->> (:id op) (get blocks-by-page))
+                        (some->> (:id op) (get new-blocks-by-page))
                         (assoc :blocks
-                               (mapv add-block (get blocks-by-page (:id op))))))
+                               (mapv #(build-add-block % idents) (get new-blocks-by-page (:id op))))))
                     new-pages)
-              ;; existing pages
-              (map (fn [[page-id ops]]
-                     (when-not (common-util/uuid-string? page-id)
-                       (throw (ex-info (str "Existing page id " (pr-str page-id) " must be a uuid") {})))
-                     {:page {:block/uuid (uuid page-id)}
-                      :blocks (mapv (fn [op]
-                                      (if (= "add" (:operation op))
-                                        (add-block op)
-                                        ;; edit
-                                        (cond-> {:block/uuid (uuid (:id op))}
-                                          (get-in op [:data :title])
-                                          (assoc :block/title (get-in op [:data :title])))))
-                                    ops)})
-                   (apply dissoc blocks-by-page (map :id new-pages))))]
+              (ops->existing-pages-and-blocks db operations idents))]
     pages-and-blocks))
 
 (defn- ops->classes
@@ -299,7 +317,6 @@
                        [:id uuid-string]
                        ;; :tags not supported yet
                        [:data [:map {:closed true}
-                               [:page-id uuid-string]
                                [:title :string]]]]]
     ;; other edit's
     [::m/default [:map [:id uuid-string]]]]])
@@ -365,7 +382,7 @@
             (throw (ex-info (str "Tool arguments are invalid:\n" (me/humanize errors))
                             {:errors errors})))
         idents (operations->idents db operations)
-        pages-and-blocks (ops->pages-and-blocks operations idents)
+        pages-and-blocks (ops->pages-and-blocks db operations idents)
         classes (ops->classes operations idents)
         properties (ops->properties operations idents)
         import-edn
