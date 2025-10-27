@@ -37,4 +37,5 @@
        :view-feature-type :query-result
        :data ids
        :set-data! set-data!
+       :query (:query config)
        :query-entity-ids ids})]))
