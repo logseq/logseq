@@ -5,6 +5,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -69,7 +70,10 @@
 
 (defn- get-page-blocks
   [db page-id]
-  (let [blocks (ldb/get-page-blocks db page-id)]
+  (let [datoms (d/datoms db :avet :block/page page-id)
+        block-eids (mapv :e datoms)
+        block-ents (map #(d/entity db %) block-eids)
+        blocks (map #(assoc % :block/title (db-content/recur-replace-uuid-in-block-title %)) block-ents)]
       ;; Use repo stub since this is a DB only tool
     (->> (otree/blocks->vec-tree "logseq_db_repo_stub" db blocks page-id)
          (map #(update % :block/uuid str)))))
