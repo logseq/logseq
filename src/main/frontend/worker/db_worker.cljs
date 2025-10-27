@@ -914,12 +914,15 @@
           service)))))
 
 (defn- notify-invalid-data
-  [{:keys [tx-meta]}]
+  [{:keys [tx-meta]} errors]
   ;; don't notify on production when undo/redo failed
   (when-not (and (or (:undo? tx-meta) (:redo? tx-meta))
                  (not worker-util/dev?))
     (shared-service/broadcast-to-clients! :notification
-                                          [["Invalid DB!"] :error])))
+                                          [["Invalid DB!"] :error])
+    (worker-util/post-message :capture-error
+                              {:error (ex-info "Invalid DB" {})
+                               :payload {:errors (str errors)}})))
 
 (defn init
   "web worker entry"

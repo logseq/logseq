@@ -567,7 +567,11 @@ so need to pull earlier remote-data from websocket."})
              title :block/title
              :as op-value} update-page-ops]
       (let [db-ident (:db/ident op-value)]
-        (when-not (and db-ident (d/entity @conn db-ident)) ; property or class exists
+        (when-not (or
+                   ;; property or class exists
+                   (and db-ident (d/entity @conn db-ident))
+                   ;; journal with the same block/uuid exists
+                   (ldb/journal? (d/entity @conn [:block/uuid self])))
           (let [create-opts {:uuid self
                              :old-db-id (@worker-state/*deleted-block-uuid->db-id self)}
                 [_ page-name page-uuid] (worker-page/rtc-create-page! conn config

@@ -104,10 +104,12 @@
 (defn- reload-app-if-old-db-worker-exists
   []
   (when (util/capacitor?)
+    (log/info ::reload-app {:client-id @state/*db-worker-client-id})
     (when-let [client-id @state/*db-worker-client-id]
       (js/navigator.locks.request client-id #js {:mode "exclusive"
                                                  :ifAvailable true}
                                   (fn [lock]
+                                    (log/info ::reload-app-lock {:acquired? (some? lock)})
                                     (when-not lock
                                       (js/window.location.reload)))))))
 
