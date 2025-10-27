@@ -143,7 +143,7 @@
             * :id - For :edit, this _must_ be a string uuid. For :add, use a temporary unique string if the new page is referenced by later operations e.g. add blocks
             * :data - A map of fields to set or update. This map can have the following keys:
               * :title - A page/tag/property's name or a block's content
-              * :page-id - A page string uuid of a block. Required when entityType is :block.
+              * :page-id - A page string uuid of a block. Required when adding a block.
               * :tags - A list of tags as string uuids
               * :property-type - A property's type
               * :property-cardinality - A property's cardinality. Must be :one or :many
@@ -181,7 +181,6 @@
                    :tags [\"00000002-1282-1814-5700-000000000000\"]}}]}
 
          Additional advice for building operations:
-         * When building a block update operation, use the 'page' key of the searchBlocks tool to fill in the value of :page-id under :data
          * Before creating any page, tag or property, check that it exists with getPage"
          :inputSchema
          #js {:operations
