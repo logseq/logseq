@@ -8,6 +8,7 @@
             [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.date :as date]
+            [frontend.db.conn :as db-conn]
             [frontend.db.file-based.model :as file-model]
             [frontend.db.query-react :as query-react]
             [frontend.db.utils :as db-utils]
@@ -18,7 +19,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.file-based.rules :as file-rules]
+            [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.rules :as rules]
             [logseq.graph-parser.text :as text]))
@@ -414,10 +417,22 @@
   (let [tags (if (coll? (first (rest e)))
                (first (rest e))
                (rest e))
-        tags (map (comp string/lower-case name) tags)]
+        tags (map name tags)]
     (when (seq tags)
-      (let [tags (set (map (comp page-ref/get-page-name! string/lower-case name) tags))]
-        {:query (list 'tags (if db-graph? '?b '?p) tags)
+      (let [tags (set (map (comp page-ref/get-page-name!) tags))
+            lower-cased-tags (set (map (comp page-ref/get-page-name! string/lower-case) tags))]
+        {:query (list 'tags
+                      (if db-graph? '?b '?p)
+                      (if db-graph?
+                        (let [db (db-conn/get-db)]
+                          (->> tags
+                               (mapcat (fn [tag-name]
+                                         (when-let [tag-id (first (ldb/page-exists? db tag-name #{:logseq.class/Tag}))]
+                                           (when-let [tag (db-utils/entity tag-id)]
+                                             (->> (db-class/get-structured-children db (:db/id tag))
+                                                  (cons (:db/id tag)))))))
+                               set))
+                        lower-cased-tags))
          :rules [:tags]}))))
 
 (defn- build-page-tags
