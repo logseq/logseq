@@ -53,6 +53,7 @@
 (defn <encrypt-private-key
   "Encrypts a private key with a password."
   [password private-key]
+  (assert (string? password))
   (p/let [salt (js/crypto.getRandomValues (js/Uint8Array. 16))
           iv (js/crypto.getRandomValues (js/Uint8Array. 12))
           password-key (.importKey subtle "raw"
@@ -79,6 +80,7 @@
 (defn <decrypt-private-key
   "Decrypts a private key with a password."
   [password encrypted-key-data]
+  (assert (and (vector? encrypted-key-data) (= 3 (count encrypted-key-data))))
   (p/let [[salt-data iv-data encrypted-private-key-data] encrypted-key-data
           salt (js/Uint8Array. salt-data)
           iv (js/Uint8Array. iv-data)
