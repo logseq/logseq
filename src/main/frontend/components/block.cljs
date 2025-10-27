@@ -2354,88 +2354,89 @@
                (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".as-inline")))
                :span.block-title-wrap)]
-    (->elem
-     elem
-     (merge
-      {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)}
-      (when (and marker
-                 (not (string/blank? marker))
-                 (not= "nil" marker))
-        {:data-marker (str (string/lower-case marker))})
-      (when bg-color
-        (let [built-in-color? (ui/built-in-color? bg-color)]
-          {:style {:background-color (if built-in-color?
-                                       (str "var(--ls-highlight-color-" bg-color ")")
-                                       bg-color)
-                   :color (when-not built-in-color? "white")}
-           :class "px-1 with-bg-color"})))
+    (when (seq block-ast-title)
+      (->elem
+       elem
+       (merge
+        {:data-hl-type (pu/lookup block :logseq.property.pdf/hl-type)}
+        (when (and marker
+                   (not (string/blank? marker))
+                   (not= "nil" marker))
+          {:data-marker (str (string/lower-case marker))})
+        (when bg-color
+          (let [built-in-color? (ui/built-in-color? bg-color)]
+            {:style {:background-color (if built-in-color?
+                                         (str "var(--ls-highlight-color-" bg-color ")")
+                                         bg-color)
+                     :color (when-not built-in-color? "white")}
+             :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
-           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
-                     [:div.prefix-link
-                      {:on-pointer-down
-                       (fn [^js e]
-                         (let [^js target (.-target e)]
-                           (case block-type
+       (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
+             hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
+                       [:div.prefix-link
+                        {:on-pointer-down
+                         (fn [^js e]
+                           (let [^js target (.-target e)]
+                             (case block-type
                              ;; pdf annotation
-                             :annotation
-                             (if (and area? (.contains (.-classList target) "blank"))
-                               :actions
-                               (do
-                                 (pdf-assets/open-block-ref! block)
-                                 (util/stop e)))
+                               :annotation
+                               (if (and area? (.contains (.-classList target) "blank"))
+                                 :actions
+                                 (do
+                                   (pdf-assets/open-block-ref! block)
+                                   (util/stop e)))
 
-                             :dune)))}
+                               :dune)))}
 
-                      [:span.hl-page
-                       [:strong.forbid-edit
-                        (str "P"
-                             (or (pu/lookup block :logseq.property.pdf/hl-page)
-                                 "?"))]]
+                        [:span.hl-page
+                         [:strong.forbid-edit
+                          (str "P"
+                               (or (pu/lookup block :logseq.property.pdf/hl-page)
+                                   "?"))]]
 
-                      (when (and area?
-                                 (or
+                        (when (and area?
+                                   (or
                                   ;; db graphs
-                                  (:logseq.property.pdf/hl-image block)
+                                    (:logseq.property.pdf/hl-image block)
                                   ;; file graphs
-                                  (get-in block [:block/properties :hl-stamp])))
-                        (pdf-assets/area-display block))])]
-       (remove-nils
-        (concat
-         (when (config/local-file-based-graph? (state/get-current-repo))
-           [(when (and (not pre-block?)
-                       (not html-export?))
-              (file-block/block-checkbox block (str "mr-1 cursor")))
-            (when (and (not pre-block?)
-                       (not html-export?))
-              (file-block/marker-switch block))
-            (file-block/marker-cp block)
-            (file-block/priority-cp block)])
+                                    (get-in block [:block/properties :hl-stamp])))
+                          (pdf-assets/area-display block))])]
+         (remove-nils
+          (concat
+           (when (config/local-file-based-graph? (state/get-current-repo))
+             [(when (and (not pre-block?)
+                         (not html-export?))
+                (file-block/block-checkbox block (str "mr-1 cursor")))
+              (when (and (not pre-block?)
+                         (not html-export?))
+                (file-block/marker-switch block))
+              (file-block/marker-cp block)
+              (file-block/priority-cp block)])
 
          ;; highlight ref block (inline)
-         (when-not area? [(hl-ref)])
+           (when-not area? [(hl-ref)])
 
-         (conj
-          (map-inline config block-ast-title)
-          (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
+           (conj
+            (map-inline config block-ast-title)
+            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
-         (when area? [(hl-ref)])
+           (when area? [(hl-ref)])
 
-         (when (and (seq block-ast-title) (ldb/class-instance?
-                                           (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
-                                           block))
-           [(ui/tooltip
-             (shui/button
-              {:variant :ghost
-               :size :sm
-               :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
-               :on-click (fn [e]
-                           (util/stop e)
-                           (state/pub-event! [:modal/show-cards (:db/id block)]))}
-              "Practice")
-             [:div "Practice cards"])])))))))
+           (when (and (seq block-ast-title) (ldb/class-instance?
+                                             (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)
+                                             block))
+             [(ui/tooltip
+               (shui/button
+                {:variant :ghost
+                 :size :sm
+                 :class "ml-2 !px-1 !h-5 text-xs text-muted-foreground"
+                 :on-click (fn [e]
+                             (util/stop e)
+                             (state/pub-event! [:modal/show-cards (:db/id block)]))}
+                "Practice")
+               [:div "Practice cards"])]))))))))
 
 (rum/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
