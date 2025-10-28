@@ -24,6 +24,10 @@
 .ui__dialog-content[label=user-login] {
   @apply flex items-center top-0 px-6 pt-0 w-auto;
 
+  .ui__card-header {
+    @apply pb-7;
+  }
+
   .ui__dialog-main-content {
     @apply p-0 w-[70vw] relative max-w-[500px] sm:w-[440px];
   }
