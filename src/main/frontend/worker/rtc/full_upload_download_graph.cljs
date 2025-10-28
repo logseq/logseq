@@ -390,6 +390,29 @@
      :init-tx-data init-tx-data
      :tx-data tx-data}))
 
+(defn- task--decrypt-blocks-aux
+  [aes-key encrypt-attr-set blocks]
+  (m/sp
+    (loop [[block & rest-blocks] blocks
+           result []]
+      (if-not block
+        result
+        (let [block* (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set block))]
+          (recur rest-blocks (conj result block*)))))))
+
+(defn- task--decrypt-blocks
+  [graph-uuid blocks]
+  (m/sp
+    (let [token (worker-state/get-id-token)
+          user-uuid (:sub (worker-util/parse-jwt token))
+          _ (assert (and token user-uuid))
+          {:keys [get-ws-create-task]}
+          (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+          aes-key (m/? (rtc-crypt/task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
+      (if aes-key
+        (m/? (task--decrypt-blocks-aux aes-key rtc-const/encrypt-attr-set blocks))
+        blocks))))
+
 (defn- new-task--transact-remote-all-blocks!
   [all-blocks repo graph-uuid]
   (let [{:keys [remote-t init-tx-data tx-data]}
@@ -489,9 +512,11 @@
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
                                                           :message "transacting graph data to local db"
                                                           :graph-uuid graph-uuid})
-            (let [all-blocks (ldb/read-transit-str body)]
+            (let [all-blocks (ldb/read-transit-str body)
+                  blocks* (m/? (task--decrypt-blocks graph-uuid (:blocks all-blocks)))
+                  all-blocks* (assoc all-blocks :blocks blocks*)]
               (worker-state/set-rtc-downloading-graph! true)
-              (m/? (new-task--transact-remote-all-blocks! all-blocks repo graph-uuid))
+              (m/? (new-task--transact-remote-all-blocks! all-blocks* repo graph-uuid))
               (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transacted-all-blocks
                                                             :message "transacted all blocks"
                                                             :graph-uuid graph-uuid})
