@@ -242,12 +242,19 @@
   ;; Notice: should check `page?` for block from the current db
   (if (ldb/page? (d/entity db (:db/id block)))
     block
-    (let [page-class? (fn [t]
+    (let [tags' (cond
+                  (qualified-keyword? tags)
+                  [(d/entity db tags)]
+                  (every? qualified-keyword? tags)
+                  (map #(d/entity db %) tags)
+                  :else
+                  tags)
+          page-class? (fn [t]
                         (and (map? t) (contains? db-class/page-classes
                                                  (or (:db/ident t)
                                                      (when-let [id (:block/uuid t)]
                                                        (:db/ident (d/entity db [:block/uuid id])))))))
-          page-classes (filter page-class? tags)]
+          page-classes (filter page-class? tags')]
       (if (seq page-classes)
         (-> block
             (update :block/tags
