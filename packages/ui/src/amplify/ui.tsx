@@ -102,7 +102,7 @@ function validatePasswordPolicy(password: string) {
     password.length < 8 ||
     !/[a-z]/.test(password) ||
     !/[A-Z]/.test(password) ||
-    !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+    !/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/.test(password)
   ) {
     throw new Error(t('PW_POLICY_TIP'))
   }
