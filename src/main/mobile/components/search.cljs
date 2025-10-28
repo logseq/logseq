@@ -143,7 +143,6 @@
                            (when-let [id (:block/uuid block)]
                              (p/let [block (db-async/<get-block (state/get-current-repo) id
                                                                 {:children? false
-                                                                 :skip-transact? true
                                                                  :skip-refresh? true})]
                                (when block (mobile-state/open-block-modal! block)))))}
               [:div.flex.flex-col.gap-1.py-1
