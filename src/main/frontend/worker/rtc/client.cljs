@@ -455,14 +455,16 @@
             (case op-type
               :update-page
               (recur rest-remote-ops
-                     (conj result (c.m/<? (crypt/<encrypt-map aes-key encrypt-attr-set op-value))))
-              :update
-              (recur rest-remote-ops
                      (conj result
-                           (c.m/<?
-                            (crypt/<encrypt-av-coll
-                             aes-key rtc-const/encrypt-attr-set (:av-coll op-value)))))
-              ;; else
+                           [op-type (c.m/<? (crypt/<encrypt-map aes-key encrypt-attr-set op-value))]))
+              :update
+              (let [av-coll* (c.m/<?
+                              (crypt/<encrypt-av-coll
+                               aes-key rtc-const/encrypt-attr-set (:av-coll op-value)))]
+                (recur rest-remote-ops
+                       (conj result [op-type (assoc op-value :av-coll av-coll*)])))
+
+;; else
               (recur rest-remote-ops (conj result remote-op)))))))))
 
 (defn new-task--push-local-ops
