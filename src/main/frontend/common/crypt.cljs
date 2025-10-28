@@ -1,5 +1,6 @@
 (ns frontend.common.crypt
-  (:require [logseq.db :as ldb]
+  (:require [lambdaisland.glogi :as log]
+            [logseq.db :as ldb]
             [promesa.core :as p]))
 
 (defonce subtle (.. js/crypto -subtle))
@@ -81,34 +82,38 @@
   "Decrypts a private key with a password."
   [password encrypted-key-data]
   (assert (and (vector? encrypted-key-data) (= 3 (count encrypted-key-data))))
-  (p/let [[salt-data iv-data encrypted-private-key-data] encrypted-key-data
-          salt (js/Uint8Array. salt-data)
-          iv (js/Uint8Array. iv-data)
-          encrypted-private-key (js/Uint8Array. encrypted-private-key-data)
-          password-key (.importKey subtle "raw"
-                                   (.encode (js/TextEncoder.) password)
-                                   "PBKDF2"
-                                   false
-                                   #js ["deriveKey"])
-          derived-key (.deriveKey subtle
-                                  #js {:name "PBKDF2"
-                                       :salt salt
-                                       :iterations 100000
-                                       :hash "SHA-256"}
-                                  password-key
-                                  #js {:name "AES-GCM" :length 256}
-                                  true
-                                  #js ["encrypt" "decrypt"])
-          decrypted-private-key-data (.decrypt subtle
-                                               #js {:name "AES-GCM" :iv iv}
-                                               derived-key
-                                               encrypted-private-key)
-          private-key (.importKey subtle "pkcs8"
-                                  decrypted-private-key-data
-                                  #js {:name "RSA-OAEP" :hash "SHA-256"}
-                                  true
-                                  #js ["decrypt"])]
-    private-key))
+  (->
+   (p/let [[salt-data iv-data encrypted-private-key-data] encrypted-key-data
+           salt (js/Uint8Array. salt-data)
+           iv (js/Uint8Array. iv-data)
+           encrypted-private-key (js/Uint8Array. encrypted-private-key-data)
+           password-key (.importKey subtle "raw"
+                                    (.encode (js/TextEncoder.) password)
+                                    "PBKDF2"
+                                    false
+                                    #js ["deriveKey"])
+           derived-key (.deriveKey subtle
+                                   #js {:name "PBKDF2"
+                                        :salt salt
+                                        :iterations 100000
+                                        :hash "SHA-256"}
+                                   password-key
+                                   #js {:name "AES-GCM" :length 256}
+                                   true
+                                   #js ["encrypt" "decrypt"])
+           decrypted-private-key-data (.decrypt subtle
+                                                #js {:name "AES-GCM" :iv iv}
+                                                derived-key
+                                                encrypted-private-key)
+           private-key (.importKey subtle "pkcs8"
+                                   decrypted-private-key-data
+                                   #js {:name "RSA-OAEP" :hash "SHA-256"}
+                                   true
+                                   #js ["decrypt"])]
+     private-key)
+   (p/catch (fn [e]
+              (log/error "decrypt-private-key" e)
+              (ex-info "decrypt-private-key" {} e)))))
 
 (defn <encrypt-aes-key
   "Encrypts an AES key with a public key."
@@ -123,17 +128,23 @@
 (defn <decrypt-aes-key
   "Decrypts an AES key with a private key."
   [private-key encrypted-aes-key-data]
-  (p/let [encrypted-aes-key (js/Uint8Array. encrypted-aes-key-data)
-          decrypted-key-data (.decrypt subtle
-                                       #js {:name "RSA-OAEP"}
-                                       private-key
-                                       encrypted-aes-key)]
-    (.importKey subtle
-                "raw"
-                decrypted-key-data
-                "AES-GCM"
-                true
-                #js ["encrypt" "decrypt"])))
+  (assert (and (instance? js/CryptoKey private-key)
+               (instance? js/Uint8Array encrypted-aes-key-data)))
+  (->
+   (p/let [encrypted-aes-key (js/Uint8Array. encrypted-aes-key-data)
+           decrypted-key-data (.decrypt subtle
+                                        #js {:name "RSA-OAEP"}
+                                        private-key
+                                        encrypted-aes-key)]
+     (.importKey subtle
+                 "raw"
+                 decrypted-key-data
+                 "AES-GCM"
+                 true
+                 #js ["encrypt" "decrypt"]))
+   (p/catch (fn [e]
+              (log/error "decrypt-aes-key" e)
+              (ex-info "decrypt-aes-key" {} e)))))
 
 (defn <encrypt-text
   "Encrypts text with an AES key."
