@@ -23,11 +23,10 @@
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
-                           (concat [[:db/retractEntity (:db/id entity)]]
-                                   (try
-                                     (db-migrate/remove-block-path-refs-datoms db)
-                                     (catch :default _e
-                                       nil)))
+                           (try
+                             (db-migrate/remove-block-path-refs db)
+                             (catch :default _e
+                               nil))
                            (and (= dispatch-key :block) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
 
