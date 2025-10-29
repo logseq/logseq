@@ -145,7 +145,6 @@
                          :repo repo
                          :graph-uuid graph-uuid
                          :remote-schema-version max-remote-schema-version}))
-          (assert @*aes-key)
           (m/? (task--apply-remote-updates-from-apply-ops
                 init-request-resp graph-uuid repo conn date-formatter @*aes-key add-log-fn))))
       ws)))
@@ -445,6 +444,7 @@
 
 (defn- task--encrypt-remote-ops
   [aes-key remote-ops]
+  (assert aes-key)
   (let [encrypt-attr-set (conj rtc-const/encrypt-attr-set :page-name)]
     (m/sp
       (loop [[remote-op & rest-remote-ops] remote-ops
@@ -464,7 +464,7 @@
                 (recur rest-remote-ops
                        (conj result [op-type (assoc op-value :av-coll av-coll*)])))
 
-;; else
+              ;; else
               (recur rest-remote-ops (conj result remote-op)))))))))
 
 (defn new-task--push-local-ops
@@ -483,11 +483,13 @@
                       other-remote-ops)]
       (when-let [ops-for-remote (rtc-schema/to-ws-ops-decoder remote-ops)]
         (let [local-tx (client-op/get-local-tx repo)
-              encrypted-remote-ops (m/? (task--encrypt-remote-ops aes-key ops-for-remote))
+              ops-for-remote* (if aes-key
+                                (m/? (task--encrypt-remote-ops aes-key ops-for-remote))
+                                ops-for-remote)
               r (try
                   (let [message (cond-> {:action "apply-ops"
                                          :graph-uuid graph-uuid :schema-version (str major-schema-version)
-                                         :ops encrypted-remote-ops :t-before local-tx}
+                                         :ops ops-for-remote* :t-before local-tx}
                                   (true? @*remote-profile?) (assoc :profile true))
                         r (m/? (ws-util/send&recv get-ws-create-task message))]
                     (r.throttle/add-rtc-api-call-record! message)
