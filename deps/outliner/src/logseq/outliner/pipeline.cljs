@@ -147,5 +147,5 @@
   (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
         refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs-tx tx-report blocks))]
                          (ldb/transact! conn refs-tx (-> (:tx-meta tx-report)
-                                                         (assoc :pipeline-replace? true))))]
+                                                         (assoc :transact-new-graph-refs? true))))]
     refs-tx-report))

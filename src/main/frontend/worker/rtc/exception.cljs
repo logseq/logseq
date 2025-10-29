@@ -57,4 +57,10 @@ the server will put it to s3 and return its presigned-url to clients."}
   (cond
     (instance? Cancelled e) (ex-info "missionary.Cancelled" {:message (.-message e)})
     (instance? js/CloseEvent e) (ex-info "js/CloseEvent" {:type (.-type e)})
+
+    ;; m/race-failure
+    (and (instance? ExceptionInfo e)
+         (contains? (ex-data e) :missionary.core/errors))
+    (ex-info (ex-message e) (update (ex-data e) :missionary.core/errors (fn [errors] (map e->ex-info errors))))
+
     :else e))

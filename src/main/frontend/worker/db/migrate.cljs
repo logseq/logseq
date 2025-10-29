@@ -396,14 +396,15 @@
             :block/name (common-util/page-name-sanity-lc (:block/title page))})))
      pages)))
 
-(defn remove-block-path-refs-datoms
+(defn remove-block-path-refs
   [db]
   (when (d/entity db :block/path-refs)
-    (->> (d/datoms db :avet :block/path-refs)
-         (map :e)
-         (distinct)
-         (map (fn [id]
-                [:db/retract id :block/path-refs])))))
+    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
+                             (map :e)
+                             (distinct)
+                             (mapv (fn [id]
+                                     [:db/retract id :block/path-refs])))]
+      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
 
 (defn- remove-position-property-from-url-properties
   [db]
@@ -428,7 +429,7 @@
    ["65.8" {:fix add-missing-page-name}]
    ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
    ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
-   ["65.11" {:fix remove-block-path-refs-datoms}]
+   ["65.11" {:fix remove-block-path-refs}]
    ["65.12" {:fix remove-position-property-from-url-properties}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)

@@ -108,6 +108,20 @@
       (when (string/starts-with? key prefix)
         (js/localStorage.removeItem key)))))
 
+(defn auto-fill-refresh-token-from-cognito!
+  []
+  (let [prefix "CognitoIdentityServiceProvider."
+        refresh-token-key (some #(when (string/starts-with? % prefix)
+                                   (when (string/ends-with? % "refreshToken")
+                                     %))
+                                (js/Object.keys js/localStorage))]
+    (when refresh-token-key
+      (let [refresh-token (js/localStorage.getItem refresh-token-key)]
+        (when (and refresh-token (not= refresh-token "undefined"))
+          (state/set-auth-refresh-token refresh-token)
+          (js/localStorage.setItem "refresh-token" refresh-token)))))
+  )
+
 (defn- clear-tokens
   ([]
    (state/set-auth-id-token nil)
@@ -206,6 +220,7 @@
    (:jwtToken (:idToken session))
    (:jwtToken (:accessToken session))
    (:token (:refreshToken session)))
+  (auto-fill-refresh-token-from-cognito!)
   (state/pub-event! [:user/fetch-info-and-graphs]))
 
 (defn ^:export login-with-username-password-e2e
