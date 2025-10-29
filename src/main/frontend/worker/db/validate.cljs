@@ -117,10 +117,11 @@
                                                     [:db/add (:e d) new-db-ident (:v d)]])))))))))
         ;; FIXME: :logseq.property.table/hidden-columns should be :property type to avoid issues like this
         hidden-columns-tx-data (->> (d/datoms db :avet :logseq.property.table/hidden-columns)
-                                    (keep (fn [d]
-                                            (when (re-find #"^(\d)" (name (:v d)))
-                                              (let [new-value (keyword (namespace (:v d)) (string/replace-first (name (:v d)) #"^(\d)" "NUM-$1"))]
-                                                [:db/add (:e d) (:a d) new-value])))))
+                                    (mapcat (fn [d]
+                                              (when (re-find #"^(\d)" (name (:v d)))
+                                                (let [new-value (keyword (namespace (:v d)) (string/replace-first (name (:v d)) #"^(\d)" "NUM-$1"))]
+                                                  [[:db/retract (:e d) (:a d) (:v d)]
+                                                   [:db/add (:e d) (:a d) new-value]])))))
         tx-data' (concat tx-data hidden-columns-tx-data)]
     (when (seq tx-data')
       (ldb/transact! conn tx-data'))))
