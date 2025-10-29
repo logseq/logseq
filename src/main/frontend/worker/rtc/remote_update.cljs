@@ -605,25 +605,26 @@ so need to pull earlier remote-data from websocket."})
 
 (defn task--decrypt-blocks-in-remote-update-data
   [aes-key encrypt-attr-set remote-update-data]
+  (assert aes-key)
   (m/sp
-    (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
-          affected-blocks-map'
-          (loop [[[block-uuid affected-block] & rest-affected-blocks] affected-blocks-map
-                 affected-blocks-map-result {}]
-            (if-not block-uuid
-              affected-blocks-map-result
-              (let [affected-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set affected-block))]
-                (recur rest-affected-blocks (assoc affected-blocks-map-result block-uuid affected-block')))))
-          refed-blocks'
-          (loop [[refed-block & rest-refed-blocks] refed-blocks
-                 refed-blocks-result []]
-            (if-not refed-block
-              refed-blocks-result
-              (let [refed-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set refed-block))]
-                (recur rest-refed-blocks (conj refed-blocks-result refed-block')))))]
-      (assoc remote-update-data
-             :affected-blocks affected-blocks-map'
-             :refed-blocks refed-blocks'))))
+   (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
+         affected-blocks-map'
+         (loop [[[block-uuid affected-block] & rest-affected-blocks] affected-blocks-map
+                affected-blocks-map-result {}]
+           (if-not block-uuid
+             affected-blocks-map-result
+             (let [affected-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set affected-block))]
+               (recur rest-affected-blocks (assoc affected-blocks-map-result block-uuid affected-block')))))
+         refed-blocks'
+         (loop [[refed-block & rest-refed-blocks] refed-blocks
+                refed-blocks-result []]
+           (if-not refed-block
+             refed-blocks-result
+             (let [refed-block' (c.m/<? (crypt/<decrypt-map aes-key encrypt-attr-set refed-block))]
+               (recur rest-refed-blocks (conj refed-blocks-result refed-block')))))]
+     (assoc remote-update-data
+            :affected-blocks affected-blocks-map'
+            :refed-blocks refed-blocks'))))
 
 (defn apply-remote-update-check
   "If the check passes, return true"
@@ -662,9 +663,11 @@ so need to pull earlier remote-data from websocket."})
   (m/sp
     (when (apply-remote-update-check repo remote-update-event add-log-fn)
       (let [remote-update-data (:value remote-update-event)
-            remote-update-data (m/? (task--decrypt-blocks-in-remote-update-data
-                                     aes-key rtc-const/encrypt-attr-set
-                                     remote-update-data))
+            remote-update-data (if aes-key
+                                 (m/? (task--decrypt-blocks-in-remote-update-data
+                                       aes-key rtc-const/encrypt-attr-set
+                                       remote-update-data))
+                                 remote-update-data)
             remote-t (:t remote-update-data)
             {affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
             {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}

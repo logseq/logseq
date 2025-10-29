@@ -190,14 +190,15 @@
       *online-users)))
 
 (defn- task--update-*aes-key
-  [get-ws-create-task user-uuid graph-uuid *aes-key]
+  [get-ws-create-task db user-uuid graph-uuid *aes-key]
   (m/sp
-    (let [aes-key (m/? (rtc-crypt/task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
-      (when (nil? aes-key)
-        (throw (ex-info "not found aes-key" {:type :rtc.exception/not-found-graph-aes-key
-                                             :graph-uuid graph-uuid
-                                             :user-uuid user-uuid})))
-      (reset! *aes-key aes-key))))
+    (when (ldb/get-graph-rtc-e2ee? db)
+      (let [aes-key (m/? (rtc-crypt/task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
+        (when (nil? aes-key)
+          (throw (ex-info "not found aes-key" {:type :rtc.exception/not-found-graph-aes-key
+                                               :graph-uuid graph-uuid
+                                               :user-uuid user-uuid})))
+        (reset! *aes-key aes-key)))))
 
 (declare new-task--inject-users-info)
 (defn- create-rtc-loop
@@ -239,7 +240,7 @@
         (try
           (log/info :rtc :loop-starting)
           ;; init run to open a ws
-          (m/? (task--update-*aes-key get-ws-create-task0 user-uuid graph-uuid *aes-key))
+          (m/? (task--update-*aes-key get-ws-create-task0 @conn user-uuid graph-uuid *aes-key))
           (m/? get-ws-create-task)
           ;; NOTE: Set dfv after ws connection is established,
           ;; ensuring the ws connection is already up when the cloud-icon turns green.
@@ -367,6 +368,8 @@
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
+                                 (when-not (instance? Cancelled e)
+                                   (println (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
                                    (worker-state/<invoke-main-thread :thread-api/rtc-start-request repo))))
