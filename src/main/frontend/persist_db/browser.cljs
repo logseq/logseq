@@ -219,7 +219,7 @@
                 _ (when disk-db-data
                     (state/<invoke-db-worker-direct-pass :thread-api/import-db repo disk-db-data))
                 _ (state/<invoke-db-worker :thread-api/create-or-open-db repo opts)]
-          (state/<invoke-db-worker :thread-api/get-initial-data repo))
+          (state/<invoke-db-worker :thread-api/get-initial-data repo opts))
         (p/catch sqlite-error-handler)))
 
   (<export-db [_this repo opts]
