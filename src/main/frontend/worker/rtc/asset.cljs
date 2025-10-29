@@ -13,6 +13,7 @@
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
             [malli.core :as ma]
@@ -293,6 +294,7 @@
       started-dfv
       (m/sp
         (try
+          (log/info :rtc-asset :loop-starting)
           (started-dfv true)
           (m/? (new-task--initial-download-missing-assets repo get-ws-create-task graph-uuid conn add-log-fn))
           (->>
