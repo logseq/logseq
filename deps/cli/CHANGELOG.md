@@ -1,3 +1,8 @@
+## 0.3.0
+* Add mcp-server command to run a MCP server
+* All commands that have graph args and options now support local paths e.g. `logseq search $HOME/Downloads/logseq_db_yep_1751032977.sqlite foo`
+* Fix: Unexpected errors don't exit with 1
+
 ## 0.2.0
 * Add export command to export graph as markdown
 * Add append command to add text to current page
