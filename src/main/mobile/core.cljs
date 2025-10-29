@@ -64,9 +64,11 @@
          (mobile-state/redirect-to-tab! "settings")
 
          :import
-         (shui/popup-show! nil (fn []
-                                 (imports/importer {}))
-                           {:id :import})
+         (p/do!
+          (p/delay 300)
+          (shui/popup-show! nil (fn []
+                                  (imports/importer {}))
+                            {:id :import}))
 
          nil)))
 
