@@ -553,9 +553,12 @@
         (throw e)))))
 
 (def-thread-api :thread-api/get-initial-data
-  [repo]
+  [repo opts]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (common-initial-data/get-initial-data @conn)))
+    (if (:file-graph-import? opts)
+      {:schema (:schema @conn)
+       :initial-data (vec (d/datoms @conn :eavt))}
+      (common-initial-data/get-initial-data @conn))))
 
 (def-thread-api :thread-api/reset-db
   [repo db-transit]
