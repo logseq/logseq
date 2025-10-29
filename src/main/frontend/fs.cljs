@@ -51,7 +51,7 @@
       node-backend
 
       :else
-      nil)))
+      (throw (ex-info "failed to get fs backend" {:dir dir :repo repo :rpath rpath})))))
 
 (defn mkdir!
   [dir]
