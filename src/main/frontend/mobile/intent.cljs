@@ -230,7 +230,7 @@
                                          (handle-payload-resource resource format))
                                        resources))
                            (p/then (partial string/join "\n")))]
-    (when (not-empty text)
+    (when (or (not-empty text) (not-empty rich-content))
       (let [time (date/get-current-time)
             date-ref-name (date/today)
             content (-> template
