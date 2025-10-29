@@ -12,6 +12,8 @@
              clojure.string string
              datascript.core d
              logseq.cli.commands.graph cli-graph
+             logseq.cli.common.mcp.server cli-common-mcp-server
+             logseq.cli.common.mcp.tools cli-common-mcp-tools
              logseq.cli.common.graph cli-common-graph
              logseq.cli.common.export.text cli-export-text
              logseq.cli.common.export.common cli-export-common
