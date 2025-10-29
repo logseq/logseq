@@ -431,14 +431,15 @@
 
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
-  (let [{:keys [from-disk? new-graph?]} tx-meta]
-    (cond
-      (or from-disk? new-graph?)
-      {:tx-report tx-report}
+  (let [{:keys [from-disk? new-graph? transact-new-graph-refs?]} tx-meta]
+    (when-not transact-new-graph-refs?
+      (cond
+        (or from-disk? new-graph?)
+        {:tx-report tx-report}
 
-      (or (::gp-exporter/new-graph? tx-meta)
-          (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta)))
-      (invoke-hooks-for-imported-graph conn tx-report)
+        (or (::gp-exporter/new-graph? tx-meta)
+            (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta)))
+        (invoke-hooks-for-imported-graph conn tx-report)
 
-      :else
-      (invoke-hooks-default repo conn tx-report context))))
+        :else
+        (invoke-hooks-default repo conn tx-report context)))))
