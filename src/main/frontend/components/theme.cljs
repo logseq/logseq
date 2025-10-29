@@ -1,5 +1,6 @@
 (ns frontend.components.theme
-  (:require [electron.ipc :as ipc]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.components.settings :as settings]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -68,7 +69,9 @@
 
     (hooks/use-effect!
      #(let [doc js/document.documentElement]
-        (.setAttribute doc "lang" preferred-language)))
+        (.setAttribute doc "lang" preferred-language)
+        (some-> preferred-language (string/lower-case) (js/LSI18N.setLocale)))
+     [preferred-language])
 
     (hooks/use-effect!
      #(js/setTimeout
