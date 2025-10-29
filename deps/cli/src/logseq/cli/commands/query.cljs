@@ -37,7 +37,7 @@
        (mapv (fn [[k v]]
                [k
                 (cond
-                  (#{:block/tags :logseq.property.class/extends} k)
+                  (#{:block/tags :logseq.property.class/extends :logseq.property/classes :logseq.property.class/properties} k)
                   (mapv :db/ident v)
                   (and (set? v) (every? de/entity? v))
                   (set (map db-property/property-value-content v))
@@ -74,7 +74,7 @@
   [{{:keys [graph args graphs properties-readable title-query]} :opts}]
   (let [graphs' (into [graph] graphs)]
     (doseq [graph' graphs']
-      (if (fs/existsSync (cli-util/get-graph-dir graph'))
+      (if (fs/existsSync (cli-util/get-graph-path graph'))
         (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
               query* (when (string? (first args)) (common-util/safe-read-string {:log-error? false} (first args)))
               results (cond

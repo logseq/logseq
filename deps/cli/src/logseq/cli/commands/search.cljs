@@ -51,7 +51,7 @@
       (p/catch cli-util/command-catch-handler)))
 
 (defn- local-search [search-term {{:keys [graph raw limit]} :opts}]
-  (if (fs/existsSync (cli-util/get-graph-dir graph))
+  (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
           nodes (->> (d/datoms @conn :aevt :block/title)
                      (filter (fn [datom]
