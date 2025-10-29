@@ -27,7 +27,7 @@
 }
 
 #mobile-editor-toolbar {
-  @apply absolute bottom-0 left-0 w-full z-[99999] flex justify-between bg-background px-2;
+  @apply fixed bottom-0 left-0 w-full z-[99999] flex justify-between bg-background px-2;
 
   will-change: transform;
   transform: translateY(calc(-1 * var(--ls-native-kb-height, 0)));
