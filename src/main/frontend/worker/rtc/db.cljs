@@ -9,7 +9,8 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (ldb/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
                          [:db/retractEntity :logseq.kv/graph-local-tx]
-                         [:db/retractEntity :logseq.kv/remote-schema-version]])))
+                         [:db/retractEntity :logseq.kv/remote-schema-version]
+                         [:db/retractEntity :logseq.kv/graph-rtc-e2ee?]])))
 
 (defn reset-client-op-conn
   [repo]
