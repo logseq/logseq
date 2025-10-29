@@ -158,6 +158,7 @@
                                                      :user-uuid user-uuid})))
 
       (let [encrypted-aes-key (c.m/<? (crypt/<encrypt-aes-key public-key aes-key))
+            _ (ldb/transact! conn [(ldb/kv :logseq.kv/graph-rtc-e2ee? true)])
             _ (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetching-presigned-put-url
                                                           :message "fetching presigned put-url"})
             [{:keys [url key]} all-blocks-str]

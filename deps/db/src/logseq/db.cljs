@@ -573,6 +573,10 @@
   [db]
   (when db (get-key-value db :logseq.kv/remote-schema-version)))
 
+(defn get-graph-rtc-e2ee?
+  [db]
+  (when db (get-key-value db :logseq.kv/graph-rtc-e2ee?)))
+
 (def get-all-properties db-db/get-all-properties)
 (def get-class-extends db-class/get-class-extends)
 (def get-classes-parents db-db/get-classes-parents)
