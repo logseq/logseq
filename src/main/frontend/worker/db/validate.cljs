@@ -23,11 +23,10 @@
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
-                           (concat [[:db/retractEntity (:db/id entity)]]
-                                   (try
-                                     (db-migrate/remove-block-path-refs-datoms db)
-                                     (catch :default _e
-                                       nil)))
+                           (try
+                             (db-migrate/remove-block-path-refs db)
+                             (catch :default _e
+                               nil))
                            (and (= dispatch-key :block) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
 
@@ -114,9 +113,17 @@
                                     (->> (d/datoms db :avet (:v d))
                                          (mapcat (fn [d]
                                                    [[:db/retract (:e d) (:a d) (:v d)]
-                                                    [:db/add (:e d) new-db-ident (:v d)]])))))))))]
-    (when (seq tx-data)
-      (ldb/transact! conn tx-data))))
+                                                    [:db/add (:e d) new-db-ident (:v d)]])))))))))
+        ;; FIXME: :logseq.property.table/hidden-columns should be :property type to avoid issues like this
+        hidden-columns-tx-data (->> (d/datoms db :avet :logseq.property.table/hidden-columns)
+                                    (mapcat (fn [d]
+                                              (when (re-find #"^(\d)" (name (:v d)))
+                                                (let [new-value (keyword (namespace (:v d)) (string/replace-first (name (:v d)) #"^(\d)" "NUM-$1"))]
+                                                  [[:db/retract (:e d) (:a d) (:v d)]
+                                                   [:db/add (:e d) (:a d) new-value]])))))
+        tx-data' (concat tx-data hidden-columns-tx-data)]
+    (when (seq tx-data')
+      (ldb/transact! conn tx-data'))))
 
 (defn validate-db
   [conn]

@@ -333,7 +333,7 @@
             (ui/icon "layout-sidebar-right"))]]))]))
 
 (defn build-columns
-  [config properties & {:keys [with-object-name? with-id? add-tags-column?]
+  [config properties & {:keys [with-object-name? with-id? add-tags-column? advanced-query?]
                         :or {with-object-name? true
                              with-id? true
                              add-tags-column? true}}]
@@ -341,7 +341,8 @@
                      (if (or (some #(= (:db/ident %) :block/tags) properties) (not add-tags-column?))
                        properties
                        (conj properties (db/entity :block/tags)))
-                     (remove nil?))]
+                     (remove nil?))
+        property-keys (set (map :db/ident properties'))]
     (->> (concat
           [{:id :select
             :name "Select"
@@ -372,7 +373,7 @@
              (when-let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/order :block/collapsed?
+                                          :block/created-at :block/updated-at :block/collapsed?
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
@@ -403,16 +404,20 @@
                     :type (:type property)}))))
            properties')
 
-          [{:id :block/created-at
-            :name (t :page/created-at)
-            :type :datetime
-            :header header-cp
-            :cell timestamp-cell-cp}
-           {:id :block/updated-at
-            :name (t :page/updated-at)
-            :type :datetime
-            :header header-cp
-            :cell timestamp-cell-cp}])
+          [(when (or (not advanced-query?)
+                     (and advanced-query? (property-keys :block/created-at)))
+             {:id :block/created-at
+              :name (t :page/created-at)
+              :type :datetime
+              :header header-cp
+              :cell timestamp-cell-cp})
+           (when (or (not advanced-query?)
+                     (and advanced-query? (property-keys :block/updated-at)))
+             {:id :block/updated-at
+              :name (t :page/updated-at)
+              :type :datetime
+              :header header-cp
+              :cell timestamp-cell-cp})])
          (remove nil?))))
 
 (defn- sort-columns
@@ -2161,15 +2166,19 @@
   (state/<invoke-db-worker :thread-api/get-view-data (state/get-current-repo) (:db/id view) opts))
 
 (defn- get-query-columns
-  [config properties]
-  (->> properties
-       (map db/entity)
-       (remove ldb/hidden?)
-       (ldb/sort-by-order)
-       ((fn [cs] (build-columns config cs {:add-tags-column? false})))))
+  [config view-entity properties]
+  (let [advanced-query? (->> (:logseq.property/query view-entity)
+                             :logseq.property.node/display-type
+                             (= :code))]
+    (->> properties
+         (remove #{:logseq.property.embedding/hnsw-label-updated-at})
+         (map db/entity)
+         (ldb/sort-by-order)
+         ((fn [cs] (build-columns config cs {:add-tags-column? false
+                                             :advanced-query? advanced-query?}))))))
 
 (defn- load-view-data-aux
-  [config view-entity view-parent {:keys [query? query-entity-ids sorting filters input
+  [config view-entity view-parent {:keys [query? query query-entity-ids sorting filters input
                                           view-feature-type group-by-property-ident
                                           set-data! set-ref-pages-count! set-ref-matched-children-ids! set-properties! set-loading!]}]
   (c.m/run-task*
@@ -2192,7 +2201,8 @@
                           :filters filters
                           :sorting sorting}
                           query?
-                          (assoc :query-entity-ids query-entity-ids))
+                          (assoc :query-entity-ids query-entity-ids
+                                 :query query))
                    {:keys [data ref-pages-count ref-matched-children-ids properties]}
                    (c.m/<? (<load-view-data view-entity opts))]
                (set-data! data)
@@ -2207,7 +2217,7 @@
                    (reset! *objects-ready? true)))))))))))
 
 (rum/defc view-aux
-  [view-entity {:keys [config view-parent view-feature-type data query-entity-ids set-view-entity!] :as option}]
+  [view-entity {:keys [config view-parent view-feature-type data query-entity-ids query set-view-entity!] :as option}]
   (let [[input set-input!] (hooks/use-state "")
         [properties set-properties!] (hooks/use-state nil)
         db-based? (config/db-based-graph?)
@@ -2234,7 +2244,7 @@
         view-filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or view-filters {}))
         query? (= view-feature-type :query-result)
-        option (if query? (assoc option :columns (get-query-columns config properties)) option)
+        option (if query? (assoc option :columns (get-query-columns config view-entity properties)) option)
         [loading? set-loading!] (hooks/use-state (not query?))
         [data set-data!] (hooks/use-state data)
         [ref-pages-count set-ref-pages-count!] (hooks/use-state nil)
@@ -2242,6 +2252,7 @@
         load-view-data (fn load-view-data []
                          (load-view-data-aux config view-entity view-parent
                                              {:query? query?
+                                              :query query
                                               :query-entity-ids query-entity-ids
                                               :sorting sorting :filters filters :input input
                                               :view-feature-type view-feature-type :group-by-property-ident group-by-property-ident

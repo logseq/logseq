@@ -77,7 +77,7 @@ export interface LSPluginPkgConfig {
   /**
    * Alternative entrypoint for development.
    */
-  devEntry: unknown
+  devEntry: string
   /**
    * For legacy themes, do not use.
    */
