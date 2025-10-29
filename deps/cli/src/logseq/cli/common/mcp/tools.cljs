@@ -160,7 +160,6 @@
          (map (fn [[page-id ops]]
                 {:page {:block/uuid page-id}
                  :blocks (mapv (fn [op]
-                                 (prn :block-op op)
                                  (if (= "add" (:operation op))
                                    (build-add-block op idents)
                                    ;; edit :block
@@ -311,7 +310,8 @@
    ;; Validate special cases of operation and entityType e.g. required keys and uuid strings
    [:multi {:dispatch (juxt :operation :entityType)}
     [["add" "block"] [:map
-                      [:data [:map
+                      [:data [:map {:closed true}
+                              [:tags {:optional true} [:sequential uuid-string]]
                               [:title :string]
                               [:page-id :string]]]]]
     [["add" "page"] add-non-block-schema]
