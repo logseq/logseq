@@ -111,13 +111,16 @@
                (not (:reset-conn! tx-meta))
                (not (:initial-db? tx-meta))
                (not (:skip-validate-db? tx-meta false))
-               (not (:rtc-download-graph? tx-meta))
-               (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
+               (not (:rtc-download-graph? tx-meta)))
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
-              [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
+              [validate-result errors]
+              ;; Skip validation for imported graphs as they are validated later
+              (if-not (:logseq.graph-parser.exporter/new-graph? tx-meta)
+                (db-validate/validate-tx-report tx-report nil)
+                [true])]
           (if validate-result
             (when (and tx-report (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`

@@ -265,15 +265,6 @@
               (assoc :logseq.property.code/lang (:kv/value (d/entity db :logseq.kv/latest-code-lang))))])))
      datoms)))
 
-(defn- invoke-hooks-for-imported-graph [conn {:keys [tx-meta] :as tx-report}]
-  (let [refs-tx-report (outliner-pipeline/transact-new-db-graph-refs conn tx-report)
-        full-tx-data (concat (:tx-data tx-report) (:tx-data refs-tx-report))
-        final-tx-report (-> (or refs-tx-report tx-report)
-                            (assoc :tx-data full-tx-data
-                                   :tx-meta tx-meta
-                                   :db-before (:db-before tx-report)))]
-    {:tx-report final-tx-report}))
-
 (defn- gen-created-by-block
   [decoded-id-token]
   (let [user-uuid (:sub decoded-id-token)
@@ -354,12 +345,16 @@
        ;; sort by :tx, use nth to make this fn works on both vector and datom
        (sort-by #(nth % 3))))
 
+(defn- imported-data? [tx-meta]
+  (or (::gp-exporter/new-graph? tx-meta)
+      (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta))))
+
 (defn transact-pipeline
   "Compute extra tx-data and block/refs, should ensure it's a pure function and
   doesn't call `d/transact!` or `ldb/transact!`."
   [repo {:keys [db-after tx-meta] :as tx-report}]
   (let [db-based? (entity-plus/db-based-graph? db-after)
-        extra-tx-data (when db-based?
+        extra-tx-data (when (and db-based? (not (imported-data? tx-meta)))
                         (compute-extra-tx-data repo tx-report))
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
@@ -432,13 +427,6 @@
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (let [{:keys [from-disk? new-graph?]} tx-meta]
-    (cond
-      (or from-disk? new-graph?)
+    (if (or from-disk? new-graph?)
       {:tx-report tx-report}
-
-      (or (::gp-exporter/new-graph? tx-meta)
-          (and (::sqlite-export/imported-data? tx-meta) (:import-db? tx-meta)))
-      (invoke-hooks-for-imported-graph conn tx-report)
-
-      :else
       (invoke-hooks-default repo conn tx-report context))))
