@@ -1382,14 +1382,16 @@
                    (or (all-existing-page-uuids (:block/name page))
                        (throw (ex-info (str "No uuid found for existing namespace page " (pr-str (:block/name page)))
                                        (select-keys page [:block/name :block/namespace]))))))
-          (cond-> page
-            ;; fix extract incorrectly assigning new user pages built-in uuids
-            (contains? all-built-in-names (keyword (:block/name page)))
-            (assoc :block/uuid (d/squuid))
-            ;; only happens for few file built-ins like tags and alias
-            (and (contains? all-built-in-names (keyword (:block/name page)))
-                 (not (:block/tags page)))
-            (assoc :block/tags [:logseq.class/Page])))]
+          (let [built-in-name? (and (contains? all-built-in-names (keyword (:block/name page)))
+                                    ;; Don't create new card page
+                                    (not (contains? #{:card} (keyword (:block/name page)))))]
+            (cond-> page
+              ;; fix extract incorrectly assigning new user pages built-in uuids
+              built-in-name?
+              (assoc :block/uuid (d/squuid))
+              ;; only happens for few file built-ins like tags and alias
+              (and built-in-name? (not (:block/tags page)))
+              (assoc :block/tags [:logseq.class/Page]))))]
     (cond-> page'
       true
       (dissoc :block/format)
