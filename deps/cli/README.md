@@ -125,6 +125,13 @@ Exported 16 properties, 16 classes and 36 pages
 # Append text to current page
 $ logseq append add this text -a my-token
 Success!
+
+# Start mcp-server against a local desktop graph
+$ logseq mcp-server -g yep
+MCP Streamable HTTP Server started on 127.0.0.1:12315
+# Start mcp-server against a local graph file
+$ logseq mcp-server -g ~/Downloads/logseq_db_yep_1751032977.sqlite
+MCP Streamable HTTP Server started on 127.0.0.1:12315
 ```
 
 ## API

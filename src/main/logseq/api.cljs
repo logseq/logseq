@@ -12,6 +12,7 @@
             [logseq.api.app :as api-app]
             [logseq.api.db :as api-db]
             [logseq.api.db-based :as db-based-api]
+            [logseq.api.db-based.cli :as cli-based-api]
             [logseq.api.editor :as api-editor]
             [logseq.api.file-based :as file-based-api]
             [logseq.api.plugin :as api-plugin]
@@ -20,6 +21,7 @@
             [logseq.sdk.experiments]
             [logseq.sdk.git]
             [logseq.sdk.ui :as sdk-ui]
+            [logseq.sdk.utils :as sdk-utils]
             [promesa.core :as p]))
 
 ;; Alert: All apis shouldn't invoke any reactive queries
@@ -178,7 +180,7 @@
 (defn ^:export search
   [q' & [opts]]
   (-> (search-handler/search (state/get-current-repo) q' (if opts (js->clj opts :keywordize-keys true) {}))
-      (p/then #(bean/->js %))))
+      (p/then #(bean/->js (sdk-utils/normalize-keyword-for-json %)))))
 
 ;; helpers
 (defn ^:export set_focused_settings
@@ -198,6 +200,13 @@
 (def ^:export get_all_tags db-based-api/get-all-tags)
 (def ^:export get_all_properties db-based-api/get-all-properties)
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
+
+;; Internal db-based CLI APIs
+(def ^:export list_tags cli-based-api/list-tags)
+(def ^:export list_properties cli-based-api/list-properties)
+(def ^:export list_pages cli-based-api/list-pages)
+(def ^:export get_page_data cli-based-api/get-page-data)
+(def ^:export upsert_nodes cli-based-api/upsert-nodes)
 
 ;; file based graph APIs
 (def ^:export get_current_graph_templates file-based-api/get_current_graph_templates)

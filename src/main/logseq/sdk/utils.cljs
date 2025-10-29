@@ -7,6 +7,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.util :as util]
             [goog.object :as gobj]
+            [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
             [logseq.db.common.entity-util :as common-entity-util]
             [logseq.db.frontend.content :as db-content]))
 
@@ -16,12 +17,7 @@
            (contains? #{"block" "db" "file"})
            (not)))
 
-(defn remove-hidden-properties
-  [m]
-  (->> (remove (fn [[k _v]]
-                 (or (= "block.temp" (namespace k))
-                     (contains? #{:logseq.property.embedding/hnsw-label-updated-at :block/tx-id} k))) m)
-       (into {})))
+(def remove-hidden-properties cli-common-mcp-tools/remove-hidden-properties)
 
 (def ^:private kw-tag "___kw___") ; unlikely in normal strings; change if you prefer
 

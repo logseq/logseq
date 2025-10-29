@@ -74,7 +74,7 @@
         (println "Exported" (count exported-files) "pages to" file-name)))))
 
 (defn export [{{:keys [graph] :as opts} :opts}]
-  (if (fs/existsSync (cli-util/get-graph-dir graph))
+  (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))]
       (export-repo-as-markdown! (str common-config/db-version-prefix graph) @conn opts))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
