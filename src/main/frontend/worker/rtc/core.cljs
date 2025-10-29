@@ -248,7 +248,8 @@
           (update-remote-schema-version! conn @*server-schema-version)
           (reset! *assets-sync-loop-canceler
                   (c.m/run-task :assets-sync-loop-task
-                    assets-sync-loop-task))
+                    assets-sync-loop-task
+                    :fail #(log/info :assets-sync-loop-task-stopped %)))
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
