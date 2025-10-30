@@ -123,7 +123,7 @@
    this
    (let [properties (bean/->clj properties)
          db-based? (config/db-based-graph?)
-         {:keys [redirect format journal schema class]} (bean/->clj opts)]
+         {:keys [redirect format journal schema class customUUID]} (bean/->clj opts)]
      (p/let [page (<get-block name {:children? false})
              new-page (when-not page
                         (page-handler/<create!
@@ -133,8 +133,10 @@
                            :journal? journal
                            :class? class
                            :format format}
-                           (not db-based?)
-                           (assoc :properties properties))))
+                          (string? customUUID)
+                          (assoc :uuid (uuid customUUID))
+                          (not db-based?)
+                          (assoc :properties properties))))
              _ (when (and db-based? (seq properties))
                  (api-block/db-based-save-block-properties! new-page properties {:plugin this
                                                                                  :schema schema}))]
