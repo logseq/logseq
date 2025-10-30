@@ -225,7 +225,8 @@
                             get-ws-create-task0 graph-uuid major-schema-version repo conn date-formatter
                             *last-calibrate-t *online-users *server-schema-version *aes-key add-log-fn)
         {:keys [assets-sync-loop-task]}
-        (r.asset/create-assets-sync-loop repo get-ws-create-task graph-uuid major-schema-version conn *auto-push?)
+        (r.asset/create-assets-sync-loop
+         repo get-ws-create-task graph-uuid major-schema-version conn *auto-push? *aes-key)
         mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push? *online-users)]
     (assert (some? *current-ws))
     {:rtc-state-flow       (create-rtc-state-flow (create-ws-state-flow *current-ws))
@@ -369,7 +370,7 @@
                          :fail (fn [e]
                                  (reset! *last-stop-exception e)
                                  (log/info :rtc-loop-task e)
-                                 (when-not (instance? Cancelled e)
+                                 (when-not (or (instance? Cancelled e) (= "missionary.Cancelled" (ex-message e)))
                                    (println (.-stack e)))
                                  (when (= :rtc.exception/ws-timeout (some-> e ex-data :type))
                                    ;; if fail reason is websocket-timeout, try to restart rtc
