@@ -373,7 +373,7 @@
              (when-let [ident (or (:db/ident property) (:id property))]
                ;; Hide properties that shouldn't ever be editable or that do not display well in a table
                (when-not (or (contains? #{:logseq.property/built-in? :logseq.property.asset/checksum :logseq.property.class/properties
-                                          :block/created-at :block/updated-at :block/collapsed?
+                                          :block/created-at :block/updated-at :block/order :block/collapsed?
                                           :logseq.property/created-from-property}
                                         ident)
                              (and with-object-name? (= :block/title ident))
