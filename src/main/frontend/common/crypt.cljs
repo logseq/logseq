@@ -5,13 +5,31 @@
 
 (defonce subtle (.. js/crypto -subtle))
 
+(defn <export-aes-key
+  [aes-key]
+  (assert (instance? js/CryptoKey aes-key))
+  (p/let [exported (.exportKey subtle "raw" aes-key)]
+    (js/Uint8Array. exported)))
+
+(defn <import-aes-key
+  [exported-aes-key]
+  (assert (instance? js/Uint8Array exported-aes-key))
+  (.importKey subtle
+              "raw"
+              exported-aes-key
+              "AES-GCM"
+              true
+              #js ["encrypt" "decrypt"]))
+
 (defn <export-public-key
   [public-key]
+  (assert (instance? js/CryptoKey public-key))
   (p/let [exported (.exportKey subtle "spki" public-key)]
     (js/Uint8Array. exported)))
 
 (defn <import-public-key
   [exported-public-key]
+  (assert (instance? js/Uint8Array exported-public-key))
   (.importKey subtle "spki" exported-public-key
               #js {:name "RSA-OAEP" :hash "SHA-256"}
               true
@@ -54,7 +72,7 @@
 (defn <encrypt-private-key
   "Encrypts a private key with a password."
   [password private-key]
-  (assert (string? password))
+  (assert (and (string? password) (instance? js/CryptoKey private-key)))
   (p/let [salt (js/crypto.getRandomValues (js/Uint8Array. 16))
           iv (js/crypto.getRandomValues (js/Uint8Array. 12))
           password-key (.importKey subtle "raw"
@@ -118,7 +136,9 @@
 (defn <encrypt-aes-key
   "Encrypts an AES key with a public key."
   [public-key aes-key]
-  (p/let [exported-aes-key (.exportKey subtle "raw" aes-key)
+  (assert (and (instance? js/CryptoKey public-key)
+               (instance? js/CryptoKey aes-key)))
+  (p/let [exported-aes-key (<export-aes-key aes-key)
           encrypted-aes-key (.encrypt subtle
                                       #js {:name "RSA-OAEP"}
                                       public-key
@@ -146,9 +166,36 @@
               (log/error "decrypt-aes-key" e)
               (ex-info "decrypt-aes-key" {} e)))))
 
+(defn <encrypt-uint8array
+  [aes-key arr]
+  (assert (and (instance? js/CryptoKey aes-key) (instance? js/Uint8Array arr)))
+  (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
+          encrypted-data (.encrypt subtle
+                                   #js {:name "AES-GCM" :iv iv}
+                                   aes-key
+                                   arr)]
+    [iv (js/Uint8Array. encrypted-data)]))
+
+(defn <decrypt-uint8array
+  [aes-key encrypted-data-vector]
+  (->
+   (p/let [[iv-data encrypted-data] encrypted-data-vector
+           _ (assert (instance? js/Uint8Array encrypted-data))
+           iv (js/Uint8Array. iv-data)
+           decrypted-data (.decrypt subtle
+                                    #js {:name "AES-GCM" :iv iv}
+                                    aes-key
+                                    encrypted-data)]
+     (js/Uint8Array. decrypted-data))
+   (p/catch
+    (fn [e]
+      (log/error "decrypt-uint8array" e)
+      (ex-info "decrypt-uint8array" {} e)))))
+
 (defn <encrypt-text
   "Encrypts text with an AES key."
   [aes-key text]
+  (assert (and (string? text) (instance? js/CryptoKey aes-key)))
   (p/let [iv (js/crypto.getRandomValues (js/Uint8Array. 12))
           encoded-text (.encode (js/TextEncoder.) text)
           encrypted-data (.encrypt subtle
@@ -159,16 +206,20 @@
 
 (defn <decrypt-text
   "Decrypts text with an AES key."
-  [aes-key encrypted-text-data]
-  (p/let [[iv-data encrypted-data-from-db] encrypted-text-data
-          iv (js/Uint8Array. iv-data)
-          encrypted-data (js/Uint8Array. encrypted-data-from-db)
-          decrypted-data (.decrypt subtle
-                                   #js {:name "AES-GCM" :iv iv}
-                                   aes-key
-                                   encrypted-data)
-          decoded-text (.decode (js/TextDecoder.) decrypted-data)]
-    decoded-text))
+  [aes-key encrypted-text-data-vector]
+  (-> (p/let [[iv-data encrypted-data] encrypted-text-data-vector
+              iv (js/Uint8Array. iv-data)
+              encrypted-data (js/Uint8Array. encrypted-data)
+              decrypted-data (.decrypt subtle
+                                       #js {:name "AES-GCM" :iv iv}
+                                       aes-key
+                                       encrypted-data)
+              decoded-text (.decode (js/TextDecoder.) decrypted-data)]
+        decoded-text)
+      (p/catch
+       (fn [e]
+         (log/error "decrypt-text" e)
+         (ex-info "decrypt-text" {} e)))))
 
 (defn <decrypt-text-if-encrypted
   "return nil if not a encrypted-package"
