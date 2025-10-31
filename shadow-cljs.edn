@@ -41,6 +41,7 @@
                                       :redef false}}
         :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
         :closure-defines {lambdaisland.glogi.console/colorize "false"
+                          lambdaisland.glogi.console/timestamp "true"
                           goog.debug.LOGGING_ENABLED true
                           frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
                           frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"
@@ -82,7 +83,8 @@
                                  :warnings {:fn-deprecated false
                                             :redef false}}
               :closure-defines {goog.debug.LOGGING_ENABLED true
-                                lambdaisland.glogi.console/colorize "false"}
+                                lambdaisland.glogi.console/colorize "false"
+                                lambdaisland.glogi.console/timestamp "true"}
               :devtools {:watch-path "/static"
                          :preloads [devtools.preload
                                     shadow.remote.runtime.cljs.browser]
@@ -141,6 +143,7 @@
            :build-hooks [(shadow.hooks/git-revision-hook "--long --always --dirty")]
            :closure-defines
            {lambdaisland.glogi.console/colorize "false"
+            lambdaisland.glogi.console/timestamp "true"
             goog.debug.LOGGING_ENABLED true
             frontend.modules.instrumentation.sentry/SENTRY-DSN #shadow/env "LOGSEQ_SENTRY_DSN"
             frontend.modules.instrumentation.posthog/POSTHOG-TOKEN #shadow/env "LOGSEQ_POSTHOG_TOKEN"

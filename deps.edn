@@ -28,7 +28,8 @@
   org.clojure/core.async                {:mvn/version "1.6.673"}
   thheller/shadow-cljs                  {:mvn/version "2.28.23"}
   expound/expound                       {:mvn/version "0.8.6"}
-  com.lambdaisland/glogi                {:mvn/version "1.1.144"}
+  com.lambdaisland/glogi                {:git/url "https://github.com/lambdaisland/glogi"
+                                         :git/sha "30328a045141717aadbbb693465aed55f0904976"}
   binaryage/devtools                    {:mvn/version "1.0.5"}
   camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
