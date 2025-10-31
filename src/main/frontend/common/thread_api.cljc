@@ -2,7 +2,8 @@
   "Macro for defining thread apis, which is invokeable by other threads"
   #?(:cljs (:require-macros [frontend.common.thread-api]))
   #?(:cljs (:require [logseq.db :as ldb]
-                     [promesa.core :as p])))
+                     [promesa.core :as p]
+                     [lambdaisland.glogi :as log])))
 
 #?(:cljs
    (def *thread-apis (volatile! {})))
@@ -28,7 +29,7 @@
      (try
        (ldb/write-transit-str v)
        (catch :default e
-         (log/error :thread-api-write-transit-failed-2 qualified-kw-str)
+         (log/error :thread-api-write-transit-failed qualified-kw-str)
          (throw e)))))
 
 #?(:cljs
