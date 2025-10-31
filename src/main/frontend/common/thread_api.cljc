@@ -23,6 +23,15 @@
 #?(:cljs (def *profile (volatile! {})))
 
 #?(:cljs
+   (defn- write-transit-str-with-catch
+     [v qualified-kw-str]
+     (try
+       (ldb/write-transit-str v)
+       (catch :default e
+         (log/error :thread-api-write-transit-failed-2 qualified-kw-str)
+         (throw e)))))
+
+#?(:cljs
    (defn remote-function
      "Return a promise whose value is transit-str."
      [qualified-kw-str direct-pass? args-transit-str-or-args-array]
@@ -37,8 +46,10 @@
                (if (fn? result) ;; missionary task is a fn
                  (js/Promise. result)
                  result)]
-           (p/let [result' result-promise]
-             (if direct-pass?
-               result'
-               (ldb/write-transit-str result'))))
+           (->
+            (p/let [result' result-promise]
+              (if direct-pass?
+                result'
+                (write-transit-str-with-catch result' qualified-kw-str)))
+            (p/catch (fn [e] (write-transit-str-with-catch e qualified-kw-str)))))
          (throw (ex-info (str "not found thread-api: " qualified-kw-str) {}))))))
