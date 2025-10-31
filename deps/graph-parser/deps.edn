@@ -11,7 +11,8 @@
   logseq/db                   {:local/root "../db"}
   logseq/common               {:local/root "../common"}
   ;; stubbed via logseq.common.log
-  com.lambdaisland/glogi      {:mvn/version "1.1.144"}}
+  com.lambdaisland/glogi      {:git/url "https://github.com/lambdaisland/glogi"
+                               :git/sha "30328a045141717aadbbb693465aed55f0904976"}}
 
  :aliases
  ;; This runs tests with nodejs. Would be nice to run this with in a browser env
