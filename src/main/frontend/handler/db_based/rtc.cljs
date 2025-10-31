@@ -49,7 +49,10 @@
     (->
      (when (not= result :timeout)
        (assert (some? download-info-s3-url) result)
-       (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3 graph-uuid graph-name download-info-s3-url))
+       (p/let [r (state/<invoke-db-worker :thread-api/rtc-download-graph-from-s3
+                                          graph-uuid graph-name download-info-s3-url)]
+         (when (instance? ExceptionInfo r)
+           (log/error :rtc-download-graph-from-s3 r))))
      (p/finally
        #(state/set-state! :rtc/downloading-graph-uuid nil)))))
 
