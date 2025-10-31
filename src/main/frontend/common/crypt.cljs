@@ -261,10 +261,12 @@
      (p/let [m map-p]
        (if-let [v (get m encrypt-attr)]
          (if (string? v)
-           (p/let [v' (<decrypt-text-if-encrypted aes-key (ldb/read-transit-str v))]
-             (if v'
-               (assoc m encrypt-attr v')
-               m))
+           (->
+            (p/let [v' (<decrypt-text-if-encrypted aes-key (ldb/read-transit-str v))]
+              (if v'
+                (assoc m encrypt-attr v')
+                m))
+            (p/catch (fn [e] (ex-info "decrypt map" {:m m :decrypt-attr encrypt-attr} e))))
            m)
          m)))
    (p/promise m) encrypt-attr-set))
