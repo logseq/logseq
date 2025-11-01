@@ -121,10 +121,13 @@
 (defn task--get-rsa-key-pair
   [get-ws-create-task user-uuid]
   (m/sp
-    (let [{:keys [password]} (c.m/<? (worker-state/<invoke-main-thread :thread-api/request-e2ee-password))
-          {:keys [public-key encrypted-private-key]}
+    (let [{:keys [public-key encrypted-private-key]}
           (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
-          private-key (c.m/<? (crypt/<decrypt-private-key password encrypted-private-key))]
+          _ (prn :xxxxx1)
+          exported-private-key (c.m/<? (worker-state/<invoke-main-thread
+                                        :thread-api/decrypt-user-e2ee-private-key encrypted-private-key))
+          _ (prn :xxxxx2)
+          private-key (c.m/<? (crypt/<import-private-key exported-private-key))]
       {:public-key public-key
        :private-key private-key})))
 
