@@ -6,6 +6,7 @@
             [frontend.db.async :as db-async]
             [frontend.handler :as fhandler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.mobile.sync-background :as mobile-sync-bg]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -83,6 +84,7 @@
   (log/add-handler mobile-state/log-append!)
   (set-router!)
   (init/init!)
+  (mobile-sync-bg/init!)
   (fhandler/start! render!))
 
 (defn ^:export stop! []
