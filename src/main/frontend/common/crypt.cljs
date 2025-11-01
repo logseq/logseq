@@ -35,6 +35,20 @@
               true
               #js ["encrypt"]))
 
+(defn <export-private-key
+  [private-key]
+  (assert (instance? js/CryptoKey private-key))
+  (p/let [exported (.exportKey subtle "pkcs8" private-key)]
+    (js/Uint8Array. exported)))
+
+(defn <import-private-key
+  [exported-private-key]
+  (assert (instance? js/Uint8Array exported-private-key))
+  (.importKey subtle "pkcs8" exported-private-key
+              #js {:name "RSA-OAEP" :hash "SHA-256"}
+              true
+              #js ["decrypt"]))
+
 (comment
   (->
    (p/let [kp (<generate-rsa-key-pair)
