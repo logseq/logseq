@@ -427,7 +427,9 @@
                         (let [db (db-conn/get-db)]
                           (->> tags
                                (mapcat (fn [tag-name]
-                                         (when-let [tag-id (first (ldb/page-exists? db tag-name #{:logseq.class/Tag}))]
+                                         (when-let [tag-id (if (common-util/uuid-string? tag-name)
+                                                             [:block/uuid (uuid tag-name)]
+                                                             (first (ldb/page-exists? db tag-name #{:logseq.class/Tag})))]
                                            (when-let [tag (db-utils/entity tag-id)]
                                              (->> (db-class/get-structured-children db (:db/id tag))
                                                   (cons (:db/id tag)))))))
