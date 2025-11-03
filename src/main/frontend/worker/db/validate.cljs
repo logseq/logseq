@@ -31,6 +31,8 @@
                            [[:db/retract (:db/id entity) :block/warning]]
                            (= :whiteboard-shape (:logseq.property/ls-type entity))
                            [[:db/retractEntity (:db/id entity)]]
+                           (and (:block/page entity) (not (:block/parent entity)))
+                           [[:db/add (:db/id entity) :block/parent (:db/id (:block/page entity))]]
                            (not (de/entity? (:logseq.property/created-by-ref entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (vector? (:logseq.property/value entity))
@@ -42,6 +44,10 @@
                              (db-migrate/remove-block-path-refs db)
                              (catch :default _e
                                nil))
+                           (not-every? (fn [e] (ldb/class? e)) (:block/tags entity))
+                           (let [non-tags (remove ldb/class? (:block/tags entity))]
+                             (map (fn [tag]
+                                    [:db/retract (:db/id entity) :block/tags (:db/id tag)]) non-tags))
                            (and (= dispatch-key :normal-page) (:block/page entity))
                            [[:db/retract (:db/id entity) :block/page]]
                            (and (= dispatch-key :block) (nil? (:block/title entity)))
@@ -72,8 +78,6 @@
                            (some (fn [k] (= "block.temp" (namespace k))) (keys entity))
                            (let [ks (filter (fn [k] (= "block.temp" (namespace k))) (keys entity))]
                              (mapv (fn [k] [:db/retract (:db/id entity) k]) ks))
-                           (and (:block/page entity) (not (:block/parent entity)))
-                           [[:db/add (:db/id entity) :block/parent (:db/id (:block/page entity))]]
                            (and (not (:block/page entity)) (not (:block/parent entity)) (not (:block/name entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (= dispatch-key :property-value-block) (:block/title entity))
@@ -184,7 +188,7 @@
     (doseq [error errors]
       (prn :debug
            :entity (:entity error)
-           :error error))
+           :error (dissoc error :entity)))
 
     (if errors
       (do
