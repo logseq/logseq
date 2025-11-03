@@ -14,7 +14,7 @@
     (some->> (first (ldb/page-exists? db title [:logseq.class/Property]))
              (d/entity db))))
 
-(defn- fix-invalid-blocks!
+(defn- ^:large-vars/cleanup-todo fix-invalid-blocks!
   [conn errors]
   (let [db @conn
         fix-tx-data (mapcat
