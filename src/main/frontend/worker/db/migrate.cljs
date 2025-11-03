@@ -445,56 +445,69 @@
   "Return tx-data"
   [conn]
   (let [*uuids (atom {})
-        data (->> (sqlite-create-graph/build-db-initial-data "")
+        initial-data (sqlite-create-graph/build-db-initial-data "")
+        data (->> initial-data
                   (keep (fn [data]
-                          (if (map? data)
-                            (cond
-                              ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
-                              (= "logseq.kv" (some-> (:db/ident data) namespace))
-                              nil
+                          (cond
+                            ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
+                            (= "logseq.kv" (some-> (:db/ident data) namespace))
+                            nil
 
-                              (= (:block/title data) "Contents")
-                              nil
+                            (= (:block/title data) "Contents")
+                            nil
 
-                              (:file/path data)
-                              (if-let [block (d/entity @conn [:file/path (:file/path data)])]
-                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                  (merge data existing-data))
-                                data)
-
-                              (:block/uuid data)
-                              (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
-                                (do
-                                  (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
-                                  (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                    (reduce
-                                     (fn [data [k existing-value]]
-                                       (update data k
-                                               (fn [v]
-                                                 (if (coll? v)
-                                                   v
-                                                   (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
-                                                                          (remove nil? existing-value)
-                                                                          existing-value)]
-                                                     (if (some? existing-value) existing-value v))))))
-                                     data
-                                     existing-data)))
-                                data)
-
-                              :else
+                            (:file/path data)
+                            (if-let [block (d/entity @conn [:file/path (:file/path data)])]
+                              (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                (merge data existing-data))
                               data)
-                            data))))
+
+                            (= [:block/uuid :logseq.property/built-in?] (keys data))
+                            data
+
+                            (:block/uuid data)
+                            (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
+                              (do
+                                (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
+                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                  (reduce
+                                   (fn [data [k existing-value]]
+                                     (update data k
+                                             (fn [v]
+                                               (cond
+                                                 (= k :logseq.property/built-in?)
+                                                 true
+                                                 (= k :logseq.property/type)
+                                                 v
+                                                 (coll? v)
+                                                 v
+
+                                                 :else
+                                                 (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
+                                                                        (remove nil? existing-value)
+                                                                        existing-value)]
+                                                   (if (some? existing-value) existing-value v))))))
+                                   data
+                                   existing-data)))
+                              data)
+
+                            :else
+                            data)))
+                  common-util/fast-remove-nils)
         ;; using existing page's uuid
-        data' (walk/prewalk
-               (fn [f]
-                 (cond
-                   (and (de/entity? f) (:block/uuid f))
-                   (or (:db/ident f) [:block/uuid (:block/uuid f)])
-                   (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
-                   [:block/uuid (@*uuids (second f))]
-                   :else
-                   f))
-               data)
+        data' (->>
+               (walk/prewalk
+                (fn [f]
+                  (cond
+                    (and (de/entity? f) (:block/uuid f))
+                    (or (:db/ident f) [:block/uuid (:block/uuid f)])
+                    (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
+                    [:block/uuid (@*uuids (second f))]
+                    :else
+                    f))
+                data)
+               (map (fn [m] (dissoc m :db/id))))
+
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
     (when (seq (:tx-data r))
