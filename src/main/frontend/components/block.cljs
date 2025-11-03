@@ -3827,14 +3827,15 @@
              query (:block/title query-block)
              result (common-util/safe-read-string {:log-error? false} query)
              advanced-query? (map? result)]
-         [:div {:style {:padding-left 42}}
-          (query/custom-query (wrap-query-components (assoc config
-                                                            :dsl-query? (not advanced-query?)
-                                                            :cards? (ldb/class-instance? (entity-plus/entity-memoized
-                                                                                          (db/get-db)
-                                                                                          :logseq.class/Cards) block)))
-                              (if advanced-query? result {:builder nil
-                                                          :query (query-builder-component/sanitize-q query)}))]))
+         (when query-block
+           [:div {:style {:padding-left 42}}
+            (query/custom-query (wrap-query-components (assoc config
+                                                              :dsl-query? (not advanced-query?)
+                                                              :cards? (ldb/class-instance? (entity-plus/entity-memoized
+                                                                                            (db/get-db)
+                                                                                            :logseq.class/Cards) block)))
+                                (if advanced-query? result {:builder nil
+                                                            :query (query-builder-component/sanitize-q query)}))])))
 
      (when-not (or (:hide-children? config) in-whiteboard? (or table? property?))
        (let [config' (-> (update config :level inc)
