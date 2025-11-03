@@ -611,8 +611,7 @@ prop-d:: [[nada]]"}])
            (map testable-content (dsl-query "#tag1")))
         "Tag arg")
 
-    (is (= []
-           (dsl-query "[[blarg]]"))
+    (is (empty? (dsl-query "[[blarg]]"))
         "Nonexistent page returns no results"))
 
   (testing "basic boolean queries"
