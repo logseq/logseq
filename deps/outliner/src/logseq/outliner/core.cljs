@@ -243,12 +243,16 @@
   (if (ldb/page? (d/entity db (:db/id block)))
     block
     (let [tags' (cond
-                  (qualified-keyword? tags)
+                  (or (integer? tags)
+                      (qualified-keyword? tags)
+                      (and (vector? tags)
+                           (= :block/uuid (first tags))))
                   [(d/entity db tags)]
                   (every? qualified-keyword? tags)
                   (map #(d/entity db %) tags)
                   :else
                   tags)
+          block (assoc block :block/tags tags')
           page-class? (fn [t]
                         (and (map? t) (contains? db-class/page-classes
                                                  (or (:db/ident t)
