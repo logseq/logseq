@@ -57,9 +57,10 @@
               (map? data)
               (cond->
                (remove-block-temp-f data)
-                (and (seq (:block/refs data))
-                     (every? map? (:block/refs data)))
-                (update :block/refs (fn [refs] (map remove-block-temp-f refs))))
+                (seq (:block/refs data))
+                (update :block/refs (fn [refs]
+                                      (map (fn [ref]
+                                             (if (map? ref) (remove-block-temp-f ref) ref)) refs))))
               (and (vector? data)
                    (contains? #{:db/add :db/retract} (first data))
                    (> (count data) 2)
