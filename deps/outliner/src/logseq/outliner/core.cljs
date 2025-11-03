@@ -327,6 +327,11 @@
                        (:block/title m*)
                        (not= (:block/title m*) (:block/title block-entity)))
               (outliner-validate/validate-block-title db (:block/title m*) block-entity))
+          _ (when (and db-based? (seq (:block/tags m*)))
+                        ;; Add built-in? b/c it's not available here
+              (doseq [tag (map #(assoc % :logseq.property/built-in?
+                                       (contains? sqlite-create-graph/built-in-pages-names (:block/title %))) (:block/tags m*))]
+                (outliner-validate/validate-built-in-pages tag {:message "Built-in page can't be a tag"})))
           m (cond-> m*
               db-based?
               (dissoc :block/format :block/pre-block? :block/priority :block/marker :block/properties-order))]
