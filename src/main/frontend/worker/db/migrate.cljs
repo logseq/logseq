@@ -471,13 +471,12 @@
                                      (fn [data [k existing-value]]
                                        (update data k
                                                (fn [v]
-                                                 (cond
-                                                   (and (vector? v) (= :block/uuid (first v)))
+                                                 (if (coll? v)
                                                    v
-                                                   (and (coll? v) (not (map? v)))
-                                                   (concat v (if (coll? existing-value) existing-value [existing-value]))
-                                                   :else
-                                                   (if (some? existing-value) existing-value v)))))
+                                                   (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
+                                                                          (remove nil? existing-value)
+                                                                          existing-value)]
+                                                     (if (some? existing-value) existing-value v))))))
                                      data
                                      existing-data)))
                                 data)
@@ -498,6 +497,8 @@
                data)
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
+    (when (seq (:tx-data r))
+      (prn :debug :ensure-built-in-data-exists? :tx-data (:tx-data r)))
     (assoc r :migrate-updates
            ;; fake it as a normal :fix type migration
            {:fix (constantly :ensure-built-in-data-exists!)})))

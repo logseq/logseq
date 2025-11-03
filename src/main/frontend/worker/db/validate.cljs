@@ -2,6 +2,7 @@
   "Validate db"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.shared-service :as shared-service]
             [logseq.db :as ldb]
@@ -20,6 +21,20 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (and (:db/ident entity)
+                                (:logseq.property/built-in? entity)
+                                (:block/parent entity))
+                           [[:db/retract (:db/id entity) :block/parent]]
+                           (:block/format entity)
+                           [[:db/retract (:db/id entity) :block/format]]
+                           (:block/warning entity)
+                           [[:db/retract (:db/id entity) :block/warning]]
+                           (= :whiteboard-shape (:logseq.property/ls-type entity))
+                           [[:db/retractEntity (:db/id entity)]]
+                           (not (de/entity? (:logseq.property/created-by-ref entity)))
+                           [[:db/retractEntity (:db/id entity)]]
+                           (vector? (:logseq.property/value entity))
+                           [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
@@ -27,9 +42,10 @@
                              (db-migrate/remove-block-path-refs db)
                              (catch :default _e
                                nil))
+                           (and (= dispatch-key :normal-page) (:block/page entity))
+                           [[:db/retract (:db/id entity) :block/page]]
                            (and (= dispatch-key :block) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
-
                            (and (= dispatch-key :block) (nil? (:block/page entity)))
                            (let [latest-journal-id (:db/id (first (ldb/get-latest-journals db)))
                                  page-id (:db/id (:block/page (:block/parent entity)))]
@@ -62,7 +78,8 @@
                            [[:db/retractEntity (:db/id entity)]]
                            (and (= dispatch-key :property-value-block) (:block/title entity))
                            [[:db/retract (:db/id entity) :block/title]]
-                           (and (ldb/class? entity) (not (:logseq.property.class/extends entity)))
+                           (and (ldb/class? entity) (not (:logseq.property.class/extends entity))
+                                (not= (:db/ident entity) :logseq.class/Root))
                            [[:db/add (:db/id entity) :logseq.property.class/extends :logseq.class/Root]]
                            (and (or (ldb/class? entity) (ldb/property? entity)) (ldb/internal-page? entity))
                            [[:db/retract (:db/id entity) :block/tags :logseq.class/Page]]
@@ -94,7 +111,8 @@
                                                 [[:db/retract (:e d) (:a d) (:v d)]
                                                  [:db/add (:e d) (:db/ident property) (:v d)]]
                                                 [[:db/retract (:e d) (:a d) (:v d)]]))))))
-        tx-data (concat fix-tx-data class-as-properties)]
+        tx-data (concat fix-tx-data
+                        class-as-properties)]
     (when (seq tx-data)
       (d/transact! conn tx-data {:fix-db? true}))))
 
@@ -125,16 +143,48 @@
     (when (seq tx-data')
       (ldb/transact! conn tx-data'))))
 
+(defn- fix-non-closed-values!
+  [conn]
+  (let [db @conn
+        properties (->> (ldb/get-all-properties db)
+                        (filter :block/_closed-value-property))
+        tx-data (mapcat
+                 (fn [property]
+                   (let [closed-values (:block/_closed-value-property property)
+                         matches (if (every? de/entity? closed-values)
+                                   (set (map :db/id closed-values))
+                                   (set closed-values))
+                         values (d/q
+                                 '[:find ?b ?v
+                                   :in $ ?p
+                                   :where
+                                   [?b ?p ?v]]
+                                 db
+                                 (:db/ident property))]
+                     (keep
+                      (fn [[b v]]
+                        (when-not (matches v)
+                          [:db/retract b (:db/ident  property) v]))
+                      values)))
+                 properties)]
+    (when (seq tx-data)
+      (prn :debug :fix-non-closed-values tx-data)
+      (d/transact! conn tx-data {:fix-db? true}))))
+
 (defn validate-db
   [conn]
+  (db-migrate/ensure-built-in-data-exists! conn)
+  (fix-non-closed-values! conn)
   (fix-num-prefix-db-idents! conn)
 
   (let [db @conn
         {:keys [errors datom-count entities]} (db-validate/validate-db! db)
         invalid-entity-ids (distinct (map (fn [e] (:db/id (:entity e))) errors))]
 
-    (doseq [id invalid-entity-ids]
-      (prn :debug :id id :entity (into {} (d/entity db id))))
+    (doseq [error errors]
+      (prn :debug
+           :entity (:entity error)
+           :error error))
 
     (if errors
       (do
