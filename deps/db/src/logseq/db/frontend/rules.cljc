@@ -33,9 +33,8 @@
       [?e2 :block/alias ?e3]]]
 
    :self-ref
-   '[(self-ref ?b ?page-name)
-     [?br :block/name ?page-name]
-     [?b :block/refs ?br]]
+   '[(self-ref ?b ?ref)
+     [?b :block/refs ?ref]]
 
    :has-ref
    '[[(has-ref ?b ?r)
