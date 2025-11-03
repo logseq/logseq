@@ -499,16 +499,20 @@
 (defn- build-page-ref
   [e]
   (let [page-name (-> (page-ref/get-page-name! e)
-                      (util/page-name-sanity-lc))]
-    {:query (list 'page-ref '?b page-name)
-     :rules [:page-ref]}))
+                      (util/page-name-sanity-lc))
+        page (ldb/get-page (db-conn/get-db) page-name)]
+    (when page
+      {:query (list 'page-ref '?b (:db/id page))
+       :rules [:page-ref]})))
 
 (defn- build-self-ref
   [e]
   (let [page-name (-> (page-ref/get-page-name! e)
-                      (util/page-name-sanity-lc))]
-    {:query (list 'self-ref '?b page-name)
-     :rules [:self-ref]}))
+                      (util/page-name-sanity-lc))
+        page (ldb/get-page (db-conn/get-db) page-name)]
+    (when page
+      {:query (list 'self-ref '?b (:db/id page))
+       :rules [:self-ref]})))
 
 (defn- build-block-content [e]
   {:query (list 'block-content '?b e)
