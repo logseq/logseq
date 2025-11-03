@@ -836,7 +836,7 @@
                                      s (if (and tag? (not (:hide-tag-symbol? config))) (str "#" s) s)]
                                  (if (ldb/page? page-entity)
                                    s
-                                   (block-title config page-entity {}))))]
+                                   (block-title (assoc config :page-ref? true) page-entity {}))))]
           page-component))]]))
 
 (rum/defc popup-preview-impl
@@ -1647,14 +1647,17 @@
           (media-link config url href label metadata full_text)
 
           :else
-          (->elem
-           :a.external-link
-           (cond->
-            {:href href
-             :target "_blank"}
-             title
-             (assoc :title title))
-           (map-inline config label)))))))
+          (if (:node-ref-link-only? config)
+            [:span
+             (map-inline config label)]
+            (->elem
+             :a.external-link
+             (cond->
+              {:target "_blank"
+               :href href}
+               title
+               (assoc :title title))
+             (map-inline config label))))))))
 
 (declare ->hiccup inline)
 
@@ -2414,14 +2417,19 @@
               (file-block/marker-cp block)
               (file-block/priority-cp block)])
 
-         ;; highlight ref block (inline)
+           ;; highlight ref block (inline)
            (when-not area? [(hl-ref)])
 
-           (conj
-            (map-inline config block-ast-title)
-            (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
+           (let [config' (cond-> config
+                           (and (:page-ref? config)
+                                (= 1 (count block-ast-title))
+                                (= "Link" (ffirst block-ast-title)))
+                           (assoc :node-ref-link-only? true))]
+             (conj
+              (map-inline config' block-ast-title)
+              (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})])))
 
-         ;; highlight ref block (area)
+           ;; highlight ref block (area)
            (when area? [(hl-ref)])
 
            (when (and (seq block-ast-title) (ldb/class-instance?
