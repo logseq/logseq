@@ -720,7 +720,7 @@
 
             ;; referenced blocks
             (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
-              [:div {:key "page-references"}
+              [:div.fade-in.delay {:key "page-references"}
                (rum/with-key
                  (reference/references page {:sidebar? sidebar?})
                  (str title "-refs"))])
@@ -735,7 +735,7 @@
                           home?
                           (or class-page? property-page?)
                           (and block? (not db-based?)))
-              [:div {:key "page-unlinked-references"}
+              [:div.fade-in.delay {:key "page-unlinked-references"}
                (reference/unlinked-references page {:sidebar? sidebar?})])])])
       [:div.opacity-75 "Page not found"])))
 
