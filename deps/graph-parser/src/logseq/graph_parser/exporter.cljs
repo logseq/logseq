@@ -871,6 +871,10 @@
               (let [[type' content] (second node)
                     wrapper (case type' "Inline" "$" "Displayed" "$$")]
                 [wrapper content wrapper])
+              (and (vector? node) (= (first node) "Src"))
+              [(str "\n```" (when-let [lang (:language (second node))] lang))
+               (apply str "\n" (:lines (second node)))
+               "```"]
               (and (vector? node) (= (first node) "Displayed_Math"))
               ["$$" (second node) "$$"]
               (and (vector? node) (= (first node) "List"))
