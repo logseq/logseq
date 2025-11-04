@@ -314,7 +314,6 @@
           built-in-tags #{":logseq.class/Template"
                           ":logseq.class/Query"
                           ":logseq.class/Math-block"
-                          ":logseq.class/Pdf-annotation"
                           ":logseq.class/Task"
                           ":logseq.class/Code-block"
                           ":logseq.class/Card"
