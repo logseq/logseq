@@ -37,8 +37,6 @@
                             :payload {:message "Page name can't be blank."
                                       :type :warning}})))))
 
-(def ^:api uneditable-page? ldb/built-in?)
-
 (defn- find-other-ids-with-title-and-tags
   "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
