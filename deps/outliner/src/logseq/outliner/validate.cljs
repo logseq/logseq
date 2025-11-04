@@ -155,9 +155,9 @@
 (defn- disallow-built-in-class-extends-change
   [_parent-ent child-ents]
   (when (some #(get db-class/built-in-classes (:db/ident %)) child-ents)
-    (throw (ex-info "Can't change the parent of a built-in tag"
+    (throw (ex-info "Can't change the extends of a built-in tag"
                     {:type :notification
-                     :payload {:message "Can't change the parent of a built-in tag"
+                     :payload {:message "Can't change the extends of a built-in tag"
                                :type :error}}))))
 
 (defn- disallow-extends-cycle
@@ -177,8 +177,8 @@
   (let [parent-ent (if (integer? parent-ent*)
                      (d/entity db parent-ent*)
                      parent-ent*)]
-    (disallow-extends-cycle db parent-ent child-ents)
     (when built-in? (disallow-built-in-class-extends-change parent-ent child-ents))
+    (disallow-extends-cycle db parent-ent child-ents)
     (validate-extends-property-have-correct-type parent-ent child-ents)))
 
 (defn- disallow-node-cant-tag-with-built-in-non-tags
