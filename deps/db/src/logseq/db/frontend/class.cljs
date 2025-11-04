@@ -116,6 +116,14 @@
   (set/union (disj internal-tags :logseq.class/Root)
              #{:logseq.class/Journal :logseq.class/Whiteboard}))
 
+(def extends-hidden-tags
+  "Built-in classes that are hidden when choosing extends"
+  (set/union
+   private-tags
+   #{:logseq.class/Cards :logseq.class/Code-block
+     :logseq.class/Math-block :logseq.class/Pdf-annotation
+     :logseq.class/Query :logseq.class/Quote-block
+     :logseq.class/Template}))
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
   #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})

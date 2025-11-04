@@ -45,7 +45,8 @@
   (let [graph test-helper/test-db-name-db-version
         conn (db-test/create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/title "b1"}]}])
+                :blocks [{:block/title "b1"}
+                         {:block/title "b2" :build/tags [:tag1]}]}])
         library (ldb/get-built-in-page @conn "Library")]
 
     (ldb/register-transact-pipeline-fn!
@@ -76,6 +77,19 @@
                               :block/title "task"}])
         (let [task (d/entity @conn (:db/id task))]
           (is (= :logseq.class/Task (:db/ident task)))
-          (is (= "Task" (:block/title task))))))
+          (is (= "Task" (:block/title task))))
+
+        (ldb/transact! conn [{:db/id (:db/id task)
+                              :logseq.property.class/extends :logseq.class/Journal}])
+        (let [task (d/entity @conn (:db/id task))]
+          (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends task)))))))
+
+    (testing "User class extends unexpected built-in classes"
+      (let [t1 (ldb/get-page @conn "tag1")]
+        (ldb/transact! conn [{:db/id (:db/id t1)
+                              :logseq.property.class/extends :logseq.class/Journal}])
+        (let [t1 (d/entity @conn (:db/id t1))]
+          (is (= [:logseq.class/Root] (map :db/ident (:logseq.property.class/extends t1)))))))
+
     ;; return global fn back to previous behavior
     (ldb/register-transact-pipeline-fn! identity)))

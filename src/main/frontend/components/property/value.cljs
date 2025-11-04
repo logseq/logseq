@@ -669,7 +669,8 @@
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
    result]
-  (let [repo (state/get-current-repo)
+  (let [[*input set-input!] (hooks/use-state nil)
+        repo (state/get-current-repo)
         classes (:logseq.property/classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
@@ -693,7 +694,7 @@
                                       ;; hide parent extends for existing values
                                       (set/union (set (map :block/uuid extends))))
                       options (if (ldb/class? block)
-                                (model/get-all-classes repo)
+                                (model/get-all-classes repo {:except-extends-hidden-tags? true})
                                 result)
 
                       excluded-options (->> options
@@ -785,6 +786,7 @@
                (merge
                 opts
                 {:multiple-choices? multiple-choices?
+                 :tap-*input-val set-input!
                  :items options
                  :selected-choices selected-choices
                  :dropdown? dropdown?
@@ -796,7 +798,12 @@
                                               :else
                                               (str "Set " (:block/title property)))
                  :show-new-when-not-exact-match? (not
-                                                  (or (and extends-property? (contains? (set children-pages) (:db/id block)))
+                                                  (or (and extends-property?
+                                                           (or (contains? (set children-pages) (:db/id block))
+                                                               (when-let [input (when *input @*input)]
+                                                                 (when-not (string/blank? input)
+                                                                   (some (fn [ident]
+                                                                           (= input (:block/title (db/entity ident)))) ldb/extends-hidden-tags)))))
                                                       ;; Don't allow creating private tags
                                                       (and (= :block/tags (:db/ident property))
                                                            (seq (set/intersection (set (map :db/ident classes'))
