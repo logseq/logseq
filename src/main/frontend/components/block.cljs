@@ -2374,7 +2374,7 @@
                      :color (when-not built-in-color? "white")}
              :class "px-1 with-bg-color"})))
 
-     ;; children
+       ;; children
        (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
              hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                        [:div.prefix-link
