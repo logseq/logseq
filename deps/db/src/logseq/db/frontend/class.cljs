@@ -117,14 +117,24 @@
              #{:logseq.class/Journal :logseq.class/Whiteboard
                :logseq.class/Pdf-annotation}))
 
+(def block-kind-tags
+  #{:logseq.class/Cards :logseq.class/Code-block
+    :logseq.class/Math-block :logseq.class/Quote-block
+    :logseq.class/Query :logseq.class/Pdf-annotation
+    :logseq.class/Template})
+
+(def disallowed-inline-tags
+  "Classes that should be removed from inline tags"
+  (set/union page-classes
+             private-tags
+             block-kind-tags))
+
 (def extends-hidden-tags
   "Built-in classes that are hidden when choosing extends"
   (set/union
    private-tags
-   #{:logseq.class/Cards :logseq.class/Code-block
-     :logseq.class/Math-block :logseq.class/Pdf-annotation
-     :logseq.class/Query :logseq.class/Quote-block
-     :logseq.class/Template}))
+   block-kind-tags))
+
 (def hidden-tags
   "Built-in classes that are hidden in a few contexts like property values"
   #{:logseq.class/Page :logseq.class/Root :logseq.class/Asset})
