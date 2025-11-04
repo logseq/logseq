@@ -17,6 +17,8 @@ logseq.db.frontend.class/build-new-class
 ;; API
 logseq.db.frontend.class/logseq-class?
 ;; API
+logseq.db.frontend.class/disallowed-inline-tags
+;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API
 logseq.db.frontend.db-ident/replace-db-ident-random-suffix
