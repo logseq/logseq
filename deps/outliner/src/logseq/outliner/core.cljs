@@ -240,7 +240,7 @@
 (defn- remove-inline-page-classes
   [db {:block/keys [tags] :as block}]
   ;; Notice: should check `page?` for block from the current db
-  (if (ldb/page? (d/entity db (:db/id block)))
+  (if (or (ldb/page? (d/entity db (:db/id block))) (:block/name block))
     block
     (let [tags' (cond
                   (or (integer? tags)
@@ -922,10 +922,8 @@
   (let [target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))]
     (if (or
-         ;; target-block doesn't have parent or moving non-page block to library
-         (and sibling? (or (nil? (:block/parent target-block))
-                           (and (not (ldb/page? block))
-                                (ldb/library? (:block/parent target-block)))))
+         ;; target-block doesn't have parent
+         (and sibling? (nil? (:block/parent target-block)))
          ;; move page to be a child of block
          (and (not sibling?)
               (not (ldb/page? target-block))
