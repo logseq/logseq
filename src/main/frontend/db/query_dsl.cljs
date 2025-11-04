@@ -802,7 +802,7 @@ Some bindings in this fn:
            blocks? (if db-graph? true blocks?)]
        (when-let [query' (some-> query* (query-wrapper {:blocks? blocks?
                                                         :block-attrs (when db-graph? db-block-attrs)}))]
-         (let [random-samples (if @sample
+         (let [random-samples (if (and sample @sample)
                                 (fn [col]
                                   (take @sample (shuffle col)))
                                 identity)
