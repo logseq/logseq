@@ -185,6 +185,7 @@
 (def get-entity-types entity-util/get-entity-types)
 (def internal-tags db-class/internal-tags)
 (def private-tags db-class/private-tags)
+(def extends-hidden-tags db-class/extends-hidden-tags)
 (def hidden-tags db-class/hidden-tags)
 
 (defn sort-by-order

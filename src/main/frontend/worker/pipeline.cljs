@@ -334,31 +334,50 @@
                                              (:block/title block))
                                   (ldb/built-in? block))))
           tx-data' (mapcat
-                    (fn [[e a v _t added]]
-                      (when added
-                        (cond
+                    (fn [datom]
+                      (let [[e a v _t added] datom]
+                        (when added
+                          (cond
                           ;; using built-in pages as tags
-                          (and (= a :block/tags) (built-in-page? v))
-                          [[:db/retract v :db/ident]
-                           [:db/retract v :logseq.property.class/extends]
-                           [:db/retract v :block/tags :logseq.class/Tag]
-                           [:db/add v :block/tags :logseq.class/Page]
-                           [:db/retract e a v]]
+                            (and (= a :block/tags) (built-in-page? v))
+                            [[:db/retract v :db/ident]
+                             [:db/retract v :logseq.property.class/extends]
+                             [:db/retract v :block/tags :logseq.class/Tag]
+                             [:db/add v :block/tags :logseq.class/Page]
+                             [:db/retract e a v]]
 
-                          ;; built-in block protected attributes/properties updated
-                          (and (contains? #{:db/ident :block/title :block/name :block/uuid
-                                            :logseq.property/type :db/cardinality
-                                            :logseq.property/built-in? :logseq.property.class/extends} a)
-                               (some? (d/entity db-before e))
-                               (let [block (d/entity db-after e)]
-                                 (and (ldb/built-in? block)
-                                      (not= (get block a) (get (d/entity db-before e) a)))))
-                          (if-some [prev-v (get (d/entity db-before e) a)]
-                            [[:db/add e a prev-v]]
-                            [[:db/retract e a v]])
+                            ;; built-in block protected properties updated
+                            (and (contains? #{:db/ident :block/title :block/name :block/uuid
+                                              :logseq.property/type :db/cardinality
+                                              :logseq.property/built-in? :logseq.property.class/extends} a)
+                                 (some? (d/entity db-before e))
+                                 (let [block (d/entity db-after e)]
+                                   (and (ldb/built-in? block)
+                                        (not= (get block a) (get (d/entity db-before e) a)))))
+                            (if-some [prev-v (get (d/entity db-before e) a)]
+                              (if (= a :logseq.property.class/extends)
+                                [[:db/retract e a]
+                                 {:db/id e
+                                  a (map :db/id prev-v)}]
+                                [[:db/add e a prev-v]])
+                              [[:db/retract e a v]])
 
-                          :else
-                          nil)))
+                            ;; user class extends unexpected built-in classes
+                            (and (= a :logseq.property.class/extends)
+                                 (let [block (d/entity db-after v)]
+                                   (and (ldb/built-in? block)
+                                        (not (contains? #{:logseq.class/Root :logseq.class/Page :logseq.class/Property
+                                                          :logseq.class/Task :logseq.class/Card}
+                                                        (:db/ident block))))))
+                            (let [prev-v (get (d/entity db-before e) a)]
+                              [[:db/retract e a v]
+                               (if (seq prev-v)
+                                 {:db/id e
+                                  a (map :db/id prev-v)}
+                                 [:db/add e a :logseq.class/Root])])
+
+                            :else
+                            nil))))
                     tx-data)]
       (when (seq tx-data')
         (prn :debug ::revert-built-in-block-updates :tx-data (distinct tx-data')))
