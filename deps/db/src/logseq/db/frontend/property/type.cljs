@@ -99,12 +99,14 @@
 
 (defn- url-entity?
   "Empty string, url or macro url"
-  [db val {:keys [new-closed-value?]}]
+  [db val {:keys [new-closed-value? skip-strict-url-validate?]}]
   (if new-closed-value?
     (or (url? val) (macro-url? val))
     (when-let [ent (d/entity db val)]
       (let [title (:block/title ent)]
-        (or (string/blank? title) (url? title) (macro-url? title))))))
+        (if skip-strict-url-validate?
+          (string? title)
+          (or (string/blank? title) (url? title) (macro-url? title)))))))
 
 (defn- entity?
   [db id]
