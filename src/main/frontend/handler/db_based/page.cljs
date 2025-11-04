@@ -50,7 +50,7 @@
         (:block/parent page-entity)
         (notification/show! "Namespaced pages can't be tags" :error false)
         (outliner-validate/uneditable-page? page-entity)
-        (notification/show! "Built-in pages can't be edited" :error)
+        (notification/show! "Built-in pages can't be used as tags" :error)
         :else
         (let [txs [(db-class/build-new-class (db/get-db)
                                              {:db/id (:db/id page-entity)
@@ -65,7 +65,7 @@
   (cond (db/page-exists? (:block/title entity) #{:logseq.class/Page})
         (notification/show! (str "A page with the name \"" (:block/title entity) "\" already exists.") :warning false)
         (outliner-validate/uneditable-page? entity)
-        (notification/show! "Built-in tags can't be edited" :error)
+        (notification/show! "Built-in tags can't be converted to pages" :error)
         :else
         (if (seq (:logseq.property.class/_extends entity))
           (notification/show! "This tag cannot be converted because it has tag children. All tag children must be removed or converted before converting this tag." :error false)

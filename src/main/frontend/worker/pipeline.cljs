@@ -15,6 +15,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.outliner.core :as outliner-core]
@@ -86,6 +87,7 @@
                                                                                                                                               (:block/uuid e)))))))]
                                                                           blocks))))]
                                      (when (seq template-blocks)
+                                       ;; FIXME: outliner core apis shouldn't use `repo`
                                        (let [result (outliner-core/insert-blocks
                                                      repo db template-blocks object
                                                      {:sibling? false
@@ -323,10 +325,49 @@
         (cond->> add-created-by-tx-data
           (nil? created-by-ent) (cons created-by-block))))))
 
+(defn- revert-disallowed-changes
+  [{:keys [tx-meta tx-data db-before db-after]}]
+  (when-not (rtc-tx-or-download-graph? tx-meta)
+    (let [built-in-page? (fn [id]
+                           (let [block (d/entity db-after id)]
+                             (and (contains? sqlite-create-graph/built-in-pages-names
+                                             (:block/title block))
+                                  (ldb/built-in? block))))
+          tx-data' (mapcat
+                    (fn [[e a v _t added]]
+                      (when added
+                        (cond
+                          ;; using built-in pages as tags
+                          (and (= a :block/tags) (built-in-page? v))
+                          [[:db/retract v :db/ident]
+                           [:db/retract v :logseq.property.class/extends]
+                           [:db/retract v :block/tags :logseq.class/Tag]
+                           [:db/add v :block/tags :logseq.class/Page]
+                           [:db/retract e a v]]
+
+                          ;; built-in block protected properties updated
+                          (and (contains? #{:db/ident :block/title :block/name :logseq.property/type
+                                            :logseq.property/built-in? :logseq.property.class/extends} a)
+                               (some? (d/entity db-before e))
+                               (let [block (d/entity db-after e)]
+                                 (and (ldb/built-in? block)
+                                      (not= (get block a) (get (d/entity db-before e) a)))))
+                          (if-some [prev-v (get (d/entity db-before e) a)]
+                            [[:db/add e a prev-v]]
+                            [[:db/retract e a v]])
+
+                          :else
+                          nil)))
+                    tx-data)]
+      (when (seq tx-data')
+        (prn :debug ::revert-built-in-block-updates :tx-data (distinct tx-data')))
+      (distinct tx-data'))))
+
 (defn- compute-extra-tx-data
   [repo tx-report]
   (let [{:keys [db-before db-after tx-data tx-meta]} tx-report
         db db-after
+        revert-tx-data (revert-disallowed-changes tx-report)
         fix-page-tags-tx-data (fix-page-tags tx-report)
         fix-inline-page-tx-data (fix-inline-built-in-page-classes tx-report)
         toggle-page-and-block-tx-data (when (empty? fix-inline-page-tx-data)
@@ -337,7 +378,8 @@
         insert-templates-tx (when-not (rtc-tx-or-download-graph? tx-meta)
                               (insert-tag-templates repo tx-report))
         created-by-tx (add-created-by-ref-hook db-before db-after tx-data tx-meta)]
-    (concat toggle-page-and-block-tx-data
+    (concat revert-tx-data
+            toggle-page-and-block-tx-data
             display-blocks-tx-data
             commands-tx
             insert-templates-tx

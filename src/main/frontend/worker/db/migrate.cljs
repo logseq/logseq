@@ -510,8 +510,6 @@
 
         r (d/transact! conn data' {:fix-db? true
                                    :db-migrate? true})]
-    (when (seq (:tx-data r))
-      (prn :debug :ensure-built-in-data-exists? :tx-data (:tx-data r)))
     (assoc r :migrate-updates
            ;; fake it as a normal :fix type migration
            {:fix (constantly :ensure-built-in-data-exists!)})))

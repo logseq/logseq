@@ -39,15 +39,6 @@
 
 (def ^:api uneditable-page? ldb/built-in?)
 
-(defn ^:api validate-built-in-pages
-  "Validates built-in pages shouldn't be modified"
-  [entity & {:keys [message]}]
-  (when (uneditable-page? entity)
-    (throw (ex-info "Rename built-in pages"
-                    {:type :notification
-                     :payload {:message (or message "Built-in pages can't be edited")
-                               :type :warning}}))))
-
 (defn- find-other-ids-with-title-and-tags
   "Query that finds other ids given the id to ignore, title to look up and tags to consider"
   [entity]
@@ -138,7 +129,6 @@
 (defn validate-block-title
   "Validates a block title when it has changed for a entity-util/page? or tagged node"
   [db new-title existing-block-entity]
-  (validate-built-in-pages existing-block-entity)
   (validate-unique-by-name-and-tags db new-title existing-block-entity)
   (validate-disallow-page-with-journal-name new-title existing-block-entity))
 
