@@ -33,7 +33,8 @@
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/page entity) (not (:block/parent entity)))
                            [[:db/add (:db/id entity) :block/parent (:db/id (:block/page entity))]]
-                           (not (de/entity? (:logseq.property/created-by-ref entity)))
+                           (and (:logseq.property/created-by-ref entity)
+                                (not (de/entity? (:logseq.property/created-by-ref entity))))
                            [[:db/retractEntity (:db/id entity)]]
                            (vector? (:logseq.property/value entity))
                            [[:db/retractEntity (:db/id entity)]]
