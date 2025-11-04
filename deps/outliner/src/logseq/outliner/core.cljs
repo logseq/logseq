@@ -284,15 +284,13 @@
     (assert (ds/outliner-txs-state? *txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [db-based? (sqlite-util/db-based-graph? repo)
-          data (cond->> this
-                 db-based?
-                 (remove-inline-page-classes db))
-          data' (cond->
-                 (if (de/entity? data)
-                   (assoc (.-kv ^js data) :db/id (:db/id data))
-                   data)
-                  db-based?
-                  (dissoc :block/properties))
+          data (if (de/entity? this)
+                 (assoc (.-kv ^js this) :db/id (:db/id this))
+                 this)
+          data' (if db-based?
+                  (->> (dissoc data :block/properties)
+                       (remove-inline-page-classes db))
+                  data)
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
               (-> data'
