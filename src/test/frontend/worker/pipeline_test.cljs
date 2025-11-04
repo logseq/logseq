@@ -76,4 +76,6 @@
                               :block/title "task"}])
         (let [task (d/entity @conn (:db/id task))]
           (is (= :logseq.class/Task (:db/ident task)))
-          (is (= "Task" (:block/title task))))))))
+          (is (= "Task" (:block/title task))))))
+    ;; return global fn back to previous behavior
+    (ldb/register-transact-pipeline-fn! identity)))
