@@ -183,14 +183,7 @@
                page-tag-update? (and (= :block/tags (:a datom))
                                      (= (:db/id page-tag) (:v datom)))
                move-to-library? (and (= :block/parent (:a datom))
-                                     (or (= (:db/id library-page) (:v datom))
-                                         (and
-                                          (ldb/page? (d/entity db (:v datom)))
-                                          (let [parents (->> (ldb/get-block-parents db (:block/uuid (d/entity db (:v datom))))
-                                                             (map :db/id)
-                                                             (set))]
-                                            (contains? parents (:db/id library-page)))))
-
+                                     (= (:db/id library-page) (:v datom))
                                      (:added datom))]
            (when (or page-tag-update? move-to-library?)
              (let [block-before (d/entity db-before id)
