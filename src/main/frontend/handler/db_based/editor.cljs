@@ -64,7 +64,7 @@
                             (-> refs
                                 remove-non-existed-refs!
                                 (use-cached-refs! block))))))
-        title' (db-content/title-ref->id-ref (:block/title block) (:block/refs block))
+        title' (db-content/title-ref->id-ref (or (get block :block/title) title) (:block/refs block))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (assoc :block/title title'))]

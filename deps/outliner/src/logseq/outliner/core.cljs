@@ -237,9 +237,26 @@
           [:db/retract eid :block/tags :logseq.class/Page]])))
    tags))
 
-(defn- remove-inline-page-classes
+(defn- inline-tag-disallowed?
+  [db t]
+  ;; both disallowed tags and built-in pages shouldn't be used as inline tags
+  (let [disallowed-idents (into db-class/disallowed-inline-tags
+                                #{:logseq.property/query :logseq.property/asset})]
+    (and (map? t)
+         (or
+          (contains?
+           disallowed-idents
+           (or (:db/ident t)
+               (when-let [id (:block/uuid t)]
+                 (:db/ident (d/entity db [:block/uuid id])))))
+          (contains?
+           sqlite-create-graph/built-in-pages-names
+           (or (:block/title t)
+               (when-let [id (:block/uuid t)]
+                 (:block/title (d/entity db [:block/uuid id])))))))))
+
+(defn- remove-disallowed-inline-classes
   [db {:block/keys [tags] :as block}]
-  ;; Notice: should check `page?` for block from the current db
   (if (or (ldb/page? (d/entity db (:db/id block))) (:block/name block))
     block
     (let [tags' (cond
@@ -253,28 +270,26 @@
                   :else
                   tags)
           block (assoc block :block/tags tags')
-          page-class? (fn [t]
-                        (and (map? t) (contains? db-class/page-classes
-                                                 (or (:db/ident t)
-                                                     (when-let [id (:block/uuid t)]
-                                                       (:db/ident (d/entity db [:block/uuid id])))))))
-          page-classes (filter page-class? tags')]
-      (if (seq page-classes)
+          disallowed-tag? (fn [tag] (inline-tag-disallowed? db tag))
+          disallowed-tags (filter disallowed-tag? tags')]
+      (if (seq disallowed-tags)
         (-> block
             (update :block/tags
                     (fn [tags]
-                      (->> (remove page-class? tags)
+                      (->> (remove disallowed-tag? tags)
                            (remove nil?))))
             (update :block/refs
-                    (fn [refs] (->> (remove page-class? refs)
+                    (fn [refs] (->> (remove disallowed-tag? refs)
                                     (remove nil?))))
             (update :block/title (fn [title]
                                    (reduce
-                                    (fn [title page-class]
-                                      (-> (string/replace title (str "#" (page-ref/->page-ref (:block/uuid page-class))) "")
+                                    (fn [title tag]
+                                      (-> (string/replace title
+                                                          (str "#" (page-ref/->page-ref (:block/uuid tag)))
+                                                          (str "#" (:block/title tag)))
                                           string/trim))
                                     title
-                                    page-classes))))
+                                    disallowed-tags))))
         block))))
 
 (extend-type Entity
@@ -289,7 +304,7 @@
                  this)
           data' (if db-based?
                   (->> (dissoc data :block/properties)
-                       (remove-inline-page-classes db))
+                       (remove-disallowed-inline-classes db))
                   data)
           collapse-or-expand? (= outliner-op :collapse-expand-blocks)
           m* (cond->
@@ -586,7 +601,7 @@
         orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid' (get uuids (:block/uuid block))]
-                     (let [block (if db-based? (remove-inline-page-classes db block) block)
+                     (let [block (if db-based? (remove-disallowed-inline-classes db block) block)
                            top-level? (= (:block/level block) 1)
                            parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
 
