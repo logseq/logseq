@@ -100,3 +100,11 @@
     (p/goto-page "Library")
     (let [contents (set (util/get-page-blocks-contents))]
       (is (set/subset? (set ["block1" "block2" "block3" "block4" "block5"]) contents)))))
+
+(deftest create-nested-pages-in-library
+  (testing "create nested pages in Library"
+    (p/goto-page "Library")
+    (b/new-blocks ["page parent" "page child"])
+    (b/indent)
+    (b/new-block "another nested child")
+    (b/indent)))
