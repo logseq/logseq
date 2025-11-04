@@ -3630,13 +3630,10 @@
       (save-current-block!) ;; Save the input contents before collapsing
       (ui-outliner-tx/transact! ;; Save the new collapsed state as an undo transaction (if it changed)
        {:outliner-op :collapse-expand-blocks}
-       (doseq [block-id block-ids]
-         (when-let [block (db/entity [:block/uuid block-id])]
-           (let [current-value (boolean (:block/collapsed? block))]
-             (when-not (= current-value value)
-               (let [block {:block/uuid block-id
-                            :block/collapsed? value}]
-                 (outliner-save-block! block {:outliner-op :collapse-expand-blocks})))))))
+       (let [tx-data (map (fn [block-id]
+                            {:block/uuid block-id
+                             :block/collapsed? value}) block-ids)]
+         (outliner-op/transact! tx-data {})))
       (doseq [block-id block-ids]
         (state/set-collapsed-block! block-id value)))))
 

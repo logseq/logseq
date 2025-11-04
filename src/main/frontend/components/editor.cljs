@@ -161,11 +161,13 @@
             result (if db-tag?
                      (let [classes (editor-handler/get-matched-classes q)]
                        (if (and (ldb/internal-page? block)
-                                (= (:block/title block) q))
-                         (cons {:block/title (util/format "Convert \"%s\" to tag" q)
+                                (= (:block/title block) q)
+                                (not (ldb/built-in? block)))
+                         (cons {:block/title q
                                 :db/id (:db/id block)
                                 :block/uuid (:block/uuid block)
-                                :convert-page-to-tag? true} classes)
+                                :convert-page-to-tag? true
+                                :friendly-title (util/format "Convert \"%s\" to tag" q)} classes)
                          classes))
                      (editor-handler/<get-matched-blocks q {:nlp-pages? true
                                                             :page-only? (not db-based?)}))]
@@ -203,7 +205,7 @@
                         (let [block' (if-let [id (:block/uuid block)]
                                        (if-let [e (db/entity [:block/uuid id])]
                                          (assoc e
-                                                :block/title (or (:block/title e) (:block/title block))
+                                                :block/title (or (:friendly-title block) (:block/title e) (:block/title block))
                                                 :alias (:alias block))
                                          block)
                                        block)]
