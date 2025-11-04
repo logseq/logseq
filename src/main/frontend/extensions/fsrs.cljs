@@ -200,7 +200,8 @@
             _card-index (rum/react *card-index)
             next-phase (phase->next-phase block-entity phase)]
         [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
-         [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+         [:div.mb-4.ml-2.opacity-70.text-sm
+          (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
          (let [option (case phase
                         :init
                         {:hide-children? true}
