@@ -1483,6 +1483,7 @@
                           (string/trim value)))
                (save-block-aux! db-block value opts))))
          (catch :default error
+           (js/console.error error)
            (log/error :save-block-failed error)))))))
 
 (defn- clean-content!
