@@ -57,7 +57,9 @@
                                                            :built-in-query? (:built-in-query? config)})]
           [k (rum/react result)]))
       (catch :default e
-        (reset! *query-error e)))))
+        (js/console.error e)
+        (reset! *query-error e)
+        [nil nil]))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
                          {:keys [table? db-graph?]}]
