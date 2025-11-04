@@ -345,8 +345,9 @@
                            [:db/add v :block/tags :logseq.class/Page]
                            [:db/retract e a v]]
 
-                          ;; built-in block protected properties updated
-                          (and (contains? #{:db/ident :block/title :block/name :logseq.property/type
+                          ;; built-in block protected attributes/properties updated
+                          (and (contains? #{:db/ident :block/title :block/name :block/uuid
+                                            :logseq.property/type :db/cardinality
                                             :logseq.property/built-in? :logseq.property.class/extends} a)
                                (some? (d/entity db-before e))
                                (let [block (d/entity db-after e)]
