@@ -89,12 +89,13 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value? _skip-strict-url-validate?]
+                                             :as validate-option}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
-                         (validate-fn db value {:new-closed-value? new-closed-value?}))
+                         (validate-fn db value validate-option))
                        validate-fn)
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
@@ -221,6 +222,10 @@
   "Used by validate-fns which need db as input"
   nil)
 
+(def ^:dynamic *skip-strict-url-validate?*
+  "`true` allows updating a block's other property when it has invalid URL value"
+  false)
+
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
@@ -235,7 +240,8 @@
               (when error-message
                 {:error/message error-message})
               (fn [tuple]
-                (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
+                (validate-property-value *db-for-validate-fns* schema-fn tuple
+                                         {:skip-strict-url-validate? *skip-strict-url-validate?*}))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
