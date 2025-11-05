@@ -202,14 +202,14 @@
     (when tag
       (sdk-utils/result->js tag))))
 
-(defn add-tag [id-or-name tag-id]
+(defn add-block-tag [id-or-name tag-id]
   (p/let [repo (state/get-current-repo)
           tag (db-async/<get-block repo tag-id)
           block (db-async/<get-block repo id-or-name)]
     (when (and tag block)
       (db-page-handler/add-tag repo (:db/id block) tag))))
 
-(defn remove-tag [id-or-name tag-id]
+(defn remove-block-tag [id-or-name tag-id]
   (p/let [repo (state/get-current-repo)
           block (db-async/<get-block repo id-or-name)
           tag (db-async/<get-block repo tag-id)]
