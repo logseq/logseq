@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
@@ -57,12 +58,19 @@
 
 (defn get-class-title-with-extends
   [entity]
-  (let [parents' (->> (db-class/get-class-extends entity)
-                      (remove (fn [e] (= :logseq.class/Root (:db/ident e))))
-                      vec)]
-    (string/join
-     ns-util/parent-char
-     (map :block/title (conj parents' entity)))))
+  (let [extends (some->> (:logseq.property.class/extends entity)
+                         (remove (fn [extend]
+                                   (or (:logseq.property/built-in? extend)
+                                       (= (:block/title entity) (:block/title extend)))))
+                         vec)]
+    (if (seq extends)
+      (str (if (= 1 (count extends))
+             (:block/title (first extends))
+             (->> (take 2 extends)
+                  (map :block/title)
+                  (string/join " | ")))
+           ns-util/parent-char (:block/title entity))
+      (:block/title entity))))
 
 (defn get-title-with-parents
   [entity]
