@@ -12,6 +12,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.modules.layout.core]
+            [frontend.handler.db-based.page :as db-page-handler]
+            [frontend.db.async :as db-async]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.api.block :as api-block]
@@ -192,3 +194,25 @@
                                               (state/get-current-repo)
                                               (:db/id class))]
         (sdk-utils/result->js result)))))
+
+(defn create-tag [title]
+  (p/let [repo (state/get-current-repo)
+          tag (db-page-handler/<create-class! title {:redirect? false})
+          tag (db-async/<get-block repo (:db/id tag) {:children? false})]
+    (when tag
+      (sdk-utils/result->js tag))))
+
+(defn add-tag [id-or-name tag-id]
+  (p/let [repo (state/get-current-repo)
+          tag (db-async/<get-block repo tag-id)
+          block (db-async/<get-block repo id-or-name)]
+    (when (and tag block)
+      (db-page-handler/add-tag repo (:db/id block) tag))))
+
+(defn remove-tag [id-or-name tag-id]
+  (p/let [repo (state/get-current-repo)
+          block (db-async/<get-block repo id-or-name)
+          tag (db-async/<get-block repo tag-id)]
+    (when (and block tag)
+      (db-property-handler/delete-property-value!
+       (:db/id block) :block/tags (:db/id tag)))))

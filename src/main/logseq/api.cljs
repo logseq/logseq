@@ -200,6 +200,9 @@
 (def ^:export get_all_tags db-based-api/get-all-tags)
 (def ^:export get_all_properties db-based-api/get-all-properties)
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
+(def ^:export create_tag db-based-api/create-tag)
+(def ^:export add_tag db-based-api/add-tag)
+(def ^:export remove_tag db-based-api/remove-tag)
 
 ;; Internal db-based CLI APIs
 (def ^:export list_tags cli-based-api/list-tags)
