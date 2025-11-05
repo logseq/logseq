@@ -310,8 +310,9 @@
                      (string/starts-with? src "~"))
                (str "file://" src)
                src)
-        get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))]
-    [:div.asset-container
+        get-blockid #(some-> (rum/deref *el-ref) (.closest "[blockid]") (.getAttribute "blockid") (uuid))
+        has-caption? (and title (not (string/blank? title)))]
+    [(if has-caption? :figure.asset-container-with-caption :div.asset-container)
      {:key "resize-asset-container"
       :on-pointer-down util/stop
       :on-click (fn [e]
@@ -398,7 +399,9 @@
                                                     (ui/icon "trash") (t :asset/delete)])])])
                                             {:align :start
                                              :dropdown-menu? true}))}
-             (shui/tabler-icon "dots-vertical")))])])]))
+             (shui/tabler-icon "dots-vertical")))])])]
+     (when has-caption?
+       [:figcaption.asset-caption title])])
 
 ;; TODO: store image height and width for better ux
 (rum/defcs ^:large-vars/cleanup-todo resizable-image <
@@ -593,11 +596,10 @@
 
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
-(defn image-link [config url href label metadata full_text]
+(defn image-link [config url href label title metadata full_text]
   (let [metadata (if (string/blank? metadata)
                    nil
                    (common-util/safe-read-map-string metadata))
-        title (second (first label))
         repo (state/get-current-repo)]
     (ui/catch-error
      [:span.warning full_text]
@@ -1448,7 +1450,7 @@
               (config/get-local-asset-absolute-path path)))))
 
 (rum/defc audio-link
-  [config url href _label metadata full_text]
+  [config url href _label _title metadata full_text]
   (if (and (common-config/local-asset? href)
            (or (config/local-file-based-graph? (state/get-current-repo))
                (config/db-based-graph? (state/get-current-repo))))
@@ -1470,18 +1472,18 @@
       (audio-cp href))))
 
 (defn- media-link
-  [config url s label metadata full_text]
+  [config url s label title metadata full_text]
   (let [ext (keyword (util/get-file-ext s))
         label-text (get-label-text label)]
     (cond
       (contains? config/audio-formats ext)
-      (audio-link config url s label metadata full_text)
+      (audio-link config url s label title metadata full_text)
 
       (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
 
       (not (contains? #{:mp4 :webm :mov} ext))
-      (image-link config url s label metadata full_text)
+      (image-link config url s label title metadata full_text)
 
       :else
       (asset-reference config label s))))
@@ -1514,7 +1516,7 @@
             (map-inline config label))
 
     (show-link? config metadata s full_text)
-    (media-link config url s label metadata full_text)
+    (media-link config url s label title metadata full_text)
 
     (util/electron?)
     (let [path (cond
@@ -1560,14 +1562,14 @@
         (if (and (= format :org)
                  (show-link? config nil page page)
                  (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-          (image-link config url page nil metadata full_text)
+          (image-link config url page nil title metadata full_text)
           (let [label* (if (seq (mldoc/plain->text label)) label nil)]
             (if (and (string? page) (string/blank? page))
               [:span (ref/->page-ref page)]
               (page-reference config page label*)))))
 
       ["Embed_data" src]
-      (image-link config url src nil metadata full_text)
+      (image-link config url src nil title metadata full_text)
 
       ["Search" s]
       (search-link-cp config url s label title metadata full_text)
@@ -1591,7 +1593,7 @@
 
           (= protocol "file")
           (if (show-link? config metadata href full_text)
-            (media-link config url href label metadata full_text)
+            (media-link config url href label title metadata full_text)
             (let [href* (if (util/electron?)
                           (relative-assets-path->absolute-path href)
                           href)]
@@ -1611,7 +1613,7 @@
                 (map-inline config label))]))
 
           (show-link? config metadata href full_text)
-          (media-link config url href label metadata full_text)
+          (media-link config url href label title metadata full_text)
 
           :else
           (if (:node-ref-link-only? config)
