@@ -134,7 +134,8 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block]
+  [block & {:keys [with-tags?]
+            :or {with-tags? true}}]
   (let [block-e (cond
                   (de/entity? block)
                   block
@@ -150,7 +151,7 @@
       (ldb/class? block)
       (ldb/get-class-title-with-extends block)
 
-      (seq tags)
+      (and with-tags? (seq tags))
       (str (:block/title block)
            " "
            (string/join
