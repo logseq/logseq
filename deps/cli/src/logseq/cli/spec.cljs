@@ -25,6 +25,15 @@
                  :desc "Export type"
                  :default :graph}})
 
+(def import-edn
+  {:api-server-token {:alias :a
+                      :desc "API server token to query current graph"}
+   :graph {:alias :g
+           :desc "Local graph to import into"}
+   :file {:alias :f
+          :require true
+          :desc "EDN File to import"}})
+
 (def query
   {:graphs {:alias :g
             :coerce []

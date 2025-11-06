@@ -212,6 +212,7 @@
 (def ^:export list_pages cli-based-api/list-pages)
 (def ^:export get_page_data cli-based-api/get-page-data)
 (def ^:export upsert_nodes cli-based-api/upsert-nodes)
+(def ^:export import_edn cli-based-api/import-edn)
 
 ;; file based graph APIs
 (def ^:export get_current_graph_templates file-based-api/get_current_graph_templates)

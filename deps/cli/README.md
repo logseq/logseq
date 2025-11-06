@@ -31,6 +31,8 @@ query [options]      Query DB graph(s)
 export [options]     Export DB graph as Markdown
 export-edn [options] Export DB graph as EDN
 append [options]     Appends text to current page
+mcp-server [options] Run a MCP server
+import-edn [options] Import into DB graph with EDN
 help                 Print a command's help
 
 $ logseq list
@@ -120,7 +122,11 @@ Exported 41 pages to yep_markdown_1756128259.zip
 
 # Export DB graph as EDN
 $ logseq export-edn woot -f woot.edn
-Exported 16 properties, 16 classes and 36 pages
+Exported 16 properties, 1 classes and 36 pages to woot.edn
+
+# Import into current graph with EDN
+$ logseq import-edn -f woot-ontology.edn
+Imported 16 properties, 1 classes and 0 pages!
 
 # Append text to current page
 $ logseq append add this text -a my-token
