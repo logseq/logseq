@@ -616,3 +616,11 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
     @apply border-none;
   }
 }
+
+.ls-properties-area .property-pair {
+  @apply flex flex-col items-start;
+
+  .property-key {
+    margin-bottom: -6px;
+  }
+}
