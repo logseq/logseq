@@ -120,27 +120,24 @@
   [this k schema opts]
   (p/let [k' (api-block/sanitize-user-property-name k)
           property-ident (api-block/get-db-ident-from-property-name k' this)
-          property (db/entity property-ident)]
-    (if property
-      property
-      (p/let [_ (api-block/ensure-property-upsert-control this property-ident k')
-              schema (or (some-> schema bean/->clj
-                                 (update-keys #(if (contains? #{:hide :public} %)
-                                                 (keyword (str (name %) "?")) %)))
-                         {})
-              _ (when (:type schema)
-                  (schema-type-check! (keyword (:type schema))))
-              schema (cond-> schema
-                       (string? (:cardinality schema))
-                       (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
-                           (dissoc :cardinality))
+          _ (api-block/ensure-property-upsert-control this property-ident k')
+          schema (or (some-> schema
+                             (update-keys #(if (contains? #{:hide :public} %)
+                                             (keyword (str (name %) "?")) %)))
+                     {})
+          _ (when (:type schema)
+              (schema-type-check! (keyword (:type schema))))
+          schema (cond-> schema
+                   (string? (:cardinality schema))
+                   (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
+                       (dissoc :cardinality))
 
-                       (string? (:type schema))
-                       (-> (assoc :logseq.property/type (keyword (:type schema)))
-                           (dissoc :type)))
-              p (db-property-handler/upsert-property! property-ident schema
-                                                      (assoc opts :property-name k'))]
-        (db/entity (:db/id p))))))
+                   (string? (:type schema))
+                   (-> (assoc :logseq.property/type (keyword (:type schema)))
+                       (dissoc :type)))
+          p (db-property-handler/upsert-property! property-ident schema
+                                                  (assoc opts :property-name k'))]
+    (db/entity (:db/id p))))
 
 (defn upsert-property
   "schema:
