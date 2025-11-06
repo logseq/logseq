@@ -92,7 +92,7 @@
        (not (:logseq.property/created-from-property block))))
 
 (defn db-rebuild-block-refs
-  "Rebuild block refs for DB graphs"
+  "Rebuild block refs for DB graphs, should returns ids"
   [db block & {:keys [page-or-object?-memoized]}]
   (let [block-db-id (:db/id block)
         ;; explicit lookup in order to be nbb compatible
@@ -103,7 +103,9 @@
                     (dissoc :block/parent :block/page :logseq.property/created-by-ref
                             :logseq.property.history/block :logseq.property.history/property :logseq.property.history/ref-value))
         property-key-refs (->> (keys properties)
-                               (remove private-built-in-props))
+                               (remove private-built-in-props)
+                               (keep (fn [ident]
+                                       (:db/id (d/entity db ident)))))
         page-or-object? (or page-or-object?-memoized page-or-object?-helper)
         property-value-refs (->> properties
                                  (mapcat (fn [[property v]]
