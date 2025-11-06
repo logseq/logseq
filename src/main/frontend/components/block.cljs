@@ -714,8 +714,9 @@
    All page-names are sanitized except page-name-in-block"
   [state
    {:keys [contents-page? whiteboard-page? other-position?
-           on-context-menu stop-event-propagation? with-tags?]
-    :or {with-tags? true}
+           on-context-menu stop-event-propagation? with-tags? show-unique-title?]
+    :or {with-tags? true
+         show-unique-title? true}
     :as config}
    page-entity children label]
   (let [*mouse-down? (::mouse-down? state)
@@ -798,7 +799,9 @@
           (ldb/page? page-entity)
           (if untitled?
             (t :untitled)
-            (let [s (util/trim-safe (block-handler/block-unique-title page-entity {:with-tags? with-tags?}))]
+            (let [s (util/trim-safe (if show-unique-title?
+                                      (block-handler/block-unique-title page-entity {:with-tags? with-tags?})
+                                      (:block/title page-entity)))]
               (if (and tag? (not (:hide-tag-symbol? config)))
                 (str "#" s)
                 s)))
