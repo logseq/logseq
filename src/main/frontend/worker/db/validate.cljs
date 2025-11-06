@@ -168,7 +168,8 @@
                                  (:db/ident property))]
                      (keep
                       (fn [[b v]]
-                        (when-not (matches v)
+                        (when-not (or (matches v)
+                                      (= :logseq.property/empty-placeholder (:db/ident (d/entity db v))))
                           [:db/retract b (:db/ident  property) v]))
                       values)))
                  properties)]
