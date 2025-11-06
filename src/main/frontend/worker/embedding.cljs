@@ -48,23 +48,13 @@
   [repo]
   (get-in @*vector-search-state [:repo->index-info repo :indexing?]))
 
-(defn- hidden-entity?
-  [entity]
-  (or (ldb/hidden? entity)
-      (let [page (:block/page entity)]
-        (and (ldb/hidden? page)
-             (not= (:block/title page) common-config/quick-add-page-name)))))
-
 (defn- stale-block-filter-preds
   "When `reset?`, ignore :logseq.property.embedding/hnsw-label-updated-at in block"
   [reset?]
   (let [preds (cond->> (list (fn [b]
-                               (let [db-ident (:db/ident b)
-                                     title (:block/title b)]
-                                 (and (or (nil? db-ident)
-                                          (not (string/starts-with? (namespace db-ident) "logseq.")))
-                                      (not (string/blank? title))
-                                      (not (hidden-entity? b))
+                               (let [title (:block/title b)]
+                                 (and (not (string/blank? title))
+                                      (not (ldb/hidden? b))
                                       (nil? (:logseq.property/view-for b))
                                       (not (keyword-identical?
                                             :logseq.property/description
@@ -252,7 +242,9 @@
                  (keep (fn [[distance label]]
                          ;; (prn :debug :semantic-search-result
                          ;;      :block (:block/title (d/entity @conn label))
-                         ;;      :distance distance)
+                         ;;      :page? (ldb/page? (d/entity @conn label))
+                         ;;      :distance distance
+                         ;;      :label label)
                          (when-not (or (js/isNaN distance) (>= distance 0.6)
                                        (> label 2147483647))
                            (when-let [block (d/entity @conn label)]
