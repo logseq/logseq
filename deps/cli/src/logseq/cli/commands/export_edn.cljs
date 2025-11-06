@@ -15,9 +15,7 @@
                                                    (= :graph (:export-type options))
                                                    (assoc :graph-options (dissoc options :file :export-type :graph))))
           file (or (:file options) (str graph "_" (quot (common-util/time-ms) 1000) ".edn"))]
-      (println "Exported" (count (:properties export-map)) "properties,"
-               (count (:properties export-map)) "classes and"
-               (count (:pages-and-blocks export-map)) "pages to" file)
+      (println (str "Exported " (cli-util/summarize-build-edn export-map) " to " file))
       (fs/writeFileSync file
                         (with-out-str (pprint/pprint export-map))))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
