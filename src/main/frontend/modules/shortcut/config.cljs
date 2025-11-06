@@ -407,7 +407,7 @@
    :go/search                               {:binding "mod+k"
                                              :fn      #(search :global)}
 
-   :go/search-themes                        {:binding "mod+shift+i"
+   :go/search-themes                        {:binding (if mac? "mod+shift+i" "alt+shift+i")
                                              :fn      #(search :themes)}
 
    :command-palette/toggle                  {:binding "mod+shift+p"
