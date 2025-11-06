@@ -791,7 +791,7 @@
   [priority]
   (when-let [block (state/get-edit-block)]
     (if (nil? priority)
-      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.property/priority)
+      (db-property-handler/set-block-property! (:block/uuid block) :logseq.property/priority :logseq.property/empty-placeholder)
       (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.property/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
