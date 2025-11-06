@@ -204,12 +204,17 @@
                                               (:db/id class))]
         (sdk-utils/result->js result)))))
 
-(defn create-tag [title]
-  (p/let [repo (state/get-current-repo)
-          tag (db-page-handler/<create-class! title {:redirect? false})
-          tag (db-async/<get-block repo (:db/id tag) {:children? false})]
-    (when tag
-      (sdk-utils/result->js tag))))
+(defn create-tag [title ^js opts]
+  (let [opts (bean/->clj opts)]
+    (p/let [repo (state/get-current-repo)
+            tag (db-page-handler/<create-class!
+                 title
+                 (-> opts
+                     (sdk-utils/with-custom-uuid)
+                     (assoc :redirect? false)))
+            tag (db-async/<get-block repo (:db/id tag) {:children? false})]
+      (when tag
+        (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-page tag-id)
