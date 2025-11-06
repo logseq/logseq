@@ -1161,38 +1161,80 @@
 
   [:<>])
 
-(rum/defcs settings-collaboration < rum/reactive
-  (rum/local "" ::invite-email)
-  {:will-mount (fn [state]
-                 (rtc-handler/<rtc-get-users-info)
-                 state)}
-  [state]
-  (let [*invite-email (::invite-email state)
+(rum/defc settings-rtc-members
+  []
+  (let [[invite-email set-invite-email!] (hooks/use-state "")
         current-repo (state/get-current-repo)
-        users (get (state/sub :rtc/users-info) current-repo)]
-    [:div.panel-wrap.is-collaboration.mb-8
-     [:div.flex.flex-col.gap-2.mt-4
-      [:h2.opacity-50.font-medium "Members:"]
-      [:div.users.flex.flex-col.gap-1
-       (for [{user-name :user/name
-              user-email :user/email
-              graph<->user-user-type :graph<->user/user-type} users]
-         [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
-          [:div user-name]
-          (when user-email [:div.opacity-50.text-sm user-email])
-          (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])])]
-      [:div.flex.flex-col.gap-4.mt-4
-       (shui/input
-        {:placeholder   "Email address"
-         :on-change     #(reset! *invite-email (util/evalue %))})
-       (shui/button
-        {:on-click (fn []
-                     (let [user-email @*invite-email
-                           graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-                       (when-not (string/blank? user-email)
-                         (when graph-uuid
-                           (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
-        "Invite")]]]))
+        [users-info] (hooks/use-atom (:rtc/users-info @state/state))
+        users (get users-info current-repo)]
+    (hooks/use-effect!
+     #(c.m/run-task* (m/sp (c.m/<? (rtc-handler/<rtc-get-users-info))))
+     [])
+    [:div.flex.flex-col.gap-2.mt-4
+     [:h2.opacity-50.font-medium "Members:"]
+     [:div.users.flex.flex-col.gap-1
+      (for [{user-name :user/name
+             user-email :user/email
+             graph<->user-user-type :graph<->user/user-type} users]
+        [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
+         [:div user-name]
+         (when user-email [:div.opacity-50.text-sm user-email])
+         (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])])]
+     [:div.flex.flex-col.gap-4.mt-4
+      (shui/input
+       {:placeholder   "Email address"
+        :on-change     #(set-invite-email! (util/evalue %))})
+      (shui/button
+       {:on-click (fn []
+                    (let [user-email invite-email
+                          graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+                      (when-not (string/blank? user-email)
+                        (when graph-uuid
+                          (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
+       "Invite")]]))
+
+(rum/defc settings-rtc-e2ee
+  []
+  (let [user-uuid (user-handler/user-uuid)
+        token (state/get-auth-id-token)
+        [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
+        [init-key-err set-init-key-err!] (hooks/use-state nil)
+        [get-key-err set-get-key-err!] (hooks/use-state nil)]
+    (hooks/use-effect!
+     (fn []
+       (when (and user-uuid token)
+         (-> (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+               (set-rsa-key-pair! r))
+             (p/catch set-get-key-err!))))
+     [user-uuid token])
+    [:div.flex.flex-col.gap-2.mt-4
+     [:h2.opacity-50.font-medium "E2EE Settings:"]
+     (when (and user-uuid token)
+       (cond
+         get-key-err
+         [:p (str "Fetching user rsa-key-pair err: " get-key-err)]
+         (= rsa-key-pair :not-inited)
+         [:p "Fetching user rsa-key-pair..."]
+         (nil? rsa-key-pair)
+         [:div
+          (when init-key-err [:p (str "Init key-pair err:" init-key-err)])
+          (shui/button
+           {:on-click (fn []
+                        (-> (p/let [key-pair (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
+                                                                      ;; :thread-api/force-reset-user-rsa-key-pair
+                                                                      token user-uuid)]
+                              (set-rsa-key-pair! key-pair))
+                            (p/catch set-init-key-err!)))}
+           "Init E2EE encrypt-key-pair")]
+         rsa-key-pair
+         [:p "E2EE key-pair already generated!"]))]))
+
+(rum/defc settings-collaboration
+  []
+  [:div.panel-wrap.is-collaboration.mb-8
+   (settings-rtc-members)
+   [:br]
+   (settings-rtc-e2ee)])
 
 (rum/defc mcp-server-row
   [t]
