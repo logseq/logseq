@@ -204,7 +204,7 @@
     (when tag
       (sdk-utils/result->js tag))))
 
-(defn upsert-property-to-tag [tag-id property-id-or-name & {:keys [schema]}]
+(defn add-tag-class-property [tag-id property-id-or-name & {:keys [schema]}]
   (p/let [repo (state/get-current-repo)
           tag-entity (db-async/<get-block repo tag-id {:children? false})
           class-tag? (some-> tag-entity (ldb/class?))
@@ -235,6 +235,9 @@
                 (throw (ex-info "This is an invalid property name." {:value property-title}))))]
       (sdk-utils/result->js property')
       )))
+
+(defn remove-tag-class-property [tag-id property-id-or-name]
+  (throw (ex-info "TODO: implement remove-tag-class-property" {tag-id property-id-or-name})))
 
 (defn add-block-tag [id-or-name tag-id]
   (p/let [repo (state/get-current-repo)
