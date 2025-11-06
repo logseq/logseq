@@ -62,7 +62,8 @@
 
 (defn remove-q!
   [k]
-  (swap! *query-state dissoc k))
+  (when-not (and (= (second k) :custom) (nth k 3))                   ; today query
+    (swap! *query-state dissoc k)))
 
 (defn add-query-component!
   [k component]
