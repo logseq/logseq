@@ -5,9 +5,11 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [frontend.components.property.value :as pv]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.handler.common.page :as page-common-handler]
+            [logseq.db.frontend.property :as db-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
@@ -58,12 +60,12 @@
             blocks (:blocks result)]
       (when (seq blocks)
         (p/doseq [block blocks]
-          (let [id (:block/uuid block)
-                b (db/entity [:block/uuid id])
-                properties (when uuid->properties (uuid->properties id))]
-            (when (seq properties)
-              (api-block/db-based-save-block-properties! b properties {:plugin this
-                                                                       :schema schema})))))
+                 (let [id (:block/uuid block)
+                       b (db/entity [:block/uuid id])
+                       properties (when uuid->properties (uuid->properties id))]
+                   (when (seq properties)
+                     (api-block/db-based-save-block-properties! b properties {:plugin this
+                                                                              :schema schema})))))
       (let [blocks' (map (fn [b] (db/entity [:block/uuid (:block/uuid b)])) blocks)]
         (sdk-utils/result->js blocks')))))
 
@@ -93,10 +95,10 @@
 (defn get-property
   [k]
   (this-as this
-           (p/let [prop (-get-property this k)
-                   prop' (some-> prop
-                                 (assoc :type (:logseq.property/type prop)))]
-             (sdk-utils/result->js prop'))))
+    (p/let [prop (-get-property this k)
+            prop' (some-> prop
+                          (assoc :type (:logseq.property/type prop)))]
+      (sdk-utils/result->js prop'))))
 
 (defn ->cardinality
   [input]
@@ -126,37 +128,37 @@
   [k ^js schema ^js opts]
   (this-as
    this
-   (when-not (string/blank? k)
-     (p/let [opts (or (some-> opts bean/->clj) {})
-             k' (api-block/sanitize-user-property-name k)
-             property-ident (api-block/get-db-ident-from-property-name k' this)
-             _ (api-block/ensure-property-upsert-control this property-ident k')
-             schema (or (some-> schema (bean/->clj)
-                                (update-keys #(if (contains? #{:hide :public} %)
-                                                (keyword (str (name %) "?")) %))) {})
-             _ (when (:type schema)
-                 (schema-type-check! (keyword (:type schema))))
-             schema (cond-> schema
-                      (string? (:cardinality schema))
-                      (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
-                          (dissoc :cardinality))
+    (when-not (string/blank? k)
+      (p/let [opts (or (some-> opts bean/->clj) {})
+              k' (api-block/sanitize-user-property-name k)
+              property-ident (api-block/get-db-ident-from-property-name k' this)
+              _ (api-block/ensure-property-upsert-control this property-ident k')
+              schema (or (some-> schema (bean/->clj)
+                                 (update-keys #(if (contains? #{:hide :public} %)
+                                                 (keyword (str (name %) "?")) %))) {})
+              _ (when (:type schema)
+                  (schema-type-check! (keyword (:type schema))))
+              schema (cond-> schema
+                             (string? (:cardinality schema))
+                             (-> (assoc :db/cardinality (->cardinality (:cardinality schema)))
+                                 (dissoc :cardinality))
 
-                      (string? (:type schema))
-                      (-> (assoc :logseq.property/type (keyword (:type schema)))
-                          (dissoc :type)))
-             p (db-property-handler/upsert-property! property-ident schema
-                                                     (assoc opts :property-name k'))
-             p (db/entity (:db/id p))]
-       (sdk-utils/result->js p)))))
+                             (string? (:type schema))
+                             (-> (assoc :logseq.property/type (keyword (:type schema)))
+                                 (dissoc :type)))
+              p (db-property-handler/upsert-property! property-ident schema
+                                                      (assoc opts :property-name k'))
+              p (db/entity (:db/id p))]
+        (sdk-utils/result->js p)))))
 
 (defn remove-property
   [k]
   (this-as
    this
-   (p/let [property (-get-property this k)]
-     (when-let [uuid (and (api-block/plugin-property-key? (:db/ident property))
-                          (:block/uuid property))]
-       (page-common-handler/<delete! uuid nil nil)))))
+    (p/let [property (-get-property this k)]
+      (when-let [uuid (and (api-block/plugin-property-key? (:db/ident property))
+                           (:block/uuid property))]
+        (page-common-handler/<delete! uuid nil nil)))))
 
 (defn upsert-block-property
   [this block key' value schema]
@@ -201,6 +203,38 @@
           tag (db-async/<get-block repo (:db/id tag) {:children? false})]
     (when tag
       (sdk-utils/result->js tag))))
+
+(defn upsert-property-to-tag [tag-id property-id-or-name & {:keys [schema]}]
+  (p/let [repo (state/get-current-repo)
+          tag-entity (db-async/<get-block repo tag-id {:children? false})
+          class-tag? (some-> tag-entity (ldb/class?))
+          _ (when-not class-tag? (throw (ex-info (str tag-id " should be class tag") {:value tag-entity})))
+          property (db-async/<get-block repo property-id-or-name {:children? false})
+          property? (some-> property (ldb/property?))
+          property-title (or (:block/title property) property-id-or-name)]
+    (p/let [property'
+            (if property?
+              (do
+                (when (and (not (ldb/public-built-in-property? property))
+                           (ldb/built-in? property))
+                  (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
+                property)
+              ;; new property entered or converting page to property
+              (if (db-property/valid-property-name? property-title)
+                (p/let [type (or (:type schema) :default)
+                        schema (assoc schema :logseq.property/type type)
+                        opts (cond-> {:property-name property-title}
+                                     (and (not property?) (ldb/internal-page? property))
+                                     (assoc :properties {:db/id (:db/id property)}))
+                        result (db-property-handler/upsert-property! nil schema opts)
+                        property (db/entity (:db/id result))
+                        _ (when class-tag?
+                            (pv/<add-property! tag-entity (:db/ident property)
+                                               "" {:class-schema? true :exit-edit? false}))]
+                  property)
+                (throw (ex-info "This is an invalid property name." {:value property-title}))))]
+      (sdk-utils/result->js property')
+      )))
 
 (defn add-block-tag [id-or-name tag-id]
   (p/let [repo (state/get-current-repo)
