@@ -1,7 +1,7 @@
 (ns ^:node-only logseq.cli.util
   "CLI only util fns"
-  (:require ["path" :as node-path]
-            ["fs" :as fs]
+  (:require ["fs" :as fs]
+            ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
             [logseq.db.common.sqlite :as common-sqlite]
@@ -68,3 +68,15 @@
   [& strings]
   (apply println "Error:" strings)
   (js/process.exit 1))
+
+(defn summarize-build-edn
+  "Given a sqlite.build EDN map, returns a string summarizing what is transacted"
+  [edn-map]
+  (let [pluralize (fn pluralize [word num]
+                    (if (= 1 num)
+                      word
+                      (get {"property" "properties"
+                            "class" "classes"} word (str word "s"))))]
+    (str (count (:properties edn-map)) " " (pluralize "property" (count (:properties edn-map))) ", "
+         (count (:classes edn-map)) " " (pluralize "class" (count (:classes edn-map))) " and "
+         (count (:pages-and-blocks edn-map)) " " (pluralize "page" (count (:pages-and-blocks edn-map))))))
