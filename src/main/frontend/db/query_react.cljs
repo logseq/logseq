@@ -109,7 +109,10 @@
           inputs (cond-> resolved-inputs
                    rules
                    (conj rules))
-          k [:custom (or (:query-string query') query') inputs]]
+          k [:custom
+             (or (:query-string query') (dissoc query' :title))
+             (:today-query? query-opts)
+             inputs]]
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))

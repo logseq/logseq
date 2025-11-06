@@ -54,7 +54,8 @@
 
         :else
         (let [[k result] (query-custom/custom-query query {:current-block-uuid current-block-uuid
-                                                           :built-in-query? (:built-in-query? config)})]
+                                                           :built-in-query? (:built-in-query? config)
+                                                           :today-query? (:today-query? config)})]
           [k (rum/react result)]))
       (catch :default e
         (js/console.error e)
