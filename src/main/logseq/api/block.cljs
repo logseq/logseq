@@ -116,7 +116,7 @@
     :else :default))
 
 (defn- set-block-properties!
-  [plugin block-id properties]
+  [plugin block-id properties {:keys [reset-property-values]}]
   (ui-outliner-tx/transact!
    {:outliner-op :set-block-properties}
    (doseq [[property-id property-ident value schema] properties]
@@ -164,7 +164,7 @@
          (ensure-property-upsert-control plugin property-ident property-id)
          (outliner-op/upsert-property! property-ident schema' {:property-name property-id}))
 
-       (when (and property (or many? (nil? value'))) ; delete property from this block
+       (when (and property (or (and many? reset-property-values) (nil? value'))) ; delete property from this block
          (outliner-op/remove-block-property! block-id property-ident))
 
        (let [set-property! (fn [value]
@@ -175,14 +175,14 @@
            (set-property! value)))))))
 
 (defn db-based-save-block-properties!
-  [block properties & {:keys [plugin schema]}]
+  [block properties & {:keys [plugin schema reset-property-values]}]
   (when-let [block-id (and (seq properties) (:db/id block))]
     (let [properties (->> properties
                           (map (fn [[k v]]
                                  (let [ident (get-db-ident-from-property-name k plugin)
                                        property-schema (get schema k)]
                                    [k ident v property-schema]))))]
-      (set-block-properties! plugin block-id properties))))
+      (set-block-properties! plugin block-id properties {:reset-property-values reset-property-values}))))
 
 (defn <sync-children-blocks!
   [block]

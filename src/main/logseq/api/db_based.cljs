@@ -85,7 +85,8 @@
        (when (seq (:properties opts))
          (api-block/db-based-save-block-properties! block (:properties opts)
                                                     {:plugin this
-                                                     :schema (:schema opts)}))
+                                                     :schema (:schema opts)
+                                                     :reset-property-values (:reset-property-values opts)}))
        (editor-handler/save-block! repo
                                    (sdk-utils/uuid-or-throw-error block-uuid) content
                                    (dissoc opts :properties))))))
@@ -168,10 +169,11 @@
        (page-common-handler/<delete! uuid nil nil)))))
 
 (defn upsert-block-property
-  [this block key' value schema]
+  [this block key' value {:keys [schema reset-property-values]}]
   (let [opts {:plugin this
               :schema (when schema
-                        {key schema})}]
+                        {key schema})
+              :reset-property-values reset-property-values}]
     (api-block/db-based-save-block-properties! block {key' value} opts)))
 
 (defn get-all-tags
