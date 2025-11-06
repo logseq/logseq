@@ -118,15 +118,13 @@
   []
   (m/sp (c.m/<? (crypt/<generate-aes-key))))
 
-(defn task--get-rsa-key-pair
+(defn task--get-decrypted-rsa-key-pair
   [get-ws-create-task user-uuid]
   (m/sp
     (let [{:keys [public-key encrypted-private-key]}
           (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
-          _ (prn :xxxxx1)
           exported-private-key (c.m/<? (worker-state/<invoke-main-thread
                                         :thread-api/decrypt-user-e2ee-private-key encrypted-private-key))
-          _ (prn :xxxxx2)
           private-key (c.m/<? (crypt/<import-private-key exported-private-key))]
       {:public-key public-key
        :private-key private-key})))
@@ -134,12 +132,26 @@
 (defn task--get-aes-key
   [get-ws-create-task user-uuid graph-uuid]
   (m/sp
-    (let [{:keys [_public-key private-key]} (m/? (task--get-rsa-key-pair get-ws-create-task user-uuid))]
+    (let [{:keys [_public-key private-key]} (m/? (task--get-decrypted-rsa-key-pair get-ws-create-task user-uuid))]
       (m/? (task--fetch-graph-aes-key get-ws-create-task graph-uuid private-key)))))
 
 (def-thread-api :thread-api/get-user-rsa-key-pair-from-indexeddb
   [user-uuid]
   (<get-item (user-rsa-key-pair-idb-key user-uuid)))
+
+(def-thread-api :thread-api/get-user-rsa-key-pair
+  [token user-uuid]
+  (m/sp
+    (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+          {:keys [public-key encrypted-private-key]}
+          (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))]
+      {:public-key (c.m/<? (crypt/<export-public-key public-key))
+       :encrypted-private-key encrypted-private-key})))
+
+(def-thread-api :thread-api/throw-ex-test
+  []
+  (m/sp
+    (throw (ex-info "throw test" {}))))
 
 (def-thread-api :thread-api/init-user-rsa-key-pair
   [token user-uuid]
@@ -151,7 +163,7 @@
                 {:keys [password]} (c.m/<? (worker-state/<invoke-main-thread :thread-api/request-e2ee-password))
                 encrypted-private-key (c.m/<? (crypt/<encrypt-private-key password privateKey))]
             (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key))
-            ;; fetch again
+           ;; fetch again
             (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
             (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
             (c.m/<? (<get-item (user-rsa-key-pair-idb-key user-uuid))))))
@@ -168,7 +180,7 @@
             encrypted-private-key (c.m/<? (crypt/<encrypt-private-key password privateKey))]
         (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key
                                              :force-reset true))
-        ;; fetch again
+       ;; fetch again
         (c.m/<? (<remove-item! (user-rsa-key-pair-idb-key user-uuid)))
         (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
         (c.m/<? (<get-item (user-rsa-key-pair-idb-key user-uuid))))

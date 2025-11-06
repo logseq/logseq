@@ -6,7 +6,7 @@
             [clojure.walk :as w]
             [daiquiri.interpreter :as interpreter]
             [logseq.shui.hooks :as hooks]
-            [rum.core :refer [use-state] :as rum]))
+            [rum.core :as rum]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
 
@@ -66,30 +66,8 @@
               (bean/->js (map-keys->camel-case new-options :html-props true))
               new-children)))))
 
-(defn use-atom-fn
-  [a getter-fn setter-fn]
-  (let [[val set-val] (use-state (getter-fn @a))]
-    (hooks/use-effect!
-     (fn []
-       (let [id (str (random-uuid))]
-         (add-watch a id (fn [_ _ prev-state next-state]
-                           (let [prev-value (getter-fn prev-state)
-                                 next-value (getter-fn next-state)]
-                             (when-not (= prev-value next-value)
-                               (set-val next-value)))))
-         #(remove-watch a id)))
-     [])
-    [val #(swap! a setter-fn %)]))
-
-(defn use-atom
-  "(use-atom my-atom)"
-  [a]
-  (use-atom-fn a identity (fn [_ v] v)))
-
-(defn use-atom-in
-  [a ks]
-  (let [ks (if (keyword? ks) [ks] ks)]
-    (use-atom-fn a #(get-in % ks) (fn [a' v] (assoc-in a' ks v)))))
+(def use-atom hooks/use-atom)
+(def use-atom-in hooks/use-atom-in)
 
 (defn use-mounted
   []
