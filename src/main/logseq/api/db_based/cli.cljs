@@ -5,7 +5,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn list-tags
   [options]
@@ -49,3 +50,13 @@
     (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)
     (cli-common-mcp-tools/summarize-upsert-operations ops options)))
+
+(defn import-edn
+  "Given EDN data as a transitized string, converts to EDN and imports it."
+  [edn-data*]
+  (p/let [edn-data (sqlite-util/transit-read edn-data*)
+          {:keys [error]} (ui-outliner-tx/transact!
+                           {:outliner-op :batch-import-edn}
+                           (outliner-op/batch-import-edn! edn-data {}))]
+    (when error (throw (ex-info error {})))
+    (ui-handler/re-render-root!)))
