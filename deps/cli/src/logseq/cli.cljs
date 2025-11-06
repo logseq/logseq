@@ -103,6 +103,10 @@
     :description "Run a MCP server against a local graph if --graph is given or against the current in-app graph. By default the MCP server runs as a HTTP Streamable server. Use --stdio to run it as a stdio server."
     :fn (lazy-load-fn 'logseq.cli.commands.mcp-server/start)
     :spec cli-spec/mcp-server}
+   {:cmds ["import-edn"] :desc "Import into DB graph with EDN"
+    :description "Import with EDN into a local graph or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this import type."
+    :fn (lazy-load-fn 'logseq.cli.commands.import-edn/import-edn)
+    :spec cli-spec/import-edn}
    {:cmds ["help"] :fn help-command :desc "Print a command's help"
     :args->opts [:command] :require [:command]}
    {:cmds []
