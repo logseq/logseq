@@ -1153,7 +1153,8 @@
               config' (assoc config
                              :label (mldoc/plain->text label)
                              :contents-page? contents-page?
-                             :show-icon? true?)
+                             :show-icon? true?
+                             :with-tags? false)
               asset? (some? (:logseq.property.asset/type block))
               brackets? (and (or show-brackets? nested-link?)
                              (not html-export?)
