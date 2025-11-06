@@ -483,7 +483,9 @@
     ;; TODO: Derive required property types from existing schema in frontend.property
     [[:logseq.property.asset/type :string]
      [:logseq.property.asset/checksum :string]
-     [:logseq.property.asset/size :int]]
+     [:logseq.property.asset/size :int]
+     [:logseq.property.asset/width {:optional true} :int]
+     [:logseq.property.asset/height {:optional true} :int]]
     block-attrs
     page-or-block-attrs)))
 

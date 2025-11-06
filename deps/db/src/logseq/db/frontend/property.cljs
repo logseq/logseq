@@ -492,6 +492,16 @@
                                            :hide? true
                                            :public? false}
                                   :queryable? true}
+     :logseq.property.asset/width {:title "Image width"
+                                   :schema {:type :raw-number
+                                            :hide? true
+                                            :public? false}
+                                   :queryable? true}
+     :logseq.property.asset/height {:title "Image height"
+                                    :schema {:type :raw-number
+                                             :hide? true
+                                             :public? false}
+                                    :queryable? true}
      :logseq.property.asset/checksum {:title "File checksum"
                                       :schema {:type :string
                                                :hide? true
