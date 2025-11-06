@@ -280,7 +280,8 @@
                                              :table? true
                                              :on-key-down
                                              (fn [e]
-                                               (when (= (util/ekey e) "Enter")
+                                               (when (and (= (util/ekey e) "Enter")
+                                                          (not (state/get-editor-action)))
                                                  (util/stop e)
                                                  (save-block-and-focus *ref set-focus-timeout! true)))}
                                             block)])))]
