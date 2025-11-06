@@ -72,8 +72,7 @@
 ;; If only block/title changes
 (def retract-attributes
   "Retract attributes for DB graphs"
-  #{:block/refs
-    :block/warning})
+  #{:block/warning})
 
 ;; DB graph helpers
 ;; ================
