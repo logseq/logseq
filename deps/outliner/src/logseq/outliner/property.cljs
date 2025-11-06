@@ -306,16 +306,25 @@
 
 (defn- get-property-value-eid
   [db property-id raw-value]
-  (first
-   (d/q '[:find [?v ...]
-          :in $ ?property-id ?raw-value
-          :where
-          [?b ?property-id ?v]
-          (or [?v :block/title ?raw-value]
-              [?v :logseq.property/value ?raw-value])]
-        db
-        property-id
-        raw-value)))
+  (if (= property-id :block/tags)
+    (first
+     (d/q '[:find [?v ...]
+            :in $ ?title
+            :where
+            [?v :block/title ?title]
+            [?v :block/tags :logseq.class/Tag]]
+          db
+          raw-value))
+    (first
+     (d/q '[:find [?v ...]
+            :in $ ?property-id ?raw-value
+            :where
+            [?b ?property-id ?v]
+            (or [?v :block/title ?raw-value]
+                [?v :logseq.property/value ?raw-value])]
+          db
+          property-id
+          raw-value))))
 
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
@@ -491,7 +500,8 @@
                         [:db/retract (:db/id block) :block/tags :logseq.class/Task]]
                        {:outliner-op :save-block})
 
-        (= (:logseq.property/default-value property) (get block property-id))
+        (and (:logseq.property/default-value property)
+             (= (:logseq.property/default-value property) (get block property-id)))
         (ldb/transact! conn
                        [{:db/id (:db/id block)
                          property-id :logseq.property/empty-placeholder}]
