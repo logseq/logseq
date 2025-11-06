@@ -145,8 +145,9 @@
     (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
           {:keys [public-key encrypted-private-key]}
           (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))]
-      {:public-key (c.m/<? (crypt/<export-public-key public-key))
-       :encrypted-private-key encrypted-private-key})))
+      (when (and public-key encrypted-private-key)
+        {:public-key (c.m/<? (crypt/<export-public-key public-key))
+         :encrypted-private-key encrypted-private-key}))))
 
 (def-thread-api :thread-api/throw-ex-test
   []
