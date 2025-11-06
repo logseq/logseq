@@ -1,6 +1,7 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
-  (:require [clojure.string :as string]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.commands :as commands]
@@ -35,19 +36,35 @@
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn- rebuild-block-refs
-  [repo {:keys [tx-meta db-after]} blocks]
+  [repo {:keys [tx-meta db-after db-before]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:rtc-tx? tx-meta))
-    (mapcat (fn [block]
-              (when (d/entity db-after (:db/id block))
-                (let [date-formatter (worker-state/get-date-formatter repo)
-                      refs (outliner-core/rebuild-block-refs repo db-after date-formatter block)]
-                  ;; Always retract because if refs is empty then a delete action has occurred
-                  (cond-> [[:db/retract (:db/id block) :block/refs]]
-                    (seq refs)
-                    (conj {:db/id (:db/id block)
-                           :block/refs refs})))))
-            blocks)))
+    (let [db-based? (entity-plus/db-based-graph? db-after)]
+      (mapcat (fn [block]
+                (when (d/entity db-after (:db/id block))
+                  (let [date-formatter (worker-state/get-date-formatter repo)
+                        refs (->> (outliner-core/rebuild-block-refs repo db-after date-formatter block) set)]
+                    (if db-based?
+                      (let [old-refs (->> (:block/refs (d/entity db-before (:db/id block)))
+                                          (map :db/id)
+                                          set)
+                            added-refs (when (and (seq refs) (not= refs old-refs))
+                                         (set/difference refs old-refs))
+                            retracted-refs (when (and (seq old-refs) (not= refs old-refs))
+                                             (set/difference old-refs refs))]
+                        (concat
+                         (map (fn [id]
+                                [:db/retract (:db/id block) :block/refs id])
+                              retracted-refs)
+                         (map (fn [id]
+                                [:db/add (:db/id block) :block/refs id])
+                              added-refs)))
+                      ;; retract all refs for file graphs because we can't ensure `refs` are all db ids
+                      (cond-> [[:db/retract (:db/id block) :block/refs]]
+                        (seq refs)
+                        (conj {:db/id (:db/id block)
+                               :block/refs refs}))))))
+              blocks))))
 
 (defn- insert-tag-templates
   [repo tx-report]
