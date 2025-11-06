@@ -1075,7 +1075,8 @@
       (entity-util/page? v-block)
       (rum/with-key
         (page-cp {:disable-preview? true
-                  :tag? class?} v-block)
+                  :tag? class?
+                  :with-tags? false} v-block)
         (:db/id v-block))
 
       :else
@@ -1127,6 +1128,7 @@
        (when value
          (let [opts {:disable-preview? true
                      :tag? tag?
+                     :with-tags? false
                      :property-position property-position
                      :other-position? other-position?
                      :table-view? table-view?
