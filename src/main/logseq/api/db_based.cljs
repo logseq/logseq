@@ -219,8 +219,8 @@
         (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
-  (p/let [tag (db/get-page tag-id)
-          property (db/get-page property-id-or-name)]
+  (p/let [tag (db/get-case-page tag-id)
+          property (db/get-case-page property-id-or-name)]
     (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
     (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
     (when (and (not (ldb/public-built-in-property? property))
@@ -228,16 +228,16 @@
       (throw (ex-info "This is a private built-in property that can't be used." {:value property})))
     (p/do!
      (db-property-handler/class-add-property! (:db/id tag) (:db/ident property))
-     (sdk-utils/result->js (db/get-page tag-id)))))
+     (sdk-utils/result->js (db/get-case-page tag-id)))))
 
 (defn tag-remove-property [tag-id property-id-or-name]
-  (p/let [tag (db/get-page tag-id)
-          property (db/get-page property-id-or-name)]
+  (p/let [tag (db/get-case-page tag-id)
+          property (db/get-case-page property-id-or-name)]
     (when-not (ldb/class? tag) (throw (ex-info "Not a valid tag" {:tag tag-id})))
     (when-not (ldb/property? property) (throw (ex-info "Not a valid property" {:property property-id-or-name})))
     (p/do!
      (db-property-handler/class-remove-property! (:db/id tag) (:db/ident property))
-     (sdk-utils/result->js (db/get-page tag-id)))))
+     (sdk-utils/result->js (db/get-case-page tag-id)))))
 
 (defn add-block-tag [id-or-name tag-id]
   (p/let [repo (state/get-current-repo)
