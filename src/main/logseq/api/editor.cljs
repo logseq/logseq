@@ -133,10 +133,10 @@
                            :journal? journal
                            :class? class
                            :format format}
-                          (string? customUUID)
-                          (assoc :uuid (uuid customUUID))
-                          (not db-based?)
-                          (assoc :properties properties))))
+                           (string? customUUID)
+                           (assoc :uuid (uuid customUUID))
+                           (not db-based?)
+                           (assoc :properties properties))))
              _ (when (and db-based? (seq properties))
                  (api-block/db-based-save-block-properties! new-page properties {:plugin this
                                                                                  :schema schema}))]
@@ -479,7 +479,7 @@
            value (bean/->clj value)]
      (when block
        (if db-based?
-         (db-based-api/upsert-block-property this block key' value (:schema opts))
+         (db-based-api/upsert-block-property this block key' value opts)
          (property-handler/set-block-property! repo block-uuid key' value))))))
 
 (defn remove_block_property
