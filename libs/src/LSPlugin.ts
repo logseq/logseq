@@ -781,6 +781,12 @@ export interface IEditorProxy extends Record<string, any> {
   getAllProperties: () => Promise<PageEntity[] | null>
   getTagObjects: (PageIdentity) => Promise<BlockEntity[] | null>
   createTag: (tagName: string) => Promise<PageEntity | null>
+  addTagClassProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity,
+    opts?: Partial<{
+      type: stirng
+      [key: string]: any
+    }>) => Promise<void>
+  removeTagClassProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
   removeBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
 
