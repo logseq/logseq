@@ -426,6 +426,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                                          :block/title (if (ldb/page? block)
                                                         (ldb/get-title-with-parents block)
                                                         (or snippet title))
+                                         :block.temp/original-title (:block/title block)
                                          :block/page (or
                                                       (:block/uuid (:block/page block))
                                                       (when page
