@@ -2355,7 +2355,6 @@
         block-ref? (:block-ref? config)
         block-type (or (keyword (pu/lookup block :logseq.property/ls-type)) :default)
         html-export? (:html-export? config)
-        bg-color (pu/lookup block :logseq.property/background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level block)
         heading (or
@@ -2376,14 +2375,7 @@
         (when (and marker
                    (not (string/blank? marker))
                    (not= "nil" marker))
-          {:data-marker (str (string/lower-case marker))})
-        (when bg-color
-          (let [built-in-color? (ui/built-in-color? bg-color)]
-            {:style {:background-color (if built-in-color?
-                                         (str "var(--ls-highlight-color-" bg-color ")")
-                                         bg-color)
-                     :color (when-not built-in-color? "white")}
-             :class "px-1 with-bg-color"})))
+          {:data-marker (str (string/lower-case marker))}))
 
        ;; children
        (let [area?  (= :area (keyword (pu/lookup block :logseq.property.pdf/hl-type)))
@@ -3157,10 +3149,20 @@
         raw-mode-block (state/sub :editor/raw-mode-block)
         type-block-editor? (and (contains? #{:code} (:logseq.property.node/display-type block))
                                 (not= (:db/id block) (:db/id raw-mode-block)))
-        config (assoc config :block-parent-id block-id)]
+        config (assoc config :block-parent-id block-id)
+        bg-color (pu/lookup block :logseq.property/background-color)]
     [:div.block-content-or-editor-wrap
-     {:class (when (:page-title? config) "ls-page-title-container")
-      :data-node-type (some-> (:logseq.property.node/display-type block) name)}
+     (merge
+      {:class (util/classnames [{"ls-page-title-container" (:page-title? config)
+                                 "px-1 with-bg-color" bg-color}])
+       :data-node-type (some-> (:logseq.property.node/display-type block) name)}
+      (when bg-color
+        (let [built-in-color? (ui/built-in-color? bg-color)]
+          {:style {:background-color (if built-in-color?
+                                       (str "var(--ls-highlight-color-" bg-color ")")
+                                       bg-color)
+                   :color (when-not built-in-color? "white")}})))
+
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.block-content-or-editor-inner
       [:div.block-row.flex.flex-1.flex-row.gap-1.items-center
