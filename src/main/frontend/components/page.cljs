@@ -239,10 +239,10 @@
                (ui/catch-error
                 (ui/component-error "Failed default query:" {:content (pr-str query')})
                 (query/custom-query (component-block/wrap-query-components
-                                     {:attr {:class "mt-10"}
-                                      :editor-box editor/box
+                                     {:editor-box editor/box
                                       :page page-cp
-                                      :built-in-query? true})
+                                      :built-in-query? true
+                                      :today-query? true})
                                     query'))
                (str repo "-custom-query-" (:query query')))))]))))
 
