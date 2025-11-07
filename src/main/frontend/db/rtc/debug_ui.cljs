@@ -268,8 +268,8 @@
            :on-click (fn [_]
                        (when-let [user-uuid (user/user-uuid)]
                          (p/let [user-rsa-key-pair (state/<invoke-db-worker
-                                                    :thread-api/get-user-rsa-key-pair-from-indexeddb
-                                                    user-uuid)]
+                                                    :thread-api/get-user-rsa-key-pair
+                                                    (state/get-auth-id-token) user-uuid)]
                            (reset! *keys-state user-rsa-key-pair))))}
           (shui/tabler-icon "refresh") "keys-state")
          (shui/button
@@ -279,15 +279,7 @@
                          (p/let [r (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair token (user/user-uuid))]
                            (when (instance? ExceptionInfo r)
                              (log/error :init-user-rsa-key-pair r)))))}
-          (shui/tabler-icon "upload") "init upload user rsa-key-pair")
-         (shui/button
-          {:size :sm
-           :on-click (fn [_]
-                       (when-let [token (state/get-auth-id-token)]
-                         (p/let [r (state/<invoke-db-worker :thread-api/force-reset-user-rsa-key-pair token (user/user-uuid))]
-                           (when (instance? ExceptionInfo r)
-                             (log/error :force-reset-user-rsa-key-pair r)))))}
-          (shui/tabler-icon "upload") "force-reset upload user rsa-key-pair")]
+          (shui/tabler-icon "upload") "init upload user rsa-key-pair")]
         [:div.pb-4
          [:pre.select-text
           (-> keys-state

@@ -1199,7 +1199,10 @@
         token (state/get-auth-id-token)
         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
         [init-key-err set-init-key-err!] (hooks/use-state nil)
-        [get-key-err set-get-key-err!] (hooks/use-state nil)]
+        [get-key-err set-get-key-err!] (hooks/use-state nil)
+        [old-password set-old-password!] (hooks/use-state nil)
+        [new-password set-new-password!] (hooks/use-state nil)
+        [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
     (hooks/use-effect!
      (fn []
        (when (and user-uuid token)
@@ -1220,14 +1223,34 @@
           (when init-key-err [:p (str "Init key-pair err:" init-key-err)])
           (shui/button
            {:on-click (fn []
-                        (-> (p/let [key-pair (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                                                      ;; :thread-api/force-reset-user-rsa-key-pair
-                                                                      token user-uuid)]
-                              (set-rsa-key-pair! key-pair))
+                        (-> (p/do!
+                              (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
+                                                       token user-uuid)
+                              (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                                (set-rsa-key-pair! r)))
                             (p/catch set-init-key-err!)))}
            "Init E2EE encrypt-key-pair")]
          rsa-key-pair
-         [:p "E2EE key-pair already generated!"]))]))
+         [:div
+          [:p "E2EE key-pair already generated!"]
+          [:h2 "Old Password:"]
+          (shui/input
+           {:type "password"
+            :on-change     #(set-old-password! (util/evalue %))})
+          [:h2 "New Password:"]
+          (shui/input
+           {:type "password"
+            :on-change     #(set-new-password! (util/evalue %))})
+          (when reset-password-status [:p reset-password-status])
+          (shui/button
+           {:on-click (fn []
+                        (-> (p/do!
+                              (set-reset-password-status! "Updating E2EE password ...")
+                              (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                                       token user-uuid old-password new-password)
+                              (set-reset-password-status! "E2EE password updated!"))
+                            (p/catch (fn [_] (set-reset-password-status! "Wrong old-password")))))}
+           "Reset Password")]))]))
 
 (rum/defc settings-collaboration
   []
