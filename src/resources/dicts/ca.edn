@@ -304,7 +304,7 @@
  :flashcards/modal-select-switch                    "Canviar a"
  :flashcards/modal-toggle-preview-mode              "Alternar el mode de vista prèvia"
  :flashcards/modal-toggle-random-mode               "Alternar el mode aleatori"
- :flashcards/modal-welcome-desc-1                   "Pot afegir \"#card\" a qualsevol bloc per convertir-lo en una targeta o executar \"/cloze\" per afegir alguns clozes."
+ :flashcards/modal-welcome-desc-1                   "Pot afegir \"{1}\" a qualsevol bloc per convertir-lo en una targeta o executar \"/cloze\" per afegir alguns clozes."
  :flashcards/modal-welcome-desc-2                   "Pot "
  :flashcards/modal-welcome-desc-3                   "fer clic en aquest enllaç"
  :flashcards/modal-welcome-desc-4                   " per revisar la documentació."
