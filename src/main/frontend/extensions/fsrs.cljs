@@ -44,7 +44,7 @@
       (update :due inst-ms->instant)))
 
 (defn- get-card-map
-  "Return nil if block is not #card.
+  "Return nil if block is not #Card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
   (when (ldb/class-instance? (db/entity :logseq.class/Card) block-entity)
@@ -295,7 +295,7 @@
             [:h2.font-medium (t :flashcards/modal-welcome-title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc-1)]]]
+             [:p (t :flashcards/modal-welcome-desc-1 "#Card")]]]
 
            :else
            [:p (t :flashcards/modal-finished)]))])))
