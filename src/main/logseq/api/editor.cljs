@@ -448,7 +448,7 @@
              target-id (str (:block/uuid target))
              opts (-> (bean/->clj opts)
                       (assoc :sibling sibling?))]
-         (insert_block target-id content opts))))))
+         (insert_block target-id content (bean/->js opts)))))))
 
 (defn download_graph_db
   []

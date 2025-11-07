@@ -91,6 +91,7 @@
 (def ^:export custom_query api-db/custom_query)
 
 ;; editor
+(def ^:export prepend_block_in_page api-editor/prepend_block_in_page)
 (def ^:export append_block_in_page api-editor/append_block_in_page)
 (def ^:export check_editing api-editor/check_editing)
 (def ^:export clear_selected_blocks api-editor/clear_selected_blocks)
@@ -124,7 +125,6 @@
 (def ^:export move_block api-editor/move_block)
 (def ^:export new_block_uuid api-editor/new_block_uuid)
 (def ^:export open_in_right_sidebar api-editor/open_in_right_sidebar)
-(def ^:export prepend_block_in_page api-editor/prepend_block_in_page)
 (def ^:export remove_block api-editor/remove_block)
 (def ^:export remove_block_property api-editor/remove_block_property)
 (def ^:export rename_page api-editor/rename_page)
