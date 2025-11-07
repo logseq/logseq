@@ -40,6 +40,7 @@ resources/electron.js
 .clj-kondo/rewrite-clj
 .clj-kondo/taoensso
 .clj-kondo/funcool
+.clj-kondo/com.lambdaisland
 /libs/dist/
 charlie/
 .vscode
