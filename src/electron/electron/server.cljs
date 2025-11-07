@@ -12,8 +12,7 @@
             [electron.utils :as utils]
             [electron.window :as window]
             [logseq.cli.common.mcp.server :as cli-common-mcp-server]
-            [promesa.core :as p]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [promesa.core :as p]))
 
 (defonce ^:private *win (atom nil))
 (defonce ^:private *server (atom nil))
