@@ -395,9 +395,9 @@
       ["upload-user-rsa-key-pair"
        [:map
         [:user-uuid :uuid]
-        [:public-key :string]
+        [:public-key {:optional true} :string]
         [:encrypted-private-key :string]
-        [:force-reset {:optional true} :boolean]]]
+        [:reset-private-key {:optional true} :boolean]]]
       ["fetch-user-rsa-key-pair"
        [:map
         [:user-uuid :uuid]]]
