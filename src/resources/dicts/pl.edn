@@ -445,7 +445,7 @@
  :flashcards/modal-select-switch                  "Przełącz się na"
  :flashcards/modal-toggle-preview-mode            "Włącz tryb podglądu"
  :flashcards/modal-toggle-random-mode             "Włącz tryb losowy"
- :flashcards/modal-welcome-desc-1                 "Możesz dodać \"#card\" do dowolnego bloku, żeby zmienić go na fiszkę lub wpisz \"/cloze\" żeby dodać luki do wypełnienia."
+ :flashcards/modal-welcome-desc-1                 "Możesz dodać \"{1}\" do dowolnego bloku, żeby zmienić go na fiszkę lub wpisz \"/cloze\" żeby dodać luki do wypełnienia."
  :flashcards/modal-welcome-desc-2                 "Możesz "
  :flashcards/modal-welcome-desc-3                 "kliknij ten link"
  :flashcards/modal-welcome-desc-4                 " żeby sprawdzić dokumentację."
