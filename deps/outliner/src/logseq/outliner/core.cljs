@@ -431,7 +431,7 @@
   (assoc-level-aux tree-vec children-key 1))
 
 (defn- assign-temp-id
-  [blocks replace-empty-target? target-block]
+  [db blocks replace-empty-target? target-block]
   (->> blocks
        (map-indexed
         (fn [idx block]
@@ -445,8 +445,23 @@
                 [(assoc block
                         :db/id (:db/id target-block)
                         :block/uuid (:block/uuid target-block))]
-                [[:db/retractEntity (:db/id target-block)] ; retract target-block first
-                 (assoc block :db/id db-id)])
+                (let [old-property-values (d/q
+                                           '[:find ?b ?a
+                                             :in $ ?v
+                                             :where
+                                             [?b ?a ?v]
+                                             [?v :block/uuid]]
+                                           db
+                                           (:db/id target-block))
+                      from-property (:logseq.property/created-from-property target-block)]
+                  (concat
+                   [[:db/retractEntity (:db/id target-block)] ; retract target-block first
+                    (cond-> (assoc block :db/id db-id)
+                      from-property
+                      (assoc :logseq.property/created-from-property (:db/id from-property)))]
+                   (map (fn [[b a]]
+                          [:db/add b a db-id])
+                        old-property-values))))
               [(assoc block :db/id db-id)]))))
        (apply concat)))
 
@@ -827,7 +842,7 @@
                            :tx (vec blocks-tx)
                            :blocks (vec blocks)
                            :target-block target-block}))
-          (let [tx (assign-temp-id blocks-tx replace-empty-target? target-block)
+          (let [tx (assign-temp-id db blocks-tx replace-empty-target? target-block)
                 old-db-id-blocks (->> (filter :block.temp/use-old-db-id? tx)
                                       (map :block/uuid)
                                       (set))
