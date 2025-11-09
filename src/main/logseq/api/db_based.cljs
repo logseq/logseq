@@ -204,16 +204,18 @@
         (sdk-utils/result->js result)))))
 
 (defn create-tag [title ^js opts]
-  (let [opts (bean/->clj opts)]
-    (p/let [repo (state/get-current-repo)
-            tag (db-page-handler/<create-class!
-                 title
-                 (-> opts
-                     (sdk-utils/with-custom-uuid)
-                     (assoc :redirect? false)))
-            tag (db-async/<get-block repo (:db/id tag) {:children? false})]
-      (when tag
-        (sdk-utils/result->js tag)))))
+  (this-as
+   this
+   (when-not (string? title)
+     (throw (ex-info "Tag title should be a string" {:title title})))
+   (when (string/blank? title)
+     (throw (ex-info "Tag title shouldn't be empty" {:title title})))
+   (let [opts (bean/->clj opts)
+         opts' (assoc opts
+                      :redirect? false
+                      :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+     (p/let [tag (db-page-handler/<create-class! title opts')]
+       (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)

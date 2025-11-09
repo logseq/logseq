@@ -80,13 +80,15 @@
          :default          false)
      ;; Used for contexts where we want repeatable idents e.g. tests and CLIs
     (keyword user-namespace (normalize-ident-name-part name-string))
-    (let [suffix (str "-"
+    (let [plugin? (string/starts-with? user-namespace "plugin.class.")
+          suffix (str "-"
                       (rand-nth non-int-char-range)
                       (nano-id 7))]
       (keyword user-namespace
                (str
                 (normalize-ident-name-part name-string)
-                suffix)))))
+                (when-not plugin?
+                  suffix))))))
 
 (defn replace-db-ident-random-suffix
   [db-ident-kw new-suffix]
