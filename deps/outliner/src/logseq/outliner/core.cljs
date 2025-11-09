@@ -272,7 +272,10 @@
           block (assoc block :block/tags tags')
           disallowed-tag? (fn [tag] (inline-tag-disallowed? db tag))
           disallowed-tags (filter disallowed-tag? tags')]
-      (if (seq disallowed-tags)
+      (if (and (seq disallowed-tags)
+               (some (fn [tag]
+                       (string/includes? (:block/title block) (str "#" (page-ref/->page-ref (:block/uuid tag)))))
+                     disallowed-tags))
         (-> block
             (update :block/tags
                     (fn [tags]
