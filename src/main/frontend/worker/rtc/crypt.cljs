@@ -172,8 +172,8 @@
     (when-let [graph-aes-key (m/? (task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
       (let [{:keys [public-key] :as response}
             (m/? (ws-util/send&recv get-ws-create-task
-                                    {:action "fetch-user-rsa-key-pair"
-                                     :user-email other-user-email}))]
+                                    {:action "fetch-user-rsa-public-key"
+                                     :user/email other-user-email}))]
         (if (:ex-data response)
           (throw (ex-info (:ex-message response) (:ex-data response)))
           (when public-key
