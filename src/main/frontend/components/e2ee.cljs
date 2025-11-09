@@ -21,7 +21,7 @@
        "OK")
       (shui/button
        {:on-click (fn []
-                    (p/reject! password-promise :cancelled)
+                    (p/reject! password-promise (ex-info "cancelled" {}))
                     (shui/dialog-close!))}
        "Cancel")]]))
 
@@ -48,6 +48,6 @@
        "OK")
       (shui/button
        {:on-click (fn []
-                    (p/reject! private-key-promise :cancelled)
+                    (p/reject! private-key-promise (ex-info "input E2EE password cancelled" {}))
                     (shui/dialog-close!))}
        "Cancel")]]))

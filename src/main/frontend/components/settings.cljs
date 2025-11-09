@@ -1253,11 +1253,12 @@
            "Reset Password")]))]))
 
 (rum/defc settings-collaboration
-  []
+  [include-e2ee-settings?]
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)
-   [:br]
-   (settings-rtc-e2ee)])
+   (when include-e2ee-settings?
+     [:br]
+     (settings-rtc-e2ee))])
 
 (rum/defc mcp-server-row
   [t]
@@ -1483,7 +1484,7 @@
          (settings-features)
 
          :collaboration
-         (settings-collaboration)
+         (settings-collaboration true)
 
          :ai
          (settings-ai)

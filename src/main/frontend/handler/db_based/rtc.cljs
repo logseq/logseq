@@ -163,12 +163,14 @@
 
 (defn <rtc-invite-email
   [graph-uuid email]
-  (let [token (state/get-auth-id-token)]
-    (->
-     (p/do!
-      (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
-                               token (str graph-uuid) [] [email])
-      (notification/show! "Invitation sent!" :success))
-     (p/catch (fn [e]
-                (notification/show! "Something wrong, please try again." :error)
-                (js/console.error e))))))
+  (let [token (state/get-auth-id-token)
+        user-uuid (user-handler/user-uuid)]
+    (when (and user-uuid token)
+      (->
+       (p/do!
+         (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
+                                  token (str graph-uuid) user-uuid email)
+         (notification/show! "Invitation sent!" :success))
+       (p/catch (fn [e]
+                  (notification/show! "Something wrong, please try again." :error)
+                  (js/console.error e)))))))
