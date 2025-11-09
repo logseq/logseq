@@ -483,13 +483,20 @@
                         :schema-version (str major-schema-version)})))
 
 (defn new-task--grant-access-to-others
-  [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-    (ws-util/send&recv get-ws-create-task
-                       (cond-> {:action "grant-access"
-                                :graph-uuid graph-uuid}
-                         target-user-uuids (assoc :target-user-uuids target-user-uuids)
-                         target-user-emails (assoc :target-user-emails target-user-emails)))))
+  [token graph-uuid user-uuid target-user-email]
+  (m/sp
+    (let [{:keys [get-ws-create-task]} (gen-get-ws-create-map--memoized (ws-util/get-ws-url token))
+          encrypted-aes-key
+          (m/? (rtc-crypt/task--encrypt-graph-aes-key-by-other-user-public-key
+                get-ws-create-task graph-uuid user-uuid target-user-email))
+          resp (m/? (ws-util/send&recv get-ws-create-task
+                                       (cond-> {:action "grant-access"
+                                                :graph-uuid graph-uuid
+                                                :target-user-email+encrypted-aes-key-coll
+                                                [{:user/email target-user-email
+                                                  :encrypted-aes-key (ldb/write-transit-str encrypted-aes-key)}]})))]
+      (when (:ex-data resp)
+        (throw (ex-info (:ex-message resp) (:ex-data resp)))))))
 
 (defn new-task--get-block-content-versions
   "Return a task that return map [:ex-data :ex-message :versions]"
@@ -612,10 +619,8 @@
   (rtc-toggle-remote-profile))
 
 (def-thread-api :thread-api/rtc-grant-graph-access
-  [token graph-uuid target-user-uuids target-user-emails]
-  (new-task--grant-access-to-others token graph-uuid
-                                    :target-user-uuids target-user-uuids
-                                    :target-user-emails target-user-emails))
+  [token graph-uuid user-uuid target-user-email]
+  (new-task--grant-access-to-others token graph-uuid user-uuid target-user-email))
 
 (def-thread-api :thread-api/rtc-get-graphs
   [token]
