@@ -261,8 +261,8 @@
                      :outliner-op :save-block}]
         (when (and class?
                    (not (ldb/class? existing-page))
-                   (or (ldb/property? existing-page) (ldb/internal-page? existing-page)))
-          ;; Convert existing user property or page to class
+                   (ldb/internal-page? existing-page))
+          ;; Convert existing page to class
           (let [tx-data [(merge (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :block/created-at]))
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
