@@ -187,8 +187,19 @@
       (prn :debug :fix-non-closed-values tx-data)
       (d/transact! conn tx-data {:fix-db? true}))))
 
+(defn- fix-icon-wrong-type!
+  [conn]
+  (let [icon (d/entity @conn :logseq.property/icon)]
+    (when (= :db.type/ref (:db/valueType icon))
+      (let [datoms (d/datoms @conn :avet :logseq.property/icon)
+            tx-data (cons
+                     [:db/retract (:db/id icon) :db/valueType]
+                     (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))]
+        (d/transact! conn tx-data {:fix-db? true})))))
+
 (defn validate-db
   [conn]
+  (fix-icon-wrong-type! conn)
   (db-migrate/ensure-built-in-data-exists! conn)
   (fix-non-closed-values! conn)
   (fix-num-prefix-db-idents! conn)
