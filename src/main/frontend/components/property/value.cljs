@@ -764,7 +764,8 @@
                                                       header (when-not (db/page? node)
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
-                                                                  (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node) {})]))
+                                                                  (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid node)
+                                                                              {:disabled? true})]))
                                                       label [:div.flex.flex-row.items-center.gap-1
                                                              (when-not (or (:logseq.property/classes property)
                                                                            (contains? #{:class :property} (:logseq.property/type property)))

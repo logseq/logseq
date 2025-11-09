@@ -3296,7 +3296,7 @@
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb-aux < rum/reactive
-  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block]
+  [config repo block-id {:keys [show-page? indent? end-separator? _navigating-block disabled?]
                          :or {show-page? true}
                          :as opts}]
   (let [from-property (when (and block-id (config/db-based-graph? repo))
@@ -3312,7 +3312,10 @@
       (let [parents-props (doall
                            (for [{:block/keys [uuid name title] :as block} parents]
                              (if name
-                               [block (page-cp {:disable-preview? true} block) true]
+                               [block (page-cp (cond-> {:disable-preview? true}
+                                                 disabled?
+                                                 (assoc :disable-click? true))
+                                               block) true]
                                (let [result (block/parse-title-and-body
                                              uuid
                                              (get block :block/format :markdown)
@@ -3333,7 +3336,9 @@
                                           label' (if page?
                                                    label
                                                    (breadcrumb-fragment config block label opts))]
-                                      (rum/with-key label' (str (:block/uuid block))))))
+                                      (if (:disabled? opts)
+                                        label
+                                        (rum/with-key label' (str (:block/uuid block)))))))
                              (interpose (breadcrumb-separator)))]
         (when (seq breadcrumbs)
           [:div.breadcrumb.block-parents
@@ -3349,7 +3354,7 @@
            (when end-separator? (breadcrumb-separator))])))))
 
 (rum/defc breadcrumb
-  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block]
+  [config repo block-id {:keys [_show-page? _indent? _end-separator? _navigating-block _disabled?]
                          :as opts}]
   (let [[block set-block!] (hooks/use-state (when (uuid? block-id)
                                               (db/entity [:block/uuid block-id])))]
