@@ -4,7 +4,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.common.config :as common-config]
-            [logseq.common.util :as common-util]
             [logseq.common.util.namespace :as ns-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
