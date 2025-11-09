@@ -795,23 +795,25 @@
                                 :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [blocks (keep (fn [b]
-                       (if-let [eid (or (:db/id b)
-                                        (when-let [id (:block/uuid b)]
-                                          [:block/uuid id]))]
-                         (let [b' (if-let [e (if (de/entity? b) b (d/entity db eid))]
-                                    (merge
-                                     (into {} e)
-                                     {:db/id (:db/id e)
-                                      :block/title (or (:block/raw-title e) (:block/title e))}
+  (let [blocks (->>
+                (keep (fn [b]
+                        (if-let [eid (or (:db/id b)
+                                         (when-let [id (:block/uuid b)]
+                                           [:block/uuid id]))]
+                          (let [b' (if-let [e (if (de/entity? b) b (d/entity db eid))]
+                                     (merge
+                                      (into {} e)
+                                      {:db/id (:db/id e)
+                                       :block/title (or (:block/raw-title e) (:block/title e))}
+                                      b)
                                      b)
-                                    b)
-                               dissoc-keys (concat [:block/tx-id]
-                                                   (when (contains? #{:insert-template-blocks :paste} outliner-op)
-                                                     [:block/refs]))]
-                           (apply dissoc b' dissoc-keys))
-                         b))
-                     blocks)
+                                dissoc-keys (concat [:block/tx-id]
+                                                    (when (contains? #{:insert-template-blocks :paste} outliner-op)
+                                                      [:block/refs]))]
+                            (apply dissoc b' dissoc-keys))
+                          b))
+                      blocks)
+                (remove ldb/asset?))
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         replace-empty-target? (if (and (some? replace-empty-target?)

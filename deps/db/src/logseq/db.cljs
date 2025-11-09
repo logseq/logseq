@@ -199,7 +199,9 @@
              :as opts}]
   (if-let [children (sort-by-order
                      (if include-property-block?
-                       (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)
+                       (let [children (entity-plus/lookup-kv-then-entity entity :block/_raw-parent)]
+                         (concat children
+                                 (keep (fn [c] (:logseq.property/query c)) children)))
                        (entity-plus/lookup-kv-then-entity entity :block/_parent)))]
     (cons entity (mapcat #(get-block-and-children-aux % opts) children))
     [entity]))
