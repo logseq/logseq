@@ -551,7 +551,8 @@
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
                   tx-data)
-        r (ldb/transact! conn tx-data' {:db-migrate? true})
+        r (ldb/transact! conn tx-data' {:db-migrate? true
+                                        :skip-validate-db? true})
         migrate-updates (cond-> migrate-updates
                           rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
     (println "DB schema migrated to" version)
