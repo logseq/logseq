@@ -153,16 +153,16 @@
   Return nil if not exists"
   [get-ws-create-task user-email]
   (m/sp
-    (let [response (m/? (ws-util/send&recv get-ws-create-task
-                                           {:action "fetch-user-rsa-public-key"
-                                            :user/email user-email}))]
+    (let [{:keys [public-key] :as response}
+          (m/? (ws-util/send&recv get-ws-create-task
+                                  {:action "fetch-user-rsa-public-key"
+                                   :user/email user-email}))]
       (if (:ex-data response)
         (throw (ex-info (:ex-message response)
                         (assoc (:ex-data response)
                                :type :rtc.exception/fetch-user-rsa-public-key-error)))
-        (let [{:keys [public-key]} response]
-          (when public-key
-            (c.m/<? (<import-public-key-transit-str public-key))))))))
+        (when public-key
+          (c.m/<? (<import-public-key-transit-str public-key)))))))
 
 (defn task--encrypt-graph-aes-key-by-other-user-public-key
   "Return encrypted-aes-key,
@@ -170,15 +170,8 @@
   [get-ws-create-task graph-uuid user-uuid other-user-email]
   (m/sp
     (when-let [graph-aes-key (m/? (task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
-      (let [{:keys [public-key] :as response}
-            (m/? (ws-util/send&recv get-ws-create-task
-                                    {:action "fetch-user-rsa-public-key"
-                                     :user/email other-user-email}))]
-        (if (:ex-data response)
-          (throw (ex-info (:ex-message response) (:ex-data response)))
-          (when public-key
-            (let [public-key* (c.m/<? (<import-public-key-transit-str public-key))]
-              (c.m/<? (crypt/<encrypt-aes-key public-key* graph-aes-key)))))))))
+      (when-let [public-key (m/? (task--fetch-user-rsa-public-key get-ws-create-task other-user-email))]
+        (c.m/<? (crypt/<encrypt-aes-key public-key graph-aes-key))))))
 
 (def-thread-api :thread-api/get-user-rsa-key-pair
   [token user-uuid]
