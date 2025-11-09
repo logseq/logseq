@@ -252,6 +252,9 @@
      ["fetch-graph-encrypted-aes-key"
       [:map
        [:encrypted-aes-key [:maybe :string]]]]
+     ["fetch-user-rsa-public-key"
+       [:map
+        [:public-key [:maybe :string]]]]
      ["upload-user-rsa-key-pair"
       [:map
        [:public-key :string]
@@ -321,8 +324,11 @@
       ["grant-access"
        [:map
         [:graph-uuid :uuid]
-        [:target-user-uuids {:optional true} [:sequential :uuid]]
-        [:target-user-emails {:optional true} [:sequential :string]]]]
+        [:target-user-email+encrypted-aes-key-coll
+         [:sequential
+          [:map
+           [:user/email :string]
+           [:encrypted-aes-key [:maybe :string]]]]]]]
       ["get-users-info"
        [:map
         [:graph-uuid :uuid]]]
@@ -403,7 +409,10 @@
         [:user-uuid :uuid]]]
       ["fetch-graph-encrypted-aes-key"
        [:map
-        [:graph-uuid :uuid]]]])))
+        [:graph-uuid :uuid]]]
+      ["fetch-user-rsa-public-key"
+       [:map
+        [:user/email :string]]]])))
 
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
