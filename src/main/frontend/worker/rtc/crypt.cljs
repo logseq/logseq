@@ -43,6 +43,12 @@
     (assert (some? user-uuid))
     (str "user-rsa-key-pair###" user-uuid)))
 
+(defn- <import-public-key-transit-str
+  "Return js/CryptoKey"
+  [public-key-transit-str]
+  (when-let [exported-public-key (ldb/read-transit-str public-key-transit-str)]
+    (crypt/<import-public-key exported-public-key)))
+
 (defn task--upload-user-rsa-key-pair
   "Uploads the user's RSA key pair to the server."
   [get-ws-create-task user-uuid public-key encrypted-private-key & {:keys [reset-private-key]
@@ -65,22 +71,30 @@
   Return {:public-key CryptoKey, :encrypted-private-key [array,array,array]}
   Return nil if not exists"
   [get-ws-create-task user-uuid]
-  (letfn [(task--import-public-key [public-key-transit-str]
-            (m/sp
-              (when-let [exported-public-key (ldb/read-transit-str public-key-transit-str)]
-                (c.m/<? (crypt/<import-public-key exported-public-key)))))]
-    (m/sp
-      (let [response (m/? (ws-util/send&recv get-ws-create-task
-                                             {:action "fetch-user-rsa-key-pair"
-                                              :user-uuid user-uuid}))]
-        (if (:ex-data response)
-          (throw (ex-info (:ex-message response)
-                          (assoc (:ex-data response)
-                                 :type :rtc.exception/fetch-user-rsa-key-pair-error)))
-          (let [{:keys [public-key encrypted-private-key]} response]
-            (when (and public-key encrypted-private-key)
-              {:public-key (m/? (task--import-public-key public-key))
-               :encrypted-private-key (ldb/read-transit-str encrypted-private-key)})))))))
+  (m/sp
+    (let [response (m/? (ws-util/send&recv get-ws-create-task
+                                           {:action "fetch-user-rsa-key-pair"
+                                            :user-uuid user-uuid}))]
+      (if (:ex-data response)
+        (throw (ex-info (:ex-message response)
+                        (assoc (:ex-data response)
+                               :type :rtc.exception/fetch-user-rsa-key-pair-error)))
+        (let [{:keys [public-key encrypted-private-key]} response]
+          (when (and public-key encrypted-private-key)
+            {:public-key (c.m/<? (<import-public-key-transit-str public-key))
+             :encrypted-private-key (ldb/read-transit-str encrypted-private-key)}))))))
+
+(defn- task--remote-fetch-graph-encrypted-aes-key
+  "Return nil if not exists."
+  [get-ws-create-task graph-uuid]
+  (m/sp
+    (let [response (m/? (ws-util/send&recv get-ws-create-task
+                                           {:action "fetch-graph-encrypted-aes-key"
+                                            :graph-uuid graph-uuid}))]
+      (if (:ex-data response)
+        (throw (ex-info (:ex-message response) (assoc (:ex-data response)
+                                                      :type :rtc.exception/fetch-graph-aes-key-error)))
+        (ldb/read-transit-str (:encrypted-aes-key response))))))
 
 (defn task--fetch-graph-aes-key
   "Fetches the AES key for a graph, from indexeddb or server.
@@ -90,17 +104,10 @@
     (let [encrypted-aes-key (c.m/<? (<get-item (graph-encrypted-aes-key-idb-key graph-uuid)))]
       (if encrypted-aes-key
         (c.m/<? (crypt/<decrypt-aes-key private-key encrypted-aes-key))
-        (let [response (m/? (ws-util/send&recv get-ws-create-task
-                                               {:action "fetch-graph-encrypted-aes-key"
-                                                :graph-uuid graph-uuid}))]
-          (if (:ex-data response)
-            (throw (ex-info (:ex-message response) (assoc (:ex-data response)
-                                                          :type :rtc.exception/fetch-graph-aes-key-error)))
-            (let [{:keys [encrypted-aes-key]} response]
-              (when-let [encrypted-aes-key* (ldb/read-transit-str encrypted-aes-key)]
-                (let [aes-key (c.m/<? (crypt/<decrypt-aes-key private-key encrypted-aes-key*))]
-                  (c.m/<? (<set-item! (graph-encrypted-aes-key-idb-key graph-uuid) encrypted-aes-key*))
-                  aes-key)))))))))
+        (when-let [encrypted-aes-key (m/? (task--remote-fetch-graph-encrypted-aes-key get-ws-create-task graph-uuid))]
+          (let [aes-key (c.m/<? (crypt/<decrypt-aes-key private-key encrypted-aes-key))]
+            (c.m/<? (<set-item! (graph-encrypted-aes-key-idb-key graph-uuid) encrypted-aes-key))
+            aes-key))))))
 
 (defn task--persist-graph-encrypted-aes-key
   [graph-uuid encrypted-aes-key]
@@ -123,6 +130,7 @@
        :private-key private-key})))
 
 (defn task--get-aes-key
+  "Return nil if not exists"
   [get-ws-create-task user-uuid graph-uuid]
   (m/sp
     (let [{:keys [_public-key private-key]} (m/? (task--get-decrypted-rsa-key-pair get-ws-create-task user-uuid))]
@@ -138,6 +146,39 @@
           new-encrypted-private-key (c.m/<? (crypt/<encrypt-private-key new-password private-key))]
       (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid public-key new-encrypted-private-key
                                            :reset-private-key true)))))
+
+(defn- task--fetch-user-rsa-public-key
+  "Fetches the user's RSA public-key from server.
+  Return js/CryptoKey.
+  Return nil if not exists"
+  [get-ws-create-task user-email]
+  (m/sp
+    (let [response (m/? (ws-util/send&recv get-ws-create-task
+                                           {:action "fetch-user-rsa-public-key"
+                                            :user/email user-email}))]
+      (if (:ex-data response)
+        (throw (ex-info (:ex-message response)
+                        (assoc (:ex-data response)
+                               :type :rtc.exception/fetch-user-rsa-public-key-error)))
+        (let [{:keys [public-key]} response]
+          (when public-key
+            (c.m/<? (<import-public-key-transit-str public-key))))))))
+
+(defn task--encrypt-graph-aes-key-by-other-user-public-key
+  "Return encrypted-aes-key,
+  which is decrypted by current user's private-key, then other-user's public-key"
+  [get-ws-create-task graph-uuid user-uuid other-user-email]
+  (m/sp
+    (when-let [graph-aes-key (m/? (task--get-aes-key get-ws-create-task user-uuid graph-uuid))]
+      (let [{:keys [public-key] :as response}
+            (m/? (ws-util/send&recv get-ws-create-task
+                                    {:action "fetch-user-rsa-key-pair"
+                                     :user-email other-user-email}))]
+        (if (:ex-data response)
+          (throw (ex-info (:ex-message response) (:ex-data response)))
+          (when public-key
+            (let [public-key* (c.m/<? (<import-public-key-transit-str public-key))]
+              (c.m/<? (crypt/<encrypt-aes-key public-key* graph-aes-key)))))))))
 
 (def-thread-api :thread-api/get-user-rsa-key-pair
   [token user-uuid]
