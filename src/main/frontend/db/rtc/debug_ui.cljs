@@ -137,29 +137,6 @@
                 :on-click (fn [] (stop))}
                (shui/tabler-icon "player-stop") "stop")]])
 
-     (when (some? debug-state*)
-       [:hr]
-       [:div.flex.flex-row.items-center.gap-2
-        (ui/button "grant graph access to"
-                   {:icon "award"
-                    :on-click (fn []
-                                (let [token (state/get-auth-id-token)
-                                      user-uuid (some-> (:grant-access-to-user debug-state*) parse-uuid)
-                                      user-email (when-not user-uuid (:grant-access-to-user debug-state*))]
-                                  (when-let [graph-uuid (:graph-uuid debug-state*)]
-                                    (state/<invoke-db-worker :thread-api/rtc-grant-graph-access
-                                                             token graph-uuid
-                                                             (some-> user-uuid vector)
-                                                             (some-> user-email vector)))))})
-
-        [:b "➡️"]
-        [:input.form-input.my-2.py-1
-         {:on-change (fn [e] (swap! debug-state assoc :grant-access-to-user (util/evalue e)))
-          :on-focus (fn [e] (let [v (.-value (.-target e))]
-                              (when (= v "input email or user-uuid here")
-                                (set! (.-value (.-target e)) ""))))
-          :placeholder "input email or user-uuid here"}]])
-
      [:hr.my-2]
 
      [:div.flex.flex-row.items-center.gap-2
