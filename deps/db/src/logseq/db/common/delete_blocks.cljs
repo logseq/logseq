@@ -26,16 +26,18 @@
 (defn- build-retracted-tx
   [retracted-blocks]
   (let [refs (->> (mapcat (fn [block] (:block/_refs block)) retracted-blocks)
-                  (common-util/distinct-by :db/id))]
+                  (common-util/distinct-by :db/id))
+        retract-ids (set (map :db/id retracted-blocks))]
     (mapcat
      (fn [ref]
        (let [id (:db/id ref)
-             replaced-title (when-let [raw-title (:block/raw-title ref)]
-                              (reduce
-                               (fn [raw-title block]
-                                 (replace-ref-with-deleted-block-title block raw-title))
-                               raw-title
-                               retracted-blocks))
+             replaced-title (when-not (contains? retract-ids id)
+                              (when-let [raw-title (:block/raw-title ref)]
+                                (reduce
+                                 (fn [raw-title block]
+                                   (replace-ref-with-deleted-block-title block raw-title))
+                                 raw-title
+                                 retracted-blocks)))
              tx (cond->
                  (mapcat
                   (fn [block]
