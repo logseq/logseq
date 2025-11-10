@@ -47,7 +47,8 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Fetch yarn deps
-        run: yarn install --frozen-lockfile
+        # run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Set Build Environment Variables
         run: |
