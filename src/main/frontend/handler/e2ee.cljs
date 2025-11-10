@@ -1,4 +1,5 @@
 (ns frontend.handler.e2ee
+  "rtc E2EE related fns"
   (:require [frontend.common.crypt :as crypt]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.state :as state]

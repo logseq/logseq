@@ -1,4 +1,5 @@
 (ns frontend.common.crypt
+  "crypto utils"
   (:require [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
