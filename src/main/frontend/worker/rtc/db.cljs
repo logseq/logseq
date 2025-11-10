@@ -17,7 +17,6 @@
   (when-let [conn (worker-state/get-client-ops-conn repo)]
     (let [tx-data (->> (concat (d/datoms @conn :avet :graph-uuid)
                                (d/datoms @conn :avet :local-tx)
-                               (d/datoms @conn :avet :aes-key-jwk)
                                (d/datoms @conn :avet :block/uuid))
                        (map (fn [datom] [:db/retractEntity (:e datom)])))]
       (ldb/transact! conn tx-data))))
