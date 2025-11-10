@@ -1193,75 +1193,70 @@
                           (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
        "Invite")]]))
 
-(rum/defc settings-rtc-e2ee
-  []
-  (let [user-uuid (user-handler/user-uuid)
-        token (state/get-auth-id-token)
-        refresh-token (state/get-auth-refresh-token)
-        [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
-        [init-key-err set-init-key-err!] (hooks/use-state nil)
-        [get-key-err set-get-key-err!] (hooks/use-state nil)
-        [old-password set-old-password!] (hooks/use-state nil)
-        [new-password set-new-password!] (hooks/use-state nil)
-        [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
-    (hooks/use-effect!
-     (fn []
-       (when (and user-uuid token)
-         (-> (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-               (set-rsa-key-pair! r))
-             (p/catch set-get-key-err!))))
-     [user-uuid token])
-    [:div.flex.flex-col.gap-2.mt-4
-     [:h2.opacity-50.font-medium "E2EE Settings:"]
-     (when (and user-uuid token)
-       (cond
-         get-key-err
-         [:p (str "Fetching user rsa-key-pair err: " get-key-err)]
-         (= rsa-key-pair :not-inited)
-         [:p "Fetching user rsa-key-pair..."]
-         (nil? rsa-key-pair)
-         [:div
-          (when init-key-err [:p (str "Init key-pair err:" init-key-err)])
-          (shui/button
-           {:on-click (fn []
-                        (-> (p/do!
-                             (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                                      token
-                                                      refresh-token
-                                                      user-uuid)
-                             (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-                               (set-rsa-key-pair! r)))
-                            (p/catch set-init-key-err!)))}
-           "Init E2EE encrypt-key-pair")]
-         rsa-key-pair
-         [:div
-          [:p "E2EE key-pair already generated!"]
-          [:h2 "Old Password:"]
-          (shui/input
-           {:type "password"
-            :on-change     #(set-old-password! (util/evalue %))})
-          [:h2 "New Password:"]
-          (shui/input
-           {:type "password"
-            :on-change     #(set-new-password! (util/evalue %))})
-          (when reset-password-status [:p reset-password-status])
-          (shui/button
-           {:on-click (fn []
-                        (-> (p/do!
-                             (set-reset-password-status! "Updating E2EE password ...")
-                             (state/<invoke-db-worker :thread-api/reset-e2ee-password
-                                                      token refresh-token user-uuid old-password new-password)
-                             (set-reset-password-status! "E2EE password updated!"))
-                            (p/catch (fn [_] (set-reset-password-status! "Wrong old-password")))))}
-           "Reset Password")]))]))
-
 (rum/defc settings-collaboration
-  [include-e2ee-settings?]
+  []
   [:div.panel-wrap.is-collaboration.mb-8
-   (settings-rtc-members)
-   (when include-e2ee-settings?
-     [:br]
-     (settings-rtc-e2ee))])
+   (settings-rtc-members)])
+
+(rum/defc encryption
+  []
+  [:div.panel-wrap.is-encryption.mb-8
+   (let [user-uuid (user-handler/user-uuid)
+         token (state/get-auth-id-token)
+         refresh-token (state/get-auth-refresh-token)
+         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
+         [init-key-err set-init-key-err!] (hooks/use-state nil)
+         [get-key-err set-get-key-err!] (hooks/use-state nil)
+         [new-password set-new-password!] (hooks/use-state nil)
+         [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
+     (hooks/use-effect!
+      (fn []
+        (when (and user-uuid token)
+          (-> (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                (set-rsa-key-pair! r))
+              (p/catch set-get-key-err!))))
+      [user-uuid token])
+     [:div.flex.flex-col.gap-2.mt-4
+      (when (and user-uuid token)
+        (cond
+          get-key-err
+          [:p (str "Fetching user rsa-key-pair err: " get-key-err)]
+          (= rsa-key-pair :not-inited)
+          [:p "Fetching user rsa-key-pair..."]
+          (nil? rsa-key-pair)
+          [:div.flex.flex-col.gap-2
+           (when init-key-err [:p (str "Init key-pair err:" init-key-err)])
+           (shui/button
+            {:on-click (fn []
+                         (-> (p/do!
+                              (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
+                                                       token
+                                                       refresh-token
+                                                       user-uuid)
+                              (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                                (set-rsa-key-pair! r)))
+                             (p/catch set-init-key-err!)))}
+            "Init E2EE encrypt-key-pair")]
+          rsa-key-pair
+          [:div.flex.flex-col.gap-4
+           ;; [:p "E2EE key-pair already generated!"]
+           [:label.opacity-70 {:for "new-password"} "Set new Password"]
+           (shui/input
+            {:id "new-password"
+             :type "password"
+             :on-change     #(set-new-password! (util/evalue %))})
+           (when reset-password-status [:p reset-password-status])
+           (shui/button
+            {:on-click (fn []
+                         (-> (p/do!
+                              (set-reset-password-status! "Updating password ...")
+                              (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                                       token refresh-token user-uuid new-password)
+                              (set-reset-password-status! "Password updated successfully!"))
+                             (p/catch (fn [e]
+                                        (js/console.error e)))))
+             :disabled (string/blank? new-password)}
+            "Reset Password")]))])])
 
 (rum/defc mcp-server-row
   [t]
@@ -1435,6 +1430,9 @@
                (when logged-in?
                  [:collaboration "collaboration" (t :settings-page/tab-collaboration) (ui/icon "users")])
 
+               (when logged-in?
+                 [:encryption "encryption" (t :settings-page/tab-encryption) (ui/icon "lock")])
+
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
 
@@ -1487,7 +1485,10 @@
          (settings-features)
 
          :collaboration
-         (settings-collaboration true)
+         (settings-collaboration)
+
+         :encryption
+         (encryption)
 
          :ai
          (settings-ai)
