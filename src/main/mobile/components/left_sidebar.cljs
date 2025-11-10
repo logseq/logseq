@@ -2,6 +2,7 @@
   "Mobile left sidebar"
   (:require [frontend.components.left-sidebar :as app-left-sidebar]
             [logseq.shui.silkhq :as silkhq]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -18,11 +19,14 @@
   []
   (when (empty? (rum/react mobile-state/*modal-blocks))
     (let [open? (rum/react mobile-state/*left-sidebar-open?)]
+      (when open?
+        (bottom-tabs/hide!))
       (silkhq/sidebar-sheet
        {:presented (boolean open?)
         :onPresentedChange (fn [v]
                              (when (false? v)
-                               (mobile-state/close-left-sidebar!)))}
+                               (mobile-state/close-left-sidebar!)
+                               (bottom-tabs/show!)))}
        (silkhq/sidebar-sheet-portal
         (silkhq/sidebar-sheet-view
          {:class "app-silk-sidebar-sheet-view"}

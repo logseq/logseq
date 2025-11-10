@@ -13,6 +13,7 @@
             [logseq.shui.hooks :as hooks]
             [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.ui :as mobile-ui]
             [mobile.init :as init]
             [mobile.state :as mobile-state]
@@ -199,6 +200,7 @@
     (hooks/use-effect!
      (fn []
        (when open?
+         (bottom-tabs/hide!)
          (state/clear-edit!)
          (init/keyboard-hide)))
      [open?])
@@ -209,7 +211,8 @@
                            (when (false? v?)
                              (mobile-state/close-block-modal!)
                              (state/clear-edit!)
-                             (state/pub-event! [:mobile/keyboard-will-hide])))}
+                             (state/pub-event! [:mobile/keyboard-will-hide])
+                             (bottom-tabs/show!)))}
      (silkhq/depth-sheet-portal
       (silkhq/depth-sheet-view
        {:class "block-modal-page"
