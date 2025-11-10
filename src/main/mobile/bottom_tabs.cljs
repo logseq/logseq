@@ -1,8 +1,9 @@
-(ns mobile.components.bottom-tabs
+(ns mobile.bottom-tabs
   "iOS bottom tabs"
   (:require ["stay-liquid" :refer [TabsBar]]
             [cljs-bean.core :as bean]
             [frontend.handler.editor :as editor-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
             [mobile.state :as mobile-state]
@@ -68,3 +69,13 @@
              (fn [_ _ old new]
                (when-not (= (:ui/theme old) (:ui/theme new))
                  (configure-tabs (:ui/theme new) true)))))
+
+(defn hide!
+  []
+  (when (mobile-util/native-ios?)
+    (.hide ^js TabsBar)))
+
+(defn show!
+  []
+  (when (mobile-util/native-ios?)
+    (.show ^js TabsBar)))

@@ -9546,9 +9546,9 @@ statuses@~1.5.0:
   resolved "https://registry.yarnpkg.com/statuses/-/statuses-1.5.0.tgz#161c7dac177659fd9811f43771fa99381478628c"
   integrity sha512-OpZ3zP+jT1PI7I8nemJX4AKmAX070ZkYPVWV/AaKTJl+tXCTGyVdC1a4SL8RUQYEwk/f34ZX8UTykN68FwrqAA==
 
-"stay-liquid@https://github.com/logseq/stay-liquid.git#d63b76938ea036ec028b2b9fde22b2f206a9dde7":
+"stay-liquid@https://github.com/logseq/stay-liquid":
   version "0.1.0"
-  resolved "https://github.com/logseq/stay-liquid.git#d63b76938ea036ec028b2b9fde22b2f206a9dde7"
+  resolved "https://github.com/logseq/stay-liquid#b2fde7447e2fff96f16b7715c6857d91c992359d"
   dependencies:
     "@capacitor/core" "^7.4.4"
 

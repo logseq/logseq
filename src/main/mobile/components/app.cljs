@@ -15,7 +15,7 @@
             [logseq.shui.silkhq :as silkhq]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
-            [mobile.components.bottom-tabs :as bottom-tabs]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.header :as mobile-header]
             [mobile.components.left-sidebar :as mobile-left-sidebar]
