@@ -50,6 +50,8 @@
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
                            [[:db/retractEntity (:db/id entity)]]
+                           (and (:block/title entity) (nil? (:block/page entity)) (nil? (:block/parent entity)) (nil? (:block/name entity)))
+                           [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
                            (try
                              (db-migrate/remove-block-path-refs db)
