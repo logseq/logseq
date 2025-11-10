@@ -1197,6 +1197,7 @@
   []
   (let [user-uuid (user-handler/user-uuid)
         token (state/get-auth-id-token)
+        refresh-token (state/get-auth-refresh-token)
         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
         [init-key-err set-init-key-err!] (hooks/use-state nil)
         [get-key-err set-get-key-err!] (hooks/use-state nil)
@@ -1224,10 +1225,12 @@
           (shui/button
            {:on-click (fn []
                         (-> (p/do!
-                              (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
-                                                       token user-uuid)
-                              (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
-                                (set-rsa-key-pair! r)))
+                             (state/<invoke-db-worker :thread-api/init-user-rsa-key-pair
+                                                      token
+                                                      refresh-token
+                                                      user-uuid)
+                             (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                               (set-rsa-key-pair! r)))
                             (p/catch set-init-key-err!)))}
            "Init E2EE encrypt-key-pair")]
          rsa-key-pair
@@ -1245,10 +1248,10 @@
           (shui/button
            {:on-click (fn []
                         (-> (p/do!
-                              (set-reset-password-status! "Updating E2EE password ...")
-                              (state/<invoke-db-worker :thread-api/reset-e2ee-password
-                                                       token user-uuid old-password new-password)
-                              (set-reset-password-status! "E2EE password updated!"))
+                             (set-reset-password-status! "Updating E2EE password ...")
+                             (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                                      token refresh-token user-uuid old-password new-password)
+                             (set-reset-password-status! "E2EE password updated!"))
                             (p/catch (fn [_] (set-reset-password-status! "Wrong old-password")))))}
            "Reset Password")]))]))
 
