@@ -53,14 +53,16 @@
              (filter #(= id (:id (second %)))) (first))))
 
 (defn update-modal!
-  [id ks val]
+  [id ks val & {:keys [closing?]}]
   (when-let [[index config] (get-modal id)]
     (let [ks (if (coll? ks) ks [ks])
           config (if (nil? val)
                    (medley/dissoc-in config ks)
                    (assoc-in config ks val))]
       (swap! *modals assoc index config)
-      (when (and (false? (:open? config)) (fn? (:on-close config)))
+      (when (and (false? (:open? config))
+                 (fn? (:on-close config))
+                 (not closing?))
         ((:on-close config) id)))))
 
 (defn upsert-modal!
@@ -115,7 +117,7 @@
 
 (defn close!
   ([] (close! (get-last-modal-id)))
-  ([id] (update-modal! id :open? false)))
+  ([id] (update-modal! id :open? false {:closing? true})))
 
 (defn close-all! []
   (doseq [{:keys [id]} @*modals]
