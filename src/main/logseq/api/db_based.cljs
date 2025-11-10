@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -205,17 +206,19 @@
 
 (defn create-tag [title ^js opts]
   (this-as
-   this
-   (when-not (string? title)
-     (throw (ex-info "Tag title should be a string" {:title title})))
-   (when (string/blank? title)
-     (throw (ex-info "Tag title shouldn't be empty" {:title title})))
-   (let [opts (bean/->clj opts)
-         opts' (assoc opts
-                      :redirect? false
-                      :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
-     (p/let [tag (db-page-handler/<create-class! title opts')]
-       (sdk-utils/result->js tag)))))
+    this
+    (when-not (string? title)
+      (throw (ex-info "Tag title should be a string" {:title title})))
+    (when (string/blank? title)
+      (throw (ex-info "Tag title shouldn't be empty" {:title title})))
+    (when (text/namespace-page? title)
+      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
+    (let [opts (bean/->clj opts)
+          opts' (assoc opts
+                  :redirect? false
+                  :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+      (p/let [tag (db-page-handler/<create-class! title opts')]
+        (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
