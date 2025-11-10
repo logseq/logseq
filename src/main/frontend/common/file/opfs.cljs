@@ -26,18 +26,19 @@
           file        (.getFile file-handle)]
     (.text file)))
 
-(defn <delete-file!
-  "Delete `filename` from Origin Private File System.
+(comment
+  (defn <delete-file!
+    "Delete `filename` from Origin Private File System.
    Options:
    - :ignore-not-found? (default true) → don't treat missing file as error.
 
    Returns a promise that resolves to nil."
-  [filename & {:keys [ignore-not-found?]
-               :or {ignore-not-found? true}}]
-  (-> (p/let [root (.. js/navigator -storage (getDirectory))]
-        (.removeEntry root filename))
-      (p/catch (fn [err]
-                 (if (and ignore-not-found?
-                          (= (.-name err) "NotFoundError"))
-                   nil
-                   (throw err))))))
+    [filename & {:keys [ignore-not-found?]
+                 :or {ignore-not-found? true}}]
+    (-> (p/let [root (.. js/navigator -storage (getDirectory))]
+          (.removeEntry root filename))
+        (p/catch (fn [err]
+                   (if (and ignore-not-found?
+                            (= (.-name err) "NotFoundError"))
+                     nil
+                     (throw err)))))))
