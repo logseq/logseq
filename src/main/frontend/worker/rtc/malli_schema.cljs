@@ -371,33 +371,6 @@
         [:schema-version db-schema/major-schema-version-string-schema]
         [:asset-uuids [:sequential :uuid]]]]
       ;; ================================================================
-      ;; TODO: cleanup
-      ["get-user-devices"
-       [:map]]
-      ["add-user-device"
-       [:map
-        [:device-name :string]]]
-      ["remove-user-device"
-       [:map
-        [:device-uuid :uuid]]]
-      ["update-user-device-name"
-       [:map
-        [:device-uuid :uuid]
-        [:device-name :string]]]
-      ["add-device-public-key"
-       [:map
-        [:device-uuid :uuid]
-        [:key-name :string]
-        [:public-key :string]]]
-      ["remove-device-public-key"
-       [:map
-        [:device-uuid :uuid]
-        [:key-name :string]]]
-      ["sync-encrypted-aes-key"
-       [:map
-        [:device-uuid->encrypted-aes-key [:map-of :uuid :string]]
-        [:graph-uuid :uuid]]]
-      ;; ================================================================
       ["upload-user-rsa-key-pair"
        [:map
         [:user-uuid :uuid]
