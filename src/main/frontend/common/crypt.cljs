@@ -73,7 +73,8 @@
                                :hash "SHA-256"}
                           true
                           #js ["encrypt" "decrypt"])]
-    (js->clj r :keywordize-keys true)))
+    {:publicKey (.-publicKey r)
+     :privateKey (.-privateKey r)}))
 
 (defn <generate-aes-key
   "Generates a new AES-GCM-256 key."
