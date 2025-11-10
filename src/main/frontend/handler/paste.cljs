@@ -213,6 +213,7 @@
                     (editor-handler/api-insert-new-block! ""
                                                           {:block-uuid (:block/uuid current-block)
                                                            :sibling? true
+                                                           :outliner-op :paste
                                                            :replace-empty-target? true
                                                            :other-attrs {:block/link (:db/id (db/entity [:block/uuid block-id]))}})
                     (state/clear-edit!)))))

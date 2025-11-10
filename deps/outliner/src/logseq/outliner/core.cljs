@@ -795,7 +795,7 @@
                                 :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [blocks (->>
+  (let [blocks (cond->>
                 (keep (fn [b]
                         (if-let [eid (or (:db/id b)
                                          (when-let [id (:block/uuid b)]
@@ -813,7 +813,9 @@
                             (apply dissoc b' dissoc-keys))
                           b))
                       blocks)
-                (remove ldb/asset?))
+                 (or (= outliner-op :paste)
+                     insert-template?)
+                 (remove ldb/asset?))
         [target-block sibling?] (get-target-block db blocks target-block opts)
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         replace-empty-target? (if (and (some? replace-empty-target?)
@@ -1161,7 +1163,10 @@
           (insert-blocks repo @conn blocks target-block opts))]
   (defn insert-blocks!
     [repo conn blocks target-block opts]
-    (op-transact! :insert-blocks f repo conn blocks target-block (assoc opts :outliner-op :insert-blocks))))
+    (op-transact! :insert-blocks f repo conn blocks target-block
+                  (if (:outliner-op opts)
+                    opts
+                    (assoc opts :outliner-op :insert-blocks)))))
 
 (let [f (fn [_repo conn blocks _opts]
           (delete-blocks @conn blocks))]
@@ -1172,7 +1177,9 @@
 (defn move-blocks!
   [repo conn blocks target-block opts]
   (op-transact! :move-blocks move-blocks repo conn blocks target-block
-                (assoc opts :outliner-op :move-blocks)))
+                (if (:outliner-op opts)
+                  opts
+                  (assoc opts :outliner-op :move-blocks))))
 
 (defn move-blocks-up-down!
   [repo conn blocks up?]
