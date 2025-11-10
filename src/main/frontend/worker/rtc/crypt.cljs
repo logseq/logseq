@@ -5,6 +5,7 @@
   Server stores the encrypted AES key, public key, and encrypted private key."
   (:require ["/frontend/idbkv" :as idb-keyval]
             [frontend.common.crypt :as crypt]
+            [frontend.common.file.opfs :as opfs]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.rtc.ws-util :as ws-util]
@@ -15,6 +16,34 @@
   (:import [missionary Cancelled]))
 
 (defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
+(defonce ^:private e2ee-password-file "e2ee-password")
+
+(defn- <save-e2ee-password
+  [refresh-token password]
+  (prn :debug :<save-e2ee-password password)
+  (assert (and (string? refresh-token)
+               (string? password)))
+  (p/let [raw (.encode (js/TextEncoder.) refresh-token)
+          digestbuf (.digest js/crypto.subtle "SHA-256" raw)
+          key-bytes (js/Uint8Array. digestbuf)
+          aes-key (crypt/<import-aes-key key-bytes)
+          result (crypt/<encrypt-text aes-key password)
+          text (ldb/write-transit-str result)]
+    (opfs/<write-text! e2ee-password-file text)))
+
+(defn- <read-e2ee-password
+  [refresh-token]
+  (prn :debug :<read-e2ee-password)
+  (assert (string? refresh-token))
+  (p/let [raw (.encode (js/TextEncoder.) refresh-token)
+          digestbuf (.digest js/crypto.subtle "SHA-256" raw)
+          key-bytes (js/Uint8Array. digestbuf)
+          aes-key (crypt/<import-aes-key key-bytes)
+          text (opfs/<read-text! e2ee-password-file)
+          data (ldb/read-transit-str text)
+          password (crypt/<decrypt-text aes-key data)]
+    (prn :debug :text text :password password)
+    password))
 
 (defn- <get-item
   [k]
@@ -138,14 +167,15 @@
 
 (defn task--reset-user-rsa-private-key
   "Throw if decrypt encrypted-private-key failed."
-  [get-ws-create-task user-uuid old-password new-password]
+  [get-ws-create-task refresh-token user-uuid old-password new-password]
   (m/sp
     (let [{:keys [public-key encrypted-private-key]}
           (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
           private-key (c.m/<? (crypt/<decrypt-private-key old-password encrypted-private-key))
           new-encrypted-private-key (c.m/<? (crypt/<encrypt-private-key new-password private-key))]
       (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid public-key new-encrypted-private-key
-                                           :reset-private-key true)))))
+                                           :reset-private-key true))
+      (m/? (<save-e2ee-password refresh-token new-password)))))
 
 (defn- task--fetch-user-rsa-public-key
   "Fetches the user's RSA public-key from server.
@@ -184,7 +214,7 @@
          :encrypted-private-key encrypted-private-key}))))
 
 (def-thread-api :thread-api/init-user-rsa-key-pair
-  [token user-uuid]
+  [token refresh-token user-uuid]
   (m/sp
     (try
       (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
@@ -193,12 +223,22 @@
                 {:keys [password]} (c.m/<? (worker-state/<invoke-main-thread :thread-api/request-e2ee-password))
                 encrypted-private-key (c.m/<? (crypt/<encrypt-private-key password privateKey))]
             (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key))
+            (m/? (<save-e2ee-password refresh-token password))
             nil)))
       (catch Cancelled _)
       (catch :default e e))))
 
 (def-thread-api :thread-api/reset-e2ee-password
-  [token user-uuid old-password new-password]
+  [token refresh-token user-uuid old-password new-password]
   (m/sp
     (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-      (m/? (task--reset-user-rsa-private-key get-ws-create-task user-uuid old-password new-password)))))
+      (m/? (task--reset-user-rsa-private-key get-ws-create-task refresh-token user-uuid old-password new-password)))))
+
+(def-thread-api :thread-api/get-e2ee-password
+  [refresh-token]
+  (p/let [password (<read-e2ee-password refresh-token)]
+    {:password password}))
+
+(def-thread-api :thread-api/save-e2ee-password
+  [refresh-token password]
+  (<save-e2ee-password refresh-token password))
