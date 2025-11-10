@@ -1,6 +1,7 @@
 (ns frontend.components.e2ee
   (:require [clojure.string :as string]
             [frontend.common.crypt :as crypt]
+            [frontend.state :as state]
             [frontend.util :as util]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -34,12 +35,13 @@
         "Submit")]]]))
 
 (rum/defc e2ee-password-to-decrypt-private-key
-  [encrypted-private-key private-key-promise]
+  [encrypted-private-key private-key-promise refresh-token]
   (let [[password set-password!] (hooks/use-state "")
         [decrypt-fail? set-decrypt-fail!] (hooks/use-state false)
         on-submit (fn []
                     (->
                      (p/let [private-key (crypt/<decrypt-private-key password encrypted-private-key)]
+                       (state/<invoke-db-worker :thread-api/save-e2ee-password refresh-token password)
                        (p/resolve! private-key-promise private-key)
                        (shui/dialog-close!))
                      (p/catch (fn [e]
