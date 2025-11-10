@@ -4,6 +4,7 @@
             [frontend.components.journal :as journal]
             [frontend.handler.common :as common-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.mobile.util :as mobile-util]
             [frontend.rum :as frum]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -14,6 +15,7 @@
             [logseq.shui.silkhq :as silkhq]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.ui :as shui]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.header :as mobile-header]
             [mobile.components.left-sidebar :as mobile-left-sidebar]
@@ -26,7 +28,6 @@
             [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
-
 
 (defn- sidebar-not-allowed-to-open?
   []
@@ -185,6 +186,8 @@
     (use-theme-effects! current-repo)
     (hooks/use-effect!
      (fn []
+       (when (mobile-util/native-ios?)
+         (bottom-tabs/configure))
        (when-let [element (util/mobile-page-scroll)]
          (common-handler/listen-to-scroll! element))) [])
     (silkhq/depth-sheet-stack
@@ -213,7 +216,8 @@
       (mobile-left-sidebar/left-sidebar)
 
       ;; bottom tabs
-      (ui-silk/app-silk-tabs)
+      (when-not (mobile-util/native-ios?)
+        (ui-silk/app-silk-tabs))
 
       (ui-component/keep-keyboard-virtual-input)
       (ui-component/install-notifications)

@@ -7,6 +7,7 @@
             [logseq.shui.popup.core :as shui-popup]
             [logseq.shui.silkhq :as silkhq]
             [logseq.shui.ui :as shui]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.state :as mobile-state]
             [rum.core :as rum]))
 
@@ -74,6 +75,7 @@
         default-height (:default-height opts)]
 
     (when open?
+      (bottom-tabs/hide!)
       (silkhq/bottom-sheet
        (merge
         {:presented (boolean open?)
@@ -81,7 +83,9 @@
                               (when (false? v?)
                                 (state/pub-event! [:mobile/clear-edit])
                                 ;; allows closing animation
-                                (js/setTimeout #(mobile-state/set-popup! nil) 150)))}
+                                (js/setTimeout #(do
+                                                  (mobile-state/set-popup! nil)
+                                                  (bottom-tabs/show!)) 150)))}
         (:modal-props opts))
        (silkhq/bottom-sheet-portal
         (silkhq/bottom-sheet-view

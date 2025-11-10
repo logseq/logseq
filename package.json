@@ -190,6 +190,7 @@
         "sanitize-filename": "1.6.3",
         "send-intent": "^7.0.0",
         "shepherd.js": "^9.1.0",
+        "stay-liquid": "https://github.com/logseq/stay-liquid.git#b2fde7447e2fff96f16b7715c6857d91c992359d",
         "tailwind-capitalize-first-letter": "^1.0.4",
         "threads": "1.6.5",
         "url": "^0.11.0",
