@@ -10,8 +10,11 @@
     (shui/dialog-close-all!)
     (shui/dialog-open!
      #(e2ee/e2ee-password-to-decrypt-private-key encrypted-private-key private-key-promise)
-     {:close-btn? false
-      :auto-width? true})
+     {:auto-width? true
+      :content-props {:onPointerDownOutside #(.preventDefault %)}
+      :on-close (fn []
+                  (p/reject! private-key-promise (ex-info "input E2EE password cancelled" {}))
+                  (shui/dialog-close!))})
     private-key-promise))
 
 (defmethod events/handle :rtc/request-e2ee-password [[_]]
@@ -19,6 +22,9 @@
     (shui/dialog-close-all!)
     (shui/dialog-open!
      #(e2ee/e2ee-request-new-password password-promise)
-     {:close-btn? false
-      :auto-width? true})
+     {:auto-width? true
+      :content-props {:onPointerDownOutside #(.preventDefault %)}
+      :on-close (fn []
+                  (p/reject! password-promise (ex-info "cancelled" {}))
+                  (shui/dialog-close!))})
     password-promise))
