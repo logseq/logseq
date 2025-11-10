@@ -5,7 +5,6 @@
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker-common.util :as worker-util]
-            [frontend.worker.device :as worker-device]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.branch-graph :as r.branch-graph]
             [frontend.worker.rtc.client :as r.client]
@@ -356,8 +355,6 @@
 (defn- new-task--rtc-start*
   [repo token]
   (m/sp
-    ;; ensure device metadata existing first
-    (m/? (worker-device/new-task--ensure-device-metadata! token))
     (let [{:keys [conn user-uuid graph-uuid schema-version remote-schema-version date-formatter] :as r}
           (validate-rtc-start-conditions repo token)]
       (if (instance? ExceptionInfo r)
