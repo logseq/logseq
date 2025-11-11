@@ -92,7 +92,9 @@
                                         (if highlighted "bg-accent-07-alpha" "bg-gray-05")
                                         " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (shui/tabler-icon icon {:size "14" :class ""})]
+       (if (string? icon)
+         (shui/tabler-icon icon {:size "14" :class ""})
+         icon)]
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
