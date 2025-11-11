@@ -212,7 +212,7 @@
     (let [!results (::results state)
           recent-pages (map (fn [block]
                               (let [text (block-handler/block-unique-title block)
-                                    icon (icon-component/get-node-icon-cp block {})]
+                                    icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                                 {:icon icon
                                  :icon-theme :gray
                                  :text text
@@ -250,7 +250,7 @@
       (->> search-results
            (map (fn [block]
                   (let [text (block-handler/block-unique-title block)
-                        icon (icon-component/get-node-icon-cp block {})]
+                        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
                     {:icon icon
                      :icon-theme :gray
                      :text text
@@ -278,12 +278,12 @@
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
-        icon (icon-component/get-node-icon-cp entity {})
-        title (block-handler/block-unique-title (or entity page))
-        title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
+        icon (icon-component/get-node-icon-cp entity {:ignore-current-icon? true})
+        title (block-handler/block-unique-title (or entity page)
+                                                {:alias (:block/title source-page)})]
     (hash-map :icon icon
               :icon-theme :gray
-              :text title'
+              :text title
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
                                            :search? true} repo (:block/uuid page)
@@ -295,7 +295,7 @@
   [repo block current-page input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block)
-        icon (icon-component/get-node-icon-cp block {})]
+        icon (icon-component/get-node-icon-cp block {:ignore-current-icon? true})]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
