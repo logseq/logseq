@@ -220,6 +220,24 @@
       (p/let [tag (db-page-handler/<create-class! title opts')]
         (sdk-utils/result->js tag)))))
 
+(defn get-tag [class-uuid-or-ident-or-title]
+  (this-as
+    this
+    (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                               (str class-uuid-or-ident-or-title)
+                               class-uuid-or-ident-or-title)
+                           (string/replace #"^:+" ""))
+          eid (if (text/namespace-page? title-or-ident)
+                (keyword title-or-ident)
+                (if (util/uuid-string? title-or-ident)
+                  (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                    [:block/uuid id])
+                  (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
+          tag (db/entity eid)]
+      (when-not (ldb/class? tag)
+        (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
+      (sdk-utils/result->js tag))))
+
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
           property (db/get-case-page property-id-or-name)]
