@@ -38,9 +38,8 @@
          [:span "You will still be able to access the local version of your graph."]]]]
 
       [:div.flex.flex-col.gap-4
-       (shui/input
-        {:type "password"
-         :placeholder "Enter password"
+       (shui/toggle-password
+        {:placeholder "Enter password"
          :value password
          :on-change (fn [e] (set-password! (-> e .-target .-value)))
          :on-blur (fn []
@@ -83,9 +82,8 @@
       [:div.text-2xl.font-medium "Enter password for remote graphs"]
       [:div.flex.flex-col.gap-4
        [:div.flex.flex-col.gap-1
-        (shui/input
-         {:type "password"
-          :value password
+        (shui/toggle-password
+         {:value password
           :on-key-press (fn [e]
                           (when (= "Enter" (util/ekey e))
                             (on-submit)))

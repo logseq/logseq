@@ -1208,6 +1208,8 @@
          [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
          [init-key-err set-init-key-err!] (hooks/use-state nil)
          [get-key-err set-get-key-err!] (hooks/use-state nil)
+         [current-password set-current-password!] (hooks/use-state nil)
+         [get-password-err set-get-password-err!] (hooks/use-state nil)
          [new-password set-new-password!] (hooks/use-state nil)
          [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
      (hooks/use-effect!
@@ -1215,13 +1217,18 @@
         (when (and user-uuid token)
           (-> (p/let [r (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
                 (set-rsa-key-pair! r))
-              (p/catch set-get-key-err!))))
+              (p/catch set-get-key-err!))
+          (-> (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)]
+                (set-current-password! password))
+              (p/catch set-get-password-err!))))
       [user-uuid token])
      [:div.flex.flex-col.gap-2.mt-4
       (when (and user-uuid token)
         (cond
           get-key-err
           [:p (str "Fetching user rsa-key-pair err: " get-key-err)]
+          get-password-err
+          [:p (str "Failed to get current password: " get-password-err)]
           (= rsa-key-pair :not-inited)
           [:p "Fetching user rsa-key-pair..."]
           (nil? rsa-key-pair)
@@ -1241,11 +1248,16 @@
           rsa-key-pair
           [:div.flex.flex-col.gap-4
            ;; [:p "E2EE key-pair already generated!"]
+           [:label.opacity-70 {:for "current-password"} "Current password"]
+           (shui/toggle-password
+            {:id "current-password"
+             :value current-password
+             :disabled true})
            [:label.opacity-70 {:for "new-password"} "Set new Password"]
-           (shui/input
+           (shui/toggle-password
             {:id "new-password"
-             :type "password"
-             :on-change     #(set-new-password! (util/evalue %))})
+             :value new-password
+             :on-change #(set-new-password! (util/evalue %))})
            (when reset-password-status [:p reset-password-status])
            (shui/button
             {:on-click (fn []
