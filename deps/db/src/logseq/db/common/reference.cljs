@@ -67,8 +67,7 @@
   [db id ref-blocks children-ids]
   (when (seq ref-blocks)
     (let [children (->> children-ids
-                        (map (fn [id] (d/entity db id))))
-          ent (d/entity db id)]
+                        (map (fn [id] (d/entity db id))))]
       (->> (concat (mapcat #(get-path-refs db %) ref-blocks)
                    (mapcat :block/refs (concat ref-blocks children)))
            frequencies
@@ -76,26 +75,25 @@
                    (when (and (ldb/page? ref)
                               (not= (:db/id ref) id)
                               (not= :block/tags (:db/ident ref))
-                              (not (common-initial-data/hidden-ref? db ref ent)))
+                              (not (common-initial-data/hidden-ref? db ref id)))
                      [(:block/title ref) size])))
            (sort-by second #(> %1 %2))))))
 
 (defn- get-block-parents-until-top-ref
   [db id ref-id ref-block-ids *result]
-  (let [ent (d/entity db id)]
-    (loop [eid ref-id
-           parents' []]
-      (when eid
-        (cond
-          (contains? @*result eid)
-          (swap! *result into parents')
+  (loop [eid ref-id
+         parents' []]
+    (when eid
+      (cond
+        (contains? @*result eid)
+        (swap! *result into parents')
 
-          (contains? ref-block-ids eid)
-          (when-not (common-initial-data/hidden-ref? db (d/entity db eid) ent)
-            (swap! *result into (conj parents' eid)))
-          :else
-          (let [e (d/entity db eid)]
-            (recur (:db/id (:block/parent e)) (conj parents' eid))))))))
+        (contains? ref-block-ids eid)
+        (when-not (common-initial-data/hidden-ref? db (d/entity db eid) id)
+          (swap! *result into (conj parents' eid)))
+        :else
+        (let [e (d/entity db eid)]
+          (recur (:db/id (:block/parent e)) (conj parents' eid)))))))
 
 (defn get-linked-references
   [db id]
