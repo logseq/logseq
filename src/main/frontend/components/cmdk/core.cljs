@@ -89,21 +89,24 @@
              (not config/publishing?))
     (let [class? (string/starts-with? q "#")
           class-name (get-class-from-input q)
-          class (ldb/class? (db/get-case-page class-name))]
+          class (let [class (db/get-case-page class-name)]
+                  (when (ldb/class? class)
+                    class))]
       (->> [{:text (cond
                      class "Configure tag"
                      class? "Create tag"
                      :else "Create page")
              :icon "new-page"
              :icon-theme :gray
-             :info (if class?
-                     (let [class-name (get-class-from-input q)
-                           class (db/get-case-page class-name)]
-                       (if class
-                         (str "Configure #" class-name)
-                         (str "Create tag called '" class-name "'")))
+             :info (cond
+                     class
+                     (str "Configure #" class-name)
+                     class?
+                     (str "Create tag called '" class-name "'")
+                     :else
                      (str "Create page called '" q "'"))
-             :source-create :page}]
+             :source-create :page
+             :class class}]
            (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
@@ -564,15 +567,17 @@
         create-whiteboard? (= :whiteboard (:source-create item))
         create-page? (= :page (:source-create item))
         class (when create-class? (get-class-from-input @!input))]
-    (p/let [result (cond
-                     create-class?
-                     (db-page-handler/<create-class! class
-                                                     {:redirect? false})
-                     create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
-                     create-page? (page-handler/<create! @!input {:redirect? true}))]
-      (shui/dialog-close! :ls-dialog-cmdk)
-      (when (and create-class? result)
-        (state/pub-event! [:dialog/show-block result {:tag-dialog? true}])))))
+    (if (and (= (:text item) "Configure tag") (:class item))
+      (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}])
+      (p/let [result (cond
+                       create-class?
+                       (db-page-handler/<create-class! class
+                                                       {:redirect? false})
+                       create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
+                       create-page? (page-handler/<create! @!input {:redirect? true}))]
+        (shui/dialog-close! :ls-dialog-cmdk)
+        (when (and create-class? result)
+          (state/pub-event! [:dialog/show-block (:class item) {:tag-dialog? true}]))))))
 
 (defn- get-filter-user-input
   [input]
