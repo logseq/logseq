@@ -20,29 +20,15 @@
 
 (defn- <save-e2ee-password
   [refresh-token password]
-  (prn :debug :<save-e2ee-password password)
-  (assert (and (string? refresh-token)
-               (string? password)))
-  (p/let [raw (.encode (js/TextEncoder.) refresh-token)
-          digestbuf (.digest js/crypto.subtle "SHA-256" raw)
-          key-bytes (js/Uint8Array. digestbuf)
-          aes-key (crypt/<import-aes-key key-bytes)
-          result (crypt/<encrypt-text aes-key password)
+  (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
           text (ldb/write-transit-str result)]
     (opfs/<write-text! e2ee-password-file text)))
 
 (defn- <read-e2ee-password
   [refresh-token]
-  (prn :debug :<read-e2ee-password)
-  (assert (string? refresh-token))
-  (p/let [raw (.encode (js/TextEncoder.) refresh-token)
-          digestbuf (.digest js/crypto.subtle "SHA-256" raw)
-          key-bytes (js/Uint8Array. digestbuf)
-          aes-key (crypt/<import-aes-key key-bytes)
-          text (opfs/<read-text! e2ee-password-file)
+  (p/let [text (opfs/<read-text! e2ee-password-file)
           data (ldb/read-transit-str text)
-          password (crypt/<decrypt-text aes-key data)]
-    (prn :debug :text text :password password)
+          password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))
 
 (defn- <get-item

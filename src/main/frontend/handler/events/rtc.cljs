@@ -4,6 +4,7 @@
             [frontend.components.e2ee :as e2ee]
             [frontend.handler.events :as events]
             [frontend.state :as state]
+            [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]))
 
@@ -17,8 +18,7 @@
        (p/resolve! private-key-promise private-key))
      (p/catch
       (fn [error]
-        (prn :debug :read-e2ee-password-failed)
-        (js/console.error error)
+        (log/error :read-e2ee-password-failed error)
         (shui/dialog-open!
          #(e2ee/e2ee-password-to-decrypt-private-key encrypted-private-key private-key-promise refresh-token)
          {:auto-width? true
