@@ -297,7 +297,8 @@
               :text title'
               :header (when (:block/parent entity)
                         (block/breadcrumb {:disable-preview? true
-                                           :search? true} repo (:block/uuid page) {}))
+                                           :search? true} repo (:block/uuid page)
+                                          {:disabled? true}))
               :alias (:alias page)
               :source-block (or source-page page))))
 
@@ -310,7 +311,8 @@
      :icon-theme :gray
      :text (highlight-content-query text input)
      :header (block/breadcrumb {:disable-preview? true
-                                :search? true} repo id {})
+                                :search? true} repo id
+                               {:disabled? true})
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))
@@ -415,7 +417,7 @@
                              {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
-                              :header (block/breadcrumb {:search? true} repo id {})
+                              :header (block/breadcrumb {:search? true} repo id {:disabled? true})
                               :current-page? true
                               :source-block block})) blocks)]
         (swap! !results update :current-page merge {:status :success :items items})))
