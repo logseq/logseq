@@ -1,7 +1,6 @@
 (ns electron.keychain
   "Helper functions for storing E2EE secrets inside the OS keychain."
-  (:require ["crypto" :as crypto]
-            ["electron" :refer [app]]
+  (:require ["electron" :refer [app]]
             ["keytar" :as keytar]
             [clojure.string :as string]
             [electron.logger :as logger]
@@ -19,26 +18,14 @@
   []
   (str (force service-name) " E2EE"))
 
-(defn- normalize-account
-  [refresh-token]
-  (when (and (string? refresh-token)
-             (not (string/blank? refresh-token)))
-    (try
-      (let [hash (.createHash crypto "sha256")]
-        (.update hash refresh-token)
-        (.digest hash "hex"))
-      (catch :default e
-        (logger/error ::normalize-account {:error e})
-        nil))))
-
 (defn supported?
   []
   (boolean keytar))
 
 (defn <set-password!
   "Persist `encrypted-text` for the `refresh-token` entry."
-  [refresh-token encrypted-text]
-  (if-let [account (and (supported?) (normalize-account refresh-token))]
+  [key encrypted-text]
+  (if-let [account (and (supported?) key)]
     (-> (p/let [_ (.setPassword keytar (keychain-service) account encrypted-text)]
           true)
         (p/catch (fn [e]
@@ -48,8 +35,8 @@
 
 (defn <get-password
   "Fetch encrypted text stored for `refresh-token`."
-  [refresh-token]
-  (if-let [account (and (supported?) (normalize-account refresh-token))]
+  [key]
+  (if-let [account (and (supported?) key)]
     (-> (p/let [password (.getPassword keytar (keychain-service) account)]
           password)
         (p/catch (fn [e]
@@ -58,8 +45,8 @@
     (p/resolved nil)))
 
 (defn <delete-password!
-  [refresh-token]
-  (if-let [account (and (supported?) (normalize-account refresh-token))]
+  [key]
+  (if-let [account (and (supported?) key)]
     (-> (p/let [_ (.deletePassword keytar (keychain-service) account)]
           true)
         (p/catch (fn [e]

@@ -19,40 +19,41 @@
 
 (defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
-(defonce ^:private electron-env?
+(defonce ^:private native-env?
   (let [href (try (.. js/self -location -href)
                   (catch :default _ nil))]
     (boolean (and (string? href)
-                  (string/includes? href "electron=true")))))
+                  (or (string/includes? href "electron=true")
+                      (string/includes? href "capacitor=true"))))))
 
-(defn- electron-worker?
+(defn- native-worker?
   []
-  electron-env?)
+  native-env?)
 
-(defn- <electron-save-password-text!
-  [refresh-token encrypted-text]
-  (worker-state/<invoke-main-thread :thread-api/electron-save-e2ee-password refresh-token encrypted-text))
+(defn- <native-save-password-text!
+  [encrypted-text]
+  (worker-state/<invoke-main-thread :thread-api/native-save-e2ee-password encrypted-text))
 
-(defn- <electron-read-password-text
-  [refresh-token]
-  (worker-state/<invoke-main-thread :thread-api/electron-get-e2ee-password refresh-token))
+(defn- <native-read-password-text
+  []
+  (worker-state/<invoke-main-thread :thread-api/native-get-e2ee-password))
 
 (defn- <save-e2ee-password
   [refresh-token password]
   (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
           text (ldb/write-transit-str result)]
-    (if (electron-worker?)
-      (-> (p/let [_ (<electron-save-password-text! refresh-token text)]
+    (if (native-worker?)
+      (-> (p/let [_ (<native-save-password-text! text)]
             nil)
           (p/catch (fn [e]
-                     (log/error :electron-save-e2ee-password {:error e})
-                     (throw e))))
+                     (log/error :native-save-e2ee-password {:error e})
+                     (opfs/<write-text! e2ee-password-file text))))
       (opfs/<write-text! e2ee-password-file text))))
 
 (defn- <read-e2ee-password
   [refresh-token]
-  (p/let [text (if (electron-worker?)
-                 (<electron-read-password-text refresh-token)
+  (p/let [text (if (native-worker?)
+                 (<native-read-password-text)
                  (opfs/<read-text! e2ee-password-file))
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
