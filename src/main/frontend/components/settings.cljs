@@ -1199,6 +1199,32 @@
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
+(rum/defc reset-encryption-password
+  [current-password new-password {:keys [set-new-password!
+                                         reset-password-status
+                                         on-click]}]
+  (let [[reset? set-reset!] (hooks/use-state false)]
+    (if reset?
+      [:div.flex.flex-col.gap-4
+       [:label.opacity-70 {:for "current-password"} "Current password"]
+       (shui/toggle-password
+        {:id "current-password"
+         :value current-password
+         :disabled true})
+       [:label.opacity-70 {:for "new-password"} "Set new Password"]
+       (shui/toggle-password
+        {:id "new-password"
+         :value new-password
+         :on-change #(set-new-password! (util/evalue %))})
+       (when reset-password-status [:p reset-password-status])
+       (shui/button
+        {:on-click on-click
+         :disabled (string/blank? new-password)}
+        "Reset Password")]
+      (shui/button
+       {:on-click #(set-reset! true)}
+       "Reset Password"))))
+
 (rum/defc encryption
   []
   [:div.panel-wrap.is-encryption.mb-8
@@ -1246,31 +1272,32 @@
                              (p/catch set-init-key-err!)))}
             "Init E2EE encrypt-key-pair")]
           rsa-key-pair
-          [:div.flex.flex-col.gap-4
-           ;; [:p "E2EE key-pair already generated!"]
-           [:label.opacity-70 {:for "current-password"} "Current password"]
-           (shui/toggle-password
-            {:id "current-password"
-             :value current-password
-             :disabled true})
-           [:label.opacity-70 {:for "new-password"} "Set new Password"]
-           (shui/toggle-password
-            {:id "new-password"
-             :value new-password
-             :on-change #(set-new-password! (util/evalue %))})
-           (when reset-password-status [:p reset-password-status])
-           (shui/button
-            {:on-click (fn []
-                         (-> (p/do!
-                              (set-reset-password-status! "Updating password ...")
-                              (state/<invoke-db-worker :thread-api/reset-e2ee-password
-                                                       token refresh-token user-uuid new-password)
-                              (set-reset-password-status! "Password updated successfully!"))
-                             (p/catch (fn [e]
-                                        (log/error :reset-password-failed e)
-                                        (set-reset-password-status! "Failed to update password.")))))
-             :disabled (string/blank? new-password)}
-            "Reset Password")]))])])
+          (let [on-submit (fn []
+                            (-> (p/do!
+                                 (set-reset-password-status! "Updating password ...")
+                                 (state/<invoke-db-worker :thread-api/reset-e2ee-password
+                                                          token refresh-token user-uuid new-password)
+                                 (set-reset-password-status! "Password updated successfully!"))
+                                (p/catch (fn [e]
+                                           (log/error :reset-password-failed e)
+                                           (set-reset-password-status! "Failed to update password.")))))]
+            [:div.flex.flex-col.gap-4
+             ;; [:p "E2EE key-pair already generated!"]
+             [:div.flex.flex-col
+              [:p
+               [:span "Please make sure you "]
+               "remember the password you have set, as we are unable to reset or retrieve it in case you forget it, "
+               [:span "and we recommend you "]
+               "keep a secure backup "
+               [:span "of the password."]]
+
+              [:p
+               "If you lose your password, all of your data in the cloud can’t be decrypted. "
+               [:span "You will still be able to access the local version of your graph."]]]
+             (reset-encryption-password current-password new-password
+                                        {:reset-password-status reset-password-status
+                                         :set-new-password! set-new-password!
+                                         :on-click on-submit})])))])])
 
 (rum/defc mcp-server-row
   [t]
