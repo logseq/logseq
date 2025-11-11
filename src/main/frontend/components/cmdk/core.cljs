@@ -96,7 +96,7 @@
                      class "Configure tag"
                      class? "Create tag"
                      :else "Create page")
-             :icon "new-page"
+             :icon (if class "settings" "new-page")
              :icon-theme :gray
              :info (cond
                      class
