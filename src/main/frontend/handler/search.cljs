@@ -141,7 +141,7 @@
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
                 [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
-            [:div
+            [:span
              (when-not (string/blank? before)
                [:span before])
              [:mark.p-0.rounded-none (subs content i (+ i (count q)))]
@@ -165,7 +165,7 @@
                                         content
                                         result)))
                              (conj result [:span content])))]
-            [:p {:class "m-0"} elements]))))))
+            [:span {:class "m-0"} elements]))))))
 
 (defn get-recents
   []

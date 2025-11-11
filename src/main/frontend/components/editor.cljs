@@ -56,7 +56,7 @@
   (let [block' (if-let [id (:block/uuid block)]
                  (if-let [e (db/entity [:block/uuid id])]
                    (assoc e
-                          :block/title (or (:friendly-title block) (:block/title e) (:block/title block))
+                          :block/title (or (:friendly-title block) (:block/title block) (:block/title e))
                           :alias (:alias block))
                    block)
                  block)]
@@ -79,19 +79,16 @@
              (ui/icon "plus" {:size 14})
 
              :else
-             (icon-component/get-node-icon-cp block' {}))])
+             (icon-component/get-node-icon-cp block' {:ignore-current-icon? true}))])
 
-        (let [title (let [alias (get-in block' [:alias :block/title])
-                          title (if (and db-based? (not (ldb/built-in? block')))
-                                  (block-handler/block-unique-title block')
-                                  (:block/title block'))]
-                      (if alias
-                        (str title " -> alias: " alias)
-                        title))]
+        (let [title (let [alias (get-in block' [:alias :block/title])]
+                      (block-handler/block-unique-title block' {:alias alias}))]
           (if (or (string/starts-with? title (t :new-tag))
                   (string/starts-with? title (t :new-page)))
             title
-            (search-handler/highlight-exact-query title q)))]])))
+            (block-handler/block-title-with-icon block'
+                                                 (search-handler/highlight-exact-query title q)
+                                                 icon-component/icon)))]])))
 
 (rum/defcs commands < rum/reactive
   (rum/local [] ::matched-commands)

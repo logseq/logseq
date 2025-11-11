@@ -134,34 +134,49 @@
 (defn block-unique-title
   "Multiple pages/objects may have the same `:block/title`.
    Notice: this doesn't prevent for pages/objects that have the same tag or created by different clients."
-  [block & {:keys [with-tags?]
+  [block & {:keys [with-tags? alias]
             :or {with-tags? true}}]
-  (let [block-e (cond
-                  (de/entity? block)
-                  block
-                  (uuid? (:block/uuid block))
-                  (db/entity [:block/uuid (:block/uuid block)])
-                  :else
-                  block)
-        tags (remove (fn [t]
-                       (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
-                           (ldb/private-tags (:db/ident t))))
-                     (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))]
-    (cond
-      (ldb/class? block)
-      (ldb/get-class-title-with-extends block)
+  (if (ldb/built-in? block)
+    (:block/title block)
+    (let [block-e (cond
+                    (de/entity? block)
+                    block
+                    (uuid? (:block/uuid block))
+                    (db/entity [:block/uuid (:block/uuid block)])
+                    :else
+                    block)
+          tags (remove (fn [t]
+                         (or (some-> (:block/raw-title block-e) (ldb/inline-tag? t))
+                             (ldb/private-tags (:db/ident t))))
+                       (map (fn [tag] (if (number? tag) (db/entity tag) tag)) (:block/tags block)))
+          title (cond
+                  (ldb/class? block)
+                  (ldb/get-class-title-with-extends block)
 
-      (and with-tags? (seq tags))
-      (str (:block/title block)
-           " "
-           (string/join
-            ", "
-            (keep (fn [tag]
-                    (when-let [title (:block/title tag)]
-                      (str "#" title)))
-                  tags)))
-      :else
-      (:block/title block))))
+                  (and with-tags? (seq tags))
+                  (str (:block/title block)
+                       " "
+                       (string/join
+                        ", "
+                        (keep (fn [tag]
+                                (when-let [title (:block/title tag)]
+                                  (str "#" title)))
+                              tags)))
+                  :else
+                  (:block/title block))]
+      (when title
+        (str (subs title 0 256)
+             (when alias
+               (str " -> alias: " alias)))))))
+
+(defn block-title-with-icon
+  "Used for select item"
+  [block title icon-cp]
+  (if-let [icon (:logseq.property/icon block)]
+    [:div.flex.flex-row.items-center.gap-1
+     (icon-cp icon {:size 14})
+     title]
+    (or title (:block/title block))))
 
 (defn edit-block!
   [block pos & {:keys [_container-id custom-content tail-len save-code-editor?]
