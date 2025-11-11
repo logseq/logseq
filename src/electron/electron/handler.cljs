@@ -22,6 +22,7 @@
             [electron.fs-watcher :as watcher]
             [electron.git :as git]
             [electron.handler-interface :refer [handle]]
+            [electron.keychain :as keychain]
             [electron.logger :as logger]
             [electron.plugin :as plugin]
             [electron.server :as server]
@@ -616,6 +617,15 @@
 
 (defmethod handle :cancel-all-requests [_ args]
   (apply rsapi/cancel-all-requests (rest args)))
+
+(defmethod handle :keychain/save-e2ee-password [_window [_ refresh-token encrypted-text]]
+  (keychain/<set-password! refresh-token encrypted-text))
+
+(defmethod handle :keychain/get-e2ee-password [_window [_ refresh-token]]
+  (keychain/<get-password refresh-token))
+
+(defmethod handle :keychain/delete-e2ee-password [_window [_ refresh-token]]
+  (keychain/<delete-password! refresh-token))
 
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))

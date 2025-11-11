@@ -46,7 +46,8 @@
     "semver": "7.5.2",
     "socks-proxy-agent": "8.0.2",
     "update-electron-app": "2.0.1",
-    "zod": "^4.1.5"
+    "zod": "^4.1.5",
+    "keytar": "^7.9.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.8.3",
