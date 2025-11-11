@@ -13,14 +13,8 @@
             [frontend.storage :as storage]
             [frontend.util :as util]
             [logseq.db :as ldb]
-            [logseq.graph-parser.text :as text]
             [missionary.core :as m]
             [promesa.core :as p]))
-
-(defn sanity-search-content
-  "Convert a block to the display contents for searching"
-  [format content]
-  (text/remove-level-spaces content format (config/get-block-pattern format)))
 
 (defn search
   "The aggretation of search results"

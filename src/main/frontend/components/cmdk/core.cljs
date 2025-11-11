@@ -4,6 +4,7 @@
             [electron.ipc :as ipc]
             [frontend.components.block :as block]
             [frontend.components.cmdk.list-item :as list-item]
+            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -206,24 +207,12 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(defn get-page-icon
-  [entity]
-  (cond
-    (ldb/class? entity)
-    "hash"
-    (ldb/property? entity)
-    "letter-p"
-    (ldb/whiteboard? entity)
-    "writing"
-    :else
-    "file"))
-
 (defmethod load-results :initial [_ state]
   (when-let [db (db/get-db)]
     (let [!results (::results state)
           recent-pages (map (fn [block]
                               (let [text (block-handler/block-unique-title block)
-                                    icon (get-page-icon block)]
+                                    icon (icon-component/get-node-icon-cp block {})]
                                 {:icon icon
                                  :icon-theme :gray
                                  :text text
@@ -261,7 +250,7 @@
       (->> search-results
            (map (fn [block]
                   (let [text (block-handler/block-unique-title block)
-                        icon (get-page-icon block)]
+                        icon (icon-component/get-node-icon-cp block {})]
                     {:icon icon
                      :icon-theme :gray
                      :text text
@@ -289,7 +278,7 @@
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (or (model/get-alias-source-page repo (:db/id entity))
                         (:alias page))
-        icon (get-page-icon entity)
+        icon (icon-component/get-node-icon-cp entity {})
         title (block-handler/block-unique-title (or entity page))
         title' (if source-page (str title " -> alias: " (:block/title source-page)) title)]
     (hash-map :icon icon
@@ -306,7 +295,7 @@
   [repo block current-page input]
   (let [id (:block/uuid block)
         text (block-handler/block-unique-title block)
-        icon "letter-n"]
+        icon (icon-component/get-node-icon-cp block {})]
     {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text input)
