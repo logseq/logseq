@@ -287,6 +287,64 @@
          m)))
    (p/promise m) encrypt-attr-set))
 
+(defn <encrypt-text-by-text-password
+  [text-password text]
+  (assert (and (string? text-password) (string? text)))
+  (p/let [salt (js/crypto.getRandomValues (js/Uint8Array. 16))
+          iv (js/crypto.getRandomValues (js/Uint8Array. 12))
+          password-key (.importKey subtle "raw"
+                                   (.encode (js/TextEncoder.) text-password)
+                                   "PBKDF2"
+                                   false
+                                   #js ["deriveKey"])
+          derived-key (.deriveKey subtle
+                                  #js {:name "PBKDF2"
+                                       :salt salt
+                                       :iterations 100000
+                                       :hash "SHA-256"}
+                                  password-key
+                                  #js {:name "AES-GCM" :length 256}
+                                  true
+                                  #js ["encrypt" "decrypt"])
+          encoded-text (.encode (js/TextEncoder.) text)
+          encrypted-text (.encrypt subtle
+                                   #js {:name "AES-GCM" :iv iv}
+                                   derived-key
+                                   encoded-text)]
+    [salt iv (js/Uint8Array. encrypted-text)]))
+
+(defn <decrypt-text-by-text-password
+  [text-password encrypted-data-vector]
+  (assert (and (string? text-password) (vector? encrypted-data-vector)))
+  (->
+   (p/let [[salt-data iv-data encrypted-data] encrypted-data-vector
+           salt (js/Uint8Array. salt-data)
+           iv (js/Uint8Array. iv-data)
+           encrypted-data (js/Uint8Array. encrypted-data)
+           password-key (.importKey subtle "raw"
+                                    (.encode (js/TextEncoder.) text-password)
+                                    "PBKDF2"
+                                    false
+                                    #js ["deriveKey"])
+           derived-key (.deriveKey subtle
+                                   #js {:name "PBKDF2"
+                                        :salt salt
+                                        :iterations 100000
+                                        :hash "SHA-256"}
+                                   password-key
+                                   #js {:name "AES-GCM" :length 256}
+                                   true
+                                   #js ["encrypt" "decrypt"])
+           decrypted-data (.decrypt subtle
+                                    #js {:name "AES-GCM" :iv iv}
+                                    derived-key
+                                    encrypted-data)]
+     (.decode (js/TextDecoder.) decrypted-data))
+   (p/catch
+    (fn [e]
+      (log/error "decrypt-text-by-text-password" e)
+      (ex-info "decrypt-text-by-text-password" {} e)))))
+
 (comment
   (let [array-buffers-equal?
         (fn [^js/ArrayBuffer buf1 ^js/ArrayBuffer buf2]
