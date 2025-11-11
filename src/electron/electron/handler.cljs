@@ -618,14 +618,14 @@
 (defmethod handle :cancel-all-requests [_ args]
   (apply rsapi/cancel-all-requests (rest args)))
 
-(defmethod handle :keychain/save-e2ee-password [_window [_ refresh-token encrypted-text]]
-  (keychain/<set-password! refresh-token encrypted-text))
+(defmethod handle :keychain/save-e2ee-password [_window [_ key encrypted-text]]
+  (keychain/<set-password! key encrypted-text))
 
-(defmethod handle :keychain/get-e2ee-password [_window [_ refresh-token]]
-  (keychain/<get-password refresh-token))
+(defmethod handle :keychain/get-e2ee-password [_window [_ key]]
+  (keychain/<get-password key))
 
-(defmethod handle :keychain/delete-e2ee-password [_window [_ refresh-token]]
-  (keychain/<delete-password! refresh-token))
+(defmethod handle :keychain/delete-e2ee-password [_window [_ key]]
+  (keychain/<delete-password! key))
 
 (defmethod handle :default [args]
   (logger/error "Error: no ipc handler for:" args))
