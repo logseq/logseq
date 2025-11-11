@@ -36,6 +36,7 @@
             [frontend.version :as fv]
             [goog.object :as gobj]
             [goog.string :as gstring]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
@@ -1254,7 +1255,8 @@
                                                        token refresh-token user-uuid new-password)
                               (set-reset-password-status! "Password updated successfully!"))
                              (p/catch (fn [e]
-                                        (js/console.error e)))))
+                                        (log/error :reset-password-failed e)
+                                        (set-reset-password-status! "Failed to update password.")))))
              :disabled (string/blank? new-password)}
             "Reset Password")]))])])
 
