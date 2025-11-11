@@ -210,7 +210,7 @@
                  :url "link"
                  :property "letter-p"
                  :page "page"
-                 :node "letter-n"
+                 :node "point-filled"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
