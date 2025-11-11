@@ -42,21 +42,10 @@
   (assert (and k @store))
   (idb-keyval/set k value @store))
 
-(comment
-  (defn- <remove-item!
-    [k]
-    (idb-keyval/del k @store)))
-
 (defn- graph-encrypted-aes-key-idb-key
   [repo]
   (assert (some? repo))
   (str "rtc-encrypted-aes-key###" repo))
-
-(comment
-  (defn- user-rsa-key-pair-idb-key
-    [user-uuid]
-    (assert (some? user-uuid))
-    (str "user-rsa-key-pair###" user-uuid)))
 
 (defn- <import-public-key-transit-str
   "Return js/CryptoKey"
