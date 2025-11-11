@@ -119,7 +119,11 @@
     (p/do!
      (reload-app-if-old-db-worker-exists)
      (let [worker-url (if config/publishing? "static/js/db-worker.js" "js/db-worker.js")
-           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+           worker (js/Worker.
+                   (str worker-url
+                        "?electron=" (util/electron?)
+                        "&capacitor=" (util/capacitor?)
+                        "&publishing=" config/publishing?))
            _ (set-worker-fs worker)
            wrapped-worker* (Comlink/wrap worker)
            wrapped-worker (fn [qkw direct-pass? & args]
@@ -166,7 +170,11 @@
   []
   (when-not util/node-test?
     (let [worker-url "js/inference-worker.js"
-          ^js worker (js/SharedWorker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
+          ^js worker (js/SharedWorker.
+                      (str worker-url
+                           "?electron=" (util/electron?)
+                           "&capacitor=" (util/capacitor?)
+                           "&publishing=" config/publishing?))
           ^js port (.-port worker)
           wrapped-worker (Comlink/wrap port)
           t1 (util/time-ms)]
