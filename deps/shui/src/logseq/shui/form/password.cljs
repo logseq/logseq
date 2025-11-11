@@ -21,4 +21,4 @@
          :style {:top 6}
          :size :sm
          :on-click #(set-visible! (not visible?))}
-        (icon-v2/root "eye")))]))
+        (icon-v2/root (if visible? "eye-off" "eye"))))]))
