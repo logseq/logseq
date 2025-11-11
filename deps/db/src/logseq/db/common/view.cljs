@@ -13,9 +13,7 @@
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.rules :as rules]
-            [medley.core :as medley]
-            [net.cgrand.xforms :as x]))
+            [logseq.db.frontend.rules :as rules]))
 
 (def valid-type-for-sort? (some-fn number? string? boolean?))
 
@@ -82,37 +80,37 @@
   [db {:keys [id asc?] :as sorting} entities partition?]
   (let [property (or (d/entity db id) {:db/ident id})
         get-value-fn (memoize (get-value-for-sort property))
-        sorted-entities (cond
-                          (= id :block.temp/refs-count)
-                          (cond-> (sort-by :block.temp/refs-count entities)
-                            (not asc?) reverse
-                            true distinct)
+        sorted-entities (->>
+                         (cond
+                           (= id :block.temp/refs-count)
+                           (cond-> (sort-by :block.temp/refs-count entities)
+                             (not asc?)
+                             reverse)
 
-                          :else
-                          (let [ref-type? (= :db.type/ref (:db/valueType property))]
-                            (if (or ref-type? (not (contains?
-                                                    #{:block/updated-at :block/created-at :block/title}
-                                                    (:db/ident property))))
-                              (sort-ref-entities-by-single-property entities sorting get-value-fn)
-                              (let [{:keys [row-ids id->row]}
-                                    (x/transjuxt
-                                     {:row-ids (comp (map :db/id) (x/into #{}))
-                                      :id->row (comp (map (juxt :db/id identity)) (x/into {}))}
-                                     entities)
-                                    xforms
-                                    (comp
-                                     (medley/distinct-by :e)
-                                     (keep
-                                      (fn [d]
-                                        (when (row-ids (:e d))
-                                          (id->row (:e d)))))
-                                     (distinct)
-                                     (if partition? (partition-by get-value-fn) identity))]
-                                (into
-                                 (if asc? [] ())
-                                 xforms
-                                 (d/datoms db :avet id))))))]
-    sorted-entities))
+                           :else
+                           (let [ref-type? (= :db.type/ref (:db/valueType property))]
+                             (if (or ref-type? (not (contains?
+                                                     #{:block/updated-at :block/created-at :block/title}
+                                                     (:db/ident property))))
+                               (sort-ref-entities-by-single-property entities sorting get-value-fn)
+                               (let [datoms (cond->
+                                             (->> (d/datoms db :avet id)
+                                                  (common-util/distinct-by :e)
+                                                  vec)
+                                              (not asc?)
+                                              rseq)
+                                     row-ids (set (map :db/id entities))
+                                     id->row (zipmap (map :db/id entities) entities)]
+                                 (keep
+                                  (fn [d]
+                                    (when (row-ids (:e d))
+                                      (id->row (:e d))))
+                                  datoms)))))
+
+                         distinct)]
+    (if partition?
+      (partition-by get-value-fn sorted-entities)
+      sorted-entities)))
 
 (defn- sort-entities-by-minor-sorting
   "minor-sorting - [{:keys [id asc?]} ...]"
@@ -284,40 +282,28 @@
 
 (defn- get-exclude-page-ids
   [db]
-  (into #{}
-        (comp cat (map :e))
-        [(d/datoms db :avet :logseq.property/hide? true)
-         (d/datoms db :avet :logseq.property/built-in? true)
-         (d/datoms db :avet :block/tags (:db/id (d/entity db :logseq.class/Property)))]))
+  (->>
+   (concat
+    (d/datoms db :avet :logseq.property/hide? true)
+    (d/datoms db :avet :logseq.property/built-in? true)
+    (d/datoms db :avet :block/tags (:db/id (d/entity db :logseq.class/Property))))
+   (map :e)
+   set))
 
-(defn- get-entities-for-all-pages
-  [db sorting property-ident {:keys [db-based?]}]
+(defn- get-entities-for-all-pages [db sorting property-ident {:keys [db-based?]}]
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
-        exclude-ids (when db-based? (get-exclude-page-ids db))
-        datoms (d/datoms db :avet property-ident)
-        datom->entity-xf1
-        (keep
-         (fn [d]
-           (if db-based?
-             (when-not (exclude-ids (:e d))
-               (entity-plus/unsafe->Entity db (:e d)))
-             (let [e (d/entity db (:e d))]
-               (when-not (or (ldb/hidden-or-internal-tag? e)
-                             (entity-util/property? e)
-                             (entity-util/built-in? e))
-                 e)))))
-        xfs (cond-> [(comp datom->entity-xf1 (x/into []))]
-              refs-count? (conj (comp datom->entity-xf1 (map :db/id) (x/into []))))
-        [ents eids] (x/transjuxt xfs datoms)
-        e->aliases (when refs-count? (common-initial-data/get-blocks-aliases db eids))]
-    (eduction
-     (if refs-count?
-       (map
-        #(assoc %
-                :block.temp/refs-count
-                (count (common-initial-data/get-block-refs db (:db/id %) e->aliases))))
-       identity)
-     ents)))
+        exclude-ids (when db-based? (get-exclude-page-ids db))]
+    (keep (fn [d]
+            (let [e (d/entity db (:e d))]
+              (when-not (if db-based?
+                          (exclude-ids (:db/id e))
+                          (or (ldb/hidden-or-internal-tag? e)
+                              (entity-util/property? e)
+                              (entity-util/built-in? e)))
+                (cond-> e
+                  refs-count?
+                  (assoc :block.temp/refs-count (common-initial-data/get-block-refs-count db (:e d)))))))
+          (d/datoms db :avet property-ident))))
 
 (defn- get-entities
   [db view feat-type property-ident view-for-id* sorting]
@@ -508,8 +494,8 @@
                                      (let [v (get by-value groups-sort-by-property-ident)]
                                        (if (and (= groups-sort-by-property-ident :block/journal-day) (not desc?)
                                                 (nil? (:block/journal-day by-value)))
-                                          ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
-                                          ;; after all journal pages when sorting by journal date.
+                                         ;; Use MAX_SAFE_INTEGER so non-journal pages (without :block/journal-day) are sorted
+                                         ;; after all journal pages when sorting by journal date.
                                          js/Number.MAX_SAFE_INTEGER
                                          v))
                                      group-by-closed-values?
@@ -550,18 +536,11 @@
                                         (map :db/id)))]
                        [by-value' group]))
                    result)
-                  (mapv :db/id result))]
+                  (map :db/id result))]
       (cond->
        {:count (count filtered-entities)
-        :data (into [] (distinct) data')}
+        :data (distinct data')}
         (= feat-type :linked-references)
         (merge (select-keys entities-result [:ref-pages-count :ref-matched-children-ids]))
         query?
         (assoc :properties (get-query-properties query entities-result))))))
-
-(comment
-  (def entities (get-view-entities db 78982 {:group-by-property-ident nil, :view-for-id 152, :sorting [{:id :block/updated-at, :asc? false}], :view-feature-type :all-pages, :input "", :filters {}}))
-
-  (def entities2 (get-view-entities db 78982 {:group-by-property-ident nil, :view-for-id 152, :sorting [{:id :block.temp/refs-count, :asc? false} {:id :block/updated-at, :asc? false}], :view-feature-type :all-pages, :input "", :filters {}}))
-
-  (time (vec (take 10 entities2))))
