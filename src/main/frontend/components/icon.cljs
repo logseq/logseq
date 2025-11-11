@@ -65,7 +65,7 @@
           (some? first-tag-icon)
           first-tag-icon
           :else
-          "letter-n"))))
+          "point-filled"))))
 
 (defn get-node-icon-cp
   [node-entity opts]
@@ -78,7 +78,7 @@
                     (or (when-let [icon' (get-in node-entity [:block/properties :icon])]
                           [:span icon'])
                         node-icon*))]
-    (when-not (or (string/blank? node-icon) (and (contains? #{"letter-n" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
+    (when-not (or (string/blank? node-icon) (and (contains? #{"point-filled" "letter-p" "hash" "file"} node-icon) (:not-text-or-page? opts)))
       [:div.icon-cp-container.flex.items-center
        (merge {:style {:color (or (:color node-icon) "inherit")}}
               (select-keys opts [:class]))
