@@ -4,12 +4,14 @@
   Each graph has an AES key.
   Server stores the encrypted AES key, public key, and encrypted private key."
   (:require ["/frontend/idbkv" :as idb-keyval]
+            [clojure.string :as string]
             [frontend.common.crypt :as crypt]
             [frontend.common.file.opfs :as opfs]
             [frontend.common.missionary :as c.m]
             [frontend.common.thread-api :refer [def-thread-api]]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [missionary.core :as m]
             [promesa.core :as p])
@@ -17,16 +19,41 @@
 
 (defonce ^:private store (delay (idb-keyval/newStore "localforage" "keyvaluepairs" 2)))
 (defonce ^:private e2ee-password-file "e2ee-password")
+(defonce ^:private electron-env?
+  (let [href (try (.. js/self -location -href)
+                  (catch :default _ nil))]
+    (boolean (and (string? href)
+                  (string/includes? href "electron=true")))))
+
+(defn- electron-worker?
+  []
+  electron-env?)
+
+(defn- <electron-save-password-text!
+  [refresh-token encrypted-text]
+  (worker-state/<invoke-main-thread :thread-api/electron-save-e2ee-password refresh-token encrypted-text))
+
+(defn- <electron-read-password-text
+  [refresh-token]
+  (worker-state/<invoke-main-thread :thread-api/electron-get-e2ee-password refresh-token))
 
 (defn- <save-e2ee-password
   [refresh-token password]
   (p/let [result (crypt/<encrypt-text-by-text-password refresh-token password)
           text (ldb/write-transit-str result)]
-    (opfs/<write-text! e2ee-password-file text)))
+    (if (electron-worker?)
+      (-> (p/let [_ (<electron-save-password-text! refresh-token text)]
+            nil)
+          (p/catch (fn [e]
+                     (log/error :electron-save-e2ee-password {:error e})
+                     (throw e))))
+      (opfs/<write-text! e2ee-password-file text))))
 
 (defn- <read-e2ee-password
   [refresh-token]
-  (p/let [text (opfs/<read-text! e2ee-password-file)
+  (p/let [text (if (electron-worker?)
+                 (<electron-read-password-text refresh-token)
+                 (opfs/<read-text! e2ee-password-file))
           data (ldb/read-transit-str text)
           password (crypt/<decrypt-text-by-text-password refresh-token data)]
     password))
