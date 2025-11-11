@@ -45,6 +45,7 @@
   com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
   missionary/missionary                 {:mvn/version "b.46"}
   meander/epsilon                       {:mvn/version "0.0.650"}
+  net.cgrand/xforms                     {:mvn/version "0.19.6"}
 
   io.github.open-spaced-repetition/cljc-fsrs {:git/sha "eeef3520df664e51c3d0ba2031ec2ba071635442"
                                               :git/url "https://github.com/open-spaced-repetition/cljc-fsrs"}

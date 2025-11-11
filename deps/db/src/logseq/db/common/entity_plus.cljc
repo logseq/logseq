@@ -9,6 +9,8 @@
             [cljs.core]
             [clojure.data :as data]
             [datascript.core :as d]
+            [datascript.db :as db]
+            [datascript.impl.entity :as de]
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.content :as db-content]
@@ -73,6 +75,13 @@
               r))
         (d/entity db eid)))
     (d/entity db eid)))
+
+(defn unsafe->Entity
+  "Faster verison of d/entity without checking e exists.
+  Only use it in performance-critical areas and where the existence of 'e' is confirmed."
+  [db e]
+  {:pre [(db/db? db) (pos-int? e)]}
+  (de/->Entity db e (volatile! false) (volatile! {})))
 
 (defn db-based-graph?
   "Whether the current graph is db-only"
