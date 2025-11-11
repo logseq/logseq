@@ -3,6 +3,7 @@
   (:require [electron.ipc :as ipc]
             [frontend.common.crypt :as crypt]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.mobile.secure-storage :as secure-storage]
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
@@ -13,30 +14,39 @@
 (def ^:private delete-op :keychain/delete-e2ee-password)
 
 (defn- <keychain-save!
-  [refresh-token encrypted-text]
-  (if (util/electron?)
-    (-> (ipc/ipc save-op refresh-token encrypted-text)
-        (p/catch (fn [e]
-                   (log/error :keychain-save-failed e)
-                   (throw e))))
+  [key encrypted-text]
+  (cond
+    (util/electron?)
+    (ipc/ipc save-op key encrypted-text)
+
+    (util/capacitor?)
+    (secure-storage/<set-item! key encrypted-text)
+
+    :else
     (p/resolved nil)))
 
 (defn- <keychain-get
-  [refresh-token]
-  (if (util/electron?)
-    (-> (ipc/ipc get-op refresh-token)
-        (p/catch (fn [e]
-                   (log/error :keychain-get-failed e)
-                   (throw e))))
+  [key]
+  (cond
+    (util/electron?)
+    (ipc/ipc get-op key)
+
+    (util/capacitor?)
+    (secure-storage/<get-item key)
+
+    :else
     (p/resolved nil)))
 
 (defn- <keychain-delete!
-  [refresh-token]
-  (if (util/electron?)
-    (-> (ipc/ipc delete-op refresh-token)
-        (p/catch (fn [e]
-                   (log/error :keychain-delete-failed e)
-                   (throw e))))
+  [key]
+  (cond
+    (util/electron?)
+    (ipc/ipc delete-op key)
+
+    (util/capacitor?)
+    (secure-storage/<remove-item! key)
+
+    :else
     (p/resolved nil)))
 
 (def-thread-api :thread-api/request-e2ee-password
@@ -59,14 +69,14 @@
   [encrypted-private-key]
   (<decrypt-user-e2ee-private-key encrypted-private-key))
 
-(def-thread-api :thread-api/electron-save-e2ee-password
-  [refresh-token encrypted-text]
-  (<keychain-save! refresh-token encrypted-text))
+(def-thread-api :thread-api/native-save-e2ee-password
+  [encrypted-text]
+  (<keychain-save! "logseq-encrypted-password" encrypted-text))
 
-(def-thread-api :thread-api/electron-get-e2ee-password
-  [refresh-token]
-  (<keychain-get refresh-token))
+(def-thread-api :thread-api/native-get-e2ee-password
+  []
+  (<keychain-get "logseq-encrypted-password"))
 
-(def-thread-api :thread-api/electron-delete-e2ee-password
-  [refresh-token]
-  (<keychain-delete! refresh-token))
+(def-thread-api :thread-api/native-delete-e2ee-password
+  []
+  (<keychain-delete! "logseq-encrypted-password"))
