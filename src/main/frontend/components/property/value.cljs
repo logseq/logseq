@@ -653,18 +653,6 @@
                           :close-modal? false
                           k f'))))
 
-(defn- get-node-icon
-  [node]
-  (cond
-    (ldb/class? node)
-    "hash"
-    (ldb/property? node)
-    "letter-p"
-    (entity-util/page? node)
-    "page"
-    :else
-    "letter-n"))
-
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
@@ -760,7 +748,7 @@
                                                                       (block-handler/block-unique-title node))]
                                                 (let [title (subs node-title 0 256)
                                                       node (or (db/entity id) node)
-                                                      icon (get-node-icon node)
+                                                      icon (icon-component/get-node-icon-cp node {})
                                                       header (when-not (db/page? node)
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
@@ -769,7 +757,7 @@
                                                       label [:div.flex.flex-row.items-center.gap-1
                                                              (when-not (or (:logseq.property/classes property)
                                                                            (contains? #{:class :property} (:logseq.property/type property)))
-                                                               (ui/icon icon {:size 14}))
+                                                               icon)
                                                              [:div title]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
