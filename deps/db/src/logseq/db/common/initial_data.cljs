@@ -12,8 +12,7 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.db :as db-db]
             [logseq.db.frontend.entity-util :as entity-util]
-            [logseq.db.frontend.rules :as rules]
-            [net.cgrand.xforms :as x]))
+            [logseq.db.frontend.rules :as rules]))
 
 ;; FIXME: For DB graph built-in pages, look up by name -> uuid like
 ;; get-built-in-page instead of this approach which is more error prone
@@ -37,29 +36,16 @@
 
 (defn get-block-alias
   [db eid]
-  (d/q
-   '[:find [?e ...]
-     :in $ ?eid %
-     :where
-     (alias ?eid ?e)]
-   db
-   eid
-   (:alias rules/rules)))
-
-(defn get-blocks-aliases
-  "Return eid->aliases map"
-  [db eids]
-  (into
-   {}
-   (x/by-key (x/into []))
+  (->>
    (d/q
-    '[:find ?eid ?e
-      :in $ [?eid ...] %
+    '[:find [?e ...]
+      :in $ ?eid %
       :where
       (alias ?eid ?e)]
     db
-    eids
-    (:alias rules/rules))))
+    eid
+    (:alias rules/rules))
+   distinct))
 
 (comment
   (defn- get-built-in-files
@@ -178,35 +164,35 @@
         (assoc :db/id (:db/id entity)))))
 
 (defn hidden-ref?
-  "Whether ref-block should be hidden."
-  [db ref-block entity]
-  (let [db-based? (entity-plus/db-based-graph? db)
-        id (:db/id entity)]
+  "Whether ref-block (for block with the `id`) should be hidden."
+  [db ref-block id]
+  (let [db-based? (entity-plus/db-based-graph? db)]
     (if db-based?
-      (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))
-       (= id (:db/id (:logseq.property/view-for ref-block)))
-       (entity-util/hidden? (:block/page ref-block))
-       (entity-util/hidden? ref-block)
-       (and (entity-util/class? entity)
-            (let [children (db-class/get-structured-children db id)
-                  class-ids (set (conj children id))]
-              (some class-ids (map :db/id (:block/tags ref-block)))))
-       (some? (get ref-block (:db/ident entity))))
+      (let [entity (d/entity db id)]
+        (or
+         (= (:db/id ref-block) id)
+         (= id (:db/id (:block/page ref-block)))
+         (= id (:db/id (:logseq.property/view-for ref-block)))
+         (entity-util/hidden? (:block/page ref-block))
+         (entity-util/hidden? ref-block)
+         (and (entity-util/class? entity)
+              (let [children (db-class/get-structured-children db id)
+                    class-ids (set (conj children id))]
+                (some class-ids (map :db/id (:block/tags ref-block)))))
+         (some? (get ref-block (:db/ident entity)))))
       (or
        (= (:db/id ref-block) id)
        (= id (:db/id (:block/page ref-block)))))))
 
 (defn get-block-refs
-  [db id & [e->aliases]]
-  (let [ent (d/entity db id)]
-    (eduction
-     (distinct)
-     (map #(d/entity db %))
-     (mapcat :block/_refs)
-     (remove (fn [ref-block] (hidden-ref? db ref-block ent)))
-     (cons id (if e->aliases (e->aliases id) (get-block-alias db id))))))
+  [db id]
+  (let [with-alias (->> (get-block-alias db id)
+                        (cons id)
+                        distinct)]
+    (some->> with-alias
+             (map #(d/entity db %))
+             (mapcat :block/_refs)
+             (remove (fn [ref-block] (hidden-ref? db ref-block id))))))
 
 (defn get-block-refs-count
   [db id]
