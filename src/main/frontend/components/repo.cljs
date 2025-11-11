@@ -22,6 +22,7 @@
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -450,68 +451,82 @@
       (string/includes? graph-name "+")
       (string/includes? graph-name "/")))
 
-(rum/defcs new-db-graph < rum/reactive
-  (rum/local "" ::graph-name)
-  (rum/local false ::cloud?)
-  (rum/local false ::creating-db?)
-  (rum/local (rum/create-ref) ::input-ref)
-  {:did-mount (fn [s]
-                (when-let [^js input (some-> @(::input-ref s)
-                                             (rum/deref))]
-                  (js/setTimeout #(.focus input) 32))
-                s)}
-  [state]
-  (let [*creating-db? (::creating-db? state)
-        *graph-name (::graph-name state)
-        *cloud? (::cloud? state)
-        input-ref @(::input-ref state)
-        new-db-f (fn []
-                   (when-not (or (string/blank? @*graph-name)
-                                 @*creating-db?)
-                     (if (invalid-graph-name? @*graph-name)
-                       (invalid-graph-name-warning)
-                       (do
-                         (reset! *creating-db? true)
-                         (p/let [repo (repo-handler/new-db! @*graph-name)]
-                           (when @*cloud?
-                             (->
-                              (p/do
-                                (state/set-state! :rtc/uploading? true)
-                                (rtc-handler/<rtc-create-graph! repo)
-                                (rtc-flows/trigger-rtc-start repo)
-                                (rtc-handler/<get-remote-graphs))
-                              (p/catch (fn [error]
-                                         (log/error :create-db-failed error)))
-                              (p/finally (fn []
-                                           (state/set-state! :rtc/uploading? false)
-                                           (reset! *creating-db? false)))))
-                           (shui/dialog-close!))))))
-        submit! (fn [^js e click?]
-                  (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
-                                        (util/trim-safe (.-value (rum/deref input-ref))))]
-                    (reset! *graph-name value)
-                    (new-db-f)))]
-    [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
-     (shui/input
-      {:default-value @*graph-name
-       :disabled @*creating-db?
-       :ref input-ref
-       :placeholder "your graph name"
-       :on-key-down submit!
-       :autoComplete "off"})
-     (when (user-handler/rtc-group?)
-       [:div.flex.flex-row.items-center.gap-1
-        (shui/checkbox
-         {:id "rtc-sync"
-          :value @*cloud?
-          :on-checked-change #(swap! *cloud? not)})
-        [:label.opacity-70.text-sm
-         {:for "rtc-sync"}
-         "Use Logseq Sync?"]])
-
-     (shui/button
-      {:on-click #(submit! % true)
-       :on-key-down submit!}
-      (if @*creating-db?
-        (ui/loading "Creating graph")
-        "Submit"))]))
+(rum/defc new-db-graph
+  []
+  (let [[creating-db? set-creating-db?] (hooks/use-state false)
+        [graph-name set-graph-name] (hooks/use-state "")
+        [cloud? set-cloud?] (hooks/use-state false)
+        [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
+        input-ref (hooks/create-ref)]
+    (hooks/use-effect!
+     (fn []
+       (when-let [^js input (hooks/deref input-ref)]
+         (js/setTimeout #(.focus input) 32)))
+     [])
+    (letfn [(new-db-f []
+              (when-not (or (string/blank? graph-name)
+                            creating-db?)
+                (if (invalid-graph-name? graph-name)
+                  (invalid-graph-name-warning)
+                  (do
+                    (set-creating-db? true)
+                    (p/let [repo (repo-handler/new-db! graph-name)]
+                      (when cloud?
+                        (->
+                         (p/do
+                           (state/set-state! :rtc/uploading? true)
+                           (rtc-handler/<rtc-create-graph! repo)
+                           (rtc-flows/trigger-rtc-start repo)
+                           (rtc-handler/<get-remote-graphs))
+                         (p/catch (fn [error]
+                                    (log/error :create-db-failed error)))
+                         (p/finally (fn []
+                                      (state/set-state! :rtc/uploading? false)
+                                      (set-creating-db? false)))))
+                      (shui/dialog-close!))))))
+            (submit! [^js e click?]
+              (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
+                                    (util/trim-safe (.-value (rum/deref input-ref))))]
+                (set-graph-name value)
+                (new-db-f)))]
+      [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
+       (shui/input
+        {:default-value graph-name
+         :disabled creating-db?
+         :ref input-ref
+         :placeholder "your graph name"
+         :on-key-down submit!
+         :autoComplete "off"})
+       (when (user-handler/rtc-group?)
+         [:div.flex.flex-col
+          [:div.flex.flex-row.items-center.gap-1
+           (shui/checkbox
+            {:id "rtc-sync"
+             :value cloud?
+             :on-checked-change
+             (fn []
+               (let [v (boolean (not cloud?))
+                     token (state/get-auth-id-token)
+                     user-uuid (user-handler/user-uuid)]
+                 (set-cloud? v)
+                 (when (and (true? v) (not e2ee-rsa-key-ensured?))
+                   (when (and token user-uuid)
+                     (-> (p/let [rsa-key-pair (state/<invoke-db-worker :thread-api/get-user-rsa-key-pair token user-uuid)]
+                           (set-e2ee-rsa-key-ensured? (some? rsa-key-pair)))
+                         (p/catch (fn [e]
+                                    (log/error :get-user-rsa-key-pair e)
+                                    e)))))))})
+           [:label.opacity-70.text-sm
+            {:for "rtc-sync"}
+            "Use Logseq Sync?"]]
+          (when (false? e2ee-rsa-key-ensured?)
+            [:label.opacity-70.text-sm
+             {:for "rtc-sync"}
+             "Need to init E2EE settings first, Settings > Encryption"])])
+       (shui/button
+        {:disabled (and cloud? (not e2ee-rsa-key-ensured?))
+         :on-click #(submit! % true)
+         :on-key-down submit!}
+        (if creating-db?
+          (ui/loading "Creating graph")
+          "Submit"))])))
