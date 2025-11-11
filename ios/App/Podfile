@@ -26,6 +26,7 @@ def capacitor_pods
   pod 'CapacitorStatusBar', :path => '../../node_modules/@capacitor/status-bar'
   pod 'CapgoCapacitorNavigationBar', :path => '../../node_modules/@capgo/capacitor-navigation-bar'
   pod 'SendIntent', :path => '../../node_modules/send-intent'
+  pod 'StayLiquid', :path => '../../node_modules/stay-liquid'
   pod 'JcesarmobileSslSkip', :path => '../../node_modules/@jcesarmobile/ssl-skip'
 end
 

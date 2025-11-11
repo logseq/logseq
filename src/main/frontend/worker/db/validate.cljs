@@ -22,6 +22,8 @@
                      (fn [{:keys [entity dispatch-key]}]
                        (let [entity (d/entity db (:db/id entity))]
                          (cond
+                           (:block/level entity)
+                           [[:db/retract (:db/id entity) :block/level]]
                            ;; missing :db/ident
                            (and (ldb/class? entity) (nil? (:db/ident entity)) (:block/title entity))
                            [[:db/add (:db/id entity) :db/ident (db-class/create-user-class-ident-from-name db (:block/title entity))]]
@@ -49,6 +51,8 @@
                            (vector? (:logseq.property/value entity))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))
+                           [[:db/retractEntity (:db/id entity)]]
+                           (and (:block/title entity) (nil? (:block/page entity)) (nil? (:block/parent entity)) (nil? (:block/name entity)))
                            [[:db/retractEntity (:db/id entity)]]
                            (= :block/path-refs (:db/ident entity))
                            (try

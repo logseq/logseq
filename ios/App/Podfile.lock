@@ -34,6 +34,8 @@ PODS:
     - Capacitor
   - SendIntent (7.0.0):
     - Capacitor
+  - StayLiquid (0.1.0):
+    - Capacitor (>= 6.0.0)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -54,6 +56,7 @@ DEPENDENCIES:
   - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
+  - StayLiquid (from `../../node_modules/stay-liquid`)
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -92,27 +95,30 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@jcesarmobile/ssl-skip"
   SendIntent:
     :path: "../../node_modules/send-intent"
+  StayLiquid:
+    :path: "../../node_modules/stay-liquid"
 
 SPEC CHECKSUMS:
-  Capacitor: 106e7a4205f4618d582b886a975657c61179138d
-  CapacitorActionSheet: 24609588961cc27c87e8b033be92b5eee65b5d4c
-  CapacitorApp: d63334c052278caf5d81585d80b21905c6f93f39
-  CapacitorCamera: eb8687d8687fed853598ec9460d94bcd5e16babe
-  CapacitorClipboard: b98aead5dc7ec595547fc2c5d75bacd2ae3338bc
-  CapacitorCommunitySafeArea: cc370b4f8d4aa340e4616acef9b73eda41ba0914
+  Capacitor: 03bc7cbdde6a629a8b910a9d7d78c3cc7ed09ea7
+  CapacitorActionSheet: 4213427449132ae4135674d93010cb011725647e
+  CapacitorApp: febecbb9582cb353aed037e18ec765141f880fe9
+  CapacitorCamera: 6e73f1fc6c629a672658705a02409b60854bc0f1
+  CapacitorClipboard: 70bfdb42b877b320a6e511ab94fa7a6a55d57ecb
+  CapacitorCommunitySafeArea: 3f049619072ab5d0da2529bcb05b358ff6c13dc1
   CapacitorCordova: 5967b9ba03915ef1d585469d6e31f31dc49be96f
-  CapacitorDevice: a50a45f0d075e55e2392c7a4be5404d4f69515de
-  CapacitorFilesystem: 307f97c27a265edf8396a1c9c235592fd8572fe3
-  CapacitorHaptics: 70e47470fa1a6bd6338cd102552e3846b7f9a1b3
-  CapacitorKeyboard: 969647d0ca2e5c737d7300088e2517aa832434e2
-  CapacitorNetwork: 07ec4c69c1bb696f41c23e00d31bda1bbb221bba
-  CapacitorShare: 58d6c2da63b093e8693287b2d36db92435538435
-  CapacitorSplashScreen: 19cd3573e57507e02d6f34597a8c421e00931487
-  CapacitorStatusBar: 275cbf2f4dfc00388f519ef80c7ec22edda342c9
-  CapgoCapacitorNavigationBar: 028e6cc0f00357381c46edb7b0d7cd1cda73493b
-  JcesarmobileSslSkip: b0f921e9d397a57f7983731209ca1ee244119c1f
-  SendIntent: 1f4f65c7103eb423067c566682dfcda973b5fb29
+  CapacitorDevice: 81ae78d5d1942707caad79276badd458bf6ec603
+  CapacitorFilesystem: e6261c410436f54908c11f94336c5b58286b1db0
+  CapacitorHaptics: 1f1e17041f435d8ead9ff2a34edd592c6aa6a8d6
+  CapacitorKeyboard: 09fd91dcde4f8a37313e7f11bde553ad1ed52036
+  CapacitorNetwork: 15cb4385f0913a8ceb5e9a4d7af1ec554bdb8de8
+  CapacitorShare: e573823f511f260f598d0423c33b1e3d7bbe5fd1
+  CapacitorSplashScreen: 1d67815a422a9b61539c94f283c08ed56667c0fc
+  CapacitorStatusBar: 6e7af040d8fc4dd655999819625cae9c2d74c36f
+  CapgoCapacitorNavigationBar: 067b1c1d1ede5ce96200a730ce7fd498e9641509
+  JcesarmobileSslSkip: 5fa98636a64c36faa50f32ab4daf34e38f4d45b9
+  SendIntent: 8a6f646a4489f788d253ffbd1082a98ea388d870
+  StayLiquid: dac4b6cd7761472754f97d367ba4651ca79fcd2e
 
-PODFILE CHECKSUM: 00fbb7ba3788966b68cb8a5a6f2abc380d7b7b9a
+PODFILE CHECKSUM: 858411d5b4560fd80593ea76b0fd6359bccabec3
 
 COCOAPODS: 1.16.2
