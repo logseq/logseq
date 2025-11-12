@@ -234,9 +234,8 @@
                     [:block/uuid id])
                   (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
           tag (db/entity eid)]
-      (when-not (ldb/class? tag)
-        (throw (ex-info "Not a tag" {:input class-uuid-or-ident-or-title})))
-      (sdk-utils/result->js tag))))
+      (when (ldb/class? tag)
+        (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]
   (p/let [tag (db/get-case-page tag-id)
