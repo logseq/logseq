@@ -294,7 +294,7 @@
   (let [refs-count? (and (coll? sorting) (some (fn [m] (= (:id m) :block.temp/refs-count)) sorting))
         exclude-ids (when db-based? (get-exclude-page-ids db))]
     (keep (fn [d]
-            (let [e (d/entity db (:e d))]
+            (let [e (entity-plus/unsafe->Entity db (:e d))]
               (when-not (if db-based?
                           (exclude-ids (:db/id e))
                           (or (ldb/hidden-or-internal-tag? e)
