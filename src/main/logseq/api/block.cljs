@@ -24,10 +24,7 @@
   (if (string? k)
     (-> k (string/trim)
         (string/replace " " "")
-        (string/replace #"^[:_\s]+" "")
-        (#(cond-> %
-            (not (string/includes? % "/"))
-            (string/lower-case))))
+        (string/replace #"^[:_\s]+" ""))
     (str k)))
 
 (defn get-sanitized-plugin-id
