@@ -75,7 +75,7 @@
     (d/entity db eid)))
 
 (defn unsafe->Entity
-  "Faster verison of d/entity without checking e exists.
+  "Faster version of d/entity without checking e exists.
   Only use it in performance-critical areas and where the existence of 'e' is confirmed."
   [db e]
   {:pre [(pos-int? e)]}
