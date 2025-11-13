@@ -142,7 +142,7 @@
        (reset! state/*db-worker wrapped-worker)
        (-> (p/let [_ (state/<invoke-db-worker :thread-api/init config/RTC-WS-URL)
                    _ (sync-app-state!)
-                   _ (log/debug "init worker spent" (str (- (util/time-ms) t1) "ms"))
+                   _ (log/info "init worker spent" (str (- (util/time-ms) t1) "ms"))
                    _ (sync-ui-state!)
                    _ (ask-persist-permission!)
                    _ (state/pub-event! [:graph/sync-context])]
