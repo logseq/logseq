@@ -299,16 +299,6 @@
                         (d/datoms db :eavt (:db/id child)))
                       children)))))
 
-(defn- get-views-data
-  [db]
-  (let [page-id (get-first-page-by-name db common-config/views-page-name)
-        children (when page-id (:block/_parent (d/entity db page-id)))]
-    (when (seq children)
-      (into
-       (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
-               children)
-       (d/datoms db :eavt page-id)))))
-
 (defn get-recent-updated-pages
   [db]
   (when db
@@ -321,7 +311,7 @@
                           (not (entity-util/hidden? e))
                           (not (string/blank? (:block/title e))))
                  e))))
-     (take 30))))
+     (take 15))))
 
 (defn- get-all-user-datoms
   [db]
@@ -350,6 +340,8 @@
                         :logseq.kv/graph-text-embedding-model-name
                         :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
+        recent-updated-pages (let [pages (get-recent-updated-pages db)]
+                               (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
         all-files (get-all-files db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
@@ -367,6 +359,7 @@
                           structured-datoms
                           user-datoms
                           favorites
+                          recent-updated-pages
                           all-files
                           pages-datoms)
                   distinct
