@@ -18,7 +18,10 @@
                                    :block/type "class",
                                    :block/name "yyy",
                                    :block/title "yyy"}])]
-      (is (= {:update
+      (is (= {:move
+              {:block-uuid block-uuid
+               :pos [nil nil]}
+              :update
               {:block-uuid block-uuid
                :db/ident :user.class/yyy
                :pos [nil nil],
@@ -72,7 +75,10 @@
                                    :block/name "xxx",
                                    :block/title "xxx"}])]
       (is (=
-           {:update
+           {:move
+            {:block-uuid block-uuid
+             :pos [nil block-order]}
+            :update
             {:block-uuid block-uuid,
              :db/ident :user.property/xxx
              :pos [nil block-order],

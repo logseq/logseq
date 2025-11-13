@@ -26,6 +26,7 @@
   ([content status clear? uid timeout]
    (show! content status clear? uid timeout nil))
   ([content status clear? uid timeout close-cb]
+   (assert (keyword? status) "status should be a keyword")
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
      (state/set-state! :notification/contents (assoc contents

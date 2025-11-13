@@ -25,6 +25,7 @@
             [frontend.util.ref :as ref]
             [logseq.common.config :as common-config]
             [logseq.common.path :as path]
+            [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.publishing.db :as publish-db]
             [medley.core :as medley]
             [promesa.core :as p]
@@ -52,7 +53,7 @@
                       (some-> url (js/decodeURIComponent)
                               (get-in-repo-assets-full-filename)
                               (string/replace '"/" "_")))
-        filekey   (util/safe-sanitize-file-name
+        filekey   (gp-exporter/safe-sanitize-file-name
                    (subs filename' 0 (- (count filename') (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
@@ -160,7 +161,7 @@
                                              (:db/id color))) colors)]
           (when color-id
             (let [properties (cond->
-                              {:block/tags :logseq.class/Pdf-annotation
+                              {:block/tags #{(:db/id (db/entity :logseq.class/Pdf-annotation))}
                                :logseq.property/ls-type  :annotation
                                :logseq.property.pdf/hl-color color-id
                                :logseq.property/asset (:db/id pdf-block)

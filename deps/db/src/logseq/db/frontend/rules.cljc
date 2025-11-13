@@ -30,7 +30,18 @@
       [?e2 :block/alias ?e3]]
      [(alias ?e3 ?e1)
       [?e1 :block/alias ?e2]
-      [?e2 :block/alias ?e3]]]})
+      [?e2 :block/alias ?e3]]]
+
+   :self-ref
+   '[(self-ref ?b ?ref)
+     [?b :block/refs ?ref]]
+
+   :has-ref
+   '[[(has-ref ?b ?r)
+      [?b :block/refs ?r]]
+     [(has-ref ?b ?r)
+      (parent ?p ?b)
+      [?p :block/refs ?r]]]})
 
 ;; Rules writing advice
 ;; ====================
@@ -218,10 +229,9 @@
 
     :tags
     '[(tags ?b ?tags)
-      [?b :block/tags ?t]
-      [?t :block/name ?tag]
-      [(missing? $ ?b :block/link)]
-      [(contains? ?tags ?tag)]]
+      [?b :block/tags ?tag]
+      [(contains? ?tags ?tag)]
+      [(missing? $ ?b :block/link)]]
 
     :task
     '[(task ?b ?statuses)
@@ -239,7 +249,9 @@
   "For db graphs, a map of rule names and the rules they depend on. If this map
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
-  {:task #{:simple-query-property}
+  {:has-ref #{:parent}
+   :page-ref #{:has-ref}
+   :task #{:simple-query-property}
    :priority #{:simple-query-property}
    :property-missing-value #{:object-has-class-property}
    :has-property-or-object-property #{:object-has-class-property}

@@ -4,7 +4,7 @@ storage_mode("git")
 
 type("appstore") # The default type, can be: appstore, adhoc, enterprise or development
 
-app_identifier(["com.logseq.logseq", "com.logseq.logseq.ShareViewController"])
+app_identifier(["com.logseq.logseq", "com.logseq.logseq.ShareViewController", "com.logseq.logseq.shortcuts"])
 # username("user@fastlane.tools") # Your Apple Developer Portal username
 
 # For all available options run `fastlane match --help`

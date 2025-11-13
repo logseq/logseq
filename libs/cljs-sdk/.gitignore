@@ -1,0 +1,38 @@
+# Clojure/Leiningen
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+/lib/
+/classes/
+/target/
+/checkouts/
+.lein-deps-sum
+.lein-repl-history
+.lein-plugins/
+.lein-failures
+.nrepl-port
+
+# ClojureScript/Build
+.cpcache/
+.shadow-cljs/
+dist/
+out/
+
+# Node.js
+node_modules/
+package-lock.json
+coverage/
+.nyc_output/
+
+# IDE
+.idea/
+.vscode/
+.calva/
+.calva/output-window
+.lsp/
+.clj-kondo/
+
+# OS
+.DS_Store
+*.log

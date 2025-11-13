@@ -75,6 +75,10 @@
     ([repo tx-data tx-meta]
      (ldb/transact! repo tx-data tx-meta))))
 
+(defn destroy-all!
+  []
+  (reset! conns {}))
+
 (defn start!
   ([repo]
    (start! repo {}))
@@ -83,10 +87,7 @@
          db-conn (if (config/db-based-graph? repo)
                    (d/create-conn db-schema/schema)
                    (gp-db/start-conn))]
+     (destroy-all!)
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler db-conn)))))
-
-(defn destroy-all!
-  []
-  (reset! conns {}))

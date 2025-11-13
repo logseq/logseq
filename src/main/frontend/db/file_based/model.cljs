@@ -3,8 +3,8 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.file-based.db :as common-file-db]
-            [frontend.db.utils :as db-utils]
             [frontend.db.conn :as conn]
+            [frontend.db.utils :as db-utils]
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.db :as ldb]
@@ -20,7 +20,6 @@
     :block/format
     :block/refs
     :block/_refs
-    :block/path-refs
     :block/tags
     :block/link
     :block/title

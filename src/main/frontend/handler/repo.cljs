@@ -24,6 +24,7 @@
             [frontend.util :as util]
             [frontend.util.text :as text-util]
             [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -118,10 +119,12 @@
                        nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        (cond (util/electron?)
-                             (ipc/ipc :inflateGraphsInfo nfs-dbs)
+                             (p/chain
+                              (ipc/ipc :inflateGraphsInfo (ldb/write-transit-str nfs-dbs))
+                              ldb/read-transit-str)
 
-                             ;(mobile-util/native-platform?)
-                             ;(util-fs/inflate-graphs-info nfs-dbs)
+                                        ;(mobile-util/native-platform?)
+                                        ;(util-fs/inflate-graphs-info nfs-dbs)
 
                              :else
                              nfs-dbs))]
@@ -137,7 +140,7 @@
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [app-major-schema-version (str (:major (db-schema/parse-schema-version db-schema/version)))
-          repos' (group-by :GraphUUID repos')
+          repos' (group-by :url repos')
           repos'' (mapcat (fn [[k vs]]
                             (if (some? k)
                               (let [remote-repos (filter :remote? vs)
@@ -169,7 +172,8 @@
                   repos
                   (concat
                    (state/get-rtc-graphs)
-                   (state/get-remote-file-graphs)))]
+                   (when-not (or (util/mobile?) util/web-platform?)
+                     (state/get-remote-file-graphs))))]
     (state/set-repos! repos')
     repos'))
 
@@ -194,7 +198,7 @@
                                 file-graph-import? (assoc :import-type :file-graph)))
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name :root (config/get-local-dir full-graph-name)})
-           _ (restore-and-setup-repo! full-graph-name)
+           _ (restore-and-setup-repo! full-graph-name {:file-graph-import? file-graph-import?})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph

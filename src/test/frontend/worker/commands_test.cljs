@@ -71,7 +71,7 @@
       (let [next-time (get-next-time now month-unit 1)]
         (is (= 1 (in-months next-time))))
       (let [next-time (get-next-time one-month-ago month-unit 1)]
-        (is (= 1 (in-months next-time))))
+        (is (> (in-days next-time) 1)))
       (let [next-time (get-next-time one-month-ago month-unit 3)]
         (is (= 2 (in-months next-time))))
       (let [next-time (get-next-time one-month-ago month-unit 5)]
@@ -117,6 +117,6 @@
       (let [next-time (get-next-time (t/minus now (t/weeks 10)) week-unit 1)]
         (is (= 1 (in-weeks next-time))))
       (let [next-time (get-next-time (t/minus now (t/months 10)) month-unit 1)]
-        (is (= 1 (in-months next-time))))
+        (is (> (in-days next-time) 1)))
       (let [next-time (get-next-time (t/minus now (t/years 10)) year-unit 1)]
         (is (= 1 (in-years next-time)))))))

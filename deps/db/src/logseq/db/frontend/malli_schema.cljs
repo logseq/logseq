@@ -89,12 +89,13 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [property property-val] & {:keys [new-closed-value?]}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value? _skip-strict-url-validate?]
+                                             :as validate-option}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
-                         (validate-fn db value {:new-closed-value? new-closed-value?}))
+                         (validate-fn db value validate-option))
                        validate-fn)
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:logseq.property/type property))
                                ;; new closed values aren't associated with the property yet
@@ -102,7 +103,11 @@
                                (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (map :db/id (:property/closed-values property))) val)))
+                               (let [ids (set (map :db/id (:property/closed-values property)))
+                                     result (contains? ids val)]
+                                 (when-not result
+                                   (js/console.error (str "Error: not a closed value, id: " val ", existing choices: " ids ", property: " (:db/ident property))))
+                                 result)))
                         validate-fn')]
     (if (db-property/many? property)
       (or (every? validate-fn'' property-val)
@@ -217,6 +222,10 @@
   "Used by validate-fns which need db as input"
   nil)
 
+(def ^:dynamic *skip-strict-url-validate?*
+  "`true` allows updating a block's other property when it has invalid URL value"
+  false)
+
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
@@ -231,7 +240,8 @@
               (when error-message
                 {:error/message error-message})
               (fn [tuple]
-                (validate-property-value *db-for-validate-fns* schema-fn tuple))])])
+                (validate-property-value *db-for-validate-fns* schema-fn tuple
+                                         {:skip-strict-url-validate? *skip-strict-url-validate?*}))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
@@ -242,7 +252,6 @@
 
 (def block-tags
   [:and
-   ;; FIXME: Display error message instead of 'unknown error'
    property-tuple
    ;; Important to keep data integrity of built-in entities. Ensure UI doesn't accidentally modify them
    [:fn {:error/message "should only have one tag for a built-in entity"}
@@ -273,8 +282,7 @@
 (def page-attrs
   "Common attributes for pages"
   [[:block/name :string]
-   [:block/title :string]
-   [:block/path-refs {:optional true} [:set :int]]])
+   [:block/title :string]])
 
 (def property-attrs
   "Common attributes for properties"
@@ -335,7 +343,8 @@
    (concat
     [:map
      [:db/ident user-property-ident]
-     [:logseq.property/type (apply vector :enum db-property-type/user-built-in-property-types)]]
+     [:logseq.property/type (apply vector :enum (into db-property-type/user-allowed-internal-property-types
+                                                      db-property-type/user-built-in-property-types))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -346,7 +355,7 @@
    (concat
     [:map
      [:db/ident plugin-property-ident]
-     [:logseq.property/type (apply vector :enum (conj db-property-type/user-built-in-property-types :string))]]
+     [:logseq.property/type (apply vector :enum (concat db-property-type/user-built-in-property-types [:json :string :page]))]]
     property-common-schema-attrs
     property-attrs
     page-attrs
@@ -387,7 +396,6 @@
    [:block/order block-order]
    ;; refs
    [:block/page :int]
-   [:block/path-refs {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
    [:logseq.property/created-from-property {:optional true} :int]])
 
@@ -399,8 +407,7 @@
     [[:block/title :string]
      [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
-     [:block/page :int]
-     [:block/path-refs {:optional true} [:set :int]]]
+     [:block/page :int]]
     page-or-block-attrs)))
 
 (def property-value-block
@@ -476,7 +483,9 @@
     ;; TODO: Derive required property types from existing schema in frontend.property
     [[:logseq.property.asset/type :string]
      [:logseq.property.asset/checksum :string]
-     [:logseq.property.asset/size :int]]
+     [:logseq.property.asset/size :int]
+     [:logseq.property.asset/width {:optional true} :int]
+     [:logseq.property.asset/height {:optional true} :int]]
     block-attrs
     page-or-block-attrs)))
 

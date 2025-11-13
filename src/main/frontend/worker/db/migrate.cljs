@@ -4,18 +4,19 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
-            [frontend.worker.util :as worker-util]
+            [frontend.worker-common.util :as worker-util]
+            [frontend.worker.db.rename-db-ident :as rename-db-ident]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-;; TODO: fixes/rollback
 ;; Frontend migrations
 ;; ===================
 
@@ -156,6 +157,7 @@
                {old-p new-p}
                {:replace-fn (fn [id prop-value]
                               (let [page (d/entity db id)
+                                    ;; bad impl, it's not just simple db/ident renaming
                                     new-p' (if (ldb/class? page) new-p :block/parent)]
                                 [[:db/retract id old-p]
                                  [:db/add id new-p' prop-value]]))})
@@ -289,12 +291,31 @@
                    db)]
     (mapcat
      (fn [id]
-       (let [title (:block/title (d/entity db id))]
-         [[:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]
-          [:db/add id :logseq.property.class/extends :logseq.class/Root]
-          [:db/retract id :block/tags :logseq.class/Page]
-          [:db/retract id :block/refs :logseq.class/Page]
-          [:db/retract id :block/path-refs :logseq.class/Page]]))
+       [[:db/add id :logseq.property.class/extends :logseq.class/Root]
+        [:db/retract id :block/tags :logseq.class/Page]
+        [:db/retract id :block/refs :logseq.class/Page]
+        [:db/retract id :block/path-refs :logseq.class/Page]])
+     class-ids)))
+
+(defn add-missing-db-ident-for-tags2
+  [db]
+  (let [class-ids
+        (d/q
+         '[:find [?b ...]
+           :where
+           [?b :block/tags :logseq.class/Tag]
+           [(missing? $ ?b :db/ident)]]
+         db)]
+    (keep
+     (fn [id]
+       (let [ent (d/entity db id)
+             title (:block/title ent)
+             block-uuid (:block/uuid ent)]
+         (when block-uuid
+           {:db-ident-or-block-uuid block-uuid
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      class-ids)))
 
 (defn fix-using-properties-as-tags
@@ -311,11 +332,32 @@
                       (map first))]
     (mapcat
      (fn [id]
-       (let [property (d/entity db id)
-             title (:block/title property)]
-         (into (retract-property-attributes id)
-               [[:db/retract id :logseq.property/parent]
-                [:db/add id :db/ident (db-class/create-user-class-ident-from-name db title)]])))
+       (into (retract-property-attributes id)
+             [[:db/retract id :logseq.property/parent]]))
+     property-ids)))
+
+(defn fix-using-properties-as-tags2
+  [db]
+  (let [property-ids
+        (->>
+         (d/q
+          '[:find ?b ?i
+            :where
+            [?b :block/tags :logseq.class/Tag]
+            [?b :db/ident ?i]]
+          db)
+         (filter (fn [[_ ident]] (= "user.property" (namespace ident))))
+         (map first))]
+    (keep
+     (fn [id]
+       (let [ent (d/entity db id)
+             title (:block/title ent)
+             block-uuid (:block/uuid ent)]
+         (when block-uuid
+           {:db-ident-or-block-uuid block-uuid
+            :new-db-ident (db-ident/replace-db-ident-random-suffix
+                           (db-class/create-user-class-ident-from-name db title)
+                           (subs (str block-uuid) 28))})))
      property-ids)))
 
 (defn remove-block-order-for-tags
@@ -343,18 +385,54 @@
                      sqlite-create-graph/mark-block-as-built-in))]
     [page]))
 
+(defn- add-missing-page-name
+  [db]
+  (let [pages (d/datoms db :avet :block/name "")]
+    (keep
+     (fn [d]
+       (let [page (d/entity db (:e d))]
+         (when-not (string/blank? (:block/title page))
+           {:db/id (:db/id page)
+            :block/name (common-util/page-name-sanity-lc (:block/title page))})))
+     pages)))
+
+(defn remove-block-path-refs
+  [db]
+  (when (d/entity db :block/path-refs)
+    (let [remove-datoms (->> (d/datoms db :avet :block/path-refs)
+                             (map :e)
+                             (distinct)
+                             (mapv (fn [id]
+                                     [:db/retract id :block/path-refs])))]
+      (conj remove-datoms [:db/retractEntity :block/path-refs]))))
+
+(defn- remove-position-property-from-url-properties
+  [db]
+  (->> (d/datoms db :avet :logseq.property/type :url)
+       (keep (fn [d]
+               (let [e (d/entity db (:e d))]
+                 (when (:logseq.property/ui-position e)
+                   [:db/retract (:e d) :logseq.property/ui-position]))))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
-   and :fix."
+   :rename-db-idents and :fix."
   [["65.0" {:fix separate-classes-and-properties}]
    ["65.1" {:fix fix-rename-parent-to-extends}]
    ["65.2" {:fix fix-tag-properties}]
-   ["65.3" {:fix add-missing-db-ident-for-tags}]
-   ["65.4" {:fix fix-using-properties-as-tags}]
+   ["65.3" {:rename-db-idents add-missing-db-ident-for-tags2 :fix add-missing-db-ident-for-tags}]
+   ["65.4" {:rename-db-idents fix-using-properties-as-tags2 :fix fix-using-properties-as-tags}]
    ["65.5" {:fix remove-block-order-for-tags}]
    ["65.6" {:fix update-extends-to-cardinality-many}]
-   ["65.7" {:fix add-quick-add-page}]])
+   ["65.7" {:fix add-quick-add-page}]
+   ["65.8" {:fix add-missing-page-name}]
+   ["65.9" {:properties [:logseq.property.embedding/hnsw-label-updated-at]}]
+   ["65.10" {:properties [:block/journal-day :logseq.property.view/sort-groups-by-property :logseq.property.view/sort-groups-desc?]}]
+   ["65.11" {:fix remove-block-path-refs}]
+   ["65.12" {:fix remove-position-property-from-url-properties}]
+   ["65.13" {:properties [:logseq.property.asset/width
+                          :logseq.property.asset/height]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -366,64 +444,81 @@
         (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))))
 
 (defn ensure-built-in-data-exists!
+  "Return tx-data"
   [conn]
   (let [*uuids (atom {})
-        data (->> (sqlite-create-graph/build-db-initial-data "")
+        initial-data (sqlite-create-graph/build-db-initial-data "")
+        data (->> initial-data
                   (keep (fn [data]
-                          (if (map? data)
-                            (cond
-                              ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
-                              (= "logseq.kv" (some-> (:db/ident data) namespace))
-                              nil
+                          (cond
+                            ;; Already created db-idents like :logseq.kv/graph-initial-schema-version should not be overwritten
+                            (= "logseq.kv" (some-> (:db/ident data) namespace))
+                            nil
 
-                              (= (:block/title data) "Contents")
-                              nil
+                            (= (:block/title data) "Contents")
+                            nil
 
-                              (:file/path data)
-                              (if-let [block (d/entity @conn [:file/path (:file/path data)])]
-                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                  (merge data existing-data))
-                                data)
-
-                              (:block/uuid data)
-                              (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
-                                (do
-                                  (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
-                                  (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
-                                    (reduce
-                                     (fn [data [k existing-value]]
-                                       (update data k
-                                               (fn [v]
-                                                 (cond
-                                                   (and (vector? v) (= :block/uuid (first v)))
-                                                   v
-                                                   (and (coll? v) (not (map? v)))
-                                                   (concat v (if (coll? existing-value) existing-value [existing-value]))
-                                                   :else
-                                                   (if (some? existing-value) existing-value v)))))
-                                     data
-                                     existing-data)))
-                                data)
-
-                              :else
+                            (:file/path data)
+                            (if-let [block (d/entity @conn [:file/path (:file/path data)])]
+                              (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                (merge data existing-data))
                               data)
-                            data))))
+
+                            (= [:block/uuid :logseq.property/built-in?] (keys data))
+                            data
+
+                            (:block/uuid data)
+                            (if-let [block (d/entity @conn [:block/uuid (:block/uuid data)])]
+                              (do
+                                (swap! *uuids assoc (:block/uuid data) (:block/uuid block))
+                                (let [existing-data (assoc (into {} block) :db/id (:db/id block))]
+                                  (reduce
+                                   (fn [data [k existing-value]]
+                                     (update data k
+                                             (fn [v]
+                                               (cond
+                                                 (= k :logseq.property/built-in?)
+                                                 true
+                                                 (= k :logseq.property/type)
+                                                 v
+                                                 (coll? v)
+                                                 v
+
+                                                 :else
+                                                 (let [existing-value (if (and (coll? existing-value) (not (map? existing-value)))
+                                                                        (remove nil? existing-value)
+                                                                        existing-value)]
+                                                   (if (some? existing-value) existing-value v))))))
+                                   data
+                                   existing-data)))
+                              data)
+
+                            :else
+                            data)))
+                  common-util/fast-remove-nils)
         ;; using existing page's uuid
-        data' (walk/prewalk
-               (fn [f]
-                 (cond
-                   (and (de/entity? f) (:block/uuid f))
-                   (or (:db/ident f) [:block/uuid (:block/uuid f)])
-                   (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
-                   [:block/uuid (@*uuids (second f))]
-                   :else
-                   f))
-               data)]
-    (d/transact! conn data' {:fix-db? true
-                             :db-migrate? true})))
+        data' (->>
+               (walk/prewalk
+                (fn [f]
+                  (cond
+                    (and (de/entity? f) (:block/uuid f))
+                    (or (:db/ident f) [:block/uuid (:block/uuid f)])
+                    (and (vector? f) (= :block/uuid (first f)) (@*uuids (second f)))
+                    [:block/uuid (@*uuids (second f))]
+                    :else
+                    f))
+                data)
+               (map (fn [m] (dissoc m :db/id))))
+
+        r (d/transact! conn data' {:fix-db? true
+                                   :db-migrate? true})]
+    (assoc r :migrate-updates
+           ;; fake it as a normal :fix type migration
+           {:fix (constantly :ensure-built-in-data-exists!)})))
 
 (defn- upgrade-version!
-  [conn db-based? version {:keys [properties classes fix]}]
+  "Return tx-data"
+  [conn db-based? version {:keys [properties classes rename-db-idents fix] :as migrate-updates}]
   (let [version (db-schema/parse-schema-version version)
         db @conn
         new-properties (->> (select-keys db-property/built-in-properties properties)
@@ -445,23 +540,32 @@
         new-class-idents (keep (fn [class]
                                  (when-let [db-ident (:db/ident class)]
                                    {:db/ident db-ident})) new-classes)
+        [rename-db-idents-tx-data rename-db-idents-coll]
+        (when rename-db-idents
+          (rename-db-ident/rename-db-idents-migration-tx-data db rename-db-idents))
         fixes (when (fn? fix)
                 (fix db))
-        tx-data (if db-based? (concat new-class-idents new-properties new-classes fixes) fixes)
+        tx-data (if db-based?
+                  (concat new-class-idents new-properties new-classes rename-db-idents-tx-data fixes)
+                  fixes)
         tx-data' (concat
                   [(sqlite-util/kv :logseq.kv/schema-version version)]
-                  tx-data)]
-    (ldb/transact! conn tx-data' {:db-migrate? true})
-    (println "DB schema migrated to" version)))
+                  tx-data)
+        r (ldb/transact! conn tx-data' {:db-migrate? true
+                                        :skip-validate-db? true})
+        migrate-updates (cond-> migrate-updates
+                          rename-db-idents (assoc :rename-db-idents rename-db-idents-coll))]
+    (println "DB schema migrated to" version)
+    (assoc r :migrate-updates migrate-updates)))
 
 (defn migrate
   "Migrate 'frontend' datascript schema and data. To add a new migration,
   add an entry to schema-version->updates and bump db-schema/version"
-  [conn]
+  [conn & {:keys [target-version] :or {target-version db-schema/version}}]
   (when (ldb/db-based-graph? @conn)
     (let [db @conn
           version-in-db (db-schema/parse-schema-version (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0))
-          compare-result (db-schema/compare-schema-version db-schema/version version-in-db)]
+          compare-result (db-schema/compare-schema-version target-version version-in-db)]
       (cond
         (zero? compare-result)
         nil
@@ -475,14 +579,21 @@
                 updates (keep (fn [[v updates]]
                                 (let [v* (db-schema/parse-schema-version v)]
                                   (when (and (neg? (db-schema/compare-schema-version version-in-db v*))
-                                             (not (pos? (db-schema/compare-schema-version v* db-schema/version))))
+                                             (not (pos? (db-schema/compare-schema-version v* target-version))))
                                     [v updates])))
-                              schema-version->updates)]
+                              schema-version->updates)
+                result-ks [:tx-data :db-before :db-after :migrate-updates]
+                *upgrade-result-coll (atom [])]
             (println "DB schema migrated from" version-in-db)
             (doseq [[v m] updates]
-              (upgrade-version! conn db-based? v m))
-            (ensure-built-in-data-exists! conn))
+              (let [r (upgrade-version! conn db-based? v m)]
+                (swap! *upgrade-result-coll conj (select-keys r result-ks))))
+            (swap! *upgrade-result-coll conj
+                   (select-keys (ensure-built-in-data-exists! conn) result-ks))
+            {:from-version version-in-db
+             :to-version target-version
+             :upgrade-result-coll @*upgrade-result-coll})
           (catch :default e
-            (prn :error (str "DB migration failed to migrate to " db-schema/version " from " version-in-db ":"))
+            (prn :error (str "DB migration failed to migrate to " target-version " from " version-in-db ":"))
             (js/console.error e)
             (throw e)))))))

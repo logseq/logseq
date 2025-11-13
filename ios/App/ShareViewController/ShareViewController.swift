@@ -184,15 +184,15 @@ class ShareViewController: UIViewController {
     }
 
     @discardableResult
-    @objc func openURL(_ url: URL) -> Bool {
+    @objc func openURL(_ url: URL) {
         var responder: UIResponder? = self
         while responder != nil {
             if let application = responder as? UIApplication {
-                return application.perform(#selector(openURL(_:)), with: url) != nil
+                application.open(url, options: [:], completionHandler: nil)
+                return
             }
             responder = responder?.next
         }
-        return false
     }
 
 
@@ -204,4 +204,3 @@ extension URL {
         return type?.preferredMIMEType
     }
 }
-

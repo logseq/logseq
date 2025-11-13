@@ -1,14 +1,15 @@
 (ns frontend.worker.rtc.db
   "rtc db ops"
   (:require [datascript.core :as d]
-            [frontend.worker.state :as worker-state]))
+            [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]))
 
 (defn remove-rtc-data-from-local-db!
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (d/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
-                       [:db/retractEntity :logseq.kv/graph-local-tx]
-                       [:db/retractEntity :logseq.kv/remote-schema-version]])))
+    (ldb/transact! conn [[:db/retractEntity :logseq.kv/graph-uuid]
+                         [:db/retractEntity :logseq.kv/graph-local-tx]
+                         [:db/retractEntity :logseq.kv/remote-schema-version]])))
 
 (defn reset-client-op-conn
   [repo]
@@ -18,7 +19,7 @@
                                (d/datoms @conn :avet :aes-key-jwk)
                                (d/datoms @conn :avet :block/uuid))
                        (map (fn [datom] [:db/retractEntity (:e datom)])))]
-      (d/transact! conn tx-data))))
+      (ldb/transact! conn tx-data))))
 
 (defn remove-rtc-data-in-conn!
   [repo]

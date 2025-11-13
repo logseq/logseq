@@ -9,12 +9,14 @@
             [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.db-based.rtc-background-tasks]
+            [frontend.handler.db-based.vector-search-background-tasks]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
+            [lambdaisland.glogi :as log]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
             [malli.dev.cljs :as md]
@@ -85,8 +87,8 @@
   ;; so it is available even in :advanced release builds
 
   ;; (setup-entity-profile!)
-  (plugin-handler/setup!
-   #(handler/start! start)))
+  (log/info ::init "App started")
+  (handler/start! start))
 
 (defn ^:export stop []
   ;; stop is called before any code is reloaded

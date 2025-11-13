@@ -3,8 +3,8 @@
   (:require [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.db.common.entity-plus :as entity-plus]))
+            [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
 
@@ -36,10 +36,10 @@
                (str "Invalid entity eid: " (pr-str eid))))
      (let [eid (if (uuid? eid) [:block/uuid eid] eid)]
        (when-let [db (if (string? repo-or-db)
-                     ;; repo
+                       ;; repo
                        (let [repo (or repo-or-db (state/get-current-repo))]
                          (conn/get-db repo))
-                     ;; db
+                       ;; db
                        repo-or-db)]
          (d/entity db eid))))))
 

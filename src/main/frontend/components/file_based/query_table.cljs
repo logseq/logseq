@@ -1,5 +1,6 @@
 (ns frontend.components.file-based.query-table
-  (:require [frontend.components.svg :as svg]
+  (:require [clojure.string :as string]
+            [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
@@ -22,8 +23,11 @@
   ;; FIXME: Look up by property id if still supporting clock-time
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
-                      (let [b (block/parse-title-and-body b)]
-                        (assoc-in b ks (or (clock/clock-summary (:block.temp/ast-body b) false) 0))))
+                      (let [b (update (block/parse-title-and-body b)
+                                      :block/properties (fn [properties] (if (map? properties) properties {})))]
+                        (try (assoc-in b ks (or (clock/clock-summary (:block.temp/ast-body b) false) 0))
+                             (catch :default _e
+                               b))))
                     result)]
     (if (every? #(zero? (get-in % ks)) result)
       (map #(medley/dissoc-in % ks) result)
@@ -173,10 +177,44 @@
     ;; string values will attempt to be rendered as pages, falling back to
     ;; inline-text when no page entity is found
     (string? value) (if-let [page (and (string? value) (db/get-page value))]
-                      (page-cp {} page)
+                      (page-cp {:stop-event-propagation? true} page)
                       (inline-text row-block row-format value))
     ;; anything else should just be rendered as provided
     :else value))
+
+(rum/defc table-row
+  [row columns config page? select? *mouse-down? map-inline page-cp ->elem inline-text]
+  (let [format (get row :block/format :markdown)
+        property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
+    [:tr.cursor
+     (for [column columns]
+       (let [[cell-format value] (build-column-value row
+                                                     column
+                                                     {:page? page?
+                                                      :->elem ->elem
+                                                      :map-inline map-inline
+                                                      :config config
+                                                      :comma-separated-property? (property-separated-by-commas? column)})]
+         [:td.whitespace-nowrap
+          {:data-key (pr-str column)
+           :on-pointer-down (fn []
+                              (reset! *mouse-down? true)
+                              (reset! select? false))
+           :on-mouse-move (fn [] (reset! select? true))
+           :on-pointer-up (fn []
+                            (when (and @*mouse-down? (not @select?))
+                              (state/sidebar-add-block!
+                               (state/get-current-repo)
+                               (:db/id row)
+                               :block)
+                              (reset! *mouse-down? false)))}
+          (when (some? value)
+            (render-column-value {:row-block row
+                                  :row-format format
+                                  :cell-format cell-format
+                                  :value value}
+                                 page-cp
+                                 inline-text))]))]))
 
 (rum/defcs result-table-v1 < rum/reactive
   (rum/local false ::select?)
@@ -186,8 +224,7 @@
         *mouse-down? (::mouse-down? state)
         clock-time-total (when-not page?
                            (->> (map #(get-in % [:block/properties :clock-time] 0) sort-result')
-                                (apply +)))
-        property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))]
+                                (apply +)))]
     [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class "query-table"}
@@ -202,41 +239,22 @@
             (sortable-title title column sort-state (:block/uuid current-block))))]]
       [:tbody
        (for [row sort-result']
-         (let [format (get row :block/format :markdown)]
-           [:tr.cursor
-            (for [column columns]
-              (let [[cell-format value] (build-column-value row
-                                                            column
-                                                            {:page? page?
-                                                             :->elem ->elem
-                                                             :map-inline map-inline
-                                                             :config config
-                                                             :comma-separated-property? (property-separated-by-commas? column)})]
-                [:td.whitespace-nowrap
-                 {:data-key (pr-str column)
-                  :on-pointer-down (fn []
-                                     (reset! *mouse-down? true)
-                                     (reset! select? false))
-                  :on-mouse-move (fn [] (reset! select? true))
-                  :on-pointer-up (fn []
-                                   (when (and @*mouse-down? (not @select?))
-                                     (state/sidebar-add-block!
-                                      (state/get-current-repo)
-                                      (:db/id row)
-                                      :block-ref)
-                                     (reset! *mouse-down? false)))}
-                 (when (some? value)
-                   (render-column-value {:row-block row
-                                         :row-format format
-                                         :cell-format cell-format
-                                         :value value}
-                                        page-cp
-                                        inline-text))]))]))]]]))
+         (table-row row columns config page? select? *mouse-down? map-inline page-cp ->elem inline-text))]]]))
 
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [result' (if page? result (attach-clock-property result))
+    (let [result (map (fn [item]
+                        (if (and (map? item) (:db/id item))
+                          (if-let [entity-title (:block/title (db/entity (:db/id item)))]
+                            (assoc item :block/title entity-title)
+                            (update item :block/title (fn [title]
+                                                        (some-> title
+                                                                (string/replace "$pfts_2lqh>$" "")
+                                                                (string/replace "$<pfts_2lqh$" "")))))
+                          item))
+                      result)
+          result' (if page? result (attach-clock-property result))
           columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted

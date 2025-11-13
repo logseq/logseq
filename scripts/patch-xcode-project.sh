@@ -40,4 +40,10 @@ FILE="App.xcodeproj/project.pbxproj"
 /usr/libexec/PlistBuddy -c 'Add :objects:5FFF7D7727E343FA00B00DA8:buildSettings:"DEVELOPMENT_TEAM[sdk=iphoneos*]" String K378MFWK59' $FILE
 /usr/libexec/PlistBuddy -c 'Add :objects:5FFF7D7727E343FA00B00DA8:buildSettings:"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" String "match AppStore com.logseq.logseq.ShareViewController"' $FILE
 
+/usr/libexec/PlistBuddy -c 'Set :objects:D3490CD72E7CE9EB00E796A6:buildSettings:CODE_SIGN_STYLE Manual' $FILE
+/usr/libexec/PlistBuddy -c 'Add :objects:D3490CD72E7CE9EB00E796A6:buildSettings:"CODE_SIGN_IDENTITY[sdk=iphoneos*]" String "iPhone Distribution"' $FILE
+/usr/libexec/PlistBuddy -c 'Set :objects:D3490CD72E7CE9EB00E796A6:buildSettings:DEVELOPMENT_TEAM ""' $FILE
+/usr/libexec/PlistBuddy -c 'Add :objects:D3490CD72E7CE9EB00E796A6:buildSettings:"DEVELOPMENT_TEAM[sdk=iphoneos*]" String K378MFWK59' $FILE
+/usr/libexec/PlistBuddy -c 'Add :objects:D3490CD72E7CE9EB00E796A6:buildSettings:"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" String "match AppStore com.logseq.logseq.shortcuts"' $FILE
+
 echo Patch OK!

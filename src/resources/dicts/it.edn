@@ -421,7 +421,7 @@
  :flashcards/modal-select-switch "Passa a"
  :flashcards/modal-toggle-preview-mode "Attiva/disattiva modalità anteprima"
  :flashcards/modal-toggle-random-mode "Attiva/disattiva modalità casuale"
- :flashcards/modal-welcome-desc-1 "Puoi aggiungere \"#card\" a qualsiasi blocco per trasformarlo in una carta o attivare \"/cloze\" per aggiungere cloze."
+ :flashcards/modal-welcome-desc-1 "Puoi aggiungere \"{1}\" a qualsiasi blocco per trasformarlo in una carta o attivare \"/cloze\" per aggiungere cloze."
  :flashcards/modal-welcome-desc-2 "Puoi "
  :flashcards/modal-welcome-desc-3 "cliccare questo link"
  :flashcards/modal-welcome-desc-4 " per controllare la documentazione."

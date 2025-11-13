@@ -62,8 +62,8 @@
   (p/let [_ (js/Promise. user-handler/task--ensure-id&access-token)
           token (state/get-auth-id-token)
           start-ex (state/<invoke-db-worker :thread-api/rtc-async-branch-graph repo token)]
-    (when-let [ex-data* (:ex-data start-ex)]
-      (throw (ex-info (:ex-message start-ex) ex-data*)))))
+    (when (instance? ExceptionInfo start-ex)
+      (throw start-ex))))
 
 (defn notification-download-higher-schema-graph!
   [graph-name graph-uuid schema-version]
@@ -95,40 +95,49 @@
       "Upload to server")]]
    :warning false))
 
+(defn <rtc-get-users-info
+  []
+  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+    (p/let [token (state/get-auth-id-token)
+            repo (state/get-current-repo)
+            result (state/<invoke-db-worker :thread-api/rtc-get-users-info token graph-uuid)]
+      (state/set-state! :rtc/users-info {repo result}))))
+
 (defn <rtc-start!
   [repo & {:keys [stop-before-start?] :or {stop-before-start? true}}]
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
-    (p/do!
-     (js/Promise. user-handler/task--ensure-id&access-token)
-     (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)
-             ex-data* (:ex-data start-ex)
-             _ (case (:type ex-data*)
-                 (:rtc.exception/not-rtc-graph
-                  :rtc.exception/not-found-db-conn)
-                 (notification/show! (:ex-message start-ex) :error)
+  (p/let [graph-uuid (state/<invoke-db-worker :thread-api/get-rtc-graph-uuid repo)]
+    (if-not graph-uuid
+      (log/info :skip-<rtc-start! ["graph-uuid not found" repo])
+      (p/do!
+       (js/Promise. user-handler/task--ensure-id&access-token)
+       (p/let [start-ex (state/<invoke-db-worker :thread-api/rtc-start stop-before-start?)
+               ex-data* (ex-data start-ex)
+               _ (case (:type ex-data*)
+                   (:rtc.exception/not-rtc-graph
+                    :rtc.exception/not-found-db-conn)
+                   (notification/show! (ex-message start-ex) :error)
 
-                 :rtc.exception/major-schema-version-mismatched
-                 (case (:sub-type ex-data*)
-                   :download
-                   (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
-                   :create-branch
-                   (notification-upload-higher-schema-graph! repo)
-                   ;; else
-                   (do (log/info :start-ex start-ex)
-                       (notification/show! [:div
-                                            [:div (:ex-message start-ex)]
-                                            [:div (-> ex-data*
-                                                      (select-keys [:app :local :remote])
-                                                      pp/pprint
-                                                      with-out-str)]]
-                                           :error)))
+                   :rtc.exception/major-schema-version-mismatched
+                   (case (:sub-type ex-data*)
+                     :download
+                     (notification-download-higher-schema-graph! repo graph-uuid (:remote ex-data*))
+                     :create-branch
+                     (notification-upload-higher-schema-graph! repo)
+                      ;; else
+                     (do (log/info :start-ex start-ex)
+                         (notification/show! [:div
+                                              [:div (ex-message start-ex)]
+                                              [:div (-> ex-data*
+                                                        (select-keys [:app :local :remote])
+                                                        pp/pprint
+                                                        with-out-str)]]
+                                             :error)))
 
-                 :rtc.exception/lock-failed
-                 (js/setTimeout #(<rtc-start! repo) 1000)
+                   :rtc.exception/lock-failed nil
 
-                 ;; else
-                 nil)]
-       nil))))
+                    ;; else
+                   nil)]
+         nil)))))
 
 (defn <get-remote-graphs
   []
@@ -148,14 +157,6 @@
                                (dissoc graph :graph-uuid :graph-name)))))]
     (state/set-state! :rtc/graphs result)
     (repo-handler/refresh-repos!)))
-
-(defn <rtc-get-users-info
-  []
-  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
-    (p/let [token (state/get-auth-id-token)
-            repo (state/get-current-repo)
-            result (state/<invoke-db-worker :thread-api/rtc-get-users-info token graph-uuid)]
-      (state/set-state! :rtc/users-info {repo result}))))
 
 (defn <rtc-invite-email
   [graph-uuid email]

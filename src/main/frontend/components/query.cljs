@@ -61,9 +61,11 @@
            (util/hiccup-keywordize result))
 
          (and db-graph? (not (:built-in-query? config)))
-         (when-let [query (:logseq.property/query current-block)]
-           (when-not (string/blank? (:block/title query))
-             (query-view/query-result (assoc config :id (str (:block/uuid current-block)))
+         (when-let [query-block (:logseq.property/query current-block)]
+           (when-not (string/blank? (:block/title query-block))
+             (query-view/query-result (assoc config
+                                             :id (str (:block/uuid current-block))
+                                             :query query)
                                       current-block result)))
 
          (and (not db-graph?)

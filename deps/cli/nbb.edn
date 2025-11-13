@@ -1,0 +1,6 @@
+{:paths ["src"]
+ :deps
+ {logseq/outliner
+  {:local/root "../outliner"}
+  io.github.nextjournal/nbb-test-runner
+  {:git/sha "b379325cfa5a3306180649da5de3bf5166414e71"}}}

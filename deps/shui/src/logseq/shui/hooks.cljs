@@ -85,3 +85,50 @@
          (m/ap (set-value! (m/?> flow)))))
       deps)
      value)))
+
+(defn- is-touch-event? [e]
+  (exists? (.-touches e)))
+
+(defn- prevent-default [e]
+  (when (and (is-touch-event? e)
+             (< (.-length (.-touches e)) 2)
+             (.-preventDefault e))
+    (.preventDefault e)))
+
+(defn use-long-press
+  [{:keys [on-click on-long-press prevent-default? delay]
+    :or {prevent-default? true
+         delay 300}}]
+  (let [[long-press-triggered set-long-press-triggered] (use-state false)
+        timeout-ref (use-ref nil)
+        target-ref (use-ref nil)
+        start (use-callback
+               (fn [e]
+                 (when (and prevent-default? (.-target e))
+                   (.addEventListener (.-target e) "touchend" prevent-default #js {:passive false})
+                   (set! (.-current target-ref) (.-target e)))
+                 (set! (.-current timeout-ref)
+                       (js/setTimeout
+                        (fn []
+                          (on-long-press e)
+                          (set-long-press-triggered true))
+                        delay)))
+               [on-long-press delay prevent-default?])
+
+        clear (use-callback
+               (fn [_e should-trigger-click]
+                 (when (.-current timeout-ref)
+                   (js/clearTimeout (.-current timeout-ref)))
+                 (when (and (or (nil? should-trigger-click) should-trigger-click)
+                            (not long-press-triggered))
+                   (on-click))
+                 (set-long-press-triggered false)
+                 (when (and prevent-default? (.-current target-ref))
+                   (.removeEventListener (.-current target-ref) "touchend" prevent-default)))
+               [prevent-default? on-click long-press-triggered])]
+
+    {:onMouseDown #(start %)
+     :onTouchStart #(start %)
+     :onMouseUp #(clear % true)
+     :onMouseLeave #(clear % false)
+     :onTouchEnd #(clear % true)}))

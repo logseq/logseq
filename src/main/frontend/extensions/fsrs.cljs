@@ -44,13 +44,10 @@
       (update :due inst-ms->instant)))
 
 (defn- get-card-map
-  "Return nil if block is not #card.
+  "Return nil if block is not #Card.
   Return default card-map if `:logseq.property.fsrs/state` or `:logseq.property.fsrs/due` is nil"
   [block-entity]
-  (when (some (fn [tag]
-                (assert (some? (:db/ident tag)) tag)
-                (= :logseq.class/Card (:db/ident tag))) ;block should contains #Card
-              (:block/tags block-entity))
+  (when (ldb/class-instance? (db/entity :logseq.class/Card) block-entity)
     (let [fsrs-state (:logseq.property.fsrs/state block-entity)
           fsrs-due (:logseq.property.fsrs/due block-entity)
           return-default-card-map? (not (and fsrs-state fsrs-due))]
@@ -84,10 +81,13 @@
         cards (when (and cards-id (not= (keyword cards-id) :global)) (db/entity cards-id))
         query (:block/title cards)
         result (query-dsl/parse query {:db-graph? true})
+        card-tag-id (:db/id (db/entity :logseq.class/Card))
+        card-tag-children-ids (db-model/get-structured-children repo card-tag-id)
+        card-ids (cons card-tag-id card-tag-children-ids)
         q '[:find [?b ...]
-            :in $ ?now-inst-ms %
+            :in $ [?t ...] ?now-inst-ms %
             :where
-            [?b :block/tags :logseq.class/Card]
+            [?b :block/tags ?t]
             (or-join [?b ?now-inst-ms]
                      (and
                       [?b :logseq.property.fsrs/due ?due]
@@ -100,7 +100,7 @@
                 q
                 (if (coll? (first query*)) query* [query*])))
              q)]
-    (db-async/<q repo {:transact-db? false} q' now-inst-ms (:rules result))))
+    (db-async/<q repo {:transact-db? false} q' card-ids now-inst-ms (:rules result))))
 
 (defn- btn-with-shortcut [{:keys [shortcut id btn-text due on-click class]}]
   (let [bg-class (case id
@@ -200,7 +200,8 @@
             _card-index (rum/react *card-index)
             next-phase (phase->next-phase block-entity phase)]
         [:div.ls-card.content.flex.flex-col.overflow-y-auto.overflow-x-hidden
-         [:div (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
+         [:div.mb-4.ml-2.opacity-70.text-sm
+          (component-block/breadcrumb {} repo (:block/uuid block-entity) {})]
          (let [option (case phase
                         :init
                         {:hide-children? true}
@@ -252,7 +253,9 @@
         all-cards (concat
                    [{:db/id :global
                      :block/title "All cards"}]
-                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards))))
+                   (db-model/get-class-objects repo (:db/id (entity-plus/entity-memoized (db/get-db) :logseq.class/Cards)))
+                   ;; TODO: list all children tags of #Card
+                   )
         *block-ids (::block-ids state)
         block-ids (rum/react *block-ids)
         loading? (rum/react (::loading? state))
@@ -292,7 +295,7 @@
             [:h2.font-medium (t :flashcards/modal-welcome-title)]
 
             [:div
-             [:p (t :flashcards/modal-welcome-desc-1)]]]
+             [:p (t :flashcards/modal-welcome-desc-1 "#Card")]]]
 
            :else
            [:p (t :flashcards/modal-finished)]))])))

@@ -8,15 +8,18 @@
             [frontend.db :as db]
             [frontend.extensions.zip :as zip]
             [frontend.format.mldoc :as mldoc]
-            [frontend.handler.export.common :as common :refer
-             [*state* raw-text simple-asts->string space]]
+            [frontend.handler.export.common :as common]
             [frontend.handler.export.zip-helper :refer [get-level goto-last
                                                         goto-level]]
-            [frontend.util :as util :refer [concatv mapcatv removev]]
+            [frontend.util :as util]
             [goog.dom :as gdom]
             [hiccups.runtime :as h]
+            [logseq.cli.common.export.common :as cli-export-common :refer
+             [*state* raw-text simple-asts->string space]]
+            [logseq.cli.common.util :refer-macros [concatv mapcatv removev]]
             [logseq.common.path :as path]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.conn :as conn]))
 
 ;;; *opml-state*
 (def ^:private ^:dynamic
@@ -447,17 +450,23 @@
          first-block (and (coll? root-block-uuids-or-page-uuid)
                           (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
          format (get first-block :block/format :markdown)]
-     (export-helper content format options :title title))))
+     (binding [cli-export-common/*current-repo* repo
+               cli-export-common/*current-db* (conn/get-db repo)
+               cli-export-common/*content-config* (common/get-content-config)]
+       (export-helper content format options :title title)))))
 
 (defn- export-files-as-opml
   "options see also `export-blocks-as-opml`"
-  [files options]
-  (mapv
-   (fn [{:keys [path content title format]}]
-     (when (and title (not (string/blank? content)))
-       (util/profile (print-str :export-files-as-opml path)
-                     [path (export-helper content format options :title title)])))
-   files))
+  [repo files options]
+  (binding [cli-export-common/*current-repo* repo
+            cli-export-common/*current-db* (conn/get-db repo)
+            cli-export-common/*content-config* (common/get-content-config)]
+    (mapv
+     (fn [{:keys [path content title format]}]
+       (when (and title (not (string/blank? content)))
+         (util/profile (print-str :export-files-as-opml path)
+                       [path (export-helper content format options :title title)])))
+     files)))
 
 (defn export-repo-as-opml!
   [repo]
@@ -466,7 +475,7 @@
       (let [repo' (if (config/db-based-graph? repo)
                     (string/replace repo config/db-version-prefix "")
                     (path/basename repo))
-            files (->> (export-files-as-opml files nil)
+            files (->> (export-files-as-opml repo files nil)
                        (clojure.core/remove nil?))
             zip-file-name (str repo' "_opml_" (quot (util/time-ms) 1000))]
         (p/let [zipfile (zip/make-zip zip-file-name files repo')]
