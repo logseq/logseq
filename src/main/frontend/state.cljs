@@ -85,7 +85,6 @@
       ;; TODO: how to detect the network reliably?
       ;; NOTE: prefer to use flows/network-online-event-flow
       :network/online?         true
-      :indexeddb/support?      true
       :me                      nil
       :git/current-repo        current-graph
       :draw?                   false
@@ -1540,10 +1539,6 @@ Similar to re-frame subscriptions"
 (defn set-db-restoring!
   [value]
   (set-state! :db/restoring? value))
-
-(defn set-indexedb-support!
-  [value]
-  (set-state! :indexeddb/support? value))
 
 (defn modal-opened?
   []

@@ -62,7 +62,7 @@
                    (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
-  [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content]}]
+  [{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
                                   (not config/publishing?)
@@ -89,9 +89,6 @@
        (footer/footer)
 
        (cond
-         (not indexeddb-support?)
-         nil
-
          db-restoring?
          (if config/publishing?
            [:div.space-y-2
@@ -423,7 +420,6 @@
         margin-less-pages? (or (boolean (#{:graph} route-name))
                                (db-model/whiteboard-page? (state/get-current-page)))
         db-restoring? (state/sub :db/restoring?)
-        indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
@@ -497,7 +493,6 @@
                  :logged? logged?
                  :home? home?
                  :route-name route-name
-                 :indexeddb-support? indexeddb-support?
                  :light? light?
                  :db-restoring? db-restoring?
                  :main-content main-content'
