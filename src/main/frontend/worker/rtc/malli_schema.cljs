@@ -253,9 +253,13 @@
       [:map
        [:encrypted-aes-key [:maybe :string]]]]
      ["fetch-user-rsa-public-key"
-       [:map
-        [:public-key [:maybe :string]]]]
+      [:map
+       [:public-key [:maybe :string]]]]
      ["upload-user-rsa-key-pair"
+      [:map
+       [:public-key :string]
+       [:encrypted-private-key :string]]]
+     ["reset-user-rsa-key-pair"
       [:map
        [:public-key :string]
        [:encrypted-private-key :string]]]
@@ -377,6 +381,11 @@
         [:public-key {:optional true} :string]
         [:encrypted-private-key :string]
         [:reset-private-key {:optional true} :boolean]]]
+      ["reset-user-rsa-key-pair"
+       [:map
+        [:user-uuid :uuid]
+        [:public-key :string]
+        [:encrypted-private-key :string]]]
       ["fetch-user-rsa-key-pair"
        [:map
         [:user-uuid :uuid]]]
