@@ -57,12 +57,13 @@
 (rum/defc references
   [entity config]
   (when-let [id (:db/id entity)]
-    (let [[refs-total-count set-refs-total-count!] (hooks/use-state nil)]
+    (let [[refs-total-count set-refs-total-count!] (hooks/use-state (:refs-count config))]
       (hooks/use-effect!
        #(c.m/run-task*
          (m/sp
-           (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
-             (set-refs-total-count! result))))
+           (when-not (:refs-count config)
+             (let [result (c.m/<? (db-async/<get-block-refs-count (state/get-current-repo) id))]
+               (set-refs-total-count! result)))))
        [])
       (when (> refs-total-count 0)
         (ui/catch-error

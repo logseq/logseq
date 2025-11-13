@@ -722,7 +722,8 @@
             (when-not (or whiteboard? tag-dialog? linked-refs? (and block? (not db-based?)))
               [:div.fade-in.delay {:key "page-references"}
                (rum/with-key
-                 (reference/references page {:sidebar? sidebar?})
+                 (reference/references page {:sidebar? sidebar?
+                                             :refs-count (:refs-count option)})
                  (str title "-refs"))])
 
             (when-not block-or-whiteboard?
@@ -750,11 +751,16 @@
                  page-uuid? (when page-name (util/uuid-string? page-name))
                  *loading? (atom true)
                  page (db/get-page page-id-uuid-or-name)
-                 *page (atom page)]
+                 *page (atom page)
+                 *refs-count (atom nil)
+                 repo (state/get-current-repo)]
              (when (:block.temp/load-status page) (reset! *loading? false))
-             (p/let [page-block (db-async/<get-block (state/get-current-repo) page-id-uuid-or-name)]
+             (p/let [page-block (db-async/<get-block repo page-id-uuid-or-name)
+                     page-id (:db/id page-block)
+                     refs-count (db-async/<get-block-refs-count repo page-id)]
                (reset! *loading? false)
                (reset! *page (db/entity (:db/id page-block)))
+               (reset! *refs-count refs-count)
                (when page-block
                  (when-not (or preview-or-sidebar? (:tag-dialog? option))
                    (if-let [page-uuid (and (not (:db/id page*))
@@ -764,15 +770,19 @@
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
              (assoc state
                     ::loading? *loading?
-                    ::*page *page)))
+                    ::*page *page
+                    ::*refs-count *refs-count)))
    :will-unmount (fn [state]
                    (state/set-state! :editor/virtualized-scroll-fn nil)
                    state)}
   [state option]
   (let [loading? (rum/react (::loading? state))
-        page (rum/react (::*page state))]
+        page (rum/react (::*page state))
+        refs-count (rum/react (::*refs-count state))]
     (when (and page (not loading?))
-      (page-inner (assoc option :page page)))))
+      (page-inner (assoc option
+                         :page page
+                         :refs-count refs-count)))))
 
 (rum/defcs page-cp
   [state option]
