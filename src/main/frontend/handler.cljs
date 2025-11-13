@@ -23,7 +23,6 @@
             [frontend.handler.file-based.events]
             [frontend.handler.file-based.file :as file-handler]
             [frontend.handler.global-config :as global-config-handler]
-            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -187,12 +186,12 @@
                       (p/resolve! state/app-ready-promise true)
                       (log/info ::app-init-spent-time (- (util/time-ms) t1))
                       (when-not (util/mobile?)
-                        ;; (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
-                        ;;   (log/info :webgpu-available? webgpu-available?)
-                        ;;   (when webgpu-available?
-                        ;;     (p/do! (db-browser/start-inference-worker!)
-                        ;;            (db-browser/<connect-db-worker-and-infer-worker!)
-                        ;;            (reset! vector-search-flows/*infer-worker-ready true))))
+                        (p/let [webgpu-available? (db-browser/<check-webgpu-available?)]
+                          (log/info :webgpu-available? webgpu-available?)
+                          (when webgpu-available?
+                            (p/do! (db-browser/start-inference-worker!)
+                                   (db-browser/<connect-db-worker-and-infer-worker!)
+                                   (reset! vector-search-flows/*infer-worker-ready true))))
                         nil))))
 
      (util/<app-wake-up-from-sleep-loop (atom false))
