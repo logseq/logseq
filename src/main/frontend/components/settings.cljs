@@ -1199,6 +1199,42 @@
   [:div.panel-wrap.is-collaboration.mb-8
    (settings-rtc-members)])
 
+(rum/defc forgot-password
+  [token refresh-token user-uuid]
+  (let [[new-password set-new-password!] (hooks/use-state "")
+        [forgot? set-forgot?] (hooks/use-state false)
+        [force-reset-status set-force-reset-status!] (hooks/use-state nil)
+        <force-reset-password-fn
+        (fn []
+          (-> (p/do!
+               (set-force-reset-status! "Force resetting password ...")
+               (state/<invoke-db-worker :thread-api/reset-user-rsa-key-pair
+                                        token refresh-token user-uuid new-password)
+               (set-force-reset-status! "Force reset password successfully!"))
+              (p/catch (fn [e]
+                         (log/error :forgot-password e)
+                         (set-force-reset-status! "Failed to force reset password.")))))]
+    (if forgot?
+      [:div.flex.flex-col.gap-4
+       [:label.opacity-70 {:for "new-password"} "Set new Password"]
+       (shui/toggle-password
+        {:id "new-password"
+         :value new-password
+         :on-change #(set-new-password! (util/evalue %))})
+       (when force-reset-status [:p force-reset-status])
+       (shui/button
+        {:on-click <force-reset-password-fn
+         :disabled (string/blank? new-password)}
+        "Force Reset Password")]
+      [:div.flex.flex-col
+       [:p
+        "If you forget your password, you can force a reset of the E2EE password.
+The cost is that all currently encrypted graph data stored on the server will become undecipherable,
+and you will need to re-upload the graphs from the client after resetting the password."]
+       (shui/button
+        {:on-click #(set-forgot? true)}
+        "Forgot Password?")])))
+
 (rum/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
                                          reset-password-status
@@ -1297,7 +1333,15 @@
              (reset-encryption-password current-password new-password
                                         {:reset-password-status reset-password-status
                                          :set-new-password! set-new-password!
-                                         :on-click on-submit})])))])])
+                                         :on-click on-submit})
+
+             [:br]
+             (forgot-password token refresh-token user-uuid)
+
+             ]
+
+
+            )))])])
 
 (rum/defc mcp-server-row
   [t]
