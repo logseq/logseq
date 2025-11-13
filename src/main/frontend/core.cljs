@@ -88,8 +88,7 @@
 
   ;; (setup-entity-profile!)
   (log/info ::init "App started")
-  (plugin-handler/setup!
-   #(handler/start! start)))
+  (handler/start! start))
 
 (defn ^:export stop []
   ;; stop is called before any code is reloaded
