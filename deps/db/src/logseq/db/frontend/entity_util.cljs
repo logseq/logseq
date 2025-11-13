@@ -50,10 +50,10 @@
 (defn page?
   [entity]
   (or (internal-page? entity)
+      (journal? entity)
       (class? entity)
       (property? entity)
-      (whiteboard? entity)
-      (journal? entity)))
+      (whiteboard? entity)))
 
 (defn asset?
   "Given an entity or map, check if it is an asset block"
