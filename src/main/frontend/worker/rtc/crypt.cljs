@@ -95,8 +95,22 @@
                                             :encrypted-private-key encrypted-private-key-str
                                             :reset-private-key reset-private-key}))]
       (when (:ex-data response)
-        (throw (ex-info (:ex-message response)
-                        (assoc (:ex-data response) :type :rtc.exception/upload-user-rsa-key-pair-error)))))))
+        (throw (ex-info (:ex-message response) (:ex-data response)))))))
+
+(defn task--reset-user-rsa-key-pair
+  "Reset rsa-key-pair in server."
+  [get-ws-create-task user-uuid public-key encrypted-private-key]
+  (assert (and public-key encrypted-private-key))
+  (m/sp
+    (let [exported-public-key-str (ldb/write-transit-str (c.m/<? (crypt/<export-public-key public-key)))
+          encrypted-private-key-str (ldb/write-transit-str encrypted-private-key)
+          resp (m/? (ws-util/send&recv get-ws-create-task
+                                       {:action "reset-user-rsa-key-pair"
+                                        :user-uuid user-uuid
+                                        :public-key exported-public-key-str
+                                        :encrypted-private-key encrypted-private-key-str}))]
+      (when (:ex-data resp)
+        (throw (ex-info (:ex-message resp) (:ex-data resp)))))))
 
 (defn task--fetch-user-rsa-key-pair
   "Fetches the user's RSA key pair from server.
@@ -228,6 +242,20 @@
                 encrypted-private-key (c.m/<? (crypt/<encrypt-private-key password privateKey))]
             (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key))
             (c.m/<? (<save-e2ee-password refresh-token password))
+            nil)))
+      (catch Cancelled _)
+      (catch :default e e))))
+
+(def-thread-api :thread-api/reset-user-rsa-key-pair
+  [token refresh-token user-uuid new-password]
+  (m/sp
+    (try
+      (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
+        (when (some? (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid)))
+          (let [{:keys [publicKey privateKey]} (c.m/<? (crypt/<generate-rsa-key-pair))
+                encrypted-private-key (c.m/<? (crypt/<encrypt-private-key new-password privateKey))]
+            (m/? (task--reset-user-rsa-key-pair get-ws-create-task user-uuid publicKey encrypted-private-key))
+            (c.m/<? (<save-e2ee-password refresh-token new-password))
             nil)))
       (catch Cancelled _)
       (catch :default e e))))
