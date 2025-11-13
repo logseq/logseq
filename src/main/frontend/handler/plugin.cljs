@@ -829,7 +829,7 @@
          (str text)]]])))
 
 (defn ^:large-vars/cleanup-todo init-plugins!
-  [callback]
+  []
 
   (let [el (js/document.createElement "div")]
     (.appendChild js/document.body el)
@@ -951,7 +951,7 @@
          (state/set-state! :plugin/indicator-text true)
           ;; wait for the plugin register async messages
          (js/setTimeout
-          (fn [] (callback)
+          (fn []
             (some-> (seq plugins-async)
                     (p/delay 16)
                     (p/then #(.register js/LSPluginCore (bean/->js plugins-async) true))))
@@ -963,13 +963,10 @@
 
 (defn setup!
   "setup plugin core handler"
-  [callback]
-  (if (not config/lsp-enabled?)
-    (callback)
-    (do
-      (idb/start)
-      (setup-global-apis-for-web!)
-      (init-plugins! callback))))
+  []
+  (when (and config/lsp-enabled? (not (util/mobile?)))
+    (setup-global-apis-for-web!)
+    (init-plugins!)))
 
 (comment
   {:pending (count (:plugin/updates-pending @state/state))
