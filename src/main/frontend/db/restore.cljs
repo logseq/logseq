@@ -6,6 +6,7 @@
             [frontend.persist-db :as persist-db]
             [frontend.state :as state]
             [frontend.undo-redo :as undo-redo]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -32,7 +33,7 @@
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 
-    (println ::restore-graph! "loads" (count initial-data) "datoms in" (t/in-millis (t/interval start-time end-time)) "ms")
+    (log/info ::restore-graph! (str "loads " (count initial-data) " datoms in " (t/in-millis (t/interval start-time end-time)) " ms"))
 
     (state/pub-event! [:graph/restored repo])
     (state/set-state! :graph/loading? false)
