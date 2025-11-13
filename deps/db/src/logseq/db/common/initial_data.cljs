@@ -306,11 +306,15 @@
      (d/datoms db :avet :block/updated-at)
      rseq
      (keep (fn [datom]
-             (let [e (d/entity db (:e datom))]
-               (when (and (common-entity-util/page? e)
-                          (not (entity-util/hidden? e))
-                          (not (string/blank? (:block/title e))))
-                 e))))
+             (let [page (first (d/datoms db :eavt (:e datom) :block/page))]
+               (when-not (or page
+                             (let [title (:v (first (d/datoms db :eavt (:e datom) :block/title)))]
+                               (string/blank? title)))
+                 (let [e (d/entity db (:e datom))]
+                   (when (and
+                          (common-entity-util/page? e)
+                          (not (entity-util/hidden? e)))
+                     e))))))
      (take 15))))
 
 (defn- get-all-user-datoms
