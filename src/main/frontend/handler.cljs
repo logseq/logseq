@@ -8,8 +8,8 @@
             [frontend.components.content :as cp-content]
             [frontend.components.editor :as editor]
             [frontend.components.page :as page]
-            [frontend.components.user.login :as user.login]
             [frontend.components.reference :as reference]
+            [frontend.components.user.login :as user.login]
             [frontend.components.whiteboard :as whiteboard]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
@@ -189,7 +189,8 @@
                         (when webgpu-available?
                           (p/do! (db-browser/start-inference-worker!)
                                  (db-browser/<connect-db-worker-and-infer-worker!)
-                                 (reset! vector-search-flows/*infer-worker-ready true))))))))
+                                 (reset! vector-search-flows/*infer-worker-ready true))))
+                      nil))))
 
    (util/<app-wake-up-from-sleep-loop (atom false))
 
