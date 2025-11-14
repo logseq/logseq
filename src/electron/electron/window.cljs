@@ -59,22 +59,14 @@
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
-                             (let [url            (.-url details)
-                                   urlObj         (js/URL. url)
-                                   origin         (.-origin urlObj)
-                                   requestHeaders (.-requestHeaders details)
-                                   no-cookie-headers (-> (bean/->clj requestHeaders)
-                                                         (dissoc :Cookie :cookie)
-                                                         bean/->js)]
-                               (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel         false
-                                                :requestHeaders no-cookie-headers})
-                                 (do
-                                   (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel         false
-                                                  :requestHeaders no-cookie-headers}))))))
+                             (let [requestHeaders (.-requestHeaders details)
+                                   headers (-> (bean/->clj requestHeaders)
+                                               (dissoc :Cookie :cookie)
+                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin'"
+                                                      :referer "https://logseq.com"))]
+                               (callback (bean/->js
+                                          {:cancel         false
+                                           :requestHeaders headers})))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
