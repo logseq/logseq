@@ -28,27 +28,27 @@
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
          win-opts  (cond->
-                     {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
-                      :width                (.-width win-state)
-                      :height               (.-height win-state)
-                      :frame                (or mac? native-titlebar?)
-                      :titleBarStyle        "hiddenInset"
-                      :trafficLightPosition {:x 16 :y 16}
-                      :autoHideMenuBar      (not mac?)
-                      :show                 false
-                      :webPreferences
-                      {:plugins                 true        ; pdf
-                       :nodeIntegration         false
-                       :nodeIntegrationInWorker false
-                       :nativeWindowOpen        true
-                       :sandbox                 false
-                       :webSecurity             (not dev?)
-                       :contextIsolation        true
-                       :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
+                    {:backgroundColor      "#fff" ; SEE https://www.electronjs.org/docs/latest/faq#the-font-looks-blurry-what-is-this-and-what-can-i-do
+                     :width                (.-width win-state)
+                     :height               (.-height win-state)
+                     :frame                (or mac? native-titlebar?)
+                     :titleBarStyle        "hiddenInset"
+                     :trafficLightPosition {:x 16 :y 16}
+                     :autoHideMenuBar      (not mac?)
+                     :show                 false
+                     :webPreferences
+                     {:plugins                 true        ; pdf
+                      :nodeIntegration         false
+                      :nodeIntegrationInWorker false
+                      :nativeWindowOpen        true
+                      :sandbox                 false
+                      :webSecurity             (not dev?)
+                      :contextIsolation        true
+                      :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                        ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                        ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                       :enableBlinkFeatures     'OverlayScrollbars'
-                       :preload                 (node-path/join js/__dirname "js/preload.js")}}
+                      :enableBlinkFeatures     'OverlayScrollbars'
+                      :preload                 (node-path/join js/__dirname "js/preload.js")}}
 
                      (seq opts)
                      (merge opts)
@@ -59,22 +59,14 @@
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
-                             (let [url            (.-url details)
-                                   urlObj         (js/URL. url)
-                                   origin         (.-origin urlObj)
-                                   requestHeaders (.-requestHeaders details)
-                                   no-cookie-headers (-> (bean/->clj requestHeaders)
-                                                         (dissoc :Cookie :cookie)
-                                                         bean/->js)]
-                               (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel         false
-                                                :requestHeaders no-cookie-headers})
-                                 (do
-                                   (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel         false
-                                                  :requestHeaders no-cookie-headers}))))))
+                             (let [requestHeaders (.-requestHeaders details)
+                                   headers (-> (bean/->clj requestHeaders)
+                                               (dissoc :Cookie :cookie)
+                                               (assoc :Referrer-Policy "strict-origin-when-cross-origin'"
+                                                      :referer "https://logseq.com"))]
+                               (callback (bean/->js
+                                          {:cancel         false
+                                           :requestHeaders headers})))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))

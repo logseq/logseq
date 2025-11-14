@@ -62,7 +62,8 @@
     [:iframe
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      :referrerpolicy    "strict-origin-when-cross-origin"
       :frame-border      "0"
       :src               url
       :height            height
@@ -99,7 +100,6 @@
           id (str/replace-first id #"youtube-player-" "")]
       (get (get @state/state :youtube/players) id))))
 
-
 (rum/defc timestamp
   [seconds]
   [:a.svg-small.youtube-timestamp
@@ -120,7 +120,6 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
        :warning
        false)
       nil)))
-
 
 (defn parse-timestamp [timestamp]
   (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
@@ -145,13 +144,13 @@ Remember: You can paste a raw YouTube url as embedded video on mobile."
   (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
   (re-matches #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
 
- (parse-timestamp "01:23")                                  ;; => 83
+  (parse-timestamp "01:23")                                  ;; => 83
 
- (parse-timestamp "01:01:23")                               ;; => 3683
+  (parse-timestamp "01:01:23")                               ;; => 3683
 
  ;; seconds->display
  ;; https://stackoverflow.com/questions/1322732/convert-seconds-to-hh-mm-ss-with-javascript
- (seconds->display 129600)                                  ;; => "36:00:00"
- (seconds->display 13545)                                   ;; => "03:45:45"
- (seconds->display 18)                                      ;; => "00:18"
- )
+  (seconds->display 129600)                                  ;; => "36:00:00"
+  (seconds->display 13545)                                   ;; => "03:45:45"
+  (seconds->display 18)                                      ;; => "00:18"
+  )
