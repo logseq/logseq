@@ -454,7 +454,6 @@
 (rum/defc new-db-graph
   []
   (let [[creating-db? set-creating-db?] (hooks/use-state false)
-        [graph-name set-graph-name] (hooks/use-state "")
         [cloud? set-cloud?] (hooks/use-state false)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
         input-ref (hooks/create-ref)]
@@ -463,7 +462,7 @@
        (when-let [^js input (hooks/deref input-ref)]
          (js/setTimeout #(.focus input) 32)))
      [])
-    (letfn [(new-db-f []
+    (letfn [(new-db-f [graph-name]
               (when-not (or (string/blank? graph-name)
                             creating-db?)
                 (if (invalid-graph-name? graph-name)
@@ -487,12 +486,10 @@
             (submit! [^js e click?]
               (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
                                     (util/trim-safe (.-value (rum/deref input-ref))))]
-                (set-graph-name value)
-                (new-db-f)))]
+                (new-db-f value)))]
       [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
        (shui/input
-        {:default-value graph-name
-         :disabled creating-db?
+        {:disabled creating-db?
          :ref input-ref
          :placeholder "your graph name"
          :on-key-down submit!
