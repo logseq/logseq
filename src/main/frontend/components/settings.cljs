@@ -1202,7 +1202,6 @@
 (rum/defc forgot-password
   [token refresh-token user-uuid]
   (let [[new-password set-new-password!] (hooks/use-state "")
-        [forgot? set-forgot?] (hooks/use-state false)
         [force-reset-status set-force-reset-status!] (hooks/use-state nil)
         <force-reset-password-fn
         (fn []
@@ -1213,35 +1212,32 @@
                (set-force-reset-status! "Force reset password successfully!"))
               (p/catch (fn [e]
                          (log/error :forgot-password e)
-                         (set-force-reset-status! "Failed to force reset password.")))))]
-    (if forgot?
-      [:div.flex.flex-col.gap-4
-       [:label.opacity-70 {:for "new-password"} "Set new Password"]
-       (shui/toggle-password
-        {:id "new-password"
-         :value new-password
-         :on-change #(set-new-password! (util/evalue %))})
-       (when force-reset-status [:p force-reset-status])
-       (shui/button
-        {:on-click <force-reset-password-fn
-         :disabled (string/blank? new-password)}
-        "Force Reset Password")]
-      [:div.flex.flex-col
-       [:p
-        "If you forget your password, you can force a reset of the E2EE password.
-The cost is that all currently encrypted graph data stored on the server will become undecipherable,
-and you will need to re-upload the graphs from the client after resetting the password."]
-       (shui/button
-        {:on-click #(set-forgot? true)}
-        "Forgot Password?")])))
+                         (set-force-reset-status! "Failed to force resetting password.")))))]
+    [:div.flex.flex-col.gap-4
+     [:p
+      "If you forget your password, you can force a reset of your encryption password. However, this will make all currently encrypted graph data stored on the server permanently unreadable. After resetting, you’ll need to re-upload your graphs from the client."]
+     [:label.opacity-70 {:for "new-password"} "Set new Password"]
+     (shui/toggle-password
+      {:id "new-password"
+       :value new-password
+       :on-change #(set-new-password! (util/evalue %))})
+     (when force-reset-status [:p force-reset-status])
+     (shui/button
+      {:on-click <force-reset-password-fn
+       :disabled (string/blank? new-password)}
+      "Force reset password")]))
 
 (rum/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
                                          set-current-password!
                                          reset-password-status
-                                         on-click]}]
+                                         on-click forgot? set-forgot!
+                                         token refresh-token user-uuid]}]
   (let [[reset? set-reset!] (hooks/use-state false)]
-    (if reset?
+    (cond
+      forgot?
+      (forgot-password token refresh-token user-uuid)
+      reset?
       [:div.flex.flex-col.gap-4
        [:label.opacity-70 {:for "current-password"} "Current password"]
        (shui/toggle-password
@@ -1257,23 +1253,26 @@ and you will need to re-upload the graphs from the client after resetting the pa
        (shui/button
         {:on-click on-click
          :disabled (string/blank? new-password)}
-        "Reset Password")]
-      (shui/button
-       {:on-click #(set-reset! true)}
-       "Reset Password"))))
+        "Reset password")
+       [:a.opacity-70.hover:opacity-100 {:on-click #(set-forgot! true)}
+        "Forgot password?"]]
+      :else
+      [:a.opacity-70.hover:opacity-100 {:on-click #(set-reset! true)}
+       "Reset password"])))
 
 (rum/defc encryption
   []
-  [:div.panel-wrap.is-encryption.mb-8
-   (let [user-uuid (user-handler/user-uuid)
-         token (state/get-auth-id-token)
-         refresh-token (state/get-auth-refresh-token)
-         [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
-         [init-key-err set-init-key-err!] (hooks/use-state nil)
-         [get-key-err set-get-key-err!] (hooks/use-state nil)
-         [current-password set-current-password!] (hooks/use-state nil)
-         [new-password set-new-password!] (hooks/use-state nil)
-         [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
+  (let [user-uuid (user-handler/user-uuid)
+        token (state/get-auth-id-token)
+        refresh-token (state/get-auth-refresh-token)
+        [rsa-key-pair set-rsa-key-pair!] (hooks/use-state :not-inited)
+        [init-key-err set-init-key-err!] (hooks/use-state nil)
+        [get-key-err set-get-key-err!] (hooks/use-state nil)
+        [current-password set-current-password!] (hooks/use-state nil)
+        [new-password set-new-password!] (hooks/use-state nil)
+        [reset-password-status set-reset-password-status!] (hooks/use-state nil)
+        [forgot? set-forgot!] (hooks/use-state false)]
+    [:div.panel-wrap.is-encryption.mb-8
      (hooks/use-effect!
       (fn []
         (when (and user-uuid token)
@@ -1317,30 +1316,28 @@ and you will need to re-upload the graphs from the client after resetting the pa
                                            (set-reset-password-status! "Failed to update password.")))))]
             [:div.flex.flex-col.gap-4
              ;; [:p "E2EE key-pair already generated!"]
-             [:div.flex.flex-col
-              [:p
-               [:span "Please make sure you "]
-               "remember the password you have set, as we are unable to reset or retrieve it in case you forget it, "
-               [:span "and we recommend you "]
-               "keep a secure backup "
-               [:span "of the password."]]
+             (when-not forgot?
+               [:div.flex.flex-col
+                [:p
+                 [:span "Please make sure you "]
+                 "remember the password you have set, as we are unable to reset or retrieve it in case you forget it, "
+                 [:span "and we recommend you "]
+                 "keep a secure backup "
+                 [:span "of the password."]]
 
-              [:p
-               "If you lose your password, all of your data in the cloud can’t be decrypted. "
-               [:span "You will still be able to access the local version of your graph."]]]
+                [:p
+                 "If you lose your password, all of your data in the cloud can’t be decrypted. "
+                 [:span "You will still be able to access the local version of your graph."]]])
              (reset-encryption-password current-password new-password
                                         {:reset-password-status reset-password-status
                                          :set-new-password! set-new-password!
                                          :set-current-password! set-current-password!
-                                         :on-click on-submit})
-
-             [:br]
-             (forgot-password token refresh-token user-uuid)
-
-             ]
-
-
-            )))])])
+                                         :on-click on-submit
+                                         :token token
+                                         :forgot? forgot?
+                                         :set-forgot! set-forgot!
+                                         :refresh-token refresh-token
+                                         :user-uuid user-uuid})])))]]))
 
 (rum/defc mcp-server-row
   [t]
