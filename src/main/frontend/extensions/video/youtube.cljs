@@ -62,7 +62,8 @@
     [:iframe.aspect-video
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
-      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+      :allow             "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      :referrerpolicy    "strict-origin-when-cross-origin"
       :frame-border      "0"
       :src               url
       :height            height
