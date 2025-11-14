@@ -657,7 +657,7 @@ export interface IEditorProxy extends Record<string, any> {
    *
    * @param srcPage - the page name or uuid
    */
-  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity> | null>
 
   /**
    * get all page/block linked references
