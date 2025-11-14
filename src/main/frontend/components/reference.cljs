@@ -70,7 +70,8 @@
          (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                                "Linked References: Unexpected error."
                                "Linked References: Unexpected error. Please re-index your graph first."))
-         (references-cp entity (assoc config :refs-total-count refs-total-count)))))))
+         [:div.references
+          (references-cp entity (assoc config :refs-total-count refs-total-count))])))))
 
 (rum/defc unlinked-references
   [entity config]
@@ -84,9 +85,10 @@
              (set-has-references! result))))
        [])
       (when has-references?
-        (views/view
-         {:view-parent entity
-          :view-feature-type :unlinked-references
-          :columns (views/build-columns config [] {})
-          :foldable-options {:default-collapsed? true}
-          :config config})))))
+        [:div.unlinked-references
+         (views/view
+          {:view-parent entity
+           :view-feature-type :unlinked-references
+           :columns (views/build-columns config [] {})
+           :foldable-options {:default-collapsed? true}
+           :config config})]))))
