@@ -82,7 +82,7 @@
                              (assoc :real-outliner-op :rename-page)))
             true))))))
 
-(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags]}]
+(defn- build-page-tx [db properties page {:keys [whiteboard? class? tags class-ident-namespace]}]
   (when (:block/uuid page)
     (let [type-tag (cond class? :logseq.class/Tag
                          whiteboard? :logseq.class/Whiteboard
@@ -117,7 +117,7 @@
                           [k v])))
                 (into {})))]
       (cond-> (if class?
-                [(merge (db-class/build-new-class db page')
+                [(merge (db-class/build-new-class db page' {:ident-namespace class-ident-namespace})
                         ;; FIXME: new pages shouldn't have db/ident but converting property to tag still relies on this
                         (select-keys page' [:db/ident]))
                  [:db/retract [:block/uuid (:block/uuid page)] :block/tags :logseq.class/Page]]
@@ -234,7 +234,7 @@
   [db title*
    {uuid' :uuid
     :keys [tags properties persist-op? whiteboard?
-           class? today-journal? split-namespace?]
+           class? today-journal? split-namespace? class-ident-namespace]
     :or   {properties               nil
            persist-op?              true}
     :as options}]
@@ -263,7 +263,10 @@
                    (not (ldb/class? existing-page))
                    (ldb/internal-page? existing-page))
           ;; Convert existing page to class
-          (let [tx-data [(merge (db-class/build-new-class db (select-keys existing-page [:block/title :block/uuid :block/created-at]))
+          (let [tx-data [(merge (db-class/build-new-class db
+                                                          (select-keys existing-page [:block/title :block/uuid :block/created-at])
+                                                          (when (and class? class-ident-namespace (string? class-ident-namespace))
+                                                            {:ident-namespace class-ident-namespace}))
                                 (select-keys existing-page [:db/ident]))
                          [:db/retract [:block/uuid (:block/uuid existing-page)] :block/tags :logseq.class/Page]]]
             {:tx-meta tx-meta
@@ -289,7 +292,7 @@
               (outliner-validate/validate-page-title-characters (str (:block/title parent)) {:node parent})))
 
           (let [page-uuid (:block/uuid page)
-                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags]))
+                page-txs  (build-page-tx db properties page (select-keys options [:whiteboard? :class? :tags :class-ident-namespace]))
                 txs      (concat
                           ;; transact doesn't support entities
                           (remove de/entity? parents')

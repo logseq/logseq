@@ -101,12 +101,6 @@
       normalize-keyword-for-json
       bean/->js))
 
-(defn with-custom-uuid [opts]
-  (let [custom-uuid (or (:customUUID opts) (:uuid opts))]
-    (cond-> opts
-            (util/uuid-string? custom-uuid)
-            (assoc :uuid (uuid custom-uuid)))))
-
 (def ^:export to-clj bean/->clj)
 (def ^:export jsx-to-clj jsx->clj)
 (def ^:export to-js bean/->js)
