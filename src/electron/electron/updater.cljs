@@ -126,7 +126,7 @@
                  (. semver lt electron-version remote-version))
 
            ;; start auto updater
-          (do
+          (when (<= (second (string/split remote-version ".")) 10) ; file version should be locked at 0.10.*
             (debug "Found remote version" remote-version)
             (when (or mac? win32?)
               (debug "forward update to autoUpdater")
