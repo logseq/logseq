@@ -38,7 +38,8 @@
 (defn- rebuild-block-refs
   [repo {:keys [tx-meta db-after db-before]} blocks]
   (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
-            (:rtc-tx? tx-meta))
+            (:rtc-tx? tx-meta)
+            (:rtc-op? tx-meta))
     (let [db-based? (entity-plus/db-based-graph? db-after)]
       (mapcat (fn [block]
                 (when (d/entity db-after (:db/id block))
