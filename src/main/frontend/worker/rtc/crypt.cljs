@@ -184,11 +184,10 @@
 
 (defn task--reset-user-rsa-private-key
   "Throw if decrypt encrypted-private-key failed."
-  [get-ws-create-task refresh-token user-uuid new-password]
+  [get-ws-create-task refresh-token user-uuid old-password new-password]
   (m/sp
     (let [{:keys [public-key encrypted-private-key]}
           (m/? (task--fetch-user-rsa-key-pair get-ws-create-task user-uuid))
-          old-password (c.m/<? (<read-e2ee-password refresh-token))
           private-key (c.m/<? (crypt/<decrypt-private-key old-password encrypted-private-key))
           new-encrypted-private-key (c.m/<? (crypt/<encrypt-private-key new-password private-key))]
       (m/? (task--upload-user-rsa-key-pair get-ws-create-task user-uuid public-key new-encrypted-private-key
@@ -261,15 +260,18 @@
       (catch :default e e))))
 
 (def-thread-api :thread-api/reset-e2ee-password
-  [token refresh-token user-uuid new-password]
+  [token refresh-token user-uuid old-password new-password]
   (m/sp
     (let [{:keys [get-ws-create-task]} (ws-util/gen-get-ws-create-map--memoized (ws-util/get-ws-url token))]
-      (m/? (task--reset-user-rsa-private-key get-ws-create-task refresh-token user-uuid new-password)))))
+      (m/? (task--reset-user-rsa-private-key get-ws-create-task refresh-token user-uuid old-password new-password)))))
 
 (def-thread-api :thread-api/get-e2ee-password
   [refresh-token]
-  (p/let [password (<read-e2ee-password refresh-token)]
-    {:password password}))
+  (-> (p/let [password (<read-e2ee-password refresh-token)]
+        {:password password})
+      (p/catch (fn [e]
+                 (log/error :read-e2ee-password e)
+                 (ex-info ":thread-api/get-e2ee-password" {})))))
 
 (def-thread-api :thread-api/save-e2ee-password
   [refresh-token password]

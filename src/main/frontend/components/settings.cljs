@@ -1237,6 +1237,7 @@ and you will need to re-upload the graphs from the client after resetting the pa
 
 (rum/defc reset-encryption-password
   [current-password new-password {:keys [set-new-password!
+                                         set-current-password!
                                          reset-password-status
                                          on-click]}]
   (let [[reset? set-reset!] (hooks/use-state false)]
@@ -1246,7 +1247,7 @@ and you will need to re-upload the graphs from the client after resetting the pa
        (shui/toggle-password
         {:id "current-password"
          :value current-password
-         :disabled true})
+         :on-change #(set-current-password! (util/evalue %))})
        [:label.opacity-70 {:for "new-password"} "Set new Password"]
        (shui/toggle-password
         {:id "new-password"
@@ -1271,7 +1272,6 @@ and you will need to re-upload the graphs from the client after resetting the pa
          [init-key-err set-init-key-err!] (hooks/use-state nil)
          [get-key-err set-get-key-err!] (hooks/use-state nil)
          [current-password set-current-password!] (hooks/use-state nil)
-         [get-password-err set-get-password-err!] (hooks/use-state nil)
          [new-password set-new-password!] (hooks/use-state nil)
          [reset-password-status set-reset-password-status!] (hooks/use-state nil)]
      (hooks/use-effect!
@@ -1282,15 +1282,13 @@ and you will need to re-upload the graphs from the client after resetting the pa
               (p/catch set-get-key-err!))
           (-> (p/let [{:keys [password]} (state/<invoke-db-worker :thread-api/get-e2ee-password refresh-token)]
                 (set-current-password! password))
-              (p/catch set-get-password-err!))))
+              (p/catch (fn [_] (set-current-password! ""))))))
       [user-uuid token])
      [:div.flex.flex-col.gap-2.mt-4
       (when (and user-uuid token)
         (cond
           get-key-err
           [:p (str "Fetching user rsa-key-pair err: " get-key-err)]
-          get-password-err
-          [:p (str "Failed to get current password: " get-password-err)]
           (= rsa-key-pair :not-inited)
           [:p "Fetching user rsa-key-pair..."]
           (nil? rsa-key-pair)
@@ -1312,7 +1310,7 @@ and you will need to re-upload the graphs from the client after resetting the pa
                             (-> (p/do!
                                  (set-reset-password-status! "Updating password ...")
                                  (state/<invoke-db-worker :thread-api/reset-e2ee-password
-                                                          token refresh-token user-uuid new-password)
+                                                          token refresh-token user-uuid current-password new-password)
                                  (set-reset-password-status! "Password updated successfully!"))
                                 (p/catch (fn [e]
                                            (log/error :reset-password-failed e)
@@ -1333,6 +1331,7 @@ and you will need to re-upload the graphs from the client after resetting the pa
              (reset-encryption-password current-password new-password
                                         {:reset-password-status reset-password-status
                                          :set-new-password! set-new-password!
+                                         :set-current-password! set-current-password!
                                          :on-click on-submit})
 
              [:br]
