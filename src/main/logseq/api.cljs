@@ -201,6 +201,7 @@
 (def ^:export get_all_properties db-based-api/get-all-properties)
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
 (def ^:export create_tag db-based-api/create-tag)
+(def ^:export get_tag db-based-api/get-tag)
 (def ^:export add_block_tag db-based-api/add-block-tag)
 (def ^:export remove_block_tag db-based-api/remove-block-tag)
 (def ^:export add_tag_property db-based-api/tag-add-property)

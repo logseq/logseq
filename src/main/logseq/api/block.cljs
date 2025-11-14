@@ -17,16 +17,14 @@
             [logseq.sdk.utils :as sdk-utils]))
 
 (def plugin-property-prefix "plugin.property.")
+(def plugin-class-prefix "plugin.class.")
 
 (defn sanitize-user-property-name
   [k]
   (if (string? k)
     (-> k (string/trim)
         (string/replace " " "")
-        (string/replace #"^[:_\s]+" "")
-        (#(cond-> %
-            (not (string/includes? % "/"))
-            (string/lower-case))))
+        (string/replace #"^[:_\s]+" ""))
     (str k)))
 
 (defn get-sanitized-plugin-id
@@ -59,6 +57,15 @@
       ;; plugin property
       (let [plugin-ns (resolve-property-prefix-for-db plugin)]
         (keyword plugin-ns (db-ident/normalize-ident-name-part property-name'))))))
+
+(defn resolve-class-prefix-for-db
+  [^js plugin]
+  (let [plugin-id (get-sanitized-plugin-id plugin)]
+    (when-not plugin-id
+      (js/console.error "Can't get current plugin id")
+      (throw (ex-info "Can't get current plugin id"
+                      {:plugin plugin})))
+    (str plugin-class-prefix plugin-id)))
 
 (defn plugin-property-key?
   [ident]
