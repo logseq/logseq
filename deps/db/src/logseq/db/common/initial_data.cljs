@@ -278,11 +278,8 @@
                    (let [block-datoms (d/datoms db :eavt (:e d))
                          properties-of-property-datoms
                          (when (= (:v d) class-property-id)
-                           (concat
-                            (when-let [desc (:logseq.property/description (d/entity db (:e d)))]
-                              (d/datoms db :eavt (:db/id desc)))
-                            (when-let [desc (:logseq.property/default-value (d/entity db (:e d)))]
-                              (d/datoms db :eavt (:db/id desc)))))]
+                           (when-let [desc (:logseq.property/default-value (d/entity db (:e d)))]
+                             (d/datoms db :eavt (:db/id desc))))]
                      (if (seq properties-of-property-datoms)
                        (concat block-datoms properties-of-property-datoms)
                        block-datoms)))))))
@@ -302,16 +299,6 @@
                         (d/datoms db :eavt (:db/id child)))
                       children)))))
 
-(defn- get-views-data
-  [db]
-  (let [page-id (get-first-page-by-name db common-config/views-page-name)
-        children (when page-id (:block/_parent (d/entity db page-id)))]
-    (when (seq children)
-      (into
-       (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
-               children)
-       (d/datoms db :eavt page-id)))))
-
 (defn get-recent-updated-pages
   [db]
   (when db
@@ -319,12 +306,16 @@
      (d/datoms db :avet :block/updated-at)
      rseq
      (keep (fn [datom]
-             (let [e (d/entity db (:e datom))]
-               (when (and (common-entity-util/page? e)
-                          (not (entity-util/hidden? e))
-                          (not (string/blank? (:block/title e))))
-                 e))))
-     (take 30))))
+             (let [page (first (d/datoms db :eavt (:e datom) :block/page))]
+               (when-not (or page
+                             (let [title (:v (first (d/datoms db :eavt (:e datom) :block/title)))]
+                               (string/blank? title)))
+                 (let [e (d/entity db (:e datom))]
+                   (when (and
+                          (common-entity-util/page? e)
+                          (not (entity-util/hidden? e)))
+                     e))))))
+     (take 15))))
 
 (defn- get-all-user-datoms
   [db]
@@ -353,12 +344,11 @@
                         :logseq.kv/graph-text-embedding-model-name
                         :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
-        views (when db-graph? (get-views-data db))
+        recent-updated-pages (let [pages (get-recent-updated-pages db)]
+                               (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
         all-files (get-all-files db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
-        recent-updated-pages (let [pages (get-recent-updated-pages db)]
-                               (mapcat (fn [p] (d/datoms db :eavt (:db/id p))) pages))
         user-datoms (get-all-user-datoms db)
         pages-datoms (if db-graph?
                        (let [contents-id (get-first-page-by-title db "Contents")
@@ -369,14 +359,17 @@
                        ;; load all pages for file graphs
                        (->> (d/datoms db :avet :block/name)
                             (mapcat (fn [d] (d/datoms db :eavt (:e d))))))
-        data (distinct
-              (concat idents
-                      structured-datoms
-                      user-datoms
-                      favorites
-                      recent-updated-pages
-                      views
-                      all-files
-                      pages-datoms))]
+        data (->> (concat idents
+                          structured-datoms
+                          user-datoms
+                          favorites
+                          recent-updated-pages
+                          all-files
+                          pages-datoms)
+                  distinct
+                  (remove (fn [d]
+                            (contains? #{:block/created-at :block/updated-at
+                                         :block/tx-id :logseq.property/created-by-ref}
+                                       (:a d)))))]
     {:schema schema
      :initial-data data}))

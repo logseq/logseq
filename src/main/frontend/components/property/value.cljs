@@ -653,18 +653,6 @@
                           :close-modal? false
                           k f'))))
 
-(defn- get-node-icon
-  [node]
-  (cond
-    (ldb/class? node)
-    "hash"
-    (ldb/property? node)
-    "letter-p"
-    (entity-util/page? node)
-    "page"
-    :else
-    "letter-n"))
-
 (rum/defc ^:large-vars/cleanup-todo select-node < rum/static
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input add-new-choice! target] :as opts}
@@ -755,12 +743,11 @@
                                     node)
                              id (:db/id node)
                              [header label] (if (integer? id)
-                                              (when-let [node-title (if (seq (:logseq.property/classes property))
-                                                                      (db-content/recur-replace-uuid-in-block-title node)
-                                                                      (block-handler/block-unique-title node))]
-                                                (let [title (subs node-title 0 256)
-                                                      node (or (db/entity id) node)
-                                                      icon (get-node-icon node)
+                                              (when-let [title (if (seq (:logseq.property/classes property))
+                                                                 (some-> (db-content/recur-replace-uuid-in-block-title node)
+                                                                         (subs 0 256))
+                                                                 (block-handler/block-unique-title node))]
+                                                (let [node (or (db/entity id) node)
                                                       header (when-not (db/page? node)
                                                                (when-let [breadcrumb (state/get-component :block/breadcrumb)]
                                                                  [:div.text-xs.opacity-70
@@ -768,9 +755,11 @@
                                                                               {:disabled? true})]))
                                                       label [:div.flex.flex-row.items-center.gap-1
                                                              (when-not (or (:logseq.property/classes property)
-                                                                           (contains? #{:class :property} (:logseq.property/type property)))
-                                                               (ui/icon icon {:size 14}))
-                                                             [:div title]]]
+                                                                           (contains? #{:class :property} property-type))
+                                                               (icon-component/get-node-icon-cp node {:ignore-current-icon? true}))
+                                                             [:div (if (contains? #{:class :property :page} property-type)
+                                                                     title
+                                                                     (block-handler/block-title-with-icon node title icon-component/icon))]]]
                                                   [header label]))
                                               [nil (:block/title node)])]
                          (assoc node

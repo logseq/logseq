@@ -73,8 +73,7 @@ jobs:
         run: clojure -A:cljs -P
 
       - name: Fetch yarn deps
-        # run: yarn install --frozen-lockfile
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       - name: Build test asset
         run: clojure -M:test compile test

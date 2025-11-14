@@ -949,24 +949,6 @@
        (boolean (and (safe-re-find #"Chrome" user-agent)
                      (safe-re-find #"Google Inc" vendor))))))
 
-#?(:cljs
-   (defn indexeddb-check?
-     "Check if indexedDB support is available, reject if not"
-     []
-     (let [db-name "logseq-indexeddb-check"]
-       (if js/window.indexedDB
-         (js/Promise. (fn [resolve reject]
-                        (let [req (js/window.indexedDB.open db-name)]
-                          (set! (.-onerror req) reject)
-                          (set! (.-onsuccess req)
-                                (fn [_event]
-                                  (.close (.-result req))
-                                  (let [req (js/window.indexedDB.deleteDatabase db-name)]
-                                    (set! (.-onerror req) reject)
-                                    (set! (.-onsuccess req) (fn [_event]
-                                                              (resolve true)))))))))
-         (p/rejected "no indexeddb defined")))))
-
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
 
