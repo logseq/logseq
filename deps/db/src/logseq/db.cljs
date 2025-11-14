@@ -111,20 +111,23 @@
       (if (and db-based?
                (not (:reset-conn! tx-meta))
                (not (:initial-db? tx-meta))
-               (not (:skip-validate-db? tx-meta false))
                (not (:rtc-download-graph? tx-meta))
+               (not (:skip-validate-db? tx-meta false))
                (not (:logseq.graph-parser.exporter/new-graph? tx-meta)))
         (let [tx-report* (d/with db tx-data tx-meta)
               pipeline-f @*transact-pipeline-fn
               tx-report (if-let [f pipeline-f] (f tx-report*) tx-report*)
               _ (throw-if-page-has-block-parent! (:db-after tx-report) (:tx-data tx-report))
               [validate-result errors] (db-validate/validate-tx-report tx-report nil)]
-          (if validate-result
+          (cond
+            validate-result
             (when (and tx-report (seq (:tx-data tx-report)))
               ;; perf enhancement: avoid repeated call on `d/with`
               (reset! conn (:db-after tx-report))
               (dc/store-after-transact! conn tx-report)
               (dc/run-callbacks conn tx-report))
+
+            :else
             (do
               ;; notify ui
               (when-let [f @*transact-invalid-callback]
@@ -154,6 +157,7 @@
                                  (dissoc :block.temp/load-status))
                                m)))
                       (remove-temp-block-data)
+                      (remove (fn [m] (and (map? m) (= (:db/ident m) :block/path-refs))))
                       (common-util/fast-remove-nils)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
