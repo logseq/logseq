@@ -232,6 +232,7 @@ export interface PageEntity {
   children?: Array<PageEntity>
   properties?: Record<string, any>
   journalDay?: number
+  ident?: string
 
   [key: string]: unknown
 }
@@ -779,8 +780,9 @@ export interface IEditorProxy extends Record<string, any> {
   getAllPages: (repo?: string) => Promise<PageEntity[] | null>
   getAllTags: () => Promise<PageEntity[] | null>
   getAllProperties: () => Promise<PageEntity[] | null>
-  getTagObjects: (PageIdentity) => Promise<BlockEntity[] | null>
+  getTagObjects: (nameOrIdent: string) => Promise<BlockEntity[] | null>
   createTag: (tagName: string, opts?: Partial<{ uuid: string }>) => Promise<PageEntity | null>
+  getTag: (nameOrIdent: string) => Promise<PageEntity | null>
   addTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   removeTagProperty: (tagId: BlockIdentity, propertyIdOrName: BlockIdentity) => Promise<void>
   addBlockTag: (blockId: BlockIdentity, tagId: BlockIdentity) => Promise<void>
