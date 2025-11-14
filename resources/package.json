@@ -63,8 +63,8 @@
     "**/electron": "38.4.0",
     "**/node-abi": "4.14.0",
     "**/node-gyp": "12.0.0",
-    "string-width": "8.1.0",
-    "wrap-ansi": "9.0.2",
-    "strip-ansi": "7.1.2"
+    "string-width": "4.2.0",
+    "wrap-ansi": "^7.0.0",
+    "strip-ansi": "^6.0.1"
   }
 }
