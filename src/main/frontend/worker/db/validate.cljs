@@ -201,8 +201,18 @@
                      (map (fn [d] [:db/retract (:e d) (:a d)]) datoms))]
         (d/transact! conn tx-data {:fix-db? true})))))
 
+(defn- fix-extends-cardinality!
+  [conn]
+  (when (not= :db.cardinality/many (:db/cardinality (d/entity @conn :logseq.property.class/extends)))
+    (d/transact! conn
+                 [{:db/ident :logseq.property.class/extends
+                   :db/cardinality :db.cardinality/many
+                   :db/index true}]
+                 {:fix-db? true})))
+
 (defn validate-db
   [conn]
+  (fix-extends-cardinality! conn)
   (fix-icon-wrong-type! conn)
   (db-migrate/ensure-built-in-data-exists! conn)
   (fix-non-closed-values! conn)
