@@ -25,3 +25,6 @@ You're Clojure(script) expert, you're responsible to check those common errors:
 - If common keywords are added or modified, make corresponding changes in their definitions.
 
 - A function that returns a promise, and its function name starts with "<".
+
+- Prohibit converting js/Uint8Array to vector. e.g. `(vec uint8-array)`
+  - This operation is very slow when the Uint8Array is large (e.g. an asset). 
