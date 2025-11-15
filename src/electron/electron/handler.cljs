@@ -459,9 +459,9 @@
 (defn set-current-graph!
   [window graph-path]
   (let [old-path (state/get-window-graph-path window)]
-    (when (and old-path graph-path (not= old-path graph-path))
-      (close-watcher-when-orphaned! window old-path))
     (swap! state/state assoc-in [:window/graph window] graph-path)
+    (when (and old-path graph-path (not= old-path graph-path))
+      (js/setTimeout #(close-watcher-when-orphaned! window old-path) 100))
     nil))
 
 (defmethod handle :setCurrentGraph [^js window [_ graph-name]]
@@ -698,17 +698,25 @@
 (defn broadcast-persist-graph!
   "Receive graph-name (not graph path)
    Sends persist graph event to the renderer contains the target graph.
-   Returns a promise<void>."
+   Returns a promise<void> with 3 second timeout."
   [graph-name]
   (p/create (fn [resolve _reject]
               (let [graph-path (utils/get-graph-dir graph-name)
                     windows (win/get-graph-all-windows graph-path)
-                    tar-graph-win (first windows)]
+                    tar-graph-win (first windows)
+                    timeout-id (js/setTimeout #(do
+                                                 (logger/warn ::broadcast-persist-graph "timeout after 3s for graph:" graph-name)
+                                                 (state/set-state! :window/once-persist-done nil)
+                                                 (resolve nil))
+                                               3000)]
                 (if tar-graph-win
                   ;; if no such graph, skip directly
-                  (do (state/set-state! :window/once-persist-done #(resolve nil))
+                  (do (state/set-state! :window/once-persist-done #(do
+                                                                     (js/clearTimeout timeout-id)
+                                                                     (resolve nil)))
                       (utils/send-to-renderer tar-graph-win "persistGraph" graph-name))
-                  (resolve nil))))))
+                  (do (js/clearTimeout timeout-id)
+                      (resolve nil)))))))
 
 (defmethod handle :broadcastPersistGraph [^js _win [_ graph-name]]
   (broadcast-persist-graph! graph-name))
