@@ -299,6 +299,7 @@ export type ExternalCommandType =
   | 'logseq.go/next-journal'
   | 'logseq.go/prev-journal'
   | 'logseq.go/search'
+  | 'logseq.go/today'
   | 'logseq.go/tomorrow'
   | 'logseq.go/backward'
   | 'logseq.go/forward'

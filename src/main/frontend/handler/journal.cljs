@@ -20,6 +20,10 @@
                                  :path-params {:name page}})
        (page-handler/<create! page)))))
 
+(defn go-to-today!
+  []
+  (redirect-to-journal! (date/today)))
+
 (defn go-to-tomorrow!
   []
   (redirect-to-journal! (date/tomorrow)))
