@@ -472,17 +472,6 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 }
 
-.app-silk-sidebar-sheet-content {
-  @apply bg-white dark:bg-gray-02 flex flex-col items-center p-2;
-  box-sizing: border-box;
-  height: 100%;
-  max-width: 800px;
-
-  /* APPEARANCE */
-  border-radius: 0;
-  overflow: hidden;
-}
-
 .app-audio-recorder {
   @apply flex flex-col p-4 gap-4;
 
@@ -538,11 +527,6 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   .hd .wrap-th > strong {
     @apply !text-lg;
   }
-}
-
-.Sidebar-hidden {
-  @apply bg-transparent dark:bg-transparent;
-  box-shadow: none;
 }
 
 #app-main-content {
