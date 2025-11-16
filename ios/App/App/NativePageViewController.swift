@@ -31,7 +31,5 @@ class NativePageViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        // Tell JS to navigate to the desired path
-        UILocalPlugin.requestNavigation(path: targetPath, push: push)
     }
 }

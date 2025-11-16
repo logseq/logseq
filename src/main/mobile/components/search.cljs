@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [frontend.components.cmdk.core :as cmdk]
             [frontend.db.async :as db-async]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -141,10 +142,7 @@
              [:li.flex.gap-1
               {:on-click (fn []
                            (when-let [id (:block/uuid block)]
-                             (p/let [block (db-async/<get-block (state/get-current-repo) id
-                                                                {:children? false
-                                                                 :skip-refresh? true})]
-                               (when block (mobile-state/open-block-modal! block)))))}
+                             (route-handler/redirect-to-page! (str id))))}
               [:div.flex.flex-col.gap-1.py-1
                (when header
                  [:div.opacity-60.text-sm
