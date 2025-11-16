@@ -19,70 +19,21 @@
             [logseq.shui.ui :as shui]
             [missionary.core :as m]
             [mobile.components.ui :as ui-component]
-            [mobile.components.ui-silk :as ui-silk]
             [mobile.state :as mobile-state]
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(rum/defc app-graphs-select
-  []
-  (let [current-repo (state/get-current-repo)
-        short-repo-name (if current-repo
-                          (db-conn/get-short-repo-name current-repo)
-                          "Select a Graph")]
-    [:.app-graph-select
-     (shui/button
-      {:variant :text
-       :size :sm
-       :on-click (fn [e]
-                   (shui/popup-show! (.-target e)
-                                     (fn [{:keys [id]}]
-                                       (repo/repos-dropdown-content {:contentid id}))
-                                     {:id :switch-graph
-                                      :default-height false
-                                      :content-props {:class "repos-list"}}))}
-      [:span.flex.items-center.pt-1
-       [:span.overflow-hidden.text-ellipsis.block.text-base
-        {:style {:max-width "40vw"}}
-        short-repo-name]])]))
+(defonce native-top-bar-listener? (atom false))
 
-(rum/defc journal-calendar-btn
-  []
-  (shui/button
-   {:variant :text
-    :size :sm
-    :on-click (fn []
-                (let [apply-date! (fn [date]
-                                    (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
-                                      (if-let [journal (db/get-page page-name)]
-                                        (mobile-state/open-block-modal! journal)
-                                        (-> (page-handler/<create! page-name {:redirect? false})
-                                            (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
-                  (-> (.showDatePicker mobile-util/ui-local)
-                      (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))}
-   [:span.mt-1
-    (shui/tabler-icon "calendar-month" {:size 24})]))
-
-(rum/defc rtc-indicator-btn
-  []
-  (let [repo (state/get-current-repo)]
-    [:div.flex.flex-row.items-center.gap-2
-     (when (and repo
-                (ldb/get-graph-rtc-uuid (db/get-db))
-                (user-handler/logged-in?))
-       (rtc-indicator/indicator))]))
-
-(rum/defc menu-button
-  []
-  (shui/button
-   {:variant :text
-    :size :sm
-    :on-pointer-down (fn [e]
-                       (util/stop e)
-                       (mobile-state/close-block-modal!)
-                       (mobile-state/open-left-sidebar!))}
-   [:span.mt-2
-    (shui/tabler-icon "menu" {:size 24})]))
+(defn- open-journal-calendar! []
+  (let [apply-date! (fn [date]
+                      (let [page-name (date/journal-name (gdate/Date. (js/Date. date)))]
+                        (if-let [journal (db/get-page page-name)]
+                          (mobile-state/open-block-modal! journal)
+                          (-> (page-handler/<create! page-name {:redirect? false})
+                              (p/then #(mobile-state/open-block-modal! (db/get-page page-name)))))))]
+    (-> (.showDatePicker mobile-util/ui-local)
+        (p/then (fn [^js e] (some-> e (.-value) (apply-date!)))))))
 
 (rum/defc log
   []
@@ -142,47 +93,101 @@
         (for [record records]
           [:li (str (:level record) " " (:message record))])])]))
 
+(defn- open-settings-actions! []
+  (ui-component/open-popup!
+   (fn []
+     [:div.-mx-2
+      (when (user-handler/logged-in?)
+        (ui/menu-link {:on-click #(user-handler/logout)}
+                      [:span.text-lg.flex.gap-2.items-center.text-red-700
+                       (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
+                       "Logout"]))
+      (ui/menu-link {:on-click #(js/window.open "https://github.com/logseq/db-test/issues")}
+                    [:span.text-lg.flex.gap-2.items-center
+                     (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
+                     "Report bug"])
+      (ui/menu-link {:on-click (fn []
+                                 (mobile-state/set-popup! nil)
+                                 (mobile-state/set-popup!
+                                  {:open? true
+                                   :content-fn (fn [] (log))}))}
+                    [:span.text-lg.flex.gap-2.items-center
+                     "Check log"])])
+   {:title "Actions"
+    :default-height false
+    :type :action-sheet}))
+
+(defn- open-graph-switcher! []
+  (ui-component/open-popup!
+   (fn []
+     [:div.px-1
+      (repo/repos-dropdown-content {})])
+   {:title "Select a Graph"
+    :default-height false
+    :type :action-sheet}))
+
+(defn- register-native-top-bar-events! []
+  (when (and (mobile-util/native-ios?)
+             (not @native-top-bar-listener?))
+    (.addListener mobile-util/native-top-bar "buttonTapped"
+                  (fn [^js e]
+                    (case (.-id e)
+                      "menu" (if (mobile-state/left-sidebar-open?)
+                               (mobile-state/close-left-sidebar!)
+                               (mobile-state/open-left-sidebar!))
+                      "title" (open-graph-switcher!)
+                      "calendar" (open-journal-calendar!)
+                      "settings-actions" (open-settings-actions!)
+                      nil)))
+    (reset! native-top-bar-listener? true)))
+
+(defn- configure-native-top-bar!
+  [{:keys [tab title]}]
+  (when (mobile-util/native-ios?)
+    (let [base {:title title
+                :tintColor "#1f2937"}
+          left-buttons (when (= tab "home")
+                         [{:id "menu" :systemIcon "line.3.horizontal"}])
+          right-buttons (cond
+                          (= tab "home")
+                          [{:id "calendar" :systemIcon "calendar"}]
+
+                          (= tab "settings")
+                          [{:id "settings-actions" :systemIcon "ellipsis"}]
+
+                          :else nil)
+          header (cond-> base
+                   left-buttons (assoc :leftButtons left-buttons)
+                   right-buttons (assoc :rightButtons right-buttons)
+                   (= tab "home") (assoc :titleClickable true))]
+      (.configure mobile-util/native-top-bar
+                  (clj->js header)))))
+
+(rum/defc rtc-indicator-btn
+  []
+  (let [repo (state/get-current-repo)]
+    [:div.flex.flex-row.items-center.gap-2
+     (when (and repo
+                (ldb/get-graph-rtc-uuid (db/get-db))
+                (user-handler/logged-in?))
+       (rtc-indicator/indicator))]))
+
 (rum/defc header
   [tab login?]
-  (ui-silk/app-silk-topbar
-   (cond-> {:title [:span.capitalize (str tab)]
-            :props {:class (str tab)}}
-     (= tab "home")
-     (assoc
-      :left-render (menu-button)
-      :title (app-graphs-select)
-      :right-render [:div.flex.items-center.gap-1
-                     (journal-calendar-btn)
-                     (rtc-indicator-btn)]
-      :center-title? true)
+  (let [current-repo (state/get-current-repo)
+        short-repo-name (if current-repo
+                          (db-conn/get-short-repo-name current-repo)
+                          "Select a Graph")]
+    (hooks/use-effect!
+     (fn []
+       (when (mobile-util/native-ios?)
+         (register-native-top-bar-events!)
+         (configure-native-top-bar!
+          {:tab tab
+           :title (if (= tab "home")
+                    short-repo-name
+                    (string/capitalize tab))}))
+       nil)
+     [tab short-repo-name])
 
-     (= tab "settings")
-     (assoc
-      :right-render
-      [:<>
-       (shui/button
-        {:variant :icon :size :sm
-         :on-click (fn []
-                     (ui-component/open-popup!
-                      (fn []
-                        [:div.-mx-2
-                         (when login?
-                           (ui/menu-link {:on-click #(user-handler/logout)}
-                                         [:span.text-lg.flex.gap-2.items-center.text-red-700
-                                          (shui/tabler-icon "logout" {:class "opacity-80" :size 22})
-                                          "Logout"]))
-                         (ui/menu-link {:on-click #(js/window.open "https://github.com/logseq/db-test/issues")}
-                                       [:span.text-lg.flex.gap-2.items-center
-                                        (shui/tabler-icon "bug" {:class "opacity-70" :size 22})
-                                        "Report bug"])
-                         (ui/menu-link {:on-click (fn []
-                                                    (mobile-state/set-popup! nil)
-                                                    (mobile-state/set-popup!
-                                                     {:open? true
-                                                      :content-fn (fn [] (log))}))}
-                                       [:span.text-lg.flex.gap-2.items-center
-                                        "Check log"])])
-                      {:title "Actions"
-                       :default-height false
-                       :type :action-sheet}))}
-        (shui/tabler-icon "dots" {:size 23}))]))))
+    [:<>]))
