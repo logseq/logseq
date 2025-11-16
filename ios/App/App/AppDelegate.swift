@@ -9,6 +9,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     private var navController: UINavigationController?
     private var pathStack: [String] = ["/"]
     private var ignoreRoutePopCount = 0
+    private lazy var sidebarCloseGesture: UISwipeGestureRecognizer = {
+        let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleSidebarCloseSwipe(_:)))
+        gesture.direction = .left // right-to-left swipe to close
+        gesture.cancelsTouchesInView = false
+        return gesture
+    }()
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -183,6 +189,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
         guard let current = viewController as? NativePageViewController else { return }
         SharedWebViewController.instance.attach(to: current)
+        updateSidebarGestureAttachment(for: current)
     }
 
     func navigationController(_ navigationController: UINavigationController,
@@ -196,6 +203,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     private func isLeftSidebar(_ vc: UIViewController) -> Bool {
         guard let pageVC = vc as? NativePageViewController else { return false }
         return pageVC.targetPath == "/left-sidebar"
+    }
+
+    private func updateSidebarGestureAttachment(for vc: NativePageViewController) {
+        guard let nav = navController else { return }
+        if isLeftSidebar(vc) {
+            if sidebarCloseGesture.view !== nav.view {
+                nav.view.addGestureRecognizer(sidebarCloseGesture)
+            }
+        } else if sidebarCloseGesture.view != nil {
+            nav.view.removeGestureRecognizer(sidebarCloseGesture)
+        }
+    }
+
+    @objc private func handleSidebarCloseSwipe(_ gesture: UISwipeGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        guard let nav = navController,
+              let top = nav.topViewController as? NativePageViewController,
+              isLeftSidebar(top) else { return }
+        // Let navigation delegate handle stack bookkeeping and JS back sync.
+        nav.popViewController(animated: true)
     }
 
     private func observeRouteChanges() {
