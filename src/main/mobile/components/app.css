@@ -5,7 +5,6 @@
 
 :root {
   --ls-page-title-size: 26px;
-  --silk-topbar-inner-height: 32px;
   --silk-tabbar-bottom-padding: 12px;
   --silk-100-lvh-dvh-pct: max(100%, 100vh);
   --safe-area-inset-top: 40px;
@@ -20,17 +19,12 @@ html.is-native-ios {
 
 html.is-native-android {
   --silk-topbar-inner-padding-top: 14px;
-  --silk-topbar-inner-height: 36px;
   --silk-topbar-inner-padding-bottom: 6px;
 
   --silk-tabbar-bottom-padding: 22px;
 
   .app-silk-index-container {
-    padding-top: calc(var(--safe-area-inset-top) + var(--silk-topbar-inner-height) + 22px);
-  }
-
-  .app-silk-topbar {
-    padding-top: calc(var(--safe-area-inset-top) + var(--silk-topbar-inner-padding-top));
+    padding-top: calc(var(--safe-area-inset-top) + 22px);
   }
 
   .app-silk-search-page {
@@ -375,54 +369,11 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
 .app-silk-index-container {
   @apply p-4 flex flex-col gap-3 bg-gray-01;
 
-  &[data-tab=search] {
-    --silk-topbar-inner-height: 2px;
-  }
-
-  padding-top: calc(env(safe-area-inset-top) + var(--silk-topbar-inner-height) + 22px);
+  padding-top: env(safe-area-inset-top);
   padding-bottom: 120px;
 
   #journals {
     @apply -mt-4 px-1;
-  }
-}
-
-.app-silk-topbar {
-  @apply fixed top-0 left-0 w-full flex justify-between items-center overflow-hidden bg-gray-01;
-
-  padding-top: calc(env(safe-area-inset-top) + var(--silk-topbar-inner-padding-top, 2px));
-  height: var(--silk-topbar-inner-height, 32px);
-
-  padding-bottom: var(--silk-topbar-inner-padding-bottom, 8px);
-  box-sizing: content-box;
-
-  &[data-center-title] {
-    @apply grid grid-cols-8 gap-4;
-
-    > .as-left, .as-right {
-      @apply col-span-2;
-    }
-  }
-
-  &.search {
-    @apply hidden;
-  }
-
-  > .as-left, .as-right {
-    @apply flex items-center gap-2 px-3;
-
-    .ui__button {
-      @apply px-1;
-    }
-  }
-
-  > .as-right {
-    @apply justify-end;
-  }
-
-  .title {
-    @apply font-semibold overflow-hidden text-ellipsis whitespace-nowrap col-span-4
-    block text-center text-lg pl-1 tracking-wide;
   }
 }
 
