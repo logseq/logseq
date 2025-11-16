@@ -131,6 +131,8 @@
              (not @native-top-bar-listener?))
     (.addListener mobile-util/native-top-bar "buttonTapped"
                   (fn [^js e]
+                    (prn :debug :id (.-id e)
+                         :sidebar-open? (mobile-state/left-sidebar-open?))
                     (case (.-id e)
                       "menu" (if (mobile-state/left-sidebar-open?)
                                (mobile-state/close-left-sidebar!)
@@ -142,10 +144,11 @@
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [{:keys [tab title]}]
+  [{:keys [tab title hidden?]}]
   (when (mobile-util/native-ios?)
     (let [base {:title title
-                :tintColor "#1f2937"}
+                :tintColor "#1f2937"
+                :hidden (boolean hidden?)}
           left-buttons (when (= tab "home")
                          [{:id "menu" :systemIcon "line.3.horizontal"}])
           right-buttons (cond

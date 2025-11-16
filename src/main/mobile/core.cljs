@@ -12,6 +12,7 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.shui.ui :as shui]
+            [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.app :as app]
             [mobile.events]
             [mobile.init :as init]
@@ -42,7 +43,11 @@
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
            :path path})
+         (when (not= route-name :left-sidebar)
+           (reset! mobile-state/*left-sidebar-open? false)
+           (bottom-tabs/show!))
          (case route-name
+           :left-sidebar (bottom-tabs/hide!)
            :page
            (let [id-str (get-in route [:path-params :name])]
              (when (util/uuid-string? id-str)

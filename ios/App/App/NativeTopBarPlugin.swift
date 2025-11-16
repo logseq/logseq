@@ -33,11 +33,16 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
         let rightButtons = call.getArray("rightButtons", JSObject.self) ?? []
         let backgroundColorHex = call.getString("backgroundColor")
         let tintColorHex = call.getString("tintColor")
+        let hidden = call.getBool("hidden") ?? false
         let titleClickable = call.getBool("titleClickable") ?? false
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            nav.setNavigationBarHidden(false, animated: false)
+            nav.setNavigationBarHidden(hidden, animated: true)
+            guard !hidden else {
+                call.resolve()
+                return
+            }
 
             let appearance = UINavigationBarAppearance()
             appearance.configureWithOpaqueBackground()
