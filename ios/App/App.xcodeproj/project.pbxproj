@@ -24,6 +24,8 @@
                 C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */; };
                 CBF2D2DA2DE83CB8006338BE /* UILocalPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */; };
                 CBF2D2E22DE95970006338BE /* AppViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF2D2E12DE95970006338BE /* AppViewController.swift */; };
+                A1B2C3D41E2F3A4B5C6D7E90 /* NativePageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */; };
+                A1B2C3D41E2F3A4B5C6D7E92 /* SharedWebViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */; };
                 D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
                 D3490CC62E7CE9EA00E796A6 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC52E7CE9EA00E796A6 /* WidgetKit.framework */; };
                 D3490CC82E7CE9EA00E796A6 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D3490CC72E7CE9EA00E796A6 /* SwiftUI.framework */; };
@@ -93,6 +95,8 @@
                 B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Logseq.framework; sourceTree = BUILT_PRODUCTS_DIR; };
                 CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UILocalPlugin.swift; sourceTree = "<group>"; };
                 CBF2D2E12DE95970006338BE /* AppViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewController.swift; sourceTree = "<group>"; };
+                A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePageViewController.swift; sourceTree = "<group>"; };
+                A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedWebViewController.swift; sourceTree = "<group>"; };
                 D32752BC275496A60039291C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
                 D32752BD275496C60039291C /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
                 D32752BF2754C5AB0039291C /* AppDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppDebug.entitlements; sourceTree = "<group>"; };
@@ -179,6 +183,8 @@
                         isa = PBXGroup;
                         children = (
                                 D39D1FDF2E7DAFB000C903D1 /* LogseqIntents.swift */,
+                                A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */,
+                                A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */,
                                 CBF2D2E12DE95970006338BE /* AppViewController.swift */,
                                 CBF2D2D92DE83CB0006338BE /* UILocalPlugin.swift */,
                                 5FF86329283B5ADB0047731B /* Utils.swift */,
@@ -426,6 +432,8 @@
                                 CBF2D2E22DE95970006338BE /* AppViewController.swift in Sources */,
                                 D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
                                 CBF2D2DA2DE83CB8006338BE /* UILocalPlugin.swift in Sources */,
+                                A1B2C3D41E2F3A4B5C6D7E90 /* NativePageViewController.swift in Sources */,
+                                A1B2C3D41E2F3A4B5C6D7E92 /* SharedWebViewController.swift in Sources */,
                                 D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,
                                 7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */,
                                 D39D1FE12E7DAFB000C903D1 /* LogseqIntents.swift in Sources */,

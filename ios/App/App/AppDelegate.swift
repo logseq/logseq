@@ -3,12 +3,29 @@ import Capacitor
 import Intents
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDelegate {
 
     var window: UIWindow?
+    private var navController: UINavigationController?
+    private var pathStack: [String] = ["/"]
+    private var ignoreRoutePopCount = 0
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        window = UIWindow(frame: UIScreen.main.bounds)
+        let nav = UINavigationController()
+        navController = nav
+        nav.navigationBar.prefersLargeTitles = false
+        nav.delegate = self
+
+        let rootPath = "/"
+        let rootVC = NativePageViewController(path: rootPath, push: true, title: "Logseq")
+        nav.setViewControllers([rootVC], animated: false)
+
+        window?.rootViewController = nav
+        window?.makeKeyAndVisible()
+        observeRouteChanges()
+
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
             DispatchQueue.main.async {
                 _ = self.handleShortcutItem(shortcutItem)
@@ -80,6 +97,109 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
+    private func navigateTo(_ urlString: String) {
+        UILocalPlugin.requestNavigation(path: urlString)
+        pushIfNeeded(path: urlString, animated: true)
+    }
+
+    private func normalizedPath(_ raw: String?) -> String {
+        guard let raw = raw, !raw.isEmpty else { return "/" }
+        return raw
+    }
+
+    private func pushIfNeeded(path: String, animated: Bool) {
+        let path = normalizedPath(path)
+        guard let nav = navController else { return }
+        if pathStack.last == path {
+            return
+        }
+        let vc = NativePageViewController(path: path, push: true)
+        pathStack.append(path)
+        nav.pushViewController(vc, animated: animated)
+    }
+
+    private func replaceTop(path: String) {
+        let path = normalizedPath(path)
+        guard let nav = navController else { return }
+        _ = pathStack.popLast()
+        let vc = NativePageViewController(path: path, push: false)
+        pathStack.append(path)
+        var stack = nav.viewControllers
+        if stack.isEmpty {
+            stack = [vc]
+        } else {
+            stack[stack.count - 1] = vc
+        }
+        nav.setViewControllers(stack, animated: false)
+    }
+
+    private func popIfNeeded(animated: Bool) {
+        guard let nav = navController else { return }
+        if nav.viewControllers.count > 1 {
+            _ = pathStack.popLast()
+            nav.popViewController(animated: animated)
+        }
+    }
+
+    func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
+        guard let current = viewController as? NativePageViewController else { return }
+
+        let visibleCount = navigationController.viewControllers.count
+        let popCount = max(0, pathStack.count - visibleCount)
+
+        if popCount > 0 {
+            // User swiped back / popped: mirror it by popping native stack tracker
+            for _ in 0..<popCount { _ = pathStack.popLast() }
+
+            // And let the single WebView go back in history (once per pop)
+            if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView {
+                ignoreRoutePopCount += popCount
+                for _ in 0..<popCount {
+                    webView.goBack()
+                }
+            }
+            return
+        }
+
+        // Not a pop: ensure stack alignment and tell JS which route to render (no extra history entry)
+        if pathStack.isEmpty {
+            pathStack.append(current.targetPath)
+        } else if let last = pathStack.last, last != current.targetPath {
+            pathStack[pathStack.count - 1] = current.targetPath
+        }
+
+        UILocalPlugin.requestNavigation(path: current.targetPath, push: false)
+    }
+
+    private func observeRouteChanges() {
+        NotificationCenter.default.addObserver(
+            forName: UILocalPlugin.routeChangeNotification,
+            object: nil,
+            queue: OperationQueue.main
+        ) { [weak self] notification in
+            guard let self else { return }
+            let path = self.normalizedPath(notification.userInfo?["path"] as? String)
+            let navigationType = (notification.userInfo?["navigationType"] as? String) ?? "push"
+            print("navigation type:", navigationType)
+            switch navigationType {
+            case "replace":
+                self.replaceTop(path: path)
+            case "pop":
+                if self.ignoreRoutePopCount > 0 {
+                    self.ignoreRoutePopCount -= 1
+                    return
+                }
+                // JS popped browser history; align native stack if needed.
+                if self.pathStack.count > 1 {
+                    self.popIfNeeded(animated: true)
+                }
+            default:
+                // push
+                self.pushIfNeeded(path: path, animated: true)
+            }
+        }
+    }
+
 }
 
 extension NSUserActivity {
