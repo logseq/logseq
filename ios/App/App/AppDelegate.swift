@@ -97,10 +97,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             UIApplication.shared.open(url, options: [:], completionHandler: nil)
         }
     }
-    private func navigateTo(_ urlString: String) {
-        UILocalPlugin.requestNavigation(path: urlString)
-        pushIfNeeded(path: urlString, animated: true)
-    }
 
     private func normalizedPath(_ raw: String?) -> String {
         guard let raw = raw, !raw.isEmpty else { return "/" }
@@ -141,34 +137,52 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         }
     }
 
+    func navigationController(_ navigationController: UINavigationController, willShow viewController: UIViewController, animated: Bool) {
+        guard let toVC = viewController as? NativePageViewController else { return }
+        guard let coordinator = navigationController.transitionCoordinator else { return }
+        let vcs = navigationController.viewControllers
+        let toIndex = vcs.firstIndex(of: toVC)
+        let fromVC = coordinator.viewController(forKey: .from) as? NativePageViewController
+        let fromIndex = fromVC.flatMap { vcs.firstIndex(of: $0) }
+
+        let isPop = if let toIdx = toIndex, let fromIdx = fromIndex {
+            toIdx < fromIdx
+        } else {
+            // fallback: compare counts
+            vcs.count < pathStack.count
+        }
+
+        print("navigationController willShow isPop:", isPop,
+              "from:", fromVC?.targetPath ?? "nil",
+              "to:", toVC.targetPath)
+
+        if isPop {
+            // Keep native bookkeeping aligned with the upcoming pop
+            if pathStack.count > 1 {
+                _ = pathStack.popLast()
+            }
+            if let last = pathStack.last, last != toVC.targetPath {
+                pathStack[pathStack.count - 1] = toVC.targetPath
+            }
+
+            // Move shared webview to destination before pop completes
+            SharedWebViewController.instance.attach(to: toVC)
+
+            // Trigger browser back so Reitit updates route-match while attached to destination
+            if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView,
+               webView.canGoBack {
+                ignoreRoutePopCount += 1
+                webView.goBack()
+            } else {
+                // Fallback: ask JS to render without adding history
+                ignoreRoutePopCount += 1
+            }
+        }
+    }
+
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
         guard let current = viewController as? NativePageViewController else { return }
-
-        let visibleCount = navigationController.viewControllers.count
-        let popCount = max(0, pathStack.count - visibleCount)
-
-        if popCount > 0 {
-            // User swiped back / popped: mirror it by popping native stack tracker
-            for _ in 0..<popCount { _ = pathStack.popLast() }
-
-            // And let the single WebView go back in history (once per pop)
-            if let webView = SharedWebViewController.instance.bridgeController.bridge?.webView {
-                ignoreRoutePopCount += popCount
-                for _ in 0..<popCount {
-                    webView.goBack()
-                }
-            }
-            return
-        }
-
-        // Not a pop: ensure stack alignment and tell JS which route to render (no extra history entry)
-        if pathStack.isEmpty {
-            pathStack.append(current.targetPath)
-        } else if let last = pathStack.last, last != current.targetPath {
-            pathStack[pathStack.count - 1] = current.targetPath
-        }
-
-        UILocalPlugin.requestNavigation(path: current.targetPath, push: false)
+        SharedWebViewController.instance.attach(to: current)
     }
 
     private func observeRouteChanges() {
