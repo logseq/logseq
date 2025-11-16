@@ -185,6 +185,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         SharedWebViewController.instance.attach(to: current)
     }
 
+    func navigationController(_ navigationController: UINavigationController,
+                              animationControllerFor operation: UINavigationController.Operation,
+                              from fromVC: UIViewController,
+                              to toVC: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        let involvesSidebar = isLeftSidebar(fromVC) || isLeftSidebar(toVC)
+        return involvesSidebar ? LeftSidebarAnimator(operation: operation) : nil
+    }
+
+    private func isLeftSidebar(_ vc: UIViewController) -> Bool {
+        guard let pageVC = vc as? NativePageViewController else { return false }
+        return pageVC.targetPath == "/left-sidebar"
+    }
+
     private func observeRouteChanges() {
         NotificationCenter.default.addObserver(
             forName: UILocalPlugin.routeChangeNotification,
@@ -235,6 +248,79 @@ extension NSUserActivity {
         activity.persistentIdentifier = NSUserActivityPersistentIdentifier("com.logseq.audio")
         activity.suggestedInvocationPhrase = "Record in Logseq"
         return activity
+    }
+}
+
+// Custom slide-in animation to open the left sidebar from left-to-right.
+final class LeftSidebarAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    private let operation: UINavigationController.Operation
+    private let duration: TimeInterval = 0.28
+
+    init(operation: UINavigationController.Operation) {
+        self.operation = operation
+    }
+
+    func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
+        duration
+    }
+
+    func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
+        guard
+            let fromView = transitionContext.view(forKey: .from),
+            let toView = transitionContext.view(forKey: .to)
+        else {
+            transitionContext.completeTransition(false)
+            return
+        }
+
+        let container = transitionContext.containerView
+        let width = container.bounds.width
+        let offscreenLeft = CGAffineTransform(translationX: -width, y: 0)
+        let restingFromTransform = CGAffineTransform(translationX: width * 0.3, y: 0)
+
+        switch operation {
+        case .push:
+            toView.transform = offscreenLeft
+            container.addSubview(toView)
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: [.curveEaseOut],
+                animations: {
+                    fromView.transform = restingFromTransform
+                    toView.transform = .identity
+                },
+                completion: { _ in
+                    let completed = !transitionContext.transitionWasCancelled
+                    fromView.transform = .identity
+                    toView.transform = .identity
+                    if !completed {
+                        toView.removeFromSuperview()
+                    }
+                    transitionContext.completeTransition(completed)
+                }
+            )
+        case .pop:
+            container.insertSubview(toView, belowSubview: fromView)
+            toView.transform = restingFromTransform
+            UIView.animate(
+                withDuration: duration,
+                delay: 0,
+                options: [.curveEaseOut],
+                animations: {
+                    fromView.transform = offscreenLeft
+                    toView.transform = .identity
+                },
+                completion: { _ in
+                    let completed = !transitionContext.transitionWasCancelled
+                    fromView.transform = .identity
+                    toView.transform = .identity
+                    transitionContext.completeTransition(completed)
+                }
+            )
+        default:
+            transitionContext.completeTransition(!transitionContext.transitionWasCancelled)
+        }
     }
 }
 
