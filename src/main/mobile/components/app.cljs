@@ -190,7 +190,9 @@
       :settings
       (settings/page)
       :search
-      (search/search)
+      (if view
+        (view route-match)
+        (search/search))
       "Not Found")))
 
 (rum/defc app
@@ -219,7 +221,7 @@
                         {:data-tab (str tab)}
                         (main-content tab *home)])))
 
-      (mobile-header/header tab login?)
+      ;; (mobile-header/header tab login?)
 
       (mobile-left-sidebar/left-sidebar)
 

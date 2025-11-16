@@ -1,5 +1,6 @@
 (ns mobile.routes
-  (:require [frontend.components.page :as page]))
+  (:require [frontend.components.page :as page]
+            [mobile.components.search :as search]))
 
 (def routes
   [["/"
@@ -8,6 +9,10 @@
     {:name :page
      :view (fn [route-match]
              (page/page-cp route-match))}]
+   ["/search"
+    {:name :search
+     :view (fn []
+             (search/search))}]
    ["/graphs"
     {:name :graphs}]
    ["/import"
