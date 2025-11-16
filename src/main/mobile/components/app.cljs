@@ -18,7 +18,6 @@
             [mobile.bottom-tabs :as bottom-tabs]
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.header :as mobile-header]
-            [mobile.components.left-sidebar :as mobile-left-sidebar]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
@@ -222,8 +221,6 @@
                         (main-content tab *home)])))
 
       (mobile-header/header tab login?)
-
-      (mobile-left-sidebar/left-sidebar)
 
       ;; bottom tabs
       (when-not (mobile-util/native-ios?)
