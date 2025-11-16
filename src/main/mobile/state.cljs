@@ -48,11 +48,8 @@
 
 (defn open-left-sidebar!
   []
-  (reset! *left-sidebar-open? true))
-
-(defn close-left-sidebar!
-  []
-  (reset! *left-sidebar-open? false))
+  (reset! *left-sidebar-open? true)
+  (state/pub-event! [:mobile/redirect-to {:k :left-sidebar}]))
 
 (defn left-sidebar-open?
   []
@@ -60,6 +57,12 @@
 
 (defn redirect-to-tab! [name]
   (set-tab! (str name)))
+
+(defn close-left-sidebar!
+  []
+  (reset! *left-sidebar-open? false)
+  (redirect-to-tab! "home")
+  (state/pub-event! [:mobile/redirect-to {:k :home}]))
 
 (defonce *log (atom []))
 (defn log-append!
