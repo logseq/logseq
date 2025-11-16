@@ -16,6 +16,7 @@
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
+            [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [logseq.api]
             [logseq.db.frontend.kv-entity]
@@ -54,16 +55,17 @@
 (defonce root (rdc/createRoot (.getElementById js/document "root")))
 
 (defn ^:export start []
-  (when config/dev?
-    (md/start!))
-  (set-router!)
+  (when-not (util/capacitor?)
+    (when config/dev?
+      (md/start!))
+    (set-router!)
 
-  (.render ^js root (page/current-page))
+    (.render ^js root (page/current-page))
 
-  (display-welcome-message)
+    (display-welcome-message)
     ;; NO repo state here, better not add init logic here
-  (when config/dev?
-    (js/setTimeout #(sync/<sync-start) 1000)))
+    (when config/dev?
+      (js/setTimeout #(sync/<sync-start) 1000))))
 
 (comment
   (def d-entity-count (volatile! 0))
