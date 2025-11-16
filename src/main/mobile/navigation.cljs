@@ -40,8 +40,9 @@
                              route (assoc :route route)
                              (or path (.-hash js/location))
                              (assoc :path (strip-fragment (or path (.-hash js/location))))))]
-      (-> (.routeDidChange mobile-util/ui-local payload)
-          (p/catch (fn [err]
-                     (log/warn :mobile-native-navigation/route-report-failed
-                               {:error err
-                                :payload payload})))))))
+      (when-not (= nav-type "pop")
+        (-> (.routeDidChange mobile-util/ui-local payload)
+            (p/catch (fn [err]
+                       (log/warn :mobile-native-navigation/route-report-failed
+                                 {:error err
+                                  :payload payload}))))))))

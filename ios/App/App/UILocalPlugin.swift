@@ -537,32 +537,6 @@ private func scoreTranscript(_ text: String, locale: Locale) -> Int {
         }
     }
 
-    @objc public static func requestNavigation(_ route: [String: Any]) {
-        // Use this to ask the WebView to navigate with a named route map.
-        if navigationReady {
-            NotificationCenter.default.post(
-                name: UILocalPlugin.navigationNotification,
-                object: nil,
-                userInfo: ["route": route]
-            )
-        } else {
-            pendingRoutes.append(route)
-        }
-    }
-
-    @objc public static func requestNavigation(path: String, push: Bool = true) {
-        // Use this to ask the WebView to navigate to a specific path (e.g. /page/Today).
-        if navigationReady {
-            NotificationCenter.default.post(
-                name: UILocalPlugin.navigationNotification,
-                object: nil,
-                userInfo: ["path": path, "push": push]
-            )
-        } else {
-            pendingPaths.append((path: path, push: push))
-        }
-    }
-
     @objc func routeDidChange(_ call: CAPPluginCall) {
         let route = call.getObject("route") as? [String: Any]
         let path = call.getString("path")
