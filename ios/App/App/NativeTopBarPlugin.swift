@@ -1,0 +1,147 @@
+import Capacitor
+import UIKit
+
+@objc(NativeTopBarPlugin)
+public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "NativeTopBarPlugin"
+    public let jsName = "NativeTopBarPlugin"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "configure", returnType: CAPPluginReturnPromise)
+    ]
+
+    private class NativeTopBarButton: UIButton {
+        var buttonId: String = ""
+    }
+
+    private func navigationController() -> UINavigationController? {
+        // AppViewController is embedded inside NativePageViewController, which
+        // lives in the root UINavigationController created in AppDelegate.
+        if let nav = bridge?.viewController?.parent?.navigationController {
+            return nav
+        }
+        return bridge?.viewController?.navigationController
+    }
+
+    @objc func configure(_ call: CAPPluginCall) {
+        guard let nav = navigationController() else {
+            call.reject("Navigation controller not found")
+            return
+        }
+
+        let title = call.getString("title")
+        let leftButtons = call.getArray("leftButtons", JSObject.self) ?? []
+        let rightButtons = call.getArray("rightButtons", JSObject.self) ?? []
+        let backgroundColorHex = call.getString("backgroundColor")
+        let tintColorHex = call.getString("tintColor")
+        let titleClickable = call.getBool("titleClickable") ?? false
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            nav.setNavigationBarHidden(false, animated: false)
+
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = backgroundColorHex?.toUIColor(defaultColor: .systemBackground)
+            appearance.shadowColor = .clear
+            appearance.titleTextAttributes = [
+                .foregroundColor: tintColorHex?.toUIColor(defaultColor: .label) ?? .label
+            ]
+
+            nav.navigationBar.standardAppearance = appearance
+            nav.navigationBar.scrollEdgeAppearance = appearance
+            nav.navigationBar.tintColor = tintColorHex?.toUIColor(defaultColor: .label) ?? .label
+
+            if let topVC = nav.topViewController {
+                topVC.navigationItem.titleView = nil
+                if titleClickable, let title {
+                    let button = NativeTopBarButton(type: .system)
+                    button.buttonId = "title"
+                    button.setTitle(title, for: .normal)
+                    button.setTitleColor(nav.navigationBar.tintColor, for: .normal)
+                    button.titleLabel?.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
+                    button.addTarget(self, action: #selector(titleTapped(_:)), for: .touchUpInside)
+                    topVC.navigationItem.titleView = button
+                } else {
+                    topVC.navigationItem.title = title
+                }
+                topVC.navigationItem.leftBarButtonItems = self.buildButtons(from: leftButtons)
+                topVC.navigationItem.rightBarButtonItems = self.buildButtons(from: rightButtons)
+            }
+
+            call.resolve()
+        }
+    }
+
+    private func buildButtons(from array: [JSObject]) -> [UIBarButtonItem] {
+        return array.compactMap { obj in
+            guard let id = obj["id"] as? String else { return nil }
+            let systemIconName = (obj["systemIcon"] as? String) ?? "circle"
+
+            let button = NativeTopBarButton(type: .system)
+            button.buttonId = id
+            if let image = UIImage(systemName: systemIconName) {
+                button.setImage(image, for: .normal)
+            }
+            button.tintColor = tintColor(for: obj)
+            button.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
+            button.imageView?.contentMode = .scaleAspectFit
+            button.addTarget(self, action: #selector(buttonTapped(_:)), for: .touchUpInside)
+
+            let item = UIBarButtonItem(customView: button)
+            // Ensure a minimum tap target size
+            button.widthAnchor.constraint(equalToConstant: 36).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            return item
+        }
+    }
+
+    private func tintColor(for obj: JSObject) -> UIColor {
+        if let hex = obj["tintColor"] as? String {
+            return hex.toUIColor(defaultColor: .label)
+        }
+        return .label
+    }
+
+    @objc private func buttonTapped(_ sender: NativeTopBarButton) {
+        notifyListeners("buttonTapped", data: ["id": sender.buttonId])
+    }
+
+    @objc private func titleTapped(_ sender: NativeTopBarButton) {
+        notifyListeners("buttonTapped", data: ["id": "title"])
+    }
+}
+
+// MARK: - Color helpers
+
+private extension String {
+    func toUIColor(defaultColor: UIColor) -> UIColor {
+        var hexString = self.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if hexString.hasPrefix("#") {
+            hexString.removeFirst()
+        }
+
+        var rgbValue: UInt64 = 0
+        guard Scanner(string: hexString).scanHexInt64(&rgbValue) else {
+            return defaultColor
+        }
+
+        switch hexString.count {
+        case 6: // RRGGBB
+            return UIColor(
+                red: CGFloat((rgbValue & 0xFF0000) >> 16) / 255.0,
+                green: CGFloat((rgbValue & 0x00FF00) >> 8) / 255.0,
+                blue: CGFloat(rgbValue & 0x0000FF) / 255.0,
+                alpha: 1.0
+            )
+        case 8: // RRGGBBAA
+            return UIColor(
+                red: CGFloat((rgbValue & 0xFF000000) >> 24) / 255.0,
+                green: CGFloat((rgbValue & 0x00FF0000) >> 16) / 255.0,
+                blue: CGFloat((rgbValue & 0x0000FF00) >> 8) / 255.0,
+                alpha: CGFloat(rgbValue & 0x000000FF) / 255.0
+            )
+        default:
+            return defaultColor
+        }
+    }
+}

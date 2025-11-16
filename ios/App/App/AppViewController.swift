@@ -11,5 +11,6 @@ import Capacitor
 @objc public class AppViewController: CAPBridgeViewController {
   override public func capacitorDidLoad() {
     bridge?.registerPluginInstance(UILocalPlugin())
+    bridge?.registerPluginInstance(NativeTopBarPlugin())
   }
 }
