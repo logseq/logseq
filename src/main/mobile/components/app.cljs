@@ -19,7 +19,6 @@
             [mobile.components.editor-toolbar :as editor-toolbar]
             [mobile.components.header :as mobile-header]
             [mobile.components.left-sidebar :as mobile-left-sidebar]
-            [mobile.components.modal :as modal]
             [mobile.components.popup :as popup]
             [mobile.components.search :as search]
             [mobile.components.selection-toolbar :as selection-toolbar]
@@ -31,8 +30,7 @@
 
 (defn- sidebar-not-allowed-to-open?
   []
-  (or (seq @mobile-state/*modal-blocks)
-      (seq @mobile-state/*popup-data)
+  (or (seq @mobile-state/*popup-data)
       (:mobile/show-action-bar? @state/state)
       (state/editing?)))
 
@@ -178,6 +176,23 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
+(rum/defc main-content < rum/reactive
+  [tab *home]
+  (let [route-match (state/sub :route-match)
+        view (get-in route-match [:data :view])]
+    (prn :debug :route-match route-match
+         :view view)
+    (case (keyword tab)
+      :home
+      (if view
+        (view route-match)
+        (home *home tab))
+      :settings
+      (settings/page)
+      :search
+      (search/search)
+      "Not Found")))
+
 (rum/defc app
   [current-repo {:keys [login?]}]
   (let [[tab] (mobile-state/use-tab)
@@ -202,14 +217,7 @@
                        {:class "app-silk-index-scroll-content"}
                        [:div.app-silk-index-container
                         {:data-tab (str tab)}
-                        (case (keyword tab)
-                          :home
-                          (home *home tab)
-                          :settings
-                          (settings/page)
-                          :search
-                          (search/search)
-                          "Not Found")])))
+                        (main-content tab *home)])))
 
       (mobile-header/header tab login?)
 
@@ -226,7 +234,6 @@
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
       (shui-popup/install-popups)
-      (modal/blocks-modal)
       (popup/popup)))))
 
 (rum/defc main < rum/reactive
