@@ -14,7 +14,8 @@
     <a href="https://logseq.com">Home Page</a> |
     <a href="https://blog.logseq.com/">Blog</a> |
     <a href="https://docs.logseq.com/">Documentation</a> |
-    <a href="https://trello.com/b/8txSM12G/roadmap">Roadmap</a>
+    <a href="https://trello.com/b/8txSM12G/roadmap">Roadmap</a> |
+    <a href="./READMEcn.md">中文/Chinese</a>
 </div>
 <br></br>
 
