@@ -61,12 +61,14 @@
   []
   (p/do!
    (configure-tabs
-    [{:id "home"    :title "Home"    :systemImage "house"             :role "normal"}
-     {:id "quick-add" :title "Capture" :systemImage "plus"            :role "normal"}
-     {:id "settings" :title "Settings" :systemImage "gear"            :role "normal"}
-     {:id "search"  :title "Search"  :systemImage "magnifyingglass"   :role "search"}])
+    [{:id "home"      :title "Home"      :systemImage "house"             :role "normal"}
+     {:id "quick-add" :title "Capture" :systemImage "plus"                :role "normal"}
+     {:id "settings"  :title "Settings" :systemImage "gear"               :role "normal"}
+     ;; {:id "search"    :title "Search"    :systemImage "magnifyingglass"   :role "search"}
+     ])
    (add-tab-selected-listener!
     (fn [tab]
+      (prn :debug :tab tab)
       (when-not (= tab "quick-add")
         (mobile-state/set-tab! tab))
       (case tab

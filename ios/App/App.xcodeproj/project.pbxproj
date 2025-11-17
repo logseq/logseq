@@ -35,7 +35,6 @@
                 D3989CC32ECB0E5700D06615 /* LiquidTabsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3989CBF2ECB0E5700D06615 /* LiquidTabsStore.swift */; };
                 D3989CC42ECB0E5700D06615 /* LiquidTabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3989CBD2ECB0E5700D06615 /* LiquidTabsPlugin.swift */; };
                 D3989CC52ECB0E5700D06615 /* NativeNavHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3989CC02ECB0E5700D06615 /* NativeNavHost.swift */; };
-                D3989CC62ECB0E5700D06615 /* SearchTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3989CC12ECB0E5700D06615 /* SearchTabView.swift */; };
                 D3989CC82ECB174A00D06615 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3989CC72ECB174A00D06615 /* SceneDelegate.swift */; };
                 D39D1FE02E7DAFB000C903D1 /* LogseqIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39D1FDF2E7DAFB000C903D1 /* LogseqIntents.swift */; };
                 D39D1FE12E7DAFB000C903D1 /* LogseqIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = D39D1FDF2E7DAFB000C903D1 /* LogseqIntents.swift */; };
@@ -116,7 +115,6 @@
                 D3989CBE2ECB0E5700D06615 /* LiquidTabsRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidTabsRootView.swift; sourceTree = "<group>"; };
                 D3989CBF2ECB0E5700D06615 /* LiquidTabsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidTabsStore.swift; sourceTree = "<group>"; };
                 D3989CC02ECB0E5700D06615 /* NativeNavHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNavHost.swift; sourceTree = "<group>"; };
-                D3989CC12ECB0E5700D06615 /* SearchTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTabView.swift; sourceTree = "<group>"; };
                 D3989CC72ECB174A00D06615 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
                 D39D1FDF2E7DAFB000C903D1 /* LogseqIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogseqIntents.swift; sourceTree = "<group>"; };
                 D3D62A09275C92880003FBDC /* FileContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FileContainer.swift; sourceTree = "<group>"; };
@@ -201,7 +199,6 @@
                                 D3989CBE2ECB0E5700D06615 /* LiquidTabsRootView.swift */,
                                 D3989CBF2ECB0E5700D06615 /* LiquidTabsStore.swift */,
                                 D3989CC02ECB0E5700D06615 /* NativeNavHost.swift */,
-                                D3989CC12ECB0E5700D06615 /* SearchTabView.swift */,
                                 D39D1FDF2E7DAFB000C903D1 /* LogseqIntents.swift */,
                                 A1B2C3D41E2F3A4B5C6D7E8F /* NativePageViewController.swift */,
                                 A1B2C3D41E2F3A4B5C6D7E91 /* SharedWebViewController.swift */,
@@ -453,7 +450,6 @@
                                 D3989CC32ECB0E5700D06615 /* LiquidTabsStore.swift in Sources */,
                                 D3989CC42ECB0E5700D06615 /* LiquidTabsPlugin.swift in Sources */,
                                 D3989CC52ECB0E5700D06615 /* NativeNavHost.swift in Sources */,
-                                D3989CC62ECB0E5700D06615 /* SearchTabView.swift in Sources */,
                                 D3989CC82ECB174A00D06615 /* SceneDelegate.swift in Sources */,
                                 5FF8632A283B5ADB0047731B /* Utils.swift in Sources */,
                                 CBF2D2E22DE95970006338BE /* AppViewController.swift in Sources */,
