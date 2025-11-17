@@ -91,9 +91,8 @@
     :args->opts [:graph] :require [:graph]
     :spec cli-spec/export}
    {:cmds ["export-edn"] :desc "Export DB graph as EDN"
-    :description "Export a graph to EDN like the in-app graph EDN export. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
+    :description "Export a local graph to EDN or the current in-app graph if --api-server-token is given. See https://github.com/logseq/docs/blob/master/db-version.md#edn-data-export for more about this export type."
     :fn (lazy-load-fn 'logseq.cli.commands.export-edn/export)
-    :args->opts [:graph] :require [:graph]
     :spec cli-spec/export-edn}
    {:cmds ["append"] :desc "Appends text to current page"
     :fn (lazy-load-fn 'logseq.cli.commands.append/append)
