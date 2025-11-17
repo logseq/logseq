@@ -2,6 +2,7 @@
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
             [clojure.string :as string]
+            [dommy.core :as dom]
             [frontend.background-tasks]
             [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
@@ -35,14 +36,15 @@
     (rfe/start!
      router
      (fn [route]
-       (route-handler/set-route-match! route)
        (let [route-name (get-in route [:data :name])
              path (-> js/location .-hash (string/replace-first #"^#" ""))]
+         (route-handler/set-route-match! route)
          (mobile-nav/notify-route-change!
           {:route {:to route-name
                    :path-params (:path-params route)
                    :query-params (:query-params route)}
            :path path})
+
          (when (not= route-name :left-sidebar)
            (reset! mobile-state/*left-sidebar-open? false)
            (bottom-tabs/show!))

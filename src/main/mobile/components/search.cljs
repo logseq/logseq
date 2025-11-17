@@ -65,7 +65,7 @@
      (fn []
        (if focused?
          (let [input (rum/deref *ref)
-               scroll-cnt (some-> input (.closest ".app-silk-index-scroll-content") (.-parentNode))
+               scroll-cnt (util/app-scroll-container-node)
                handle! (fn [] (some-> input (.blur)))]
            (.addEventListener scroll-cnt "scroll" handle!)
            #(.removeEventListener scroll-cnt "scroll" handle!))
