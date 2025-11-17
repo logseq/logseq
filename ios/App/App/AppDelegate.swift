@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import Intents
+import SwiftUI
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDelegate {
@@ -16,20 +17,42 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         return gesture
     }()
 
-    func application(_ application: UIApplication,
-                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        window = UIWindow(frame: UIScreen.main.bounds)
+    func createRootNavController() -> UINavigationController {
         let nav = UINavigationController()
         navController = nav
         nav.navigationBar.prefersLargeTitles = false
         nav.delegate = self
 
+        if #available(iOS 15.0, *) {
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithTransparentBackground()
+            appearance.backgroundEffect = UIBlurEffect(style: .systemMaterial)
+            appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.6)
+            appearance.shadowColor = .clear
+            nav.navigationBar.standardAppearance = appearance
+            nav.navigationBar.scrollEdgeAppearance = appearance
+            nav.navigationBar.compactAppearance = appearance
+        }
+
         let rootPath = "/"
         let rootVC = NativePageViewController(path: rootPath, push: true, title: "Logseq")
         nav.setViewControllers([rootVC], animated: false)
 
-        window?.rootViewController = nav
+        return nav
+    }
+
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        let nav = createRootNavController()
+        self.navController = nav
+
+        let rootView = LiquidTabsRootView(navController: nav)
+        let hosting = UIHostingController(rootView: rootView)
+
+        window = UIWindow(frame: UIScreen.main.bounds)
+        window?.rootViewController = hosting
         window?.makeKeyAndVisible()
+
         observeRouteChanges()
 
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
