@@ -31,16 +31,11 @@
 
 (rum/defc ^:large-vars/cleanup-todo search
   []
-  (let [*ref (hooks/use-ref nil)
-        [input set-input!] (hooks/use-state "")
-        [focused? set-focused?] (hooks/use-state false)
+  (let [[input set-input!] (hooks/use-state "")
         [search-result set-search-result!] (hooks/use-state nil)
         [last-input-at set-last-input-at!] (hooks/use-state nil)
         [recents set-recents!] (hooks/use-state (search-handler/get-recents))
-        result search-result
-        clear! (fn []
-                 (set-input! "")
-                 (set-search-result! nil))]
+        result search-result]
 
     (hooks/use-effect!
      (fn []
@@ -61,56 +56,7 @@
               (js/clearTimeout timeout)))))
      [(hooks/use-debounced-value input 150)])
 
-    (hooks/use-effect!
-     (fn []
-       (if focused?
-         (let [input (rum/deref *ref)
-               scroll-cnt (util/app-scroll-container-node)
-               handle! (fn [] (some-> input (.blur)))]
-           (.addEventListener scroll-cnt "scroll" handle!)
-           #(.removeEventListener scroll-cnt "scroll" handle!))
-         #()))
-     [focused?])
-
-    (hooks/use-effect!
-     (fn []
-       (js/setTimeout #(some-> (rum/deref *ref) (.focus)) 128)
-       #())
-     [])
-
     [:div.app-silk-search-page
-     [:div.hd
-      {:class (when (or focused?
-                        (not (string/blank? input)))
-                "input-focused")}
-      [:div.relative
-       (shui/tabler-icon "search")
-       (shui/input
-        {:ref *ref
-         :placeholder "Search"
-         :value input
-         :auto-focus false
-         :on-focus #(set-focused? true)
-         :on-blur #(set-focused? false)
-         :on-change (fn [^js e]
-                      (let [input (.-value (.-target e))]
-                        (set-input! input)
-                        (set-last-input-at! (util/time-ms))))})]
-      (shui/button
-       {:class "cancel"
-        :variant :text
-        :on-pointer-down
-        (fn [e]
-          (util/stop e)
-          (some-> (rum/deref *ref) (.blur))
-          (util/schedule #(clear!)))}
-       "Cancel")
-      (when-not (string/blank? input)
-        [:a.x {:on-click (fn []
-                           (clear!)
-                           (some-> (rum/deref *ref) (.focus)))}
-         (shui/tabler-icon "x" {:size 14})])]
-
      [:div.bd
       (when (and (string/blank? input) (seq recents))
         [:div.mb-4
