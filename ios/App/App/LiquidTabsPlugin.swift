@@ -3,11 +3,18 @@ import Capacitor
 import SwiftUI
 
 @objc(LiquidTabsPlugin)
-public class LiquidTabsPlugin: CAPPlugin {
+public class LiquidTabsPlugin: CAPPlugin, CAPBridgedPlugin {
     // So SwiftUI can notify JS
     static weak var shared: LiquidTabsPlugin?
 
     private let store = LiquidTabsStore.shared
+
+    public let identifier = "LiquidTabsPlugin"
+    public let jsName = "LiquidTabsPlugin"
+    public let pluginMethods: [CAPPluginMethod] = [
+      CAPPluginMethod(name: "configureTabs", returnType: CAPPluginReturnPromise),
+      CAPPluginMethod(name: "selectTab", returnType: CAPPluginReturnPromise)
+    ]
 
     public override func load() {
         super.load()

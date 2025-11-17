@@ -11,7 +11,7 @@
 ;; Capacitor plugin instance:
 ;; Make sure the plugin is registered as `LiquidTabs` on the native side.
 (def ^js liquid-tabs
-  (.. js/Capacitor -Plugins -LiquidTabs))
+  (.. js/Capacitor -Plugins -LiquidTabsPlugin))
 
 (defn configure-tabs
   "Configure the native tab bar.
@@ -89,9 +89,10 @@
   (p/do!
     ;; (configure-tabs (:ui/theme @state/state) true)
    (configure-tabs
-    [{:id "home"    :title "Home"    :system-image "house"             :role "normal"}
-     {:id "search"  :title "Search"  :system-image "magnifyingglass"   :role "search"}
-     {:id "settings" :title "Settings" :system-image "gear"            :role "normal"}])
+    [{:id "home"    :title "Home"    :systemImage "house"             :role "normal"}
+     {:id "quick-add" :title "Capture" :systemImage "plus"            :role "normal"}
+     {:id "settings" :title "Settings" :systemImage "gear"            :role "normal"}
+     {:id "search"  :title "Search"  :systemImage "magnifyingglass"   :role "search"}])
    (add-tab-selected-listener!
     (fn [tab]
       (when-not (= tab "quick-add")

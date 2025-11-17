@@ -5,16 +5,24 @@ struct LiquidTabsRootView: View {
     let navController: UINavigationController
 
     var body: some View {
-        TabView(selection: Binding(
-            get: { store.effectiveSelectedId() },
-            set: { newValue in
-                guard let id = newValue else { return }
-                store.selectedId = id
-                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-            }
-        )) {
-            ForEach(store.tabs) { tab in
-                tabView(for: tab)
+        Group {
+            if store.tabs.isEmpty {
+                // Fallback: just show your existing nav + webview
+                NativeNavHost(navController: navController)
+                    .ignoresSafeArea()
+            } else {
+                TabView(selection: Binding(
+                    get: { store.effectiveSelectedId() },
+                    set: { newValue in
+                        guard let id = newValue else { return }
+                        store.selectedId = id
+                        LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                    }
+                )) {
+                    ForEach(store.tabs) { tab in
+                        tabView(for: tab)
+                    }
+                }
             }
         }
     }
@@ -23,7 +31,6 @@ struct LiquidTabsRootView: View {
     private func tabView(for tab: LiquidTab) -> some View {
         switch tab.role {
         case .normal:
-            // Normal tab: your existing nav + webview
             NativeNavHost(navController: navController)
                 .ignoresSafeArea()
                 .tabItem {
@@ -32,7 +39,6 @@ struct LiquidTabsRootView: View {
                 .tag(tab.id as String?)
 
         case .search:
-            // Search tab: uses SwiftUI's searchable() for the liquid search UI
             SearchTabView()
                 .tabItem {
                     Label(tab.title, systemImage: tab.systemImage)

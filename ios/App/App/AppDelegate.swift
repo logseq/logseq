@@ -7,7 +7,7 @@ import SwiftUI
 class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDelegate {
 
     var window: UIWindow?
-    private var navController: UINavigationController?
+    var navController: UINavigationController?
     private var pathStack: [String] = ["/"]
     private var ignoreRoutePopCount = 0
     private lazy var sidebarCloseGesture: UISwipeGestureRecognizer = {
@@ -17,44 +17,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         return gesture
     }()
 
-    func createRootNavController() -> UINavigationController {
-        let nav = UINavigationController()
-        navController = nav
-        nav.navigationBar.prefersLargeTitles = false
-        nav.delegate = self
-
-        if #available(iOS 15.0, *) {
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithTransparentBackground()
-            appearance.backgroundEffect = UIBlurEffect(style: .systemMaterial)
-            appearance.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.6)
-            appearance.shadowColor = .clear
-            nav.navigationBar.standardAppearance = appearance
-            nav.navigationBar.scrollEdgeAppearance = appearance
-            nav.navigationBar.compactAppearance = appearance
-        }
-
-        let rootPath = "/"
-        let rootVC = NativePageViewController(path: rootPath, push: true, title: "Logseq")
-        nav.setViewControllers([rootVC], animated: false)
-
-        return nav
-    }
-
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        let nav = createRootNavController()
-        self.navController = nav
-
-        let rootView = LiquidTabsRootView(navController: nav)
-        let hosting = UIHostingController(rootView: rootView)
-
-        window = UIWindow(frame: UIScreen.main.bounds)
-        window?.rootViewController = hosting
-        window?.makeKeyAndVisible()
-
-        observeRouteChanges()
-
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
             DispatchQueue.main.async {
                 _ = self.handleShortcutItem(shortcutItem)
@@ -68,6 +32,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
                      completionHandler: @escaping (Bool) -> Void) {
         let handled = handleShortcutItem(shortcutItem)
         completionHandler(handled)
+    }
+
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: "Default Configuration",
+                                          sessionRole: connectingSceneSession.role)
+        config.delegateClass = SceneDelegate.self
+        return config
+    }
+
+    func application(_ application: UIApplication,
+                     didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
+        // no-op, unless you want to clean anything up
     }
 
     private func handleShortcutItem(_ shortcutItem: UIApplicationShortcutItem) -> Bool {
@@ -387,5 +365,9 @@ extension AppDelegate {
         window?.rootViewController?.userActivity = activity
         activity.becomeCurrent()
         print("✅ Donated Record Audio (NSUserActivity)")
+    }
+
+    func startRouteObservation() {
+        observeRouteChanges()
     }
 }

@@ -34,8 +34,6 @@ PODS:
     - Capacitor
   - SendIntent (7.0.0):
     - Capacitor
-  - StayLiquid (0.1.0):
-    - Capacitor (>= 6.0.0)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
@@ -56,7 +54,6 @@ DEPENDENCIES:
   - "CapgoCapacitorNavigationBar (from `../../node_modules/@capgo/capacitor-navigation-bar`)"
   - "JcesarmobileSslSkip (from `../../node_modules/@jcesarmobile/ssl-skip`)"
   - SendIntent (from `../../node_modules/send-intent`)
-  - StayLiquid (from `../../node_modules/stay-liquid`)
 
 EXTERNAL SOURCES:
   Capacitor:
@@ -95,8 +92,6 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@jcesarmobile/ssl-skip"
   SendIntent:
     :path: "../../node_modules/send-intent"
-  StayLiquid:
-    :path: "../../node_modules/stay-liquid"
 
 SPEC CHECKSUMS:
   Capacitor: 03bc7cbdde6a629a8b910a9d7d78c3cc7ed09ea7
@@ -117,8 +112,7 @@ SPEC CHECKSUMS:
   CapgoCapacitorNavigationBar: 067b1c1d1ede5ce96200a730ce7fd498e9641509
   JcesarmobileSslSkip: 5fa98636a64c36faa50f32ab4daf34e38f4d45b9
   SendIntent: 8a6f646a4489f788d253ffbd1082a98ea388d870
-  StayLiquid: dac4b6cd7761472754f97d367ba4651ca79fcd2e
 
-PODFILE CHECKSUM: 858411d5b4560fd80593ea76b0fd6359bccabec3
+PODFILE CHECKSUM: 00fbb7ba3788966b68cb8a5a6f2abc380d7b7b9a
 
 COCOAPODS: 1.16.2

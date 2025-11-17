@@ -12,5 +12,6 @@ import Capacitor
   override public func capacitorDidLoad() {
     bridge?.registerPluginInstance(UILocalPlugin())
     bridge?.registerPluginInstance(NativeTopBarPlugin())
+    bridge?.registerPluginInstance(LiquidTabsPlugin())
   }
 }
