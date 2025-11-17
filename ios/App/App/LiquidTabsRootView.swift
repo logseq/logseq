@@ -5,9 +5,8 @@ struct LiquidTabsRootView: View {
     let navController: UINavigationController
 
     @State private var searchText: String = ""
-    @FocusState private var isSearchFocused: Bool
 
-    // Convenience helpers: first two tabs from CLJS, rest ignored
+    // Convenience helpers: first three tabs from CLJS, rest ignored
     private var firstTab: LiquidTab? {
         store.tabs.first
     }
@@ -22,106 +21,98 @@ struct LiquidTabsRootView: View {
 
     var body: some View {
         if #available(iOS 26.0, *) {
-            // iOS 26+: static TabView with a dedicated search tab (role: .search)
+            // iOS 26+: TabView with dedicated search tab role
             if store.tabs.isEmpty {
                 NativeNavHost(navController: navController)
-                  .ignoresSafeArea()
+                    .ignoresSafeArea()
             } else {
-                    TabView {
-                        // ---- Tab 1 (normal) ----
-                        if let tab = firstTab {
-                            Tab {
-                                NativeNavHost(navController: navController)
-                                  .ignoresSafeArea()
-                                  .onAppear {
-                                      store.selectedId = tab.id
-                                      LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
-                                  }
-                            } label: {
-                                Label(tab.title, systemImage: tab.systemImage)
-                            }
-                        }
-
-                        // ---- Tab 2 (normal) ----
-                        if let tab = secondTab {
-                            Tab {
-                                NativeNavHost(navController: navController)
-                                  .ignoresSafeArea()
-                                  .onAppear {
-                                      store.selectedId = tab.id
-                                      LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
-                                  }
-                            } label: {
-                                Label(tab.title, systemImage: tab.systemImage)
-                            }
-                        }
-
-                        // ---- Tab 3 (normal) ----
-                        if let tab = thirdTab {
-                            Tab {
-                                NativeNavHost(navController: navController)
-                                  .ignoresSafeArea()
-                                  .onAppear {
-                                      store.selectedId = tab.id
-                                      LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
-                                  }
-                            } label: {
-                                Label(tab.title, systemImage: tab.systemImage)
-                            }
-                        }
-
-                        // ---- Search tab: same webview, CLJS shows search page ----
-                        Tab(role: .search) {
+                TabView {
+                    // ---- Tab 1 (normal) ----
+                    if let tab = firstTab {
+                        Tab {
                             NativeNavHost(navController: navController)
-                              .ignoresSafeArea()
-                              .onAppear {
-                                  store.selectedId = "search"
-                                  LiquidTabsPlugin.shared?.notifyTabSelected(id: "search")
-
-                                  // Focus the native search field when entering search tab
-                                  DispatchQueue.main.async {
-                                      isSearchFocused = true
-                                  }
-                              }
-                              .onDisappear {
-                                  isSearchFocused = false
-                              }
+                                .ignoresSafeArea()
+                                .onAppear {
+                                    store.selectedId = tab.id
+                                    LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
+                                }
                         } label: {
-                            Label("Search", systemImage: "magnifyingglass")
+                            Label(tab.title, systemImage: tab.systemImage)
                         }
-
                     }
-                    // 👇 Key part: toolbar placement ties search to the bottom “liquid” bar
-                      .searchable(
-                        text: $searchText,
-                        placement: .toolbar,
-                        prompt: "Search"
-                      )
-                      .searchFocused($isSearchFocused)
-                      .searchToolbarBehavior(.minimize)
-                      .onChange(of: searchText) { newValue in
-                          LiquidTabsPlugin.shared?.notifySearchChanged(query: newValue)
-                      }
 
+                    // ---- Tab 2 (normal) ----
+                    if let tab = secondTab {
+                        Tab {
+                            NativeNavHost(navController: navController)
+                                .ignoresSafeArea()
+                                .onAppear {
+                                    store.selectedId = tab.id
+                                    LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
+                                }
+                        } label: {
+                            Label(tab.title, systemImage: tab.systemImage)
+                        }
+                    }
+
+                    // ---- Tab 3 (normal) ----
+                    if let tab = thirdTab {
+                        Tab {
+                            NativeNavHost(navController: navController)
+                                .ignoresSafeArea()
+                                .onAppear {
+                                    store.selectedId = tab.id
+                                    LiquidTabsPlugin.shared?.notifyTabSelected(id: tab.id)
+                                }
+                        } label: {
+                            Label(tab.title, systemImage: tab.systemImage)
+                        }
+                    }
+
+                    // ---- Search tab (special role) ----
+                    Tab(role: .search) {
+                        // 👇 Apple requires search tab content inside NavigationStack
+                        NavigationStack {
+                            NativeNavHost(navController: navController)
+                                .ignoresSafeArea()
+                                .onAppear {
+                                    // Tell CLJS to show the search page
+                                    store.selectedId = "search"
+                                    LiquidTabsPlugin.shared?.notifyTabSelected(id: "search")
+                                }
+                        }
+                    } label: {
+                        Label("Search", systemImage: "magnifyingglass")
+                    }
+                }
+                // 👇 This is the key combo for “search tab → search field” UX:
+                //  - Tab(role: .search) above
+                //  - .searchable on the TabView
+                .searchable(text: $searchText)
+                .searchToolbarBehavior(.minimize)
+                .onChange(of: searchText) { newValue in
+                    // Forward query to JS/CLJS
+                    LiquidTabsPlugin.shared?.notifySearchChanged(query: newValue)
+                }
             }
 
         } else {
-            // iOS < 26: fall back to the old dynamic tabItem-based tabs
+            // iOS < 26: old dynamic tabItem-based tabs
             TabView(selection: Binding(
-                      get: { store.selectedId ?? firstTab?.id },
-                      set: { newValue in
-                guard let id = newValue else { return }
-                store.selectedId = id
-                LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-            }
-                    )) {
+                get: { store.selectedId ?? firstTab?.id },
+                set: { newValue in
+                    guard let id = newValue else { return }
+                    store.selectedId = id
+                    LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
+                }
+            )) {
                 ForEach(store.tabs) { tab in
                     NativeNavHost(navController: navController)
-                      .ignoresSafeArea()
-                      .tabItem {
-                          Label(tab.title, systemImage: tab.systemImage)
-                      }
-                      .tag(tab.id as String?)
+                        .ignoresSafeArea()
+                        .tabItem {
+                            Label(tab.title, systemImage: tab.systemImage)
+                        }
+                        .tag(tab.id as String?)
                 }
             }
         }

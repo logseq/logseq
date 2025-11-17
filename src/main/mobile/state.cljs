@@ -6,6 +6,9 @@
 (defonce *tab (atom "home"))
 (defn set-tab! [tab] (reset! *tab tab))
 (defn use-tab [] (r/use-atom *tab))
+(defonce *search-input (atom ""))
+(defn use-search-input []
+  (r/use-atom *search-input))
 
 (defonce *modal-blocks (atom []))
 (defonce *blocks-navigation-history (atom []))
