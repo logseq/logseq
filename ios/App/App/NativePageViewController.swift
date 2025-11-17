@@ -8,7 +8,7 @@
 
 import UIKit
 
-class NativePageViewController: UIViewController {
+class NativePageViewController: UIViewController, UIGestureRecognizerDelegate {
     let targetPath: String
     let push: Bool
 
@@ -29,7 +29,37 @@ class NativePageViewController: UIViewController {
         SharedWebViewController.instance.attach(to: self)
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+
+        guard let nav = navigationController,
+              let popGesture = nav.interactivePopGestureRecognizer else { return }
+
+        popGesture.delegate = self
+        let isSidebar = (targetPath == "/left-sidebar")
+        popGesture.isEnabled = !isSidebar && nav.viewControllers.count > 1
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard
+            let nav = navigationController,
+            gestureRecognizer === nav.interactivePopGestureRecognizer
+        else { return true }
+
+        if targetPath == "/left-sidebar" {
+            return false
+        }
+        return nav.viewControllers.count > 1
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let nav = navigationController else { return false }
+        return gestureRecognizer === nav.interactivePopGestureRecognizer
     }
 }
