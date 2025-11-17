@@ -7,7 +7,11 @@
           :desc "File to save export"}})
 
 (def export-edn
-  {:include-timestamps? {:alias :T
+  {:api-server-token {:alias :a
+                      :desc "API server token to export current graph"}
+   :graph {:alias :g
+           :desc "Local graph to export"}
+   :include-timestamps? {:alias :T
                          :desc "Include timestamps in export"}
    :file {:alias :f
           :desc "File to save export"}
@@ -27,7 +31,7 @@
 
 (def import-edn
   {:api-server-token {:alias :a
-                      :desc "API server token to query current graph"}
+                      :desc "API server token to import into current graph"}
    :graph {:alias :g
            :desc "Local graph to import into"}
    :file {:alias :f
@@ -35,16 +39,16 @@
           :desc "EDN File to import"}})
 
 (def query
-  {:graphs {:alias :g
+  {:api-server-token {:alias :a
+                      :desc "API server token to query current graph"}
+   :graphs {:alias :g
             :coerce []
             :desc "Additional graphs to local query"}
    :properties-readable {:alias :p
                          :coerce :boolean
                          :desc "Make properties on local, entity queries show property values instead of ids"}
    :title-query {:alias :t
-                 :desc "Invoke local query on :block/title"}
-   :api-server-token {:alias :a
-                      :desc "API server token to query current graph"}})
+                 :desc "Invoke local query on :block/title"}})
 
 (def search
   {:api-server-token {:alias :a
