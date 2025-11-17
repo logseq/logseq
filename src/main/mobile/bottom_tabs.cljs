@@ -64,9 +64,7 @@
    (configure-tabs
     [{:id "home"      :title "Home"      :systemImage "house"             :role "normal"}
      {:id "quick-add" :title "Capture"   :systemImage "plus"              :role "normal"}
-     {:id "settings"  :title "Settings"  :systemImage "gear"              :role "normal"}
-     ;; {:id "search"    :title "Search"    :systemImage "magnifyingglass"   :role "search"}
-     ])
+     {:id "settings"  :title "Settings"  :systemImage "gear"              :role "normal"}])
    (add-tab-selected-listener!
     (fn [tab]
       (when-not (= tab "quick-add")
@@ -76,8 +74,6 @@
         (do
           (route-handler/redirect-to-home!)
           (util/scroll-to-top false))
-        "search"
-        (route-handler/redirect! {:to :search})
         "quick-add"
         (editor-handler/show-quick-add)
                        ;; TODO: support longPress detection
@@ -88,7 +84,8 @@
    (add-search-listener!
     (fn [q]
       ;; wire up search handler
-      (js/console.log "Native search query" q)))))
+      (js/console.log "Native search query" q)
+      (reset! mobile-state/*search-input q)))))
 
 (defn hide!
   []

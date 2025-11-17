@@ -144,9 +144,13 @@
     (reset! native-top-bar-listener? true)))
 
 (defn- configure-native-top-bar!
-  [{:keys [tab title hidden?]}]
+  [{:keys [tab title route-name]}]
   (when (mobile-util/native-ios?)
-    (let [base {:title title
+    (let [hidden? (and (= tab "search")
+                       (not= route-name :page))
+          skip? (and (= tab "home")
+                     (not= route-name :home))
+          base {:title title
                 :tintColor "#1f2937"
                 :hidden (boolean hidden?)}
           left-buttons (when (= tab "home")
@@ -163,8 +167,9 @@
                    left-buttons (assoc :leftButtons left-buttons)
                    right-buttons (assoc :rightButtons right-buttons)
                    (= tab "home") (assoc :titleClickable true))]
-      (.configure mobile-util/native-top-bar
-                  (clj->js header)))))
+      (when-not skip?
+        (.configure mobile-util/native-top-bar
+                    (clj->js header))))))
 
 (rum/defc rtc-indicator-btn
   []
@@ -175,8 +180,8 @@
                 (user-handler/logged-in?))
        (rtc-indicator/indicator))]))
 
-(rum/defc header
-  [tab login?]
+(rum/defc header-inner
+  [tab route-name]
   (let [current-repo (state/get-current-repo)
         short-repo-name (if current-repo
                           (db-conn/get-short-repo-name current-repo)
@@ -189,8 +194,16 @@
           {:tab tab
            :title (if (= tab "home")
                     short-repo-name
-                    (string/capitalize tab))}))
+                    (string/capitalize tab))
+           :hidden? (and (= tab "search")
+                         (not= route-name :page))
+           :route-name route-name}))
        nil)
-     [tab short-repo-name])
+     [tab short-repo-name route-name])
 
     [:<>]))
+
+(rum/defc header < rum/reactive
+  [tab]
+  (let [route-match (state/sub :route-match)]
+    (header-inner tab (get-in route-match [:data :name]))))

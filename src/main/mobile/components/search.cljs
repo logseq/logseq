@@ -31,7 +31,7 @@
 
 (rum/defc ^:large-vars/cleanup-todo search
   []
-  (let [[input set-input!] (hooks/use-state "")
+  (let [[input set-input!] (mobile-state/use-search-input)
         [search-result set-search-result!] (hooks/use-state nil)
         [last-input-at set-last-input-at!] (hooks/use-state nil)
         [recents set-recents!] (hooks/use-state (search-handler/get-recents))
@@ -56,47 +56,45 @@
               (js/clearTimeout timeout)))))
      [(hooks/use-debounced-value input 150)])
 
-    [:div.app-silk-search-page
-     [:div.bd
-      (when (and (string/blank? input) (seq recents))
-        [:div.mb-4
-         [:div.px-4.text-sm.font-medium.text-muted-foreground
-          [:div.flex.flex-item.items-center.justify-between.mt-2
-           "Recent"
-           (shui/button
-            {:variant :text
-             :size :sm
-             :class "text-muted-foreground flex justify-end pr-1"
-             :on-click (fn []
-                         (search-handler/clear-recents!)
-                         (set-recents! nil))}
-            "Clear")]]
+    [:div.app-search
+     (when (and (string/blank? input) (seq recents))
+       [:div.mb-4
+        [:div.px-4.text-sm.font-medium.text-muted-foreground
+         [:div.flex.flex-item.items-center.justify-between.mt-2
+          "Recent"
+          (shui/button
+           {:variant :text
+            :size :sm
+            :class "text-muted-foreground flex justify-end pr-1"
+            :on-click (fn []
+                        (search-handler/clear-recents!)
+                        (set-recents! nil))}
+           "Clear")]]
 
-         (for [item recents]
-           [:div.px-2
-            (ui/menu-link
-             {:on-click #(set-input! item)}
-             item)])])
-
-      (if (seq result)
-        [:ul.px-3
-         {:class (when (and (not (string/blank? input))
-                            (seq search-result))
-                   "as-results")}
-         (for [{:keys [page? icon text header source-block]} result]
-           (let [block source-block]
-             [:li.flex.gap-1
-              {:on-click (fn []
-                           (when-let [id (:block/uuid block)]
-                             (route-handler/redirect-to-page! (str id))))}
-              [:div.flex.flex-col.gap-1.py-1
-               (when header
-                 [:div.opacity-60.text-sm
-                  header])
-               [:div.flex.flex-row.items-start.gap-1
-                (when (and page? icon) (ui/icon icon {:size 15
-                                                      :class "text-muted-foreground mt-1"}))
-                [:div text]]]]))]
-        (when-not (string/blank? input)
-          [:div.px-4.text-muted-foreground
-           "No results"]))]]))
+        (for [item recents]
+          [:div.px-2
+           (ui/menu-link
+            {:on-click #(set-input! item)}
+            item)])])
+     (if (seq result)
+       [:ul.px-3
+        {:class (when (and (not (string/blank? input))
+                           (seq search-result))
+                  "as-results")}
+        (for [{:keys [page? icon text header source-block]} result]
+          (let [block source-block]
+            [:li.flex.gap-1
+             {:on-click (fn []
+                          (when-let [id (:block/uuid block)]
+                            (route-handler/redirect-to-page! (str id))))}
+             [:div.flex.flex-col.gap-1.py-1
+              (when header
+                [:div.opacity-60.text-sm
+                 header])
+              [:div.flex.flex-row.items-start.gap-1
+               (when (and page? icon) (ui/icon icon {:size 15
+                                                     :class "text-muted-foreground mt-1"}))
+               [:div text]]]]))]
+       (when-not (string/blank? input)
+         [:div.px-4.text-muted-foreground
+          "No results"]))]))
