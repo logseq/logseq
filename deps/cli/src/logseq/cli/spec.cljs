@@ -3,7 +3,9 @@
   commands but are separate because command namespaces are lazy loaded")
 
 (def export
-  {:file {:alias :f
+  {:graph {:alias :g
+           :desc "Local graph to export"}
+   :file {:alias :f
           :desc "File to save export"}})
 
 (def export-edn
@@ -43,7 +45,7 @@
                       :desc "API server token to query current graph"}
    :graphs {:alias :g
             :coerce []
-            :desc "Additional graphs to local query"}
+            :desc "Local graph(s) to query"}
    :properties-readable {:alias :p
                          :coerce :boolean
                          :desc "Make properties on local, entity queries show property values instead of ids"}
@@ -53,6 +55,8 @@
 (def search
   {:api-server-token {:alias :a
                       :desc "API server token to search current graph"}
+   :graph {:alias :g
+           :desc "Local graph to search"}
    :raw {:alias :r
          :desc "Print raw response"}
    :limit {:alias :l
