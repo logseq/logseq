@@ -38,10 +38,6 @@ html.is-native-android {
   }
 }
 
-#main-container {
-  overflow-y: visible;
-}
-
 html.has-mobile-keyboard {
   body {
     @apply overflow-hidden
@@ -529,10 +525,6 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   }
 }
 
-#app-main-content {
-  padding-bottom: 200px;
-}
-
 .menu-link, .cp__repos-quick-actions .ui__button {
   @apply text-base;
 }
@@ -558,4 +550,17 @@ html[data-silk-native-page-scroll-replaced=false] .app-silk-index-scroll-view {
   .property-key {
     margin-bottom: -6px;
   }
+}
+
+body, #root {
+  @apply h-full;
+}
+
+/* Both layers use their own independent scroll containers. */
+#app-main-home, #main-content-container
+{
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 48px;
 }
