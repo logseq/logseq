@@ -5,8 +5,10 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.state :as state]
             [logseq.cli.common.mcp.tools :as cli-common-mcp-tools]
+            [logseq.db.sqlite.util :as sqlite-util]
             [promesa.core :as p]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [clojure.string :as string]
+            [logseq.common.config :as common-config]))
 
 (defn list-tags
   [options]
@@ -60,3 +62,15 @@
                            (outliner-op/batch-import-edn! edn-data {}))]
     (when error (throw (ex-info error {})))
     (ui-handler/re-render-root!)))
+
+(defn export-edn
+  "Given sqlite.export options, exports the current graph as a json map with the
+  :export-body key containing a transit string of the export EDN"
+  [options*]
+  (p/let [options (-> (js->clj options* :keywordize-keys true)
+                      (update :export-type (fnil keyword :graph)))
+          result (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) options)]
+    (when (= :export-edn-error result)
+      (throw (ex-info "Export EDN error" {})))
+    {:export-body (sqlite-util/transit-write result)
+     :graph (string/replace-first (state/get-current-repo) common-config/db-version-prefix "")}))
