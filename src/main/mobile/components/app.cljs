@@ -116,28 +116,22 @@
    [:div.pt-3
     (journal/all-journals)]))
 
-(rum/defc home-inner
-  [*page db-restoring? current-tab]
-  [:div {:id "app-main-content"
-         :ref *page}
+(rum/defc home-inner < rum/static
+  [db-restoring?]
+  (if db-restoring?
+    [:div.space-y-2.mt-8.mx-0.opacity-75
+     (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
+     (shui/skeleton {:class "h-6 w-full bg-gray-200"})
+     (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
+    (journals)))
 
-   ;; main content
-   (if db-restoring?
-     [:div.space-y-2.mt-8.mx-0.opacity-75
-      (shui/skeleton {:class "h-10 w-full mb-6 bg-gray-200"})
-      (shui/skeleton {:class "h-6 w-full bg-gray-200"})
-      (shui/skeleton {:class "h-6 w-full bg-gray-200"})]
-     (if (= current-tab "search")
-       [:div]
-       (journals)))])
-
-(rum/defc home < rum/reactive
+(rum/defc home < rum/reactive rum/static
   {:did-mount (fn [state]
                 (ui/inject-document-devices-envs!)
                 state)}
-  [*page current-tab]
+  []
   (let [db-restoring? (state/sub :db/restoring?)]
-    (home-inner *page db-restoring? current-tab)))
+    (home-inner db-restoring?)))
 
 (defn use-theme-effects!
   [current-repo]
@@ -175,65 +169,93 @@
        #(.removeEventListener js/window "orientationchange" handle-size!)))
    []))
 
+(comment
+  (rum/defc main-content-inner < rum/static
+    [tab route-match]
+    (let [view (get-in route-match [:data :view])
+          home? (and (= tab "home") (nil? view))]
+      [:<>
+       [:div#home-container {:class (when-not home? "hidden")}
+        (home)]
+       (case (keyword tab)
+         :home
+         (when view
+           (view route-match))
+         :settings
+         (settings/page)
+         :search
+         (if view
+           (view route-match)
+           (search/search))
+         "Not Found")])))
+
+(rum/defc main-content-inner < rum/static
+  [tab route-match]
+  (let [view (get-in route-match [:data :view])
+        ;; We are on the journals home screen if the tab is :home
+        ;; AND there is no view (e.g. not viewing a specific journal page)
+        home? (and (= tab "home") (nil? view))]
+    ;; Two-layer structure:
+    ;; - Journals layer keeps its own scroll container and is always in the DOM.
+    ;; - Page layer keeps its own independent scroll container.
+    ;; This ensures switching tabs does not reset scrollTop.
+    [:div#main-container
+     ;; Journals scroll container (keep-alive)
+     ;; This element stays mounted permanently and only toggles visibility.
+     [:div#app-main-home {:class (when-not home? "hidden")}
+      [:div.px-5
+       (home)]]
+
+     ;; Other pages: page, search, settings, etc.
+     ;; These views scroll independently from the journals layer.
+     (when-not home?
+       [:div#main-content-container.px-5
+        (case (keyword tab)
+          :home
+          (when view
+            (view route-match))
+
+          :settings
+          (settings/page)
+
+          :search
+          (if view
+            (view route-match)
+            (search/search))
+
+          nil)])]))
+
 (rum/defc main-content < rum/reactive
-  [tab *home]
-  (let [route-match (state/sub :route-match)
-        view (get-in route-match [:data :view])]
-    (prn :debug :route-match route-match
-         :view view)
-    (case (keyword tab)
-      :home
-      (if view
-        (view route-match)
-        (home *home tab))
-      :settings
-      (settings/page)
-      :search
-      (if view
-        (view route-match)
-        (search/search))
-      "Not Found")))
+  [tab]
+  (let [route-match (state/sub :route-match)]
+    (main-content-inner tab route-match)))
 
 (rum/defc app
   [current-repo {:keys [login?]}]
-  (let [[tab] (mobile-state/use-tab)
-        *home (rum/use-ref nil)]
+  (let [[tab] (mobile-state/use-tab)]
     (use-screen-size-effects!)
     (use-theme-effects! current-repo)
     (hooks/use-effect!
      (fn []
        (when (mobile-util/native-ios?)
          (bottom-tabs/configure))
-       (when-let [element (util/mobile-page-scroll)]
+       (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element))) [])
-    (silkhq/depth-sheet-stack
-     {:as-child true}
-     (silkhq/depth-sheet-scenery-outlets
-      (silkhq/scroll {:as-child true}
-                     (silkhq/scroll-view
-                      {:class "app-silk-index-scroll-view"
-                       :pageScroll true
-                       :nativePageScrollReplacement false}
-                      (silkhq/scroll-content
-                       {:class "app-silk-index-scroll-content"}
-                       [:div.app-silk-index-container
-                        {:data-tab (str tab)}
-                        (main-content tab *home)])))
+    [:div.mt-24.h-full
+     (mobile-header/header tab login?)
+     (main-content tab)
+     ;; bottom tabs
+     (when-not (mobile-util/native-ios?)
+       (ui-silk/app-silk-tabs))
 
-      (mobile-header/header tab login?)
+     (ui-component/keep-keyboard-virtual-input)
+     (ui-component/install-notifications)
+     (ui-component/install-modals)
 
-      ;; bottom tabs
-      (when-not (mobile-util/native-ios?)
-        (ui-silk/app-silk-tabs))
-
-      (ui-component/keep-keyboard-virtual-input)
-      (ui-component/install-notifications)
-      (ui-component/install-modals)
-
-      (shui-toaster/install-toaster)
-      (shui-dialog/install-modals)
-      (shui-popup/install-popups)
-      (popup/popup)))))
+     (shui-toaster/install-toaster)
+     (shui-dialog/install-modals)
+     (shui-popup/install-popups)
+     (popup/popup)]))
 
 (rum/defc main < rum/reactive
   []
