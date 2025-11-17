@@ -2,8 +2,6 @@
   "iOS bottom tabs"
   (:require [cljs-bean.core :as bean]
             [frontend.handler.editor :as editor-handler]
-            [frontend.mobile.util :as mobile-util]
-            [frontend.state :as state]
             [frontend.util :as util]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
@@ -59,35 +57,9 @@
       ;; data is like { query: string }
      (f (.-query data)))))
 
-;; (defn- tab-options
-;;   [theme visible?]
-;;   {:visible visible?
-;;    :initialId "home"
-;;    :items [{:id "home"
-;;             :title "Journals"
-;;             :systemIcon "house"}
-
-;;            {:id "search"
-;;             :title "Search"
-;;             :systemIcon "magnifyingglass"}
-
-;;            {:id "quick-add"
-;;             :title "Quick add"
-;;             :systemIcon "plus"}
-
-;;            {:id "settings"
-;;             :title "Settings"
-;;             :systemIcon "gear"}]
-;;    :selectedIconColor (if (= "light" theme)
-;;                         "rgb(0, 105, 182)"
-;;                         "#8ec2c2")
-;;    :unselectedIconColor "#8E8E93"
-;;    :titleOpacity 0.7})
-
 (defn configure
   []
   (p/do!
-    ;; (configure-tabs (:ui/theme @state/state) true)
    (configure-tabs
     [{:id "home"    :title "Home"    :systemImage "house"             :role "normal"}
      {:id "quick-add" :title "Capture" :systemImage "plus"            :role "normal"}
@@ -110,15 +82,7 @@
    (add-search-listener!
     (fn [q]
       ;; wire up search handler
-      (js/console.log "Native search query" q))))
-
-  ;; Update selected icon color according to current theme
-  ;; (add-watch state/state
-  ;;            :theme-changed
-  ;;            (fn [_ _ old new]
-  ;;              (when-not (= (:ui/theme old) (:ui/theme new))
-  ;;                (configure-tabs (:ui/theme new) true))))
-  )
+      (js/console.log "Native search query" q)))))
 
 (defn hide!
   []
