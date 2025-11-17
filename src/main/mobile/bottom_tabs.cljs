@@ -2,6 +2,7 @@
   "iOS bottom tabs"
   (:require [cljs-bean.core :as bean]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
@@ -62,18 +63,21 @@
   (p/do!
    (configure-tabs
     [{:id "home"      :title "Home"      :systemImage "house"             :role "normal"}
-     {:id "quick-add" :title "Capture" :systemImage "plus"                :role "normal"}
-     {:id "settings"  :title "Settings" :systemImage "gear"               :role "normal"}
+     {:id "quick-add" :title "Capture"   :systemImage "plus"              :role "normal"}
+     {:id "settings"  :title "Settings"  :systemImage "gear"              :role "normal"}
      ;; {:id "search"    :title "Search"    :systemImage "magnifyingglass"   :role "search"}
      ])
    (add-tab-selected-listener!
     (fn [tab]
-      (prn :debug :tab tab)
       (when-not (= tab "quick-add")
         (mobile-state/set-tab! tab))
       (case tab
         "home"
-        (util/scroll-to-top false)
+        (do
+          (route-handler/redirect-to-home!)
+          (util/scroll-to-top false))
+        "search"
+        (route-handler/redirect! {:to :search})
         "quick-add"
         (editor-handler/show-quick-add)
                        ;; TODO: support longPress detection
