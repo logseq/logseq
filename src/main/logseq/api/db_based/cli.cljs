@@ -70,7 +70,7 @@
   (p/let [options (-> (js->clj options* :keywordize-keys true)
                       (update :export-type (fnil keyword :graph)))
           result (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) options)]
-    (when (= :export-edn-error result)
-      (throw (ex-info "Export EDN error" {})))
+    (when (:export-edn-error result)
+      (throw (ex-info (str "Export EDN Error: " (:export-edn-error result)) {})))
     {:export-body (sqlite-util/transit-write result)
      :graph (string/replace-first (state/get-current-repo) common-config/db-version-prefix "")}))
