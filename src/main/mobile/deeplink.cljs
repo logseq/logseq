@@ -11,6 +11,7 @@
             [frontend.util.text :as text-util]
             [goog :refer [Uri]]
             [logseq.common.util :as common-util]
+            [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
 (def *link-to-another-graph (atom false))
@@ -38,6 +39,8 @@
       (state/pub-event! [:mobile/start-audio-record])
       (and (= hostname "mobile") (= pathname "/go/quick-add"))
       (editor-handler/show-quick-add)
+      (and (= hostname "mobile") (= pathname "/go/left-sidebar"))
+      (mobile-state/open-left-sidebar!)
       (= hostname "graph")
       (let [graph-name (some-> pathname
                                (string/replace "/" "")
