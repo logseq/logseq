@@ -33,7 +33,7 @@
   []
   (let [[input set-input!] (mobile-state/use-search-input)
         [search-result set-search-result!] (hooks/use-state nil)
-        [last-input-at set-last-input-at!] (hooks/use-state nil)
+        [last-input-at _set-last-input-at!] (mobile-state/use-search-last-input-at)
         [recents set-recents!] (hooks/use-state (search-handler/get-recents))
         result search-result]
 

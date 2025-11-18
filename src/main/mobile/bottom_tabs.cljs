@@ -4,6 +4,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
+            [logseq.common.util :as common-util]
             [mobile.state :as mobile-state]
             [promesa.core :as p]))
 
@@ -85,7 +86,8 @@
     (fn [q]
       ;; wire up search handler
       (js/console.log "Native search query" q)
-      (reset! mobile-state/*search-input q)))))
+      (reset! mobile-state/*search-input q)
+      (reset! mobile-state/*search-last-input-at (common-util/time-ms))))))
 
 (defn hide!
   []

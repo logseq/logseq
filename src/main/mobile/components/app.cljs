@@ -242,7 +242,7 @@
        (when-let [element (util/app-scroll-container-node)]
          (common-handler/listen-to-scroll! element))) [])
     [:div.mt-24.h-full
-     (mobile-header/header tab login?)
+     (mobile-header/header tab)
      (main-content tab)
      ;; bottom tabs
      (when-not (mobile-util/native-ios?)

@@ -9,6 +9,9 @@
 (defonce *search-input (atom ""))
 (defn use-search-input []
   (r/use-atom *search-input))
+(defonce *search-last-input-at (atom nil))
+(defn use-search-last-input-at []
+  (r/use-atom *search-last-input-at))
 
 (defonce *modal-blocks (atom []))
 (defonce *blocks-navigation-history (atom []))
