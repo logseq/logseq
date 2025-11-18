@@ -67,7 +67,6 @@
 (defn close-left-sidebar!
   []
   (reset! *left-sidebar-open? false)
-  (redirect-to-tab! "home")
   (state/pub-event! [:mobile/redirect-to {:k :home}]))
 
 (defonce *log (atom []))
