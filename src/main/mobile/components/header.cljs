@@ -151,7 +151,6 @@
           skip? (and (= tab "home")
                      (not= route-name :home))
           base {:title title
-                :tintColor "#1f2937"
                 :hidden (boolean hidden?)}
           left-buttons (when (= tab "home")
                          [{:id "menu" :systemIcon "line.3.horizontal"}])
