@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LiquidTabsRootView: View {
     @StateObject private var store = LiquidTabsStore.shared
@@ -101,20 +102,11 @@ struct LiquidTabsRootView: View {
 
                     // ---- Search tab (special role) ----
                     Tab(value: TabSelection.search, role: .search) {
-                        // Apple requires search tab content inside NavigationStack
-                        NavigationStack {
-                            NativeNavHost(navController: navController)
-                                .ignoresSafeArea()
-                                .onAppear {
-                                    // Focus native search field when entering search tab
-                                    DispatchQueue.main.async {
-                                        isSearchFocused = true
-                                    }
-                                }
-                                .onDisappear {
-                                    isSearchFocused = false
-                                }
-                        }
+                        SearchTabHost(navController: navController
+                                      , isSearchFocused: $isSearchFocused
+                                      , selectedTab: $selectedTab
+                                      , firstTabId: firstTab?.id
+                                      , store: store)
                     }
                 }
                 // Set initial selection once we have tabs
@@ -134,21 +126,6 @@ struct LiquidTabsRootView: View {
                     guard let id = tabId(for: newValue) else { return }
                     store.selectedId = id
                     LiquidTabsPlugin.shared?.notifyTabSelected(id: id)
-                }
-                // Detect "Cancel" on the search field:
-                //  - focus goes false
-                //  - we're still on the search tab
-                //  - search text is empty (system clears it on Cancel)
-                // Then jump back to first tab.
-                .onChange(of: isSearchFocused) { focused in
-                    guard !focused else { return }
-
-                    if selectedTab == .search,
-                       searchText.isEmpty,
-                       firstTab != nil {
-                        selectedTab = .first
-                        // `onChange(of: selectedTab)` will update store / CLJS.
-                    }
                 }
             }
 
@@ -171,6 +148,46 @@ struct LiquidTabsRootView: View {
                         .tag(tab.id as String?)
                 }
             }
+        }
+    }
+}
+
+private struct SearchTabHost: View {
+    let navController: UINavigationController
+    @FocusState.Binding var isSearchFocused: Bool
+    var selectedTab: Binding<LiquidTabsRootView.TabSelection>
+    let firstTabId: String?
+    let store: LiquidTabsStore
+
+    @Environment(\.isSearching) private var isSearching
+    @State private var wasSearching: Bool = false
+
+    var body: some View {
+        // Apple requires search tab content inside NavigationStack
+        NavigationStack {
+            NativeNavHost(navController: navController)
+                .ignoresSafeArea()
+                .onAppear {
+                    DispatchQueue.main.async {
+                        isSearchFocused = true
+                    }
+                    print("search tab appear, isSearching:", isSearching)
+                }
+                .onDisappear {
+                    isSearchFocused = false
+                }
+                .onChange(of: isSearching) { searching in
+                    if searching {
+                        wasSearching = true
+                    } else if wasSearching,
+                              selectedTab.wrappedValue == .search,
+                              let firstId = firstTabId {
+                        wasSearching = false
+                        selectedTab.wrappedValue = .first
+                        store.selectedId = firstId
+                        LiquidTabsPlugin.shared?.notifyTabSelected(id: firstId)
+                    }
+                }
         }
     }
 }
