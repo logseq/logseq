@@ -1,6 +1,6 @@
 ## Description
 
-This library provides a `logseq` CLI for DB graphs. The CLI currently only applies to desktop DB graphs and requires the [database-version](/README.md#-database-version) desktop app to be installed. The CLI works offline by default which means it can also be used on CI/CD platforms like Github Actions. Some CLI commands can also interact with the current DB graph if the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on in the Desktop app.
+This library provides a `logseq` CLI for DB graphs. The CLI currently only applies to desktop DB graphs and requires the [database-version](/README.md#-database-version) desktop app to be installed. The CLI works offline by default which means it can also be used on CI/CD platforms like Github Actions. Most CLI commands can also interact with the current DB graph if the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on in the Desktop app.
 
 ## Install
 
@@ -12,9 +12,9 @@ This section assumes you have installed the CLI from npm or via the [dev
 setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
 `node.cli.mjs -h`.
 
-All commands except for `append` can be used offline or on CI. The `search` command and any command that has an api-server-token option require the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) to be turned on.
+All commands work with both local graphs and the current in-app graph except for `append` (in-app graph only) and `export` (local graph only). For a command to work with an in-app graph, the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) must be turned on.
 
-Now let's use it!
+Now let's use the CLI!
 
 ```
 $ logseq -h
@@ -30,9 +30,9 @@ search [options]     Search DB graph
 query [options]      Query DB graph(s)
 export [options]     Export DB graph as Markdown
 export-edn [options] Export DB graph as EDN
+import-edn [options] Import into DB graph with EDN
 append [options]     Appends text to current page
 mcp-server [options] Run a MCP server
-import-edn [options] Import into DB graph with EDN
 help                 Print a command's help
 
 $ logseq list
@@ -68,7 +68,7 @@ $ LOGSEQ_API_SERVER_TOKEN=my-token logseq search woot
 ...
 
 # Search a local graph
-$ logseq search woot page
+$ logseq search page -g woot
 Search found 23 results:
 Node page
 Annotation page
@@ -76,7 +76,7 @@ Annotation page
 
 # Query a graph locally using `d/entity` id(s) like an integer or a :db/ident
 # Can also specify a uuid string to fetch an entity
-$ logseq query woot 10 :logseq.class/Tag
+$ logseq query 10 :logseq.class/Tag -g woot
 ({:db/id 10,
   :db/ident :logseq.kv/graph-git-sha,
   :kv/value "f736895b1b-dirty"}
@@ -92,7 +92,7 @@ $ logseq query woot 10 :logseq.class/Tag
   :block/name "tag"})
 
 # Query a graph using a datalog query
-$ logseq query woot '[:find (pull ?b [*]) :where [?b :kv/value]]'
+$ logseq query '[:find (pull ?b [*]) :where [?b :kv/value]]' -g woot
 [{:db/id 5, :db/ident :logseq.kv/db-type, :kv/value "db"}
  {:db/id 6,
   :db/ident :logseq.kv/schema-version,
@@ -116,12 +116,15 @@ $ logseq query '(task DOING)' -a my-token
   :uuid "68795144-e5f6-48e8-849d-79cd6473b952"}
   ...
 
-# Export DB graph as markdown
-$ logseq export yep
+# Export local graph as markdown
+$ logseq export -g yep
 Exported 41 pages to yep_markdown_1756128259.zip
 
-# Export DB graph as EDN
-$ logseq export-edn woot -f woot.edn
+# Export current graph as EDN
+$ logseq export-edn -a my-token
+Exported 16 properties, 3 classes and 16 pages to yep_1763407592.edn
+# Export local graph as EDN to specified file
+$ logseq export-edn -g woot -f woot.edn
 Exported 16 properties, 1 classes and 36 pages to woot.edn
 
 # Import into current graph with EDN
