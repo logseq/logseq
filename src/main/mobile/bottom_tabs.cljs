@@ -68,6 +68,7 @@
      {:id "settings"  :title "Settings"  :systemImage "gear"              :role "normal"}])
    (add-tab-selected-listener!
     (fn [tab]
+      (reset! mobile-state/*search-input "")
       (when-not (= tab "quick-add")
         (mobile-state/set-tab! tab))
       (case tab
