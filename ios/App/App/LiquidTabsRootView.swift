@@ -5,6 +5,7 @@ struct LiquidTabsRootView: View {
     let navController: UINavigationController
 
     @State private var searchText: String = ""
+    @FocusState private var isSearchFocused: Bool
 
     // Convenience helpers: first three tabs from CLJS, rest ignored
     private var firstTab: LiquidTab? {
@@ -79,6 +80,13 @@ struct LiquidTabsRootView: View {
                                     // Tell CLJS to show the search page
                                     store.selectedId = "search"
                                     LiquidTabsPlugin.shared?.notifyTabSelected(id: "search")
+                                    // Focus the native search field when entering search tab
+                                    DispatchQueue.main.async {
+                                        isSearchFocused = true
+                                    }
+                                }
+                                .onDisappear {
+                                    isSearchFocused = false
                                 }
                         }
                     } label: {
@@ -89,6 +97,7 @@ struct LiquidTabsRootView: View {
                 //  - Tab(role: .search) above
                 //  - .searchable on the TabView
                 .searchable(text: $searchText)
+                .searchFocused($isSearchFocused)
                 .searchToolbarBehavior(.minimize)
                 .onChange(of: searchText) { newValue in
                     // Forward query to JS/CLJS
