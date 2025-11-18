@@ -10,6 +10,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     var navController: UINavigationController?
     private var pathStack: [String] = ["/"]
     private var ignoreRoutePopCount = 0
+    private lazy var navigationSwipeGesture: UISwipeGestureRecognizer = {
+        let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleNavigationSwipe(_:)))
+        gesture.direction = .right // allow back/open without edge-only gesture
+        gesture.cancelsTouchesInView = false
+        return gesture
+    }()
     private lazy var sidebarCloseGesture: UISwipeGestureRecognizer = {
         let gesture = UISwipeGestureRecognizer(target: self, action: #selector(handleSidebarCloseSwipe(_:)))
         gesture.direction = .left // right-to-left swipe to close
@@ -211,6 +217,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
     func navigationController(_ navigationController: UINavigationController, didShow viewController: UIViewController, animated: Bool) {
         guard let current = viewController as? NativePageViewController else { return }
         SharedWebViewController.instance.attach(to: current)
+        attachNavigationSwipeGesture()
         updateSidebarGestureAttachment(for: current)
     }
 
@@ -227,6 +234,16 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         return pageVC.targetPath == "/left-sidebar"
     }
 
+    private func attachNavigationSwipeGesture() {
+        guard let nav = navController else { return }
+        if let edgePan = nav.interactivePopGestureRecognizer {
+            navigationSwipeGesture.require(toFail: edgePan)
+        }
+        if navigationSwipeGesture.view !== nav.view {
+            nav.view.addGestureRecognizer(navigationSwipeGesture)
+        }
+    }
+
     private func updateSidebarGestureAttachment(for vc: NativePageViewController) {
         guard let nav = navController else { return }
         if isLeftSidebar(vc) {
@@ -235,6 +252,21 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
             }
         } else if sidebarCloseGesture.view != nil {
             nav.view.removeGestureRecognizer(sidebarCloseGesture)
+        }
+    }
+
+    @objc private func handleNavigationSwipe(_ gesture: UISwipeGestureRecognizer) {
+        guard gesture.state == .ended else { return }
+        guard let nav = navController else { return }
+
+        if nav.viewControllers.count > 1 {
+            nav.popViewController(animated: true)
+            return
+        }
+
+        if shouldAllowSidebarOpen("/left-sidebar") {
+            print("debug open left sidebar")
+            openURL("logseq://mobile/go/left-sidebar")
         }
     }
 
