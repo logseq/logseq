@@ -53,15 +53,10 @@
     (ui-handler/re-render-root!)
     (cli-common-mcp-tools/summarize-upsert-operations ops options)))
 
-(defn- ensure-db-graph
-  [repo]
-  (when-not (sqlite-util/db-based-graph? repo)
-    (throw (ex-info "This endpoint must be called on a DB graph" {}))))
 
 (defn import-edn
   "Given EDN data as a transitized string, converts to EDN and imports it."
   [edn-data*]
-  (ensure-db-graph (state/get-current-repo))
   (p/let [edn-data (sqlite-util/transit-read edn-data*)
           {:keys [error]} (ui-outliner-tx/transact!
                            {:outliner-op :batch-import-edn}
@@ -73,7 +68,6 @@
   "Given sqlite.export options, exports the current graph as a json map with the
   :export-body key containing a transit string of the export EDN"
   [options*]
-  (ensure-db-graph (state/get-current-repo))
   (p/let [options (-> (js->clj options* :keywordize-keys true)
                       (update :export-type (fnil keyword :graph)))
           result (state/<invoke-db-worker :thread-api/export-edn (state/get-current-repo) options)]
