@@ -17,6 +17,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         return gesture
     }()
 
+    private func isOnFirstTab() -> Bool {
+        let store = LiquidTabsStore.shared
+        guard let firstId = store.tabs.first?.id,
+              let selectedId = store.effectiveSelectedId() else {
+            return false
+        }
+        return firstId == selectedId
+    }
+
+    private func isNavigationStackEmpty() -> Bool {
+        if let nav = navController {
+            return nav.viewControllers.count <= 1
+        }
+        return pathStack.count <= 1
+    }
+
+    private func shouldAllowSidebarOpen(_ path: String) -> Bool {
+        guard path == "/left-sidebar" else { return true }
+        return isOnFirstTab() && isNavigationStackEmpty()
+    }
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         if let shortcutItem = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem {
@@ -234,6 +255,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UINavigationControllerDel
         ) { [weak self] notification in
             guard let self else { return }
             let path = self.normalizedPath(notification.userInfo?["path"] as? String)
+            let allowSidebar = self.shouldAllowSidebarOpen(path)
+            print("observeRouteChanges path:", path,
+                  "allowSidebar:", allowSidebar,
+                  "firstTab:", self.isOnFirstTab(),
+                  "navEmpty:", self.isNavigationStackEmpty())
+            guard self.shouldAllowSidebarOpen(path) else {
+                print("Ignoring left sidebar request: requires first tab and empty navigation stack")
+                return
+            }
             let navigationType = (notification.userInfo?["navigationType"] as? String) ?? "push"
             print("navigation type:", navigationType)
             switch navigationType {

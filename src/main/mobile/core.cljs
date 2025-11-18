@@ -2,7 +2,6 @@
   "Mobile core"
   (:require ["react-dom/client" :as rdc]
             [clojure.string :as string]
-            [dommy.core :as dom]
             [frontend.background-tasks]
             [frontend.components.imports :as imports]
             [frontend.db.async :as db-async]
@@ -38,6 +37,7 @@
      (fn [route]
        (let [route-name (get-in route [:data :name])
              path (-> js/location .-hash (string/replace-first #"^#" ""))]
+         (prn :debug :route-name route-name :path path)
          (route-handler/set-route-match! route)
          (mobile-nav/notify-route-change!
           {:route {:to route-name
