@@ -11,6 +11,9 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private class NativeTopBarButton: UIButton {
         var buttonId: String = ""
+        override var intrinsicContentSize: CGSize {
+            CGSize(width: 36, height: 32)
+        }
     }
 
     private func navigationController() -> UINavigationController? {
@@ -23,11 +26,6 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func configure(_ call: CAPPluginCall) {
-        guard let nav = navigationController() else {
-            call.reject("Navigation controller not found")
-            return
-        }
-
         let title = call.getString("title")
         let leftButtons = call.getArray("leftButtons", JSObject.self) ?? []
         let rightButtons = call.getArray("rightButtons", JSObject.self) ?? []
@@ -38,6 +36,10 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
+            guard let nav = self.navigationController() else {
+                call.reject("Navigation controller not found")
+                return
+            }
             nav.setNavigationBarHidden(hidden, animated: true)
             guard !hidden else {
                 call.resolve()
@@ -88,14 +90,16 @@ public class NativeTopBarPlugin: CAPPlugin, CAPBridgedPlugin {
                 button.setImage(image, for: .normal)
             }
             button.tintColor = tintColor(for: obj)
-            button.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
             button.imageView?.contentMode = .scaleAspectFit
             button.addTarget(self, action: #selector(buttonTapped(_:)), for: .touchUpInside)
 
-            let item = UIBarButtonItem(customView: button)
-            // Ensure a minimum tap target size
-            button.widthAnchor.constraint(equalToConstant: 36).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            // Use a fixed-size container via frames to avoid Auto Layout conflicts with the bar wrapper.
+            let container = UIView(frame: CGRect(x: 0, y: 0, width: 36, height: 32))
+            button.frame = container.bounds
+            button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            container.addSubview(button)
+
+            let item = UIBarButtonItem(customView: container)
             return item
         }
     }
