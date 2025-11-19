@@ -12,7 +12,7 @@ This section assumes you have installed the CLI from npm or via the [dev
 setup](#setup). If you haven't, substitute `node cli.mjs` for `logseq` e.g.
 `node.cli.mjs -h`.
 
-All commands work with both local graphs and the current in-app graph except for `append` (in-app graph only) and `export` (local graph only). For a command to work with an in-app graph, the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) must be turned on.
+All commands work with both local graphs and the current in-app graph except for `append` (in-app graph only), `validate` (local graph only) and `export` (local graph only). For a command to work with an in-app graph, the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) must be turned on.
 
 Now let's use the CLI!
 
@@ -33,6 +33,7 @@ export-edn [options] Export DB graph as EDN
 import-edn [options] Import into DB graph with EDN
 append [options]     Appends text to current page
 mcp-server [options] Run a MCP server
+validate [options]   Validate DB graph
 help                 Print a command's help
 
 $ logseq list
