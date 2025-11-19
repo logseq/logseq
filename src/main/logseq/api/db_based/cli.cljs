@@ -1,5 +1,5 @@
 (ns logseq.api.db-based.cli
-  "API fns for CLI. DB graph checks are either at the top level or in cli-common-mcp-tools ns."
+  "API fns for CLI"
   (:require [clojure.string :as string]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.op :as outliner-op]

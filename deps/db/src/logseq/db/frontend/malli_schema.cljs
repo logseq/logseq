@@ -89,18 +89,31 @@
   expected to be a coll if the property has a :many cardinality. validate-fn is
   a fn that is called directly on each value to return a truthy value.
   validate-fn varies by property type"
-  [db validate-fn [property property-val] & {:keys [_skip-strict-url-validate?]
-                                             :as validate-option}]
+  [db validate-fn [property property-val] & {:keys [new-closed-value? :closed-values-validate? _skip-strict-url-validate?]
+                                             :as validate-options}]
   ;; For debugging
   ;; (when (not (internal-ident? (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:logseq.property/type property))
                        (fn [value]
-                         (validate-fn db value validate-option))
-                       validate-fn)]
+                         (validate-fn db value validate-options))
+                       validate-fn)
+        validate-fn'' (if (and closed-values-validate?
+                               (db-property-type/closed-value-property-types (:logseq.property/type property))
+                               ;; new closed values aren't associated with the property yet
+                               (not new-closed-value?)
+                               (seq (:property/closed-values property)))
+                        (fn closed-value-valid? [val]
+                          (and (validate-fn' val)
+                               (let [ids (set (map :db/id (:property/closed-values property)))
+                                     result (contains? ids val)]
+                                 (when-not result
+                                   (js/console.error (str "Error: not a closed value, id: " val ", existing choices: " ids ", property: " (:db/ident property))))
+                                 result)))
+                        validate-fn')]
     (if (db-property/many? property)
-      (or (every? validate-fn' property-val)
+      (or (every? validate-fn'' property-val)
           (empty-placeholder-value? db property (first property-val)))
-      (or (validate-fn' property-val)
+      (or (validate-fn'' property-val)
           ;; also valid if value is empty-placeholder
           (empty-placeholder-value? db property property-val)))))
 
@@ -214,6 +227,12 @@
   "`true` allows updating a block's other property when it has invalid URL value"
   false)
 
+(def ^:dynamic *closed-values-validate?*
+  "By default this is false because we can't ensure this when merging updates from server.
+   `true` allows for non RTC graphs to have higher data quality and avoid
+   possible UX bugs related to closed values."
+  false)
+
 (def property-tuple
   "A tuple of a property map and a property value"
   (into
@@ -229,7 +248,8 @@
                 {:error/message error-message})
               (fn [tuple]
                 (validate-property-value *db-for-validate-fns* schema-fn tuple
-                                         {:skip-strict-url-validate? *skip-strict-url-validate?*}))])])
+                                         {:skip-strict-url-validate? *skip-strict-url-validate?*
+                                          :closed-values-validate? *closed-values-validate?*}))])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
