@@ -1,3 +1,14 @@
+## 0.4.0
+* BREAKING CHANGE: Commands that call local graphs are invoked with `-g` instead of as an argument e.g. `logseq search foo -g db-name` instead of `logseq search db-name foo`
+* Add `import-edn` command for local and in-app graphs
+* Add `validate` command for local graphs
+* Add `export-edn` command for API mode
+* Fix most commands with API mode not respecting `$LOGSEQ_API_SERVER_TOKEN`
+* Fix API `mcp-server` command failing lazily
+* Fix commands failing confusingly when given a file graph
+* Fix `query` command with multiple local graphs not switching graphs
+* Fix API `search` command
+
 ## 0.3.0
 * Add mcp-server command to run a MCP server
 * All commands that have graph args and options now support local paths e.g. `logseq search $HOME/Downloads/logseq_db_yep_1751032977.sqlite foo`

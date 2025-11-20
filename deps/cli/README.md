@@ -1,6 +1,6 @@
 ## Description
 
-This library provides a `logseq` CLI for DB graphs. The CLI currently only applies to desktop DB graphs and requires the [database-version](/README.md#-database-version) desktop app to be installed. The CLI works offline by default which means it can also be used on CI/CD platforms like Github Actions. Most CLI commands can also interact with the current DB graph if the [HTTP Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on in the Desktop app.
+This library provides a `logseq` CLI for DB graphs created using the [database-version](/README.md#-database-version). By default, the CLI works offline with local graphs. This allows for running commands automatically on CI/CD platforms like Github Actions. Most CLI commands also connect to the current DB graph in a desktop app (a.k.a. in-app graph) if the [HTTP API Server](https://docs.logseq.com/#/page/local%20http%20server) is turned on.
 
 ## Install
 
@@ -24,7 +24,7 @@ Options:
   -v, --version Print version
 
 Commands:
-list                 List graphs
+list                 List local graphs
 show                 Show DB graph(s) info
 search [options]     Search DB graph
 query [options]      Query DB graph(s)
@@ -57,7 +57,11 @@ $ logseq show db-test
 | Graph initial schema version |                              {:major 65, :minor 7} |
 |      Graph created by commit | https://github.com/logseq/logseq/commit/3c93fd2637 |
 |            Graph imported by |                                  :cli/create-graph |
+```
 
+To run a command against the current desktop graph, set `$LOGSEQ_API_SERVER_TOKEN` once or set `-a` each time with a valid token for the desktop's HTTP API server:
+
+```
 # Search your current graph and print highlighted results one per line like grep
 $ logseq search woot -a my-token
 Search found 100 results:
@@ -65,9 +69,13 @@ dev:db-export woot woot.edn && dev:db-create woot2 woot.edn
 dev:db-diff woot woot2
 ...
 # Can also authenticate api with $LOGSEQ_API_SERVER_TOKEN
-$ LOGSEQ_API_SERVER_TOKEN=my-token logseq search woot
+$ export LOGSEQ_API_SERVER_TOKEN=my-token
+$ logseq search woot
 ...
+```
 
+Here are more examples of all the available commands:
+```
 # Search a local graph
 $ logseq search page -g woot
 Search found 23 results:
@@ -131,6 +139,11 @@ Exported 16 properties, 1 classes and 36 pages to woot.edn
 # Import into current graph with EDN
 $ logseq import-edn -f woot-ontology.edn
 Imported 16 properties, 1 classes and 0 pages!
+
+# Validate a local graph. Useful to run in CI
+$ logseq validate -g woot
+Read graph woot with counts: {:entities 317, :pages 159, :blocks 147, :classes 17, :properties 112, :objects 64, :property-pairs 669, :datoms 3964}
+Valid!
 
 # Append text to current page
 $ logseq append add this text -a my-token
