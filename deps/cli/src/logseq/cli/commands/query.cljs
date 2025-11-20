@@ -101,7 +101,7 @@
       (cli-util/error "Graph" (pr-str graph) "does not exist"))))
 
 (defn query
-  [{{:keys [args api-server-token]} :opts :as m}]
-  (if api-server-token
+  [{{:keys [args api-server-token] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
     (api-query (first args) api-server-token)
     (local-query m)))

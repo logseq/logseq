@@ -64,7 +64,7 @@
       (format-results nodes search-term {:raw raw}))
     (cli-util/error "Graph" (pr-str graph) "does not exist")))
 
-(defn search [{{:keys [search-terms api-server-token]} :opts :as m}]
-  (if api-server-token
+(defn search [{{:keys [search-terms] :as opts} :opts :as m}]
+  (if (cli-util/api-command? opts)
     (api-search (string/join " " search-terms) m)
     (local-search (string/join " " search-terms) m)))

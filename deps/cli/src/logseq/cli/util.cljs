@@ -4,8 +4,8 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [logseq.cli.common.graph :as cli-common-graph]
-            [logseq.db.common.sqlite :as common-sqlite]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.sqlite :as common-sqlite]
             [nbb.error]
             [promesa.core :as p]))
 
@@ -86,3 +86,11 @@
   [db]
   (when-not (entity-plus/db-based-graph? db)
     (error "This command must be called on a DB graph")))
+
+(defn api-command?
+  "Given user options and $LOGSEQ_API_SERVER_TOKEN, determines if
+   given command is an api (true) or local (false) command"
+  [{:keys [graph graphs api-server-token]}]
+  (or api-server-token
+      ;; graph(s) check overrides env since it is more explicit
+      (and js/process.env.LOGSEQ_API_SERVER_TOKEN (not graph) (not graphs))))
