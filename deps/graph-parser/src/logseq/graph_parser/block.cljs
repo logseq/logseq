@@ -14,6 +14,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
+            [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -410,20 +411,20 @@
        (not (common-date/valid-journal-title-with-slash? page))))
 
 (defn- ref->map
-  [db *col {:keys [date-formatter db-based? *name->id tag?]}]
+  [db *col {:keys [date-formatter *name->id tag? db-based?]}]
   (let [col (remove string/blank? @*col)
-        children-pages (when-not db-based?
-                         (->> (mapcat (fn [p]
-                                        (let [p (if (map? p)
-                                                  (:block/title p)
-                                                  p)]
-                                          (when (string? p)
-                                            (let [p (or (text/get-nested-page-name p) p)]
-                                              (when (text/namespace-page? p)
-                                                (common-util/split-namespace-pages p))))))
-                                      col)
-                              (remove string/blank?)
-                              (distinct)))
+        children-pages (->> (mapcat (fn [p]
+                                      (let [p (if (map? p)
+                                                (:block/title p)
+                                                p)]
+                                        (when (string? p)
+                                          (let [p (or (text/get-nested-page-name p) p)]
+                                            (if (and (text/namespace-page? p) (not tag?))
+                                              (common-util/split-namespace-pages p)
+                                              [p])))))
+                                    col)
+                            (remove string/blank?)
+                            (distinct))
         col (->> (distinct (concat col children-pages))
                  (remove nil?))]
     (map
