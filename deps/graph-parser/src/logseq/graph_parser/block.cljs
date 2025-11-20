@@ -412,8 +412,8 @@
        (not (common-date/valid-journal-title-with-slash? page))))
 
 (defn- ref->map
-  [db *col {:keys [date-formatter *name->id tag? db-based?]}]
-  (let [col (remove string/blank? @*col)
+  [db *col {:keys [date-formatter *name->id tag? db-based? structured-tags]}]
+  (let [col (distinct (remove string/blank? @*col))
         children-pages (->> (mapcat (fn [p]
                                       (let [p (if (map? p)
                                                 (:block/title p)
@@ -431,7 +431,8 @@
     (map
      (fn [item]
        (let [macro? (and (map? item)
-                         (= "macro" (:type item)))]
+                         (= "macro" (:type item)))
+             tag? (or (contains? structured-tags item) tag?)]
          (when-not macro?
            (let [m (page-name->map item db true date-formatter {:class? tag?})
                  result (cond->> m
@@ -443,7 +444,9 @@
                (swap! *name->id assoc page-name (:block/uuid result)))
              ;; Changing a :block/uuid should be done cautiously here as it can break
              ;; the identity of built-in concepts in db graphs
-             (if id
+             (if (and id
+                      (when-let [ident (:db/ident result)]
+                        (nil? (d/entity db ident))))
                (assoc result :block/uuid id)
                result))))) col)))
 
@@ -478,18 +481,14 @@
     (let [*name->id (atom {})
           ref->map-options {:db-based? db-based?
                             :date-formatter date-formatter
-                            :*name->id *name->id}
+                            :*name->id *name->id
+                            :structured-tags (set @*structured-tags)}
           refs (->> (ref->map db *refs ref->map-options)
                     (remove nil?)
                     (map (fn [ref]
-                           (let [ref' (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                                        (if (= (:db/id parse-block) (:db/id entity))
-                                          ref
-                                          (select-keys entity [:block/uuid :block/title :block/name]))
-                                        ref)]
-                             (cond-> ref'
-                               (:block.temp/original-page-name ref)
-                               (assoc :block.temp/original-page-name (:block.temp/original-page-name ref)))))))
+                           (cond-> ref
+                             (:block.temp/original-page-name ref)
+                             (assoc :block.temp/original-page-name (:block.temp/original-page-name ref))))))
           tags (ref->map db *structured-tags (assoc ref->map-options :tag? true))]
       (assoc block
              :refs refs
