@@ -878,7 +878,8 @@
           :graph-ontology
           (build-graph-ontology-export db {})
           :graph
-          (build-graph-export db (:graph-options options)))
+          (build-graph-export db (:graph-options options))
+          (throw (ex-info (str (pr-str export-type) " is an invalid export-type") {})))
         export-map (patch-invalid-keywords export-map*)]
     (if (get-in options [:graph-options :catch-validation-errors?])
       (try

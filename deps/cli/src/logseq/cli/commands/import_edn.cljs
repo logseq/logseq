@@ -20,8 +20,11 @@
       (p/catch cli-util/command-catch-handler)))
 
 (defn- local-import [{:keys [graph]} import-map]
-  (if (and graph (fs/existsSync (cli-util/get-graph-path graph)))
+  (when-not graph
+    (cli-util/error "Command missing required option 'graph'"))
+  (if (fs/existsSync (cli-util/get-graph-path graph))
     (let [conn (apply sqlite-cli/open-db! (cli-util/->open-db-args graph))
+          _ (cli-util/ensure-db-graph-for-command @conn)
           {:keys [init-tx block-props-tx misc-tx]}
           (sqlite-export/build-import import-map @conn {})
           txs (vec (concat init-tx block-props-tx misc-tx))]

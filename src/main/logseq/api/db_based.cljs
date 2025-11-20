@@ -5,6 +5,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [logseq.graph-parser.text :as text]
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
@@ -204,15 +205,36 @@
         (sdk-utils/result->js result)))))
 
 (defn create-tag [title ^js opts]
-  (let [opts (bean/->clj opts)]
-    (p/let [repo (state/get-current-repo)
-            tag (db-page-handler/<create-class!
-                 title
-                 (-> opts
-                     (sdk-utils/with-custom-uuid)
-                     (assoc :redirect? false)))
-            tag (db-async/<get-block repo (:db/id tag) {:children? false})]
-      (when tag
+  (this-as
+    this
+    (when-not (string? title)
+      (throw (ex-info "Tag title should be a string" {:title title})))
+    (when (string/blank? title)
+      (throw (ex-info "Tag title shouldn't be empty" {:title title})))
+    (when (text/namespace-page? title)
+      (throw (ex-info "Tag title shouldn't include forward slash" {:title title})))
+    (let [opts (bean/->clj opts)
+          opts' (assoc opts
+                  :redirect? false
+                  :class-ident-namespace (api-block/resolve-class-prefix-for-db this))]
+      (p/let [tag (db-page-handler/<create-class! title opts')]
+        (sdk-utils/result->js tag)))))
+
+(defn get-tag [class-uuid-or-ident-or-title]
+  (this-as
+    this
+    (let [title-or-ident (-> (if-not (string? class-uuid-or-ident-or-title)
+                               (str class-uuid-or-ident-or-title)
+                               class-uuid-or-ident-or-title)
+                           (string/replace #"^:+" ""))
+          eid (if (text/namespace-page? title-or-ident)
+                (keyword title-or-ident)
+                (if (util/uuid-string? title-or-ident)
+                  (when-let [id (sdk-utils/uuid-or-throw-error title-or-ident)]
+                    [:block/uuid id])
+                  (keyword (api-block/resolve-class-prefix-for-db this) title-or-ident)))
+          tag (db/entity eid)]
+      (when (ldb/class? tag)
         (sdk-utils/result->js tag)))))
 
 (defn tag-add-property [tag-id property-id-or-name]

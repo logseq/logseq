@@ -16,6 +16,7 @@
             [logseq.api.editor :as api-editor]
             [logseq.api.file-based :as file-based-api]
             [logseq.api.plugin :as api-plugin]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.sdk.assets :as sdk-assets]
             [logseq.sdk.core]
             [logseq.sdk.experiments]
@@ -201,18 +202,28 @@
 (def ^:export get_all_properties db-based-api/get-all-properties)
 (def ^:export get_tag_objects db-based-api/get-tag-objects)
 (def ^:export create_tag db-based-api/create-tag)
+(def ^:export get_tag db-based-api/get-tag)
 (def ^:export add_block_tag db-based-api/add-block-tag)
 (def ^:export remove_block_tag db-based-api/remove-block-tag)
 (def ^:export add_tag_property db-based-api/tag-add-property)
 (def ^:export remove_tag_property db-based-api/tag-remove-property)
 
 ;; Internal db-based CLI APIs
+;; CLI APIs should use ensure-db-graph unless they have a nested check in cli-common-mcp-tools ns
+(defn- ensure-db-graph
+  [f]
+  (fn ensure-db-graph-wrapper [& args]
+    (when-not (sqlite-util/db-based-graph? (state/get-current-repo))
+      (throw (ex-info "This endpoint must be called on a DB graph" {})))
+    (apply f args)))
+
 (def ^:export list_tags cli-based-api/list-tags)
 (def ^:export list_properties cli-based-api/list-properties)
 (def ^:export list_pages cli-based-api/list-pages)
 (def ^:export get_page_data cli-based-api/get-page-data)
 (def ^:export upsert_nodes cli-based-api/upsert-nodes)
-(def ^:export import_edn cli-based-api/import-edn)
+(def ^:export import_edn (ensure-db-graph cli-based-api/import-edn))
+(def ^:export export_edn (ensure-db-graph cli-based-api/export-edn))
 
 ;; file based graph APIs
 (def ^:export get_current_graph_templates file-based-api/get_current_graph_templates)
