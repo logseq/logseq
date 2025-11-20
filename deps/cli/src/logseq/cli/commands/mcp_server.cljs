@@ -78,7 +78,7 @@
 
 (defn- create-mcp-server [{{:keys [api-server-token] :as opts} :opts} graph]
   (if (cli-util/api-command? opts)
-    ;; Make an intial /api call to ensure the API server is on
+    ;; Make an initial /api call to ensure the API server is on
     (-> (p/let [_resp (call-api api-server-token "logseq.app.search" ["foo"])]
           (cli-common-mcp-server/create-mcp-api-server (partial call-api api-server-token)))
         (p/catch cli-util/command-catch-handler))
