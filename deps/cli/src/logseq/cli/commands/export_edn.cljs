@@ -40,7 +40,7 @@
             (cli-util/api-handle-error-response resp)))
         (p/catch cli-util/command-catch-handler))))
 
-(defn export [{{:keys [api-server-token]} :opts :as m}]
-  (if api-server-token
+(defn export [{opts :opts :as m}]
+  (if (cli-util/api-command? opts)
     (api-export m)
     (local-export m)))
